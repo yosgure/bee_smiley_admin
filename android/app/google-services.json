@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "964732214398",
+    "project_id": "bee-smiley-admin",
+    "storage_bucket": "bee-smiley-admin.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:964732214398:android:788ec45ec662bbf1d24c2f",
+        "android_client_info": {
+          "package_name": "com.example.bee_smiley_admin"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD34ChRiP2ozUNUENeDJQfDj3kdcVa9WDo"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
