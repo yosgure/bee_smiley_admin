@@ -21,6 +21,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
         title: const Text('お知らせ配信'),
         backgroundColor: Colors.white,
         elevation: 0,
+        foregroundColor: Colors.black,
       ),
       body: StreamBuilder<QuerySnapshot>(
         stream: _notificationsRef.orderBy('createdAt', descending: true).snapshots(),
@@ -44,13 +45,13 @@ class _NotificationScreenState extends State<NotificationScreen> {
             itemBuilder: (context, index) {
               final doc = docs[index];
               final data = doc.data() as Map<String, dynamic>;
-              
+
               DateTime date = DateTime.now();
               if (data['createdAt'] != null && data['createdAt'] is Timestamp) {
                 date = (data['createdAt'] as Timestamp).toDate();
               }
               final dateStr = DateFormat('yyyy/MM/dd HH:mm').format(date);
-              
+
               String targetStr = '全体';
               if (data['target'] == 'specific') {
                 final list = List<String>.from(data['targetClassrooms'] ?? []);
@@ -64,8 +65,9 @@ class _NotificationScreenState extends State<NotificationScreen> {
               return Card(
                 margin: const EdgeInsets.only(bottom: 12),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                elevation: 1,
                 child: InkWell(
-                  onTap: () => _showEditDialog(doc),
+                  onTap: () => _openEditScreen(doc),
                   borderRadius: BorderRadius.circular(12),
                   child: Padding(
                     padding: const EdgeInsets.all(16.0),
@@ -110,13 +112,17 @@ class _NotificationScreenState extends State<NotificationScreen> {
                         Row(
                           mainAxisAlignment: MainAxisAlignment.end,
                           children: [
-                            IconButton(
-                              icon: const Icon(Icons.edit, size: 20, color: Colors.blue),
-                              onPressed: () => _showEditDialog(doc),
+                            TextButton.icon(
+                              icon: const Icon(Icons.edit, size: 18),
+                              label: const Text('編集'),
+                              onPressed: () => _openEditScreen(doc),
+                              style: TextButton.styleFrom(foregroundColor: Colors.blue),
                             ),
-                            IconButton(
-                              icon: const Icon(Icons.delete, size: 20, color: Colors.red),
+                            TextButton.icon(
+                              icon: const Icon(Icons.delete, size: 18),
+                              label: const Text('削除'),
                               onPressed: () => _deleteNotification(doc.id),
+                              style: TextButton.styleFrom(foregroundColor: Colors.red),
                             ),
                           ],
                         ),
@@ -129,11 +135,9 @@ class _NotificationScreenState extends State<NotificationScreen> {
           );
         },
       ),
-      // 新規作成ボタン
       floatingActionButton: FloatingActionButton(
-        onPressed: () => _showEditDialog(null),
+        onPressed: () => _openEditScreen(null),
         backgroundColor: Colors.white,
-        // ★修正: 画像を少し大きくし、エラー時はアイコンを表示
         child: Container(
           width: 32,
           height: 32,
@@ -168,30 +172,35 @@ class _NotificationScreenState extends State<NotificationScreen> {
     );
   }
 
-  void _showEditDialog(DocumentSnapshot? doc) {
-    showDialog(
-      context: context,
-      builder: (context) => _NotificationEditDialog(doc: doc),
+  // ★修正: 全画面スライド（モーダル）で開くように変更
+  void _openEditScreen(DocumentSnapshot? doc) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => NotificationEditScreen(doc: doc),
+        fullscreenDialog: true, // これにより下からスライドして表示される動きになります
+      ),
     );
   }
 }
 
-class _NotificationEditDialog extends StatefulWidget {
+// ★修正: DialogではなくScaffoldを使った全画面Widgetに変更
+class NotificationEditScreen extends StatefulWidget {
   final DocumentSnapshot? doc;
 
-  const _NotificationEditDialog({required this.doc});
+  const NotificationEditScreen({super.key, required this.doc});
 
   @override
-  State<_NotificationEditDialog> createState() => _NotificationEditDialogState();
+  State<NotificationEditScreen> createState() => _NotificationEditScreenState();
 }
 
-class _NotificationEditDialogState extends State<_NotificationEditDialog> {
+class _NotificationEditScreenState extends State<NotificationEditScreen> {
   final _titleController = TextEditingController();
   final _bodyController = TextEditingController();
-  
-  String _targetType = 'all'; 
+
+  String _targetType = 'all';
   final Set<String> _selectedClassrooms = {};
-  
+
   List<String> _classroomOptions = [];
   bool _isLoadingClassrooms = true;
   bool _isLoadingSave = false;
@@ -199,14 +208,14 @@ class _NotificationEditDialogState extends State<_NotificationEditDialog> {
   @override
   void initState() {
     super.initState();
-    _fetchClassrooms(); // ★ダイアログ起動時にデータを取得
+    _fetchClassrooms();
 
     if (widget.doc != null) {
       final data = widget.doc!.data() as Map<String, dynamic>;
       _titleController.text = data['title'] ?? '';
       _bodyController.text = data['body'] ?? data['detail'] ?? '';
       _targetType = data['target'] ?? 'all';
-      
+
       if (_targetType == 'specific') {
         final list = List<String>.from(data['targetClassrooms'] ?? []);
         _selectedClassrooms.addAll(list);
@@ -214,34 +223,52 @@ class _NotificationEditDialogState extends State<_NotificationEditDialog> {
     }
   }
 
-  // ★修正: 教室データをより安全に取得
   Future<void> _fetchClassrooms() async {
     try {
       final snapshot = await FirebaseFirestore.instance.collection('classrooms').get();
       final List<String> list = [];
-      
+
       for (var doc in snapshot.docs) {
         final data = doc.data();
-        // nameフィールドが存在する場合のみ追加
         if (data.containsKey('name') && data['name'] != null) {
           list.add(data['name'].toString());
         }
       }
 
+      if (list.isEmpty) {
+        list.addAll([
+          'ビースマイリー湘南藤沢教室',
+          'ビースマイリー湘南台教室',
+          'ビースマイリープラス湘南藤沢教室',
+        ]);
+      }
+
       if (mounted) {
         setState(() {
-          _classroomOptions = list.toSet().toList(); // 重複排除
+          _classroomOptions = list.toSet().toList();
           _isLoadingClassrooms = false;
         });
       }
     } catch (e) {
       debugPrint('Error fetching classrooms: $e');
-      if (mounted) setState(() => _isLoadingClassrooms = false);
+      if (mounted) {
+        setState(() {
+          _classroomOptions = [
+            'ビースマイリー湘南藤沢教室',
+            'ビースマイリー湘南台教室',
+            'ビースマイリープラス湘南藤沢教室',
+          ];
+          _isLoadingClassrooms = false;
+        });
+      }
     }
   }
 
   Future<void> _save() async {
-    if (_titleController.text.trim().isEmpty) return;
+    if (_titleController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('タイトルを入力してください')));
+      return;
+    }
     if (_targetType == 'specific' && _selectedClassrooms.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('教室を選択してください')));
       return;
@@ -265,9 +292,14 @@ class _NotificationEditDialogState extends State<_NotificationEditDialog> {
         await widget.doc!.reference.update(data);
       }
 
-      if (mounted) Navigator.pop(context);
+      if (mounted) {
+        Navigator.pop(context); // 画面を閉じる
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('お知らせを保存しました')));
+      }
     } catch (e) {
-      // エラー処理
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('エラーが発生しました: $e')));
+      }
     } finally {
       if (mounted) setState(() => _isLoadingSave = false);
     }
@@ -277,28 +309,66 @@ class _NotificationEditDialogState extends State<_NotificationEditDialog> {
   Widget build(BuildContext context) {
     final isEditing = widget.doc != null;
 
-    return AlertDialog(
-      title: Text(isEditing ? 'お知らせ編集' : 'お知らせ作成', style: const TextStyle(fontWeight: FontWeight.bold)),
-      content: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 500),
-        child: SingleChildScrollView(
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(isEditing ? 'お知らせ編集' : 'お知らせ作成'),
+        leading: IconButton(
+          icon: const Icon(Icons.close),
+          onPressed: () => Navigator.pop(context),
+        ),
+        actions: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: ElevatedButton(
+              onPressed: _isLoadingSave ? null : _save,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.orange,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              ),
+              child: _isLoadingSave
+                  ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                  : Text(isEditing ? '更新' : '配信'),
+            ),
+          ),
+        ],
+      ),
+      body: SingleChildScrollView(
+        child: Padding(
+          padding: const EdgeInsets.all(24.0),
           child: Column(
-            mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // タイトル入力
+              const Text('タイトル', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+              const SizedBox(height: 8),
               TextField(
                 controller: _titleController,
-                decoration: const InputDecoration(labelText: 'タイトル', border: OutlineInputBorder()),
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: _bodyController,
-                maxLines: 5,
-                decoration: const InputDecoration(labelText: '本文', border: OutlineInputBorder()),
+                decoration: const InputDecoration(
+                  hintText: '例：9月のイベントについて',
+                  border: OutlineInputBorder(),
+                  contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                ),
               ),
               const SizedBox(height: 24),
-              
-              const Text('配信対象', style: TextStyle(fontWeight: FontWeight.bold)),
+
+              // 本文入力
+              const Text('本文', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+              const SizedBox(height: 8),
+              TextField(
+                controller: _bodyController,
+                maxLines: 8,
+                decoration: const InputDecoration(
+                  hintText: 'お知らせの内容を入力してください',
+                  border: OutlineInputBorder(),
+                  contentPadding: EdgeInsets.all(12),
+                ),
+              ),
+              const SizedBox(height: 24),
+
+              // 配信対象
+              const Text('配信対象', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+              const SizedBox(height: 8),
               Row(
                 children: [
                   Radio<String>(
@@ -307,41 +377,41 @@ class _NotificationEditDialogState extends State<_NotificationEditDialog> {
                     activeColor: Colors.orange,
                     onChanged: (val) => setState(() => _targetType = val!),
                   ),
-                  const Text('全体'),
-                  const SizedBox(width: 16),
+                  const Text('全体へ配信'),
+                  const SizedBox(width: 24),
                   Radio<String>(
                     value: 'specific',
                     groupValue: _targetType,
                     activeColor: Colors.orange,
                     onChanged: (val) => setState(() => _targetType = val!),
                   ),
-                  const Text('教室を指定'),
+                  const Text('教室を指定して配信'),
                 ],
               ),
 
-              // 教室選択リスト
+              // 教室選択エリア（「教室を指定」の場合のみ表示）
               if (_targetType == 'specific') ...[
-                const SizedBox(height: 8),
+                const SizedBox(height: 16),
                 Container(
-                  height: 200,
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
+                    color: Colors.white,
                     border: Border.all(color: Colors.grey.shade300),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: _isLoadingClassrooms
                       ? const Center(child: CircularProgressIndicator())
                       : _classroomOptions.isEmpty
-                          ? const Center(child: Text('教室データがありません', style: TextStyle(color: Colors.grey)))
-                          : ListView.builder(
-                              shrinkWrap: true,
-                              itemCount: _classroomOptions.length,
-                              itemBuilder: (context, index) {
-                                final roomName = _classroomOptions[index];
+                          ? const Text('教室データがありません', style: TextStyle(color: Colors.grey))
+                          // ★修正: ListViewではなくColumnを使って安全に表示（スクロールは画面全体で行う）
+                          : Column(
+                              children: _classroomOptions.map((roomName) {
                                 return CheckboxListTile(
                                   value: _selectedClassrooms.contains(roomName),
-                                  title: Text(roomName, style: const TextStyle(fontSize: 14)),
+                                  title: Text(roomName),
                                   activeColor: Colors.orange,
-                                  dense: true,
+                                  contentPadding: EdgeInsets.zero,
                                   controlAffinity: ListTileControlAffinity.leading,
                                   onChanged: (val) {
                                     setState(() {
@@ -353,27 +423,16 @@ class _NotificationEditDialogState extends State<_NotificationEditDialog> {
                                     });
                                   },
                                 );
-                              },
+                              }).toList(),
                             ),
                 ),
               ],
+              // 下部の余白
+              const SizedBox(height: 50),
             ],
           ),
         ),
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('キャンセル'),
-        ),
-        ElevatedButton(
-          onPressed: _isLoadingSave ? null : _save,
-          style: ElevatedButton.styleFrom(backgroundColor: Colors.orange, foregroundColor: Colors.white),
-          child: _isLoadingSave
-              ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-              : Text(isEditing ? '更新' : '配信'),
-        ),
-      ],
     );
   }
 }

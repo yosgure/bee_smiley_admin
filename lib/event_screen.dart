@@ -66,48 +66,54 @@ class _EventScreenState extends State<EventScreen> with SingleTickerProviderStat
       ),
       backgroundColor: const Color(0xFFF2F2F7),
       
-      // Firestoreからデータを取得
-      body: StreamBuilder<QuerySnapshot>(
-        stream: _eventsRef.orderBy('createdAt', descending: true).snapshots(),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          if (snapshot.hasError) {
-            return const Center(child: Text('エラーが発生しました'));
-          }
-
-          final allDocs = snapshot.data!.docs;
-          final now = DateTime.now();
-
-          // 締め切りでデータを振り分け
-          final activeEvents = <DocumentSnapshot>[];
-          final pastEvents = <DocumentSnapshot>[];
-
-          for (var doc in allDocs) {
-            final data = doc.data() as Map<String, dynamic>;
-            // 締め切り日を取得（なければ遠い未来扱い）
-            final Timestamp? deadlineTs = data['deadline'];
-            // 締め切り判定は日付の終わり(23:59:59)までを考慮
-            final DateTime deadline = (deadlineTs?.toDate() ?? DateTime(2100)).add(const Duration(days: 1)).subtract(const Duration(seconds: 1));
-            
-            if (deadline.isAfter(now)) { // 締め切りが現在時刻より後なら公開中
-              activeEvents.add(doc);
-            } else { // それ以外は終了分
-              pastEvents.add(doc);
-            }
-          }
-
-          return TabBarView(
-            controller: _tabController,
-            children: [
-              // 公開中リスト
-              _buildEventList(activeEvents, true),
-              // 終了分リスト
-              _buildEventList(pastEvents, false),
-            ],
-          );
-        },
+      // ★修正: 画面幅を制限して中央寄せにする (PCで見やすくするため)
+      body: Align(
+        alignment: Alignment.topCenter,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 600), // スマホ程度の幅に制限
+          child: StreamBuilder<QuerySnapshot>(
+            stream: _eventsRef.orderBy('createdAt', descending: true).snapshots(),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Center(child: CircularProgressIndicator());
+              }
+              if (snapshot.hasError) {
+                return const Center(child: Text('エラーが発生しました'));
+              }
+      
+              final allDocs = snapshot.data!.docs;
+              final now = DateTime.now();
+      
+              // 締め切りでデータを振り分け
+              final activeEvents = <DocumentSnapshot>[];
+              final pastEvents = <DocumentSnapshot>[];
+      
+              for (var doc in allDocs) {
+                final data = doc.data() as Map<String, dynamic>;
+                // 締め切り日を取得（なければ遠い未来扱い）
+                final Timestamp? deadlineTs = data['deadline'];
+                // 締め切り判定は日付の終わり(23:59:59)までを考慮
+                final DateTime deadline = (deadlineTs?.toDate() ?? DateTime(2100)).add(const Duration(days: 1)).subtract(const Duration(seconds: 1));
+                
+                if (deadline.isAfter(now)) { // 締め切りが現在時刻より後なら公開中
+                  activeEvents.add(doc);
+                } else { // それ以外は終了分
+                  pastEvents.add(doc);
+                }
+              }
+      
+              return TabBarView(
+                controller: _tabController,
+                children: [
+                  // 公開中リスト
+                  _buildEventList(activeEvents, true),
+                  // 終了分リスト
+                  _buildEventList(pastEvents, false),
+                ],
+              );
+            },
+          ),
+        ),
       ),
       
       floatingActionButton: FloatingActionButton(
@@ -179,24 +185,27 @@ class _EventScreenState extends State<EventScreen> with SingleTickerProviderStat
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // 1. 写真エリア
-          SizedBox(
-            height: 180,
-            width: double.infinity,
-            child: event['imageUrl'] != null && (event['imageUrl'] as String).isNotEmpty
-                ? CachedNetworkImage(
-                    imageUrl: event['imageUrl'],
-                    fit: BoxFit.cover,
-                    // 過去分は少し暗くする
-                    color: isActive ? null : Colors.grey.withOpacity(0.5),
-                    colorBlendMode: isActive ? null : BlendMode.saturation,
-                    placeholder: (context, url) => Container(color: Colors.grey.shade200),
-                    errorWidget: (context, url, error) => const Center(child: Icon(Icons.broken_image, color: Colors.grey)),
-                  )
-                : Container(
-                    color: Colors.grey.shade300,
-                    child: const Center(child: Icon(Icons.event, size: 50, color: Colors.grey)),
-                  ),
+          // 1. 写真エリア (幅が制限されたのでシンプルにアスペクト比固定でOK)
+          AspectRatio(
+            aspectRatio: 16 / 9,
+            child: Container(
+              width: double.infinity,
+              color: Colors.grey.shade100, // ロード中の背景
+              child: event['imageUrl'] != null && (event['imageUrl'] as String).isNotEmpty
+                  ? CachedNetworkImage(
+                      imageUrl: event['imageUrl'],
+                      fit: BoxFit.cover,
+                      // 過去分は少し暗くする
+                      color: isActive ? null : Colors.grey.withOpacity(0.5),
+                      colorBlendMode: isActive ? null : BlendMode.saturation,
+                      placeholder: (context, url) => Container(color: Colors.grey.shade200),
+                      errorWidget: (context, url, error) => const Center(child: Icon(Icons.broken_image, color: Colors.grey)),
+                    )
+                  : Container(
+                      color: Colors.grey.shade300,
+                      child: const Center(child: Icon(Icons.event, size: 50, color: Colors.grey)),
+                    ),
+            ),
           ),
 
           Padding(
@@ -221,26 +230,29 @@ class _EventScreenState extends State<EventScreen> with SingleTickerProviderStat
                   ],
                 ),
                 
-                // 締め切りバッジ
-                Container(
-                  margin: const EdgeInsets.only(bottom: 12),
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: isActive ? Colors.red.shade50 : Colors.grey.shade400,
-                    borderRadius: BorderRadius.circular(4),
-                    border: Border.all(color: isActive ? Colors.red.shade200 : Colors.grey),
-                  ),
-                  child: Text(
-                    isActive ? '締切: $deadlineStr まで' : '受付終了',
-                    style: TextStyle(
-                      color: isActive ? Colors.red : Colors.white,
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
+                const SizedBox(height: 8),
 
                 _buildIconText(Icons.calendar_today, eventDateTimeStr),
+                
+                // 締め切り情報を控えめに追加
+                if (deadlineTs != null && isActive) ...[
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      const SizedBox(width: 28), // アイコン分のインデント調整
+                      Icon(Icons.timer_outlined, size: 14, color: Colors.grey.shade600),
+                      const SizedBox(width: 4),
+                      Text(
+                        '申込締切: $deadlineStr まで',
+                        style: TextStyle(
+                          color: Colors.grey.shade600,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+
                 const SizedBox(height: 6),
                 _buildIconText(Icons.place, event['location'] ?? ''),
                 if ((event['address'] ?? '').isNotEmpty)

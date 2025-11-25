@@ -87,7 +87,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       controller: _loginIdController,
                       decoration: InputDecoration(
                         labelText: 'ログインID', // 表示名
-                        hintText: '例: tanaka',
+                        // hintText: '例: tanaka', // ★ここを削除しました
                         prefixIcon: const Icon(Icons.person_outline), // アイコンを人型に
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(10),
