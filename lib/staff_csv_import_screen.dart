@@ -18,7 +18,6 @@ class _StaffCsvImportScreenState extends State<StaffCsvImportScreen> {
   bool _isLoading = false;
   String _statusMessage = '';
   
-  // 固定ドメイン
   static const String _fixedDomain = '@bee-smiley.com';
 
   Future<void> _pickCsv() async {
@@ -31,17 +30,27 @@ class _StaffCsvImportScreenState extends State<StaffCsvImportScreen> {
 
       if (result != null) {
         final bytes = result.files.first.bytes!;
-        // 文字化け防止 (UTF-8)
         final csvString = utf8.decode(bytes);
         
         setState(() {
-          _csvData = const CsvToListConverter().convert(csvString);
+          _csvData = const CsvToListConverter(shouldParseNumbers: false).convert(csvString);
           _statusMessage = '${_csvData.length - 1} 件のデータを読み込みました。\n「登録開始」を押してください。';
         });
       }
     } catch (e) {
       setState(() => _statusMessage = 'エラー: CSVを読み込めませんでした。\n$e');
     }
+  }
+
+  String _formatPhone(dynamic value) {
+    if (value == null) return '';
+    String s = value.toString().trim();
+    if (s.isEmpty) return '';
+    if (s.contains('-')) return s;
+    if (!s.startsWith('0') && (s.length == 9 || s.length == 10)) {
+      return '0$s';
+    }
+    return s;
   }
 
   Future<void> _registerAll() async {
@@ -69,10 +78,8 @@ class _StaffCsvImportScreenState extends State<StaffCsvImportScreen> {
     final tempAuth = FirebaseAuth.instanceFor(app: tempApp!);
     final firestore = FirebaseFirestore.instance;
 
-    // 1行目はヘッダーとみなしてスキップ
     for (int i = 1; i < _csvData.length; i++) {
       final row = _csvData[i];
-      // 想定カラム: A:氏名, B:ふりがな, C:ID, D:PW, E:電話, F:メール, G:役職, H:教室
       if (row.length < 4) {
         errorCount++;
         continue;
@@ -82,14 +89,15 @@ class _StaffCsvImportScreenState extends State<StaffCsvImportScreen> {
       final String furigana = row.length > 1 ? row[1].toString().trim() : '';
       final String loginId = row[2].toString().trim();
       final String password = row[3].toString().trim();
-      final String phone = row.length > 4 ? row[4].toString().trim() : '';
+      
+      final String phone = row.length > 4 ? _formatPhone(row[4]) : '';
+      
       final String contactEmail = row.length > 5 ? row[5].toString().trim() : '';
       final String role = row.length > 6 ? row[6].toString().trim() : 'スタッフ';
       
-      // ★修正: 教室は「/」か「、」で区切ってリスト化
       final String rawClassrooms = row.length > 7 ? row[7].toString() : '';
       final List<String> classrooms = rawClassrooms
-          .replaceAll('、', '/') // 「、」も「/」に統一
+          .replaceAll('、', '/')
           .split('/')
           .map((e) => e.trim())
           .where((e) => e.isNotEmpty)
@@ -98,13 +106,11 @@ class _StaffCsvImportScreenState extends State<StaffCsvImportScreen> {
       final String authEmail = '$loginId$_fixedDomain';
 
       try {
-        // 1. Authenticationにユーザー作成
         UserCredential userCredential = await tempAuth.createUserWithEmailAndPassword(
           email: authEmail,
           password: password,
         );
 
-        // 2. Firestoreに保存
         await firestore.collection('staffs').add({
           'uid': userCredential.user!.uid,
           'loginId': loginId,
@@ -113,15 +119,15 @@ class _StaffCsvImportScreenState extends State<StaffCsvImportScreen> {
           'phone': phone,
           'email': contactEmail,
           'role': role,
-          'classrooms': classrooms, // 配列として保存
+          'classrooms': classrooms,
           'createdAt': FieldValue.serverTimestamp(),
+          'isInitialPassword': true, // ★ここを追加
         });
 
         successCount++;
       } catch (e) {
         errorCount++;
         errorLogs.add('$name ($loginId): $e');
-        debugPrint('Error registering $name: $e');
       }
     }
 
@@ -160,22 +166,8 @@ class _StaffCsvImportScreenState extends State<StaffCsvImportScreen> {
                   Text('・1行目: ヘッダー (無視されます)'),
                   Text('・列の順番: A:氏名, B:ふりがな, C:ID, D:PW, E:電話, F:メール, G:役職, H:教室'),
                   SizedBox(height: 12),
-                  Text('【H列(教室)の書き方】', style: TextStyle(fontWeight: FontWeight.bold)),
-                  Text('・正式名称で記入してください。'),
-                  Text('・複数ある場合は「/」で区切ってください。'),
-                  SizedBox(height: 8),
-                  Text(
-                    '例: ビースマイリー湘南藤沢教室/ビースマイリー湘南台教室',
-                    style: TextStyle(color: Colors.blueGrey, fontWeight: FontWeight.bold, fontSize: 12),
-                  ),
-                  SizedBox(height: 8),
-                  Divider(),
-                  SizedBox(height: 8),
-                  Text('データ例:', style: TextStyle(color: Colors.grey)),
-                  Text(
-                    '山田 花子,やまだ,hanako,pass123,090-0000,test@ex.com,保育士,ビースマイリー湘南藤沢教室',
-                    style: TextStyle(fontSize: 12, fontFamily: 'monospace'),
-                  ),
+                  Text('【パスワードについて】', style: TextStyle(fontWeight: FontWeight.bold)),
+                  Text('D列のパスワードが初期設定されます。「次回ログイン時に変更」フラグが自動でONになります。'),
                 ],
               ),
             ),

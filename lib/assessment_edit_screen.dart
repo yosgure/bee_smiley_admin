@@ -1,15 +1,27 @@
+import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:intl/intl.dart';
+import 'package:image_picker/image_picker.dart';
 
 class AssessmentEditScreen extends StatefulWidget {
-  final String? preSelectedStudentName;
-  final bool isMonthlyMode; // 初期モード指定用
+  final String studentId;
+  final String studentName;
+  final String type; // 'weekly' or 'monthly'
+  final String? docId;
+  final Map<String, dynamic>? initialData;
 
   const AssessmentEditScreen({
     super.key,
-    this.preSelectedStudentName,
-    this.isMonthlyMode = false,
+    required this.studentId,
+    required this.studentName,
+    required this.type,
+    this.docId,
+    this.initialData,
   });
 
   @override
@@ -17,547 +29,853 @@ class AssessmentEditScreen extends StatefulWidget {
 }
 
 class _AssessmentEditScreenState extends State<AssessmentEditScreen> {
+  final _formKey = GlobalKey<FormState>();
+  late Future<void> _initializationFuture;
+  
   DateTime _selectedDate = DateTime.now();
-  String? _selectedStudentName;
-  String _currentClassroom = '';
+  bool _isSaving = false;
+
+  // --- 週次用データ ---
+  List<Map<String, dynamic>> _weeklyEntries = [];
+  List<Map<String, String>> _toolList = [];
+  final List<String> _durationOptions = ['0〜5分', '6〜10分', '11〜20分', '20分以上'];
+
+  // --- 月次用データ ---
+  final TextEditingController _monthlySummaryController = TextEditingController();
+  final Set<String> _selectedSensitivePeriods = {}; 
   
-  bool _isMonthlyMode = false;
+  // 非認知能力と伸びている力のペアリスト
+  List<Map<String, String?>> _monthlyEntries = [];
 
-  List<Map<String, String>> _studentList = [];
-  bool _isLoadingStudents = true;
-
-  // --- 週次データ ---
-  final List<Map<String, dynamic>> _activities = [
-    {
-      'title': 'ピンクタワー',
-      'duration': '6~10分',
-      'evaluation': '◎',
-      'comment': '視覚で判断して順番に積み上げることができました。',
-      'imageUrl': null,
-    },
-  ];
-
-  // --- 月間データ用 選択状態管理 ---
-  
-  // 1. 敏感期（複数選択）
-  List<String> _selectedSensitivePeriods = [];
-  // Firestoreから取得する敏感期リスト
-  List<String> _sensitivePeriodsMaster = []; 
-
-  // 2. 非認知能力（カテゴリと力のペア）
-  // 形式: [{'category': '自立心', 'strength': '身支度を自分で行える'}]
-  List<Map<String, String>> _selectedStrengths = [];
-  
-  // 非認知能力マスタ（ご提示いただいたリスト）
-  final Map<String, List<String>> _nonCognitiveSkillMaster = {
-    '愛着心': ['スムーズに母子分離ができる', '教師や友達を頼ることができる'],
-    '自立心': ['身支度を自分で行える', '自分の持ち物の管理ができる'],
-    '集中力': ['活動に集中することができる'],
-    '社会性': ['教師の話を聞ける', 'お友達の活動を待てる', 'お友達とコミュニケーションを取れる', '自分の意見を伝えることができる', '集団活動に参加することができる'],
-    '思いやり': ['お手伝いができる', '他者を気遣うことができる'],
-    '責任感': ['片付けができる', '自分の役割を全うできる'],
-    'やり抜く力': ['困難を感じても諦めずに取り組める'],
-    '自主性': ['積極的に活動に参加できる', '自分で活動を選ぶことができる', '新しい活動に挑戦できる'],
-    '自己コントロール': ['ものを丁寧に扱える', '感情をコントロールできる', 'ルールを守ることができる'],
-    'ワーキングメモリ': ['工程の長い活動に取り組める', '見通しを持つことができる', '模倣することができる'],
-  };
-
-  final TextEditingController _monthlyCommentController = TextEditingController();
+  // マスタデータ
+  Map<String, List<String>> _nonCognitiveSkillMap = {};
+  List<String> _sensitivePeriodMaster = [];
 
   @override
   void initState() {
     super.initState();
-    _isMonthlyMode = widget.isMonthlyMode;
+    _initializationFuture = _initializeAll();
+  }
 
-    if (widget.preSelectedStudentName != null) {
-      _selectedStudentName = widget.preSelectedStudentName;
-      _isLoadingStudents = false;
+  Future<void> _initializeAll() async {
+    await _fetchMasters();
+    
+    if (widget.initialData != null) {
+      _initializeEditData();
     } else {
-      _fetchStudents();
+      _initializeNewData();
     }
-    _fetchSensitivePeriods(); // 敏感期マスタを取得
   }
 
-  // Firestoreから敏感期マスタを取得
-  Future<void> _fetchSensitivePeriods() async {
+  Future<void> _fetchMasters() async {
     try {
-      final snapshot = await FirebaseFirestore.instance.collection('sensitive_periods').get();
-      final periods = snapshot.docs.map((doc) => doc['name'] as String).toList();
-      if (mounted) {
-        setState(() {
-          _sensitivePeriodsMaster = periods;
-          // マスタが空ならデフォルトを入れる（テスト用）
-          if (_sensitivePeriodsMaster.isEmpty) {
-            _sensitivePeriodsMaster = ['秩序の敏感期', '運動の敏感期', '言語の敏感期', '感覚の敏感期', '数の敏感期', '模倣の敏感期'];
-          }
+      if (widget.type == 'weekly') {
+        final toolsSnap = await FirebaseFirestore.instance.collection('tools').get();
+        _toolList = toolsSnap.docs.map((d) {
+          final data = d.data();
+          return {
+            'name': (data['name'] ?? '') as String,
+            'furigana': (data['furigana'] ?? '') as String,
+          };
+        }).toList();
+
+        if (_toolList.isEmpty) {
+          _toolList = [
+            {'name': '円柱さし', 'furigana': 'えんちゅうさし'},
+            {'name': 'ピンクタワー', 'furigana': 'ぴんくたわー'},
+          ];
+        }
+        
+        _toolList.sort((a, b) {
+          final ka = a['furigana'] ?? a['name'] ?? '';
+          final kb = b['furigana'] ?? b['name'] ?? '';
+          return ka.compareTo(kb);
         });
-      }
-    } catch (e) {
-      debugPrint('Error fetching sensitive periods: $e');
-    }
-  }
 
-  Future<void> _fetchStudents() async {
-    try {
-      final snapshot = await FirebaseFirestore.instance.collection('families').get();
-      List<Map<String, String>> loadedStudents = [];
+      } else {
+        // 月次マスタ取得
+        final ncSnap = await FirebaseFirestore.instance.collection('non_cognitive_skills').get();
+        final spSnap = await FirebaseFirestore.instance.collection('sensitive_periods').get();
 
-      for (var doc in snapshot.docs) {
-        final data = doc.data();
-        final String lastName = data['lastName'] ?? '';
-        final List<dynamic> children = data['children'] ?? [];
-
-        for (var child in children) {
-          final String firstName = child['firstName'] ?? '';
-          final String classroom = child['classroom'] ?? '';
-          final String fullName = '$lastName $firstName'.trim();
-          if (fullName.isNotEmpty) {
-            loadedStudents.add({'name': fullName, 'classroom': classroom});
+        _nonCognitiveSkillMap = {};
+        for (var doc in ncSnap.docs) {
+          final data = doc.data();
+          final name = data['name'] as String;
+          
+          // ★修正: あらゆるフィールド名の可能性をチェック
+          List<String> skills = List<String>.from(data['strengths'] ?? []);
+          if (skills.isEmpty) {
+            skills = List<String>.from(data['growing_skills'] ?? []);
           }
+          if (skills.isEmpty) {
+            skills = List<String>.from(data['growingSkills'] ?? []);
+          }
+          
+          // ★重要修正: データが空でも勝手に文字を追加しない！
+          // if (skills.isEmpty) skills.add('$nameに関する力'); // ← これを削除しました
+          
+          _nonCognitiveSkillMap[name] = skills;
+        }
+        
+        // マスタ自体が空の場合のみ開発用ダミーを入れる（本番では不要なら削除可）
+        if (_nonCognitiveSkillMap.isEmpty) {
+          _nonCognitiveSkillMap = {
+            '協調性': ['貸し借りができる', '順番を待てる'],
+            '自律心': ['身支度ができる', '片付けができる'],
+          };
+        }
+
+        _sensitivePeriodMaster = spSnap.docs.map((d) => d['name'] as String).toList();
+        if (_sensitivePeriodMaster.isEmpty) {
+          _sensitivePeriodMaster = ['運動', '感覚', '言語', '秩序', '微小', '社会性'];
         }
       }
-
-      if (mounted) {
-        setState(() {
-          _studentList = loadedStudents;
-          _isLoadingStudents = false;
-        });
-      }
     } catch (e) {
-      debugPrint('Error: $e');
-      if (mounted) setState(() => _isLoadingStudents = false);
+      debugPrint('Error fetching masters: $e');
     }
   }
 
-  void _onStudentSelected(String? name) {
-    if (name == null) return;
-    final studentData = _studentList.firstWhere(
-      (s) => s['name'] == name,
-      orElse: () => {'name': name, 'classroom': ''},
-    );
+  void _initializeNewData() {
+    if (widget.type == 'weekly') {
+      _addWeeklyEntry();
+    } else {
+      _addMonthlyEntry();
+    }
+  }
+
+  void _initializeEditData() {
+    final data = widget.initialData!;
+    if (data['date'] != null) {
+      _selectedDate = (data['date'] as Timestamp).toDate();
+    }
+
+    if (widget.type == 'weekly') {
+      final entries = List<Map<String, dynamic>>.from(data['entries'] ?? []);
+      for (var entry in entries) {
+        _weeklyEntries.add({
+          'tool': entry['tool'] ?? '',
+          'rating': entry['rating'] ?? '○',
+          'duration': entry['duration'],
+          'comment': entry['comment'] ?? '',
+          'photoUrl': entry['photoUrl'],
+          'localPhoto': null,
+        });
+      }
+      if (_weeklyEntries.isEmpty) _addWeeklyEntry();
+    } else {
+      _monthlySummaryController.text = data['summary'] ?? '';
+      _selectedSensitivePeriods.addAll(List<String>.from(data['sensitivePeriods'] ?? []));
+      
+      final savedEntries = List<Map<String, dynamic>>.from(data['monthlyEntries'] ?? []);
+      for (var entry in savedEntries) {
+        _monthlyEntries.add({
+          'category': entry['category'] as String?,
+          'skill': entry['skill'] as String?,
+        });
+      }
+      if (_monthlyEntries.isEmpty) _addMonthlyEntry();
+    }
+  }
+
+  void _addWeeklyEntry() {
     setState(() {
-      _selectedStudentName = name;
-      _currentClassroom = studentData['classroom'] ?? '';
+      _weeklyEntries.add({
+        'tool': null,
+        'rating': '○',
+        'duration': null,
+        'comment': '',
+        'photoUrl': null,
+        'localPhoto': null,
+      });
     });
+  }
+
+  void _removeWeeklyEntry(int index) {
+    setState(() {
+      _weeklyEntries.removeAt(index);
+    });
+  }
+
+  Future<void> _pickImage(int index) async {
+    final picker = ImagePicker();
+    final XFile? image = await picker.pickImage(source: ImageSource.gallery);
+    if (image != null) {
+      setState(() {
+        _weeklyEntries[index]['localPhoto'] = image;
+      });
+    }
+  }
+
+  void _addMonthlyEntry() {
+    setState(() {
+      _monthlyEntries.add({
+        'category': null,
+        'skill': null,
+      });
+    });
+  }
+
+  void _removeMonthlyEntry(int index) {
+    setState(() {
+      _monthlyEntries.removeAt(index);
+    });
+  }
+
+  Future<String?> _uploadImage(XFile file) async {
+    try {
+      final Uint8List fileBytes = await file.readAsBytes();
+      final String fileName = '${DateTime.now().millisecondsSinceEpoch}_${file.name}';
+      final ref = FirebaseStorage.instance.ref().child('assessment_photos/$fileName');
+      await ref.putData(fileBytes, SettableMetadata(contentType: 'image/jpeg'));
+      return await ref.getDownloadURL();
+    } catch (e) {
+      return null;
+    }
+  }
+
+  Future<void> _save() async {
+    if (!_formKey.currentState!.validate()) return;
+    
+    setState(() => _isSaving = true);
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      String staffName = '担当スタッフ'; 
+      if (user != null) {
+         final snap = await FirebaseFirestore.instance.collection('staffs').where('uid', isEqualTo: user.uid).get();
+         if (snap.docs.isNotEmpty) staffName = snap.docs.first.data()['name'] ?? '担当スタッフ';
+      }
+
+      final Map<String, dynamic> data = {
+        'studentId': widget.studentId,
+        'studentName': widget.studentName,
+        'type': widget.type,
+        'date': _selectedDate,
+        'staffId': user?.uid,
+        'staffName': staffName,
+        'updatedAt': FieldValue.serverTimestamp(),
+      };
+
+      if (widget.type == 'weekly') {
+        List<Map<String, dynamic>> savedEntries = [];
+        for (var entry in _weeklyEntries) {
+          String? photoUrl = entry['photoUrl'];
+          if (entry['localPhoto'] != null) {
+            final url = await _uploadImage(entry['localPhoto']);
+            if (url != null) photoUrl = url;
+          }
+
+          savedEntries.add({
+            'tool': entry['tool'] ?? '未選択',
+            'rating': entry['rating'],
+            'duration': entry['duration'],
+            'comment': entry['comment'],
+            'photoUrl': photoUrl,
+          });
+        }
+        data['entries'] = savedEntries;
+        data['dateRange'] = DateFormat('yyyy/MM/dd (E)', 'ja').format(_selectedDate);
+        
+        if (savedEntries.isNotEmpty) {
+          final first = savedEntries.first;
+          data['content'] = '${first['tool']} (${first['rating']})... 他${savedEntries.length - 1}件';
+        } else {
+          data['content'] = '(記録なし)';
+        }
+      } else {
+        data['summary'] = _monthlySummaryController.text;
+        data['sensitivePeriods'] = _selectedSensitivePeriods.toList();
+        
+        data['monthlyEntries'] = _monthlyEntries;
+        
+        final flatSkills = _monthlyEntries
+            .map((e) => e['skill'])
+            .where((s) => s != null)
+            .cast<String>()
+            .toList();
+        final flatCategories = _monthlyEntries
+            .map((e) => e['category'])
+            .where((c) => c != null)
+            .cast<String>()
+            .toSet()
+            .toList();
+
+        data['strengths'] = flatSkills;
+        data['skills'] = [
+          ...flatCategories,
+          ...flatSkills,
+          ..._selectedSensitivePeriods
+        ];
+      }
+
+      if (widget.docId != null) {
+        await FirebaseFirestore.instance.collection('assessments').doc(widget.docId).update(data);
+      } else {
+        data['createdAt'] = FieldValue.serverTimestamp();
+        await FirebaseFirestore.instance.collection('assessments').add(data);
+      }
+
+      if (mounted) Navigator.pop(context);
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('エラー: $e')));
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
+    }
+  }
+
+  void _showToolSelectDialog(int index) {
+    showDialog(
+      context: context,
+      builder: (context) => _ToolSelectDialog(
+        tools: _toolList,
+        onSelected: (toolName) {
+          setState(() {
+            _weeklyEntries[index]['tool'] = toolName;
+          });
+        },
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    String appBarTitle = 'アセスメント作成';
-    if (_selectedStudentName != null) {
-      appBarTitle = '$_selectedStudentName';
-    }
-
     return Scaffold(
       backgroundColor: const Color(0xFFF2F2F7),
       appBar: AppBar(
+        title: Text(widget.type == 'weekly' ? '週次アセスメント編集' : '月次サマリ編集'),
         backgroundColor: Colors.white,
         elevation: 0,
-        leadingWidth: 80,
-        leading: TextButton(
+        leading: IconButton(
+          icon: const Icon(Icons.close, color: Colors.black),
           onPressed: () => Navigator.pop(context),
-          child: const Text('閉じる', style: TextStyle(color: Colors.blue, fontSize: 16)),
-        ),
-        centerTitle: true,
-        title: Text(
-          appBarTitle,
-          style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 17),
         ),
         actions: [
           TextButton(
-            onPressed: _saveAssessment,
-            child: const Text('保存', style: TextStyle(color: Colors.blue, fontSize: 16, fontWeight: FontWeight.bold)),
+            onPressed: _isSaving ? null : _save,
+            child: const Text('保存', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
           ),
         ],
       ),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          Container(
+      body: FutureBuilder(
+        future: _initializationFuture,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          
+          return SingleChildScrollView(
             padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // モード切り替えスイッチ
-                Container(
-                  width: double.infinity,
-                  decoration: BoxDecoration(
-                    color: Colors.grey.shade200,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Row(
-                    children: [
-                      _buildModeButton('週次記録', !_isMonthlyMode),
-                      _buildModeButton('月間総括', _isMonthlyMode),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 16),
-
-                // 日付選択 (月間モードなら年月のみ表示)
-                GestureDetector(
-                  onTap: () async {
-                    final picked = await showDatePicker(
-                      context: context,
-                      initialDate: _selectedDate,
-                      firstDate: DateTime(2020),
-                      lastDate: DateTime(2030),
-                      // 月間モードでも内部的には特定の日付を持つが、表示を変える
-                    );
-                    if (picked != null) setState(() => _selectedDate = picked);
-                  },
-                  child: Row(
-                    children: [
-                      const Icon(Icons.calendar_today, color: Colors.orange, size: 20),
-                      const SizedBox(width: 12),
-                      Text(
-                        _isMonthlyMode
-                            ? DateFormat('yyyy年 M月').format(_selectedDate) // 月間用
-                            : DateFormat('yyyy年 M月 d日').format(_selectedDate), // 週次用
-                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                      ),
-                      const Icon(Icons.arrow_drop_down, color: Colors.grey),
-                    ],
-                  ),
-                ),
-                
-                if (widget.preSelectedStudentName == null) ...[
-                  const Divider(height: 24),
-                  if (_isLoadingStudents)
-                    const Center(child: CircularProgressIndicator())
-                  else
-                    DropdownButtonFormField<String>(
-                      value: _selectedStudentName,
-                      decoration: const InputDecoration(
-                        labelText: '対象児童',
-                        prefixIcon: Icon(Icons.face),
-                        border: OutlineInputBorder(),
-                        contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                      ),
-                      hint: const Text('児童を選択してください'),
-                      items: _studentList.map((student) {
-                        return DropdownMenuItem<String>(
-                          value: student['name'],
-                          child: Text(student['name']!),
-                        );
-                      }).toList(),
-                      onChanged: _onStudentSelected,
-                    ),
+            child: Form(
+              key: _formKey,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildDateSelector(),
+                  const SizedBox(height: 24),
+                  if (widget.type == 'weekly') _buildWeeklyForm() else _buildMonthlyForm(),
                 ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildDateSelector() {
+    final isWeekly = widget.type == 'weekly';
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(isWeekly ? '対象日' : '対象月', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)),
+          const SizedBox(height: 8),
+          InkWell(
+            onTap: () async {
+              final picked = await showDatePicker(
+                context: context,
+                initialDate: _selectedDate,
+                firstDate: DateTime(2020),
+                lastDate: DateTime(2030),
+                locale: const Locale('ja'),
+              );
+              if (picked != null) {
+                setState(() {
+                  _selectedDate = picked;
+                });
+              }
+            },
+            child: Row(
+              children: [
+                const Icon(Icons.calendar_month, color: Colors.orange),
+                const SizedBox(width: 12),
+                Text(
+                  isWeekly 
+                      ? DateFormat('yyyy/MM/dd (E)', 'ja').format(_selectedDate)
+                      : DateFormat('yyyy年 M月度').format(_selectedDate),
+                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+                const Spacer(),
+                const Icon(Icons.arrow_drop_down, color: Colors.grey),
               ],
             ),
           ),
-          
-          const SizedBox(height: 24),
-
-          if (_isMonthlyMode)
-            _buildMonthlyForm()
-          else
-            _buildWeeklyForm(),
-          
-          const SizedBox(height: 40),
         ],
       ),
     );
   }
 
-  Widget _buildModeButton(String text, bool isActive) {
-    return Expanded(
-      child: GestureDetector(
-        onTap: () {
-          setState(() {
-            _isMonthlyMode = (text == '月間総括');
-          });
-        },
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 10),
-          decoration: BoxDecoration(
-            color: isActive ? Colors.white : Colors.transparent,
-            borderRadius: BorderRadius.circular(6),
-            boxShadow: isActive ? [BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 2)] : [],
-          ),
-          alignment: Alignment.center,
-          child: Text(
-            text,
-            style: TextStyle(
-              fontWeight: FontWeight.bold,
-              color: isActive ? Colors.black : Colors.grey,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  // --- 週次フォーム ---
   Widget _buildWeeklyForm() {
     return Column(
       children: [
-        ..._activities.asMap().entries.map((entry) => _buildActivityCard(entry.key, entry.value)),
-        const SizedBox(height: 16),
-        SizedBox(
-          width: double.infinity,
-          height: 50,
+        ListView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: _weeklyEntries.length,
+          itemBuilder: (context, index) {
+            final entry = _weeklyEntries[index];
+            return Container(
+              margin: const EdgeInsets.only(bottom: 16),
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 4)],
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text('教具 ${index + 1}', style: const TextStyle(color: Colors.grey, fontSize: 12)),
+                      if (_weeklyEntries.length > 1)
+                        IconButton(
+                          icon: const Icon(Icons.close, color: Colors.grey, size: 20),
+                          onPressed: () => _removeWeeklyEntry(index),
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  InkWell(
+                    onTap: () => _showToolSelectDialog(index),
+                    child: Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
+                      decoration: BoxDecoration(
+                        border: Border.all(color: Colors.grey.shade300),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            entry['tool'] ?? '教具を選択',
+                            style: TextStyle(
+                              color: entry['tool'] == null ? Colors.grey.shade600 : Colors.black87,
+                              fontSize: 16,
+                              fontWeight: entry['tool'] != null ? FontWeight.bold : FontWeight.normal,
+                            ),
+                          ),
+                          const Icon(Icons.arrow_drop_down, color: Colors.grey),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      const Text('評価', style: TextStyle(fontSize: 12, color: Colors.grey, fontWeight: FontWeight.bold)),
+                      const SizedBox(width: 12),
+                      _buildCircleRating(index, '△', Colors.blue),
+                      const SizedBox(width: 8),
+                      _buildCircleRating(index, '○', Colors.orange),
+                      const SizedBox(width: 8),
+                      _buildCircleRating(index, '◎', Colors.red),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  const Text('所要時間', style: TextStyle(fontSize: 12, color: Colors.grey, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    children: _durationOptions.map((option) {
+                      final isSelected = entry['duration'] == option;
+                      return ChoiceChip(
+                        label: Text(option),
+                        selected: isSelected,
+                        onSelected: (val) {
+                          setState(() {
+                            entry['duration'] = val ? option : null;
+                          });
+                        },
+                        backgroundColor: Colors.grey.shade100,
+                        selectedColor: Colors.orange.shade100,
+                        labelStyle: TextStyle(
+                          color: isSelected ? Colors.orange.shade900 : Colors.black87,
+                          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                          fontSize: 12,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(20),
+                          side: BorderSide(color: isSelected ? Colors.orange : Colors.transparent),
+                        ),
+                        showCheckmark: false,
+                      );
+                    }).toList(),
+                  ),
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    initialValue: entry['comment'],
+                    decoration: const InputDecoration(
+                      hintText: 'コメントを入力...',
+                      border: OutlineInputBorder(),
+                      contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      isDense: true,
+                    ),
+                    maxLines: 2,
+                    onChanged: (val) => entry['comment'] = val,
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      InkWell(
+                        onTap: () => _pickImage(index),
+                        borderRadius: BorderRadius.circular(8),
+                        child: Container(
+                          width: 60, height: 60,
+                          decoration: BoxDecoration(
+                            color: Colors.grey.shade100,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: Colors.grey.shade300),
+                          ),
+                          clipBehavior: Clip.antiAlias,
+                          child: entry['localPhoto'] != null
+                              ? (kIsWeb 
+                                  ? Image.network(entry['localPhoto'].path, fit: BoxFit.cover)
+                                  : Image.file(File(entry['localPhoto'].path), fit: BoxFit.cover))
+                              : (entry['photoUrl'] != null
+                                  ? Image.network(entry['photoUrl'], fit: BoxFit.cover)
+                                  : const Icon(Icons.add_a_photo, color: Colors.grey)),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      const Text('写真を添付', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                    ],
+                  ),
+                ],
+              ),
+            );
+          },
+        ),
+        Center(
           child: ElevatedButton.icon(
-            onPressed: () {
-              setState(() {
-                _activities.add({
-                  'title': '', 'duration': '0~5分', 'evaluation': '○', 'comment': '', 'imageUrl': null,
-                });
-              });
-            },
-            icon: const Icon(Icons.add_circle_outline, color: Colors.blue),
-            label: const Text('教具を追加', style: TextStyle(color: Colors.blue, fontSize: 16, fontWeight: FontWeight.bold)),
+            onPressed: _addWeeklyEntry,
+            icon: const Icon(Icons.add),
+            label: const Text('活動を追加'),
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.white, elevation: 0,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              backgroundColor: Colors.orange,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
             ),
           ),
         ),
+        const SizedBox(height: 40),
       ],
     );
   }
 
-  Widget _buildActivityCard(int index, Map<String, dynamic> item) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 24),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white, borderRadius: BorderRadius.circular(12),
-      ),
-      child: Column(
-        children: [
-          TextField(
-            controller: TextEditingController(text: item['title']),
-            decoration: const InputDecoration(hintText: '教具名', border: InputBorder.none, filled: true, fillColor: Color(0xFFF9F9F9)),
-            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            onChanged: (val) => item['title'] = val,
+  Widget _buildCircleRating(int index, String label, Color color) {
+    final isSelected = _weeklyEntries[index]['rating'] == label;
+    return InkWell(
+      onTap: () => setState(() => _weeklyEntries[index]['rating'] = label),
+      child: Container(
+        width: 36, height: 36,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: isSelected ? color : Colors.white,
+          shape: BoxShape.circle,
+          border: Border.all(color: isSelected ? color : Colors.grey.shade400),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: isSelected ? Colors.white : Colors.grey.shade600,
+            fontWeight: FontWeight.bold,
+            fontSize: 16,
           ),
-          const SizedBox(height: 16),
-          _buildSegmentedControl(
-            options: ['0~5分', '6~10分', '11~20分', '20分以上'],
-            selectedValue: item['duration'],
-            onSelected: (val) => setState(() => item['duration'] = val),
-          ),
-          const SizedBox(height: 12),
-          _buildSegmentedControl(
-            options: ['◎', '○', '△'],
-            selectedValue: item['evaluation'],
-            onSelected: (val) => setState(() => item['evaluation'] = val),
-          ),
-          const SizedBox(height: 16),
-          TextField(
-            controller: TextEditingController(text: item['comment']),
-            maxLines: null,
-            decoration: const InputDecoration(hintText: 'コメント', border: InputBorder.none),
-            onChanged: (val) => item['comment'] = val,
-          ),
-        ],
+        ),
       ),
     );
   }
 
-  // --- 月間フォーム ---
   Widget _buildMonthlyForm() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // 1. 敏感期選択エリア
         const Padding(
-          padding: EdgeInsets.only(left: 4, bottom: 6),
-          child: Text('敏感期 (複数選択可)', style: TextStyle(color: Colors.grey, fontSize: 13, fontWeight: FontWeight.bold)),
+          padding: EdgeInsets.only(left: 4, bottom: 8),
+          child: Text('非認知能力・伸びている力', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)),
+        ),
+        
+        ListView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: _monthlyEntries.length,
+          itemBuilder: (context, index) {
+            final entry = _monthlyEntries[index];
+            final selectedCategory = entry['category'];
+            final skillOptions = selectedCategory != null ? (_nonCognitiveSkillMap[selectedCategory] ?? []) : <String>[];
+
+            return Container(
+              margin: const EdgeInsets.only(bottom: 12),
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.grey.shade200),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text('項目 ${index + 1}', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.grey, fontSize: 12)),
+                      if (_monthlyEntries.length > 1)
+                        IconButton(
+                          icon: const Icon(Icons.close, size: 18, color: Colors.grey),
+                          onPressed: () => _removeMonthlyEntry(index),
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                        ),
+                    ],
+                  ),
+                  
+                  DropdownButtonFormField<String>(
+                    value: _nonCognitiveSkillMap.keys.contains(entry['category']) ? entry['category'] : null,
+                    decoration: const InputDecoration(
+                      labelText: '非認知能力',
+                      border: OutlineInputBorder(),
+                      contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                    ),
+                    isExpanded: true,
+                    items: _nonCognitiveSkillMap.keys.map((key) => DropdownMenuItem(value: key, child: Text(key))).toList(),
+                    onChanged: (val) {
+                      setState(() {
+                        entry['category'] = val;
+                        entry['skill'] = null;
+                      });
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  
+                  DropdownButtonFormField<String>(
+                    value: skillOptions.contains(entry['skill']) ? entry['skill'] : null,
+                    decoration: InputDecoration(
+                      labelText: '伸びている力',
+                      border: const OutlineInputBorder(),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                      filled: selectedCategory == null,
+                      fillColor: selectedCategory == null ? Colors.grey.shade100 : null,
+                    ),
+                    isExpanded: true,
+                    items: skillOptions.map((skill) => DropdownMenuItem(value: skill, child: Text(skill))).toList(),
+                    onChanged: selectedCategory == null ? null : (val) {
+                      setState(() => entry['skill'] = val);
+                    },
+                  ),
+                ],
+              ),
+            );
+          },
+        ),
+
+        Center(
+          child: TextButton.icon(
+            onPressed: _addMonthlyEntry,
+            icon: const Icon(Icons.add),
+            label: const Text('非認知能力を追加'),
+            style: TextButton.styleFrom(
+              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+              backgroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: BorderSide(color: Colors.grey.shade300)),
+            ),
+          ),
+        ),
+        const SizedBox(height: 24),
+
+        const Padding(
+          padding: EdgeInsets.only(left: 4, bottom: 8),
+          child: Text('敏感期', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)),
         ),
         Container(
           width: double.infinity,
           padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(12),
-          ),
+          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12)),
           child: Wrap(
-            spacing: 8.0,
-            runSpacing: 8.0,
-            children: _sensitivePeriodsMaster.map((period) {
-              final isSelected = _selectedSensitivePeriods.contains(period);
+            spacing: 8,
+            runSpacing: 8,
+            children: _sensitivePeriodMaster.map((tag) {
+              final isSelected = _selectedSensitivePeriods.contains(tag);
               return FilterChip(
-                label: Text(period),
+                label: Text(tag),
                 selected: isSelected,
-                onSelected: (bool selected) {
+                onSelected: (val) {
                   setState(() {
-                    if (selected) {
-                      _selectedSensitivePeriods.add(period);
-                    } else {
-                      _selectedSensitivePeriods.remove(period);
-                    }
+                    if (val) _selectedSensitivePeriods.add(tag);
+                    else _selectedSensitivePeriods.remove(tag);
                   });
                 },
-                selectedColor: Colors.purple.shade100,
-                checkmarkColor: Colors.purple,
-                labelStyle: TextStyle(
-                  color: isSelected ? Colors.purple.shade900 : Colors.black87,
-                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                ),
+                selectedColor: Colors.green.shade100,
+                checkmarkColor: Colors.green,
               );
             }).toList(),
           ),
         ),
-        
-        const SizedBox(height: 24),
-        
-        // 2. 非認知能力選択エリア (アコーディオン)
-        const Padding(
-          padding: EdgeInsets.only(left: 4, bottom: 6),
-          child: Text('非認知能力・伸びている力 (複数選択可)', style: TextStyle(color: Colors.grey, fontSize: 13, fontWeight: FontWeight.bold)),
-        ),
-        Container(
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(12),
-          ),
-          clipBehavior: Clip.antiAlias, // 角丸からはみ出さないように
-          child: Column(
-            children: _nonCognitiveSkillMaster.keys.map((category) {
-              final strengths = _nonCognitiveSkillMaster[category]!;
-              
-              // このカテゴリ内で選択されている数
-              final selectedCount = _selectedStrengths.where((s) => s['category'] == category).length;
-
-              return ExpansionTile(
-                title: Text(
-                  category,
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: selectedCount > 0 ? Colors.orange : Colors.black87,
-                  ),
-                ),
-                trailing: selectedCount > 0 
-                    ? CircleAvatar(
-                        radius: 12, 
-                        backgroundColor: Colors.orange, 
-                        child: Text(selectedCount.toString(), style: const TextStyle(fontSize: 12, color: Colors.white)))
-                    : const Icon(Icons.keyboard_arrow_down),
-                children: strengths.map((strength) {
-                  final isChecked = _selectedStrengths.any((s) => s['category'] == category && s['strength'] == strength);
-                  
-                  return CheckboxListTile(
-                    value: isChecked,
-                    title: Text(strength, style: const TextStyle(fontSize: 14)),
-                    activeColor: Colors.orange,
-                    dense: true,
-                    controlAffinity: ListTileControlAffinity.leading,
-                    onChanged: (bool? value) {
-                      setState(() {
-                        if (value == true) {
-                          _selectedStrengths.add({'category': category, 'strength': strength});
-                        } else {
-                          _selectedStrengths.removeWhere((s) => s['category'] == category && s['strength'] == strength);
-                        }
-                      });
-                    },
-                  );
-                }).toList(),
-              );
-            }).toList(),
-          ),
-        ),
-
         const SizedBox(height: 24),
 
-        // 3. 総括コメント
         const Padding(
-          padding: EdgeInsets.only(left: 4, bottom: 6),
-          child: Text('総括コメント', style: TextStyle(color: Colors.grey, fontSize: 13, fontWeight: FontWeight.bold)),
+          padding: EdgeInsets.only(left: 4, bottom: 8),
+          child: Text('月間総評', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)),
         ),
         Container(
           padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: TextField(
-            controller: _monthlyCommentController,
-            maxLines: 8,
+          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12)),
+          child: TextFormField(
+            controller: _monthlySummaryController,
+            maxLines: 5,
             decoration: const InputDecoration(
-              hintText: '今月の全体的な様子や成長した点などを記述してください...',
               border: InputBorder.none,
+              hintText: '今月の様子や成長した点などを入力してください...',
             ),
-            style: const TextStyle(fontSize: 15, height: 1.5),
           ),
         ),
+        const SizedBox(height: 40),
       ],
     );
   }
+}
 
-  Widget _buildSegmentedControl({required List<String> options, required String selectedValue, required Function(String) onSelected}) {
-    return Container(
-      padding: const EdgeInsets.all(4),
-      decoration: BoxDecoration(color: const Color(0xFFEEEEEF), borderRadius: BorderRadius.circular(8)),
-      child: Row(
-        children: options.map((option) {
-          final isSelected = option == selectedValue;
-          return Expanded(
-            child: GestureDetector(
-              onTap: () => onSelected(option),
-              child: Container(
-                padding: const EdgeInsets.symmetric(vertical: 8),
-                decoration: BoxDecoration(
-                  color: isSelected ? Colors.white : Colors.transparent,
-                  borderRadius: BorderRadius.circular(6),
-                  boxShadow: isSelected ? [BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 2)] : [],
-                ),
-                alignment: Alignment.center,
-                child: Text(option, style: TextStyle(fontSize: 12, fontWeight: isSelected ? FontWeight.bold : FontWeight.normal)),
-              ),
-            ),
-          );
-        }).toList(),
-      ),
-    );
+// 教具選択ダイアログ
+class _ToolSelectDialog extends StatefulWidget {
+  final List<Map<String, String>> tools;
+  final Function(String) onSelected;
+
+  const _ToolSelectDialog({required this.tools, required this.onSelected});
+
+  @override
+  State<_ToolSelectDialog> createState() => _ToolSelectDialogState();
+}
+
+class _ToolSelectDialogState extends State<_ToolSelectDialog> {
+  List<Map<String, String>> _filteredTools = [];
+  final TextEditingController _searchController = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    _filteredTools = widget.tools;
   }
 
-  Future<void> _saveAssessment() async {
-    if (_selectedStudentName == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('対象の児童を選択してください')));
-      return;
-    }
-
-    try {
-      final Map<String, dynamic> saveData = {
-        'studentName': _selectedStudentName,
-        'classroom': _currentClassroom,
-        'createdAt': Timestamp.fromDate(_selectedDate),
-        'type': _isMonthlyMode ? 'monthly' : 'weekly',
-      };
-
-      if (_isMonthlyMode) {
-        // 月間データ保存（構造を変更）
-        saveData['monthlySummary'] = [{
-          'sensitivePeriods': _selectedSensitivePeriods, // 敏感期リスト
-          'strengths': _selectedStrengths, // 非認知能力（カテゴリと力のペア）
-          'comment': _monthlyCommentController.text,
-        }];
+  void _onSearch(String query) {
+    setState(() {
+      if (query.isEmpty) {
+        _filteredTools = widget.tools;
       } else {
-        // 週次データ保存
-        saveData['weeklyRecords'] = _activities.map((act) => {
-          'tool': act['title'],
-          'time': act['duration'],
-          'evaluation': act['evaluation'],
-          'comment': act['comment'],
+        _filteredTools = widget.tools.where((tool) {
+          return (tool['name']!.contains(query)) || (tool['furigana']!.contains(query));
         }).toList();
       }
+    });
+  }
 
-      await FirebaseFirestore.instance.collection('assessments').add(saveData);
+  String _getIndexHeader(String kana) {
+    if (kana.isEmpty) return '他';
+    final firstChar = kana.substring(0, 1);
+    if (firstChar.compareTo('あ') >= 0 && firstChar.compareTo('お') <= 0) return 'あ';
+    if (firstChar.compareTo('か') >= 0 && firstChar.compareTo('こ') <= 0) return 'か';
+    if (firstChar.compareTo('さ') >= 0 && firstChar.compareTo('そ') <= 0) return 'さ';
+    if (firstChar.compareTo('た') >= 0 && firstChar.compareTo('と') <= 0) return 'た';
+    if (firstChar.compareTo('な') >= 0 && firstChar.compareTo('の') <= 0) return 'な';
+    if (firstChar.compareTo('は') >= 0 && firstChar.compareTo('ほ') <= 0) return 'は';
+    if (firstChar.compareTo('ま') >= 0 && firstChar.compareTo('も') <= 0) return 'ま';
+    if (firstChar.compareTo('や') >= 0 && firstChar.compareTo('よ') <= 0) return 'や';
+    if (firstChar.compareTo('ら') >= 0 && firstChar.compareTo('ろ') <= 0) return 'ら';
+    if (firstChar.compareTo('わ') >= 0 && firstChar.compareTo('ん') <= 0) return 'わ';
+    return '他';
+  }
 
-      if (mounted) {
-        Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('保存しました')));
-      }
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('エラー: $e')));
-    }
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      contentPadding: EdgeInsets.zero,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      content: SizedBox(
+        width: 400,
+        height: 600,
+        child: Column(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                children: [
+                  const Text('教具を選択', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: _searchController,
+                    decoration: const InputDecoration(
+                      hintText: '教具名で検索...',
+                      prefixIcon: Icon(Icons.search),
+                      border: OutlineInputBorder(),
+                      contentPadding: EdgeInsets.symmetric(horizontal: 12),
+                      isDense: true,
+                    ),
+                    onChanged: _onSearch,
+                  ),
+                ],
+              ),
+            ),
+            const Divider(height: 1, color: Colors.grey),
+            Expanded(
+              child: ListView.builder(
+                itemCount: _filteredTools.length,
+                itemBuilder: (context, index) {
+                  final tool = _filteredTools[index];
+                  final header = _getIndexHeader(tool['furigana']!);
+                  bool showHeader = true;
+                  if (index > 0) {
+                    final prevHeader = _getIndexHeader(_filteredTools[index - 1]['furigana']!);
+                    if (prevHeader == header) showHeader = false;
+                  }
+
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (showHeader)
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                          child: Text(header, style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey.shade700)),
+                        ),
+                      ListTile(
+                        title: Text(tool['name']!),
+                        onTap: () {
+                          widget.onSelected(tool['name']!);
+                          Navigator.pop(context);
+                        },
+                      ),
+                    ],
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }

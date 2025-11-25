@@ -1,10 +1,5 @@
-import 'dart:typed_data'; // Web対応用
-
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_storage/firebase_storage.dart';
-import 'package:file_picker/file_picker.dart'; // ファイル選択用
-import 'package:url_launcher/url_launcher.dart'; // リンクを開く用
 import 'package:intl/intl.dart';
 
 class NotificationScreen extends StatefulWidget {
@@ -18,47 +13,29 @@ class _NotificationScreenState extends State<NotificationScreen> {
   final CollectionReference _notificationsRef =
       FirebaseFirestore.instance.collection('notifications');
 
-  Future<void> _launchURL(BuildContext context, String urlString) async {
-    if (urlString.isEmpty) return;
-    final Uri url = Uri.parse(urlString);
-    try {
-      if (!await launchUrl(url, mode: LaunchMode.externalApplication)) {
-        throw Exception('Could not launch $url');
-      }
-    } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('ファイルを開けませんでした')),
-        );
-      }
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: const Color(0xFFF2F2F7),
       appBar: AppBar(
-        title: const Text('お知らせ'),
+        title: const Text('お知らせ配信'),
         backgroundColor: Colors.white,
         elevation: 0,
       ),
-      backgroundColor: const Color(0xFFF2F2F7),
       body: StreamBuilder<QuerySnapshot>(
         stream: _notificationsRef.orderBy('createdAt', descending: true).snapshots(),
         builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
           if (snapshot.hasError) {
             return const Center(child: Text('エラーが発生しました'));
+          }
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
           }
 
           final docs = snapshot.data!.docs;
 
           if (docs.isEmpty) {
-            return const Center(
-              child: Text('お知らせはありません', style: TextStyle(color: Colors.grey)),
-            );
+            return const Center(child: Text('お知らせはありません'));
           }
 
           return ListView.builder(
@@ -67,141 +44,122 @@ class _NotificationScreenState extends State<NotificationScreen> {
             itemBuilder: (context, index) {
               final doc = docs[index];
               final data = doc.data() as Map<String, dynamic>;
-              return _buildNotificationCard(doc.id, data);
+              
+              DateTime date = DateTime.now();
+              if (data['createdAt'] != null && data['createdAt'] is Timestamp) {
+                date = (data['createdAt'] as Timestamp).toDate();
+              }
+              final dateStr = DateFormat('yyyy/MM/dd HH:mm').format(date);
+              
+              String targetStr = '全体';
+              if (data['target'] == 'specific') {
+                final list = List<String>.from(data['targetClassrooms'] ?? []);
+                if (list.isNotEmpty) {
+                  targetStr = list.join(', ');
+                } else {
+                  targetStr = '指定なし';
+                }
+              }
+
+              return Card(
+                margin: const EdgeInsets.only(bottom: 12),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                child: InkWell(
+                  onTap: () => _showEditDialog(doc),
+                  borderRadius: BorderRadius.circular(12),
+                  child: Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Expanded(
+                              child: Text(
+                                data['title'] ?? '(タイトルなし)',
+                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Text(dateStr, style: const TextStyle(color: Colors.grey, fontSize: 12)),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: Colors.blue.shade50,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            '対象: $targetStr',
+                            style: TextStyle(fontSize: 11, color: Colors.blue.shade800),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          data['body'] ?? data['detail'] ?? '',
+                          maxLines: 3,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(color: Colors.black87),
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          children: [
+                            IconButton(
+                              icon: const Icon(Icons.edit, size: 20, color: Colors.blue),
+                              onPressed: () => _showEditDialog(doc),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.delete, size: 20, color: Colors.red),
+                              onPressed: () => _deleteNotification(doc.id),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
             },
           );
         },
       ),
+      // 新規作成ボタン
       floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (context) => const NotificationCreateScreen()),
-          );
-        },
+        onPressed: () => _showEditDialog(null),
         backgroundColor: Colors.white,
-        elevation: 4,
-        shape: const CircleBorder(),
-        child: Padding(
-          padding: const EdgeInsets.all(8.0),
-          child: Image.asset('assets/logo_beesmileymark.png'),
+        // ★修正: 画像を少し大きくし、エラー時はアイコンを表示
+        child: Container(
+          width: 32,
+          height: 32,
+          decoration: const BoxDecoration(
+            image: DecorationImage(
+              image: AssetImage('assets/logo_beesmileymark.png'),
+              fit: BoxFit.contain,
+            ),
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildNotificationCard(String docId, Map<String, dynamic> item) {
-    final Timestamp createdAt = item['createdAt'];
-    final String dateStr = DateFormat('yyyy/MM/dd').format(createdAt.toDate());
-    
-    final String? fileUrl = item['fileUrl'];
-    final String? fileName = item['fileName'];
-    final String fileType = item['fileType'] ?? 'other'; // 'image' or 'pdf'
-
-    IconData fileIcon = Icons.insert_drive_file;
-    Color fileColor = Colors.grey;
-    if (fileType == 'pdf') {
-      fileIcon = Icons.picture_as_pdf;
-      fileColor = Colors.red;
-    } else if (fileType == 'image') {
-      fileIcon = Icons.image;
-      fileColor = Colors.green;
-    }
-
-    return Card(
-      elevation: 2,
-      margin: const EdgeInsets.only(bottom: 16),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // ヘッダー（日付と削除ボタン）
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(dateStr, style: const TextStyle(color: Colors.grey, fontSize: 12)),
-                IconButton(
-                  icon: const Icon(Icons.delete_outline, size: 20, color: Colors.grey),
-                  onPressed: () => _deleteNotification(docId),
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            
-            // タイトル
-            Text(
-              item['title'] ?? '無題',
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 12),
-            
-            // 本文
-            Text(
-              item['detail'] ?? '',
-              style: const TextStyle(height: 1.5, fontSize: 14),
-            ),
-            
-            // 添付ファイル
-            if (fileUrl != null && fileUrl.isNotEmpty) ...[
-              const SizedBox(height: 16),
-              InkWell(
-                onTap: () => _launchURL(context, fileUrl),
-                borderRadius: BorderRadius.circular(8),
-                child: Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.grey.shade100,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.grey.shade300),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(fileIcon, color: fileColor, size: 32),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              fileName ?? '添付ファイル',
-                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            Text(
-                              'タップして開く',
-                              style: TextStyle(color: Colors.grey.shade600, fontSize: 11),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const Icon(Icons.open_in_new, color: Colors.grey, size: 20),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _deleteNotification(String docId) {
+  Future<void> _deleteNotification(String docId) async {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (ctx) => AlertDialog(
         title: const Text('削除確認'),
         content: const Text('このお知らせを削除しますか？'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('キャンセル')),
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('キャンセル')),
           TextButton(
             onPressed: () async {
+              Navigator.pop(ctx);
               await _notificationsRef.doc(docId).delete();
-              if (context.mounted) Navigator.pop(context);
             },
             child: const Text('削除', style: TextStyle(color: Colors.red)),
           ),
@@ -209,215 +167,213 @@ class _NotificationScreenState extends State<NotificationScreen> {
       ),
     );
   }
+
+  void _showEditDialog(DocumentSnapshot? doc) {
+    showDialog(
+      context: context,
+      builder: (context) => _NotificationEditDialog(doc: doc),
+    );
+  }
 }
 
-// ==========================================
-// お知らせ作成画面
-// ==========================================
-class NotificationCreateScreen extends StatefulWidget {
-  const NotificationCreateScreen({super.key});
+class _NotificationEditDialog extends StatefulWidget {
+  final DocumentSnapshot? doc;
+
+  const _NotificationEditDialog({required this.doc});
 
   @override
-  State<NotificationCreateScreen> createState() => _NotificationCreateScreenState();
+  State<_NotificationEditDialog> createState() => _NotificationEditDialogState();
 }
 
-class _NotificationCreateScreenState extends State<NotificationCreateScreen> {
+class _NotificationEditDialogState extends State<_NotificationEditDialog> {
   final _titleController = TextEditingController();
-  final _detailController = TextEditingController();
+  final _bodyController = TextEditingController();
   
-  Uint8List? _fileBytes; // Web対応のためバイトデータで保持
-  String? _fileName;
-  String? _fileExtension;
-  bool _isUploading = false;
+  String _targetType = 'all'; 
+  final Set<String> _selectedClassrooms = {};
+  
+  List<String> _classroomOptions = [];
+  bool _isLoadingClassrooms = true;
+  bool _isLoadingSave = false;
 
-  // ファイル選択（画像 or PDF）
-  Future<void> _pickFile() async {
-    try {
-      final result = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: ['jpg', 'jpeg', 'png', 'pdf'],
-        withData: true, // Webでは必須
-      );
+  @override
+  void initState() {
+    super.initState();
+    _fetchClassrooms(); // ★ダイアログ起動時にデータを取得
 
-      if (result != null) {
-        final file = result.files.first;
-        setState(() {
-          _fileBytes = file.bytes;
-          _fileName = file.name;
-          _fileExtension = file.extension;
-        });
+    if (widget.doc != null) {
+      final data = widget.doc!.data() as Map<String, dynamic>;
+      _titleController.text = data['title'] ?? '';
+      _bodyController.text = data['body'] ?? data['detail'] ?? '';
+      _targetType = data['target'] ?? 'all';
+      
+      if (_targetType == 'specific') {
+        final list = List<String>.from(data['targetClassrooms'] ?? []);
+        _selectedClassrooms.addAll(list);
       }
-    } catch (e) {
-      debugPrint('File pick error: $e');
     }
   }
 
-  Future<void> _submit() async {
-    if (_titleController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('タイトルを入力してください')));
+  // ★修正: 教室データをより安全に取得
+  Future<void> _fetchClassrooms() async {
+    try {
+      final snapshot = await FirebaseFirestore.instance.collection('classrooms').get();
+      final List<String> list = [];
+      
+      for (var doc in snapshot.docs) {
+        final data = doc.data();
+        // nameフィールドが存在する場合のみ追加
+        if (data.containsKey('name') && data['name'] != null) {
+          list.add(data['name'].toString());
+        }
+      }
+
+      if (mounted) {
+        setState(() {
+          _classroomOptions = list.toSet().toList(); // 重複排除
+          _isLoadingClassrooms = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error fetching classrooms: $e');
+      if (mounted) setState(() => _isLoadingClassrooms = false);
+    }
+  }
+
+  Future<void> _save() async {
+    if (_titleController.text.trim().isEmpty) return;
+    if (_targetType == 'specific' && _selectedClassrooms.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('教室を選択してください')));
       return;
     }
 
-    setState(() => _isUploading = true);
+    setState(() => _isLoadingSave = true);
 
     try {
-      String? fileUrl;
-      String? fileType;
+      final data = {
+        'title': _titleController.text.trim(),
+        'body': _bodyController.text.trim(),
+        'target': _targetType,
+        'targetClassrooms': _targetType == 'specific' ? _selectedClassrooms.toList() : [],
+        'updatedAt': FieldValue.serverTimestamp(),
+      };
 
-      // ファイルアップロード
-      if (_fileBytes != null) {
-        final String ext = _fileExtension ?? 'dat';
-        if (['jpg', 'jpeg', 'png'].contains(ext.toLowerCase())) {
-          fileType = 'image';
-        } else if (ext.toLowerCase() == 'pdf') {
-          fileType = 'pdf';
-        }
-
-        // Storageのパス: notifications/{timestamp}_{filename}
-        final storageRef = FirebaseStorage.instance
-            .ref()
-            .child('notifications')
-            .child('${DateTime.now().millisecondsSinceEpoch}_$_fileName');
-        
-        // メタデータを設定してアップロード（PDFなどをブラウザで正しく開くため）
-        final metadata = SettableMetadata(
-          contentType: fileType == 'pdf' ? 'application/pdf' : 'image/jpeg',
-        );
-
-        await storageRef.putData(_fileBytes!, metadata);
-        fileUrl = await storageRef.getDownloadURL();
+      if (widget.doc == null) {
+        data['createdAt'] = FieldValue.serverTimestamp();
+        await FirebaseFirestore.instance.collection('notifications').add(data);
+      } else {
+        await widget.doc!.reference.update(data);
       }
 
-      // Firestoreに保存
-      await FirebaseFirestore.instance.collection('notifications').add({
-        'title': _titleController.text,
-        'detail': _detailController.text,
-        'fileUrl': fileUrl,
-        'fileName': _fileName,
-        'fileType': fileType,
-        'createdAt': FieldValue.serverTimestamp(),
-      });
-
-      if (mounted) {
-        Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('お知らせを配信しました')));
-      }
+      if (mounted) Navigator.pop(context);
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('エラー: $e')));
+      // エラー処理
     } finally {
-      if (mounted) setState(() => _isUploading = false);
+      if (mounted) setState(() => _isLoadingSave = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF2F2F7),
-      appBar: AppBar(
-        title: const Text('お知らせ作成'),
-        backgroundColor: Colors.white,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.close, color: Colors.black),
-          onPressed: () => Navigator.pop(context),
-        ),
-        actions: [
-          TextButton(
-            onPressed: _isUploading ? null : _submit,
-            child: _isUploading
-              ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
-              : const Text('配信', style: TextStyle(color: Colors.orange, fontWeight: FontWeight.bold, fontSize: 16)),
-          ),
-        ],
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text('タイトル', style: TextStyle(color: Colors.grey, fontSize: 13)),
-            const SizedBox(height: 8),
-            TextField(
-              controller: _titleController,
-              decoration: InputDecoration(
-                hintText: '例：春の遠足について',
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-                filled: true, fillColor: Colors.white,
+    final isEditing = widget.doc != null;
+
+    return AlertDialog(
+      title: Text(isEditing ? 'お知らせ編集' : 'お知らせ作成', style: const TextStyle(fontWeight: FontWeight.bold)),
+      content: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 500),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              TextField(
+                controller: _titleController,
+                decoration: const InputDecoration(labelText: 'タイトル', border: OutlineInputBorder()),
               ),
-            ),
-            
-            const SizedBox(height: 24),
-
-            const Text('詳細', style: TextStyle(color: Colors.grey, fontSize: 13)),
-            const SizedBox(height: 8),
-            TextField(
-              controller: _detailController,
-              maxLines: 10,
-              decoration: InputDecoration(
-                hintText: '詳細内容を入力してください...',
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-                filled: true, fillColor: Colors.white,
+              const SizedBox(height: 16),
+              TextField(
+                controller: _bodyController,
+                maxLines: 5,
+                decoration: const InputDecoration(labelText: '本文', border: OutlineInputBorder()),
               ),
-            ),
-
-            const SizedBox(height: 24),
-
-            const Text('添付ファイル (画像またはPDF)', style: TextStyle(color: Colors.grey, fontSize: 13)),
-            const SizedBox(height: 8),
-            
-            if (_fileName == null)
-              SizedBox(
-                width: double.infinity,
-                height: 50,
-                child: ElevatedButton.icon(
-                  onPressed: _pickFile,
-                  icon: const Icon(Icons.attach_file, color: Colors.grey),
-                  label: const Text('ファイルを選択', style: TextStyle(color: Colors.black87)),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.white,
-                    elevation: 0,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              const SizedBox(height: 24),
+              
+              const Text('配信対象', style: TextStyle(fontWeight: FontWeight.bold)),
+              Row(
+                children: [
+                  Radio<String>(
+                    value: 'all',
+                    groupValue: _targetType,
+                    activeColor: Colors.orange,
+                    onChanged: (val) => setState(() => _targetType = val!),
                   ),
-                ),
-              )
-            else
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.orange),
-                ),
-                child: Row(
-                  children: [
-                    Icon(
-                      _fileExtension == 'pdf' ? Icons.picture_as_pdf : Icons.image,
-                      color: _fileExtension == 'pdf' ? Colors.red : Colors.green,
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        _fileName!,
-                        style: const TextStyle(fontWeight: FontWeight.bold),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.close, color: Colors.grey),
-                      onPressed: () {
-                        setState(() {
-                          _fileBytes = null;
-                          _fileName = null;
-                          _fileExtension = null;
-                        });
-                      },
-                    ),
-                  ],
-                ),
+                  const Text('全体'),
+                  const SizedBox(width: 16),
+                  Radio<String>(
+                    value: 'specific',
+                    groupValue: _targetType,
+                    activeColor: Colors.orange,
+                    onChanged: (val) => setState(() => _targetType = val!),
+                  ),
+                  const Text('教室を指定'),
+                ],
               ),
-          ],
+
+              // 教室選択リスト
+              if (_targetType == 'specific') ...[
+                const SizedBox(height: 8),
+                Container(
+                  height: 200,
+                  decoration: BoxDecoration(
+                    border: Border.all(color: Colors.grey.shade300),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: _isLoadingClassrooms
+                      ? const Center(child: CircularProgressIndicator())
+                      : _classroomOptions.isEmpty
+                          ? const Center(child: Text('教室データがありません', style: TextStyle(color: Colors.grey)))
+                          : ListView.builder(
+                              shrinkWrap: true,
+                              itemCount: _classroomOptions.length,
+                              itemBuilder: (context, index) {
+                                final roomName = _classroomOptions[index];
+                                return CheckboxListTile(
+                                  value: _selectedClassrooms.contains(roomName),
+                                  title: Text(roomName, style: const TextStyle(fontSize: 14)),
+                                  activeColor: Colors.orange,
+                                  dense: true,
+                                  controlAffinity: ListTileControlAffinity.leading,
+                                  onChanged: (val) {
+                                    setState(() {
+                                      if (val == true) {
+                                        _selectedClassrooms.add(roomName);
+                                      } else {
+                                        _selectedClassrooms.remove(roomName);
+                                      }
+                                    });
+                                  },
+                                );
+                              },
+                            ),
+                ),
+              ],
+            ],
+          ),
         ),
       ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('キャンセル'),
+        ),
+        ElevatedButton(
+          onPressed: _isLoadingSave ? null : _save,
+          style: ElevatedButton.styleFrom(backgroundColor: Colors.orange, foregroundColor: Colors.white),
+          child: _isLoadingSave
+              ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+              : Text(isEditing ? '更新' : '配信'),
+        ),
+      ],
     );
   }
 }

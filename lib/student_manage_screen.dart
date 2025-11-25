@@ -11,17 +11,13 @@ class StudentManageScreen extends StatefulWidget {
 class _StudentManageScreenState extends State<StudentManageScreen> {
   final CollectionReference _familiesRef =
       FirebaseFirestore.instance.collection('families');
+  final CollectionReference _classroomsRef =
+      FirebaseFirestore.instance.collection('classrooms');
 
-  // 教室マスタ
-  final List<String> _allClassrooms = [
-    'ビースマイリー湘南藤沢教室',
-    'ビースマイリー湘南台教室',
-    'ビースマイリープラス湘南藤沢教室',
-    '園庭',
-    'ホール',
-  ];
+  // ★修正: 固定リストを廃止し、Firestoreから取得するリストを用意
+  List<String> _classroomList = [];
 
-  // ★追加: コースマスタ（CSVのデータに合わせて定義）
+  // コースマスタ
   final List<String> _allCourses = [
     'プリスクール',
     'キッズコース',
@@ -30,6 +26,34 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
   ];
 
   final List<String> _genders = ['男', '女', 'その他'];
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchClassrooms();
+  }
+
+  // ★追加: 教室マスタを取得
+  Future<void> _fetchClassrooms() async {
+    try {
+      final snapshot = await _classroomsRef.get();
+      setState(() {
+        _classroomList = snapshot.docs
+            .map((doc) => (doc.data() as Map<String, dynamic>)['name'] as String? ?? '')
+            .where((name) => name.isNotEmpty)
+            .toList();
+      });
+    } catch (e) {
+      // エラー時はデフォルト値をセット（フォールバック）
+      setState(() {
+        _classroomList = [
+          'ビースマイリー湘南藤沢教室',
+          'ビースマイリー湘南台教室',
+          'ビースマイリープラス湘南藤沢教室',
+        ];
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -140,18 +164,17 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
           );
         },
       ),
-      // ★変更: 新規登録ボタンをビースマイリーマークに変更
+      // ★修正: 新規登録ボタンをビースマイリーマークに変更
       floatingActionButton: FloatingActionButton(
         onPressed: () => _showEditDialog(),
-        backgroundColor: Colors.white, // 画像が映えるように白背景
+        backgroundColor: Colors.white,
+        elevation: 4,
+        shape: const CircleBorder(),
         child: Padding(
-          padding: const EdgeInsets.all(8.0), // 少し余白を開ける
+          padding: const EdgeInsets.all(8.0),
           child: Image.asset(
-            'assets/images/logo.png', // ★ここに画像ファイル名を指定してください
-            // 画像がない・読み込めない場合はデフォルトアイコンを表示
-            errorBuilder: (context, error, stackTrace) {
-              return const Icon(Icons.person_add, color: Colors.blue);
-            },
+            'assets/logo_beesmileymark.png',
+            errorBuilder: (context, error, stackTrace) => const Icon(Icons.person_add, color: Colors.blue),
           ),
         ),
       ),
@@ -178,7 +201,6 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
       displayName += ' (${child['firstNameKana']})';
     }
 
-    // コース情報の表示を追加
     String classInfo = child['classroom'] ?? '';
     if (child['course'] != null && child['course'].isNotEmpty) {
       classInfo += ' / ${child['course']}';
@@ -200,7 +222,6 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
           ),
           const SizedBox(height: 4),
           Text('誕生日: ${child['birthDate']}', style: const TextStyle(fontSize: 12)),
-          // ★教室・コースを表示
           Text('所属: $classInfo', style: const TextStyle(fontSize: 12)),
           if ((child['allergy'] ?? '').isNotEmpty)
             Text('特記事項: ${child['allergy']}', style: const TextStyle(fontSize: 12, color: Colors.red)),
@@ -259,8 +280,8 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
         'firstNameKana': '',
         'gender': '男',
         'birthDate': '',
-        'classroom': _allClassrooms[0],
-        'course': _allCourses[0], // デフォルトコース
+        'classroom': _classroomList.isNotEmpty ? _classroomList[0] : '', // 初期値
+        'course': _allCourses[0],
         'allergy': '',
       });
     }
@@ -350,7 +371,7 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
                                     'firstNameKana': '',
                                     'gender': '男',
                                     'birthDate': '',
-                                    'classroom': _allClassrooms[0],
+                                    'classroom': _classroomList.isNotEmpty ? _classroomList[0] : '',
                                     'course': _allCourses[0],
                                     'allergy': '',
                                   });
@@ -455,16 +476,20 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
                                   ],
                                 ),
                                 const SizedBox(height: 8),
-                                // ★教室の選択
+                                
+                                // ★修正: Firestoreから取得した教室リストを表示
                                 DropdownButtonFormField<String>(
-                                  value: _allClassrooms.contains(child['classroom']) ? child['classroom'] : _allClassrooms[0],
+                                  // 既存の値がリストにない場合は、リストの先頭を選択するかnullにする
+                                  value: _classroomList.contains(child['classroom']) 
+                                      ? child['classroom'] 
+                                      : (_classroomList.isNotEmpty ? _classroomList[0] : null),
                                   isExpanded: true,
                                   decoration: const InputDecoration(labelText: '教室', isDense: true, border: OutlineInputBorder()),
-                                  items: _allClassrooms.map((c) => DropdownMenuItem(value: c, child: Text(c, style: const TextStyle(fontSize: 12)))).toList(),
+                                  items: _classroomList.map((c) => DropdownMenuItem(value: c, child: Text(c, style: const TextStyle(fontSize: 12)))).toList(),
                                   onChanged: (val) => setStateDialog(() => child['classroom'] = val),
                                 ),
+                                
                                 const SizedBox(height: 8),
-                                // ★コースの選択 (新規追加)
                                 DropdownButtonFormField<String>(
                                   value: _allCourses.contains(child['course']) ? child['course'] : _allCourses[0],
                                   isExpanded: true,
