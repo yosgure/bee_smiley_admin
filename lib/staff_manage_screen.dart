@@ -1,7 +1,12 @@
+import 'dart:async';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart'; // 追加
-import 'package:firebase_core/firebase_core.dart'; // 追加
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_storage/firebase_storage.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
 class StaffManageScreen extends StatefulWidget {
   const StaffManageScreen({super.key});
@@ -18,7 +23,6 @@ class _StaffManageScreenState extends State<StaffManageScreen> {
 
   List<String> _classroomList = [];
   
-  // ★共通の初期パスワード
   static const String _defaultPassword = 'bee2025';
   static const String _fixedDomain = '@bee-smiley.com';
 
@@ -65,7 +69,6 @@ class _StaffManageScreenState extends State<StaffManageScreen> {
         elevation: 0,
       ),
       backgroundColor: const Color(0xFFF2F2F7),
-      
       body: StreamBuilder<QuerySnapshot>(
         stream: _staffsRef.snapshots(),
         builder: (context, snapshot) {
@@ -92,6 +95,7 @@ class _StaffManageScreenState extends State<StaffManageScreen> {
               final data = doc.data() as Map<String, dynamic>;
               
               final List<String> classrooms = List<String>.from(data['classrooms'] ?? []);
+              final String? photoUrl = data['photoUrl'];
 
               return Card(
                 margin: const EdgeInsets.only(bottom: 12),
@@ -99,10 +103,15 @@ class _StaffManageScreenState extends State<StaffManageScreen> {
                 child: ExpansionTile(
                   leading: CircleAvatar(
                     backgroundColor: Colors.blue.shade100,
-                    child: Text(
-                      (data['name'] as String).isNotEmpty ? data['name'].substring(0, 1) : '?',
-                      style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.bold),
-                    ),
+                    backgroundImage: (photoUrl != null && photoUrl.isNotEmpty)
+                        ? CachedNetworkImageProvider(photoUrl)
+                        : null,
+                    child: (photoUrl == null || photoUrl.isEmpty)
+                        ? Text(
+                            (data['name'] as String).isNotEmpty ? data['name'].substring(0, 1) : '?',
+                            style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.bold),
+                          )
+                        : null,
                   ),
                   title: Text(
                     data['name'] ?? '名称未設定',
@@ -197,20 +206,49 @@ class _StaffManageScreenState extends State<StaffManageScreen> {
   void _deleteStaff(String docId, String? name) {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('削除確認'),
-        content: Text('$name さんの情報を削除しますか？'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('キャンセル')),
-          TextButton(
-            onPressed: () async {
-              await _staffsRef.doc(docId).delete();
-              if (context.mounted) Navigator.pop(context);
-            },
-            child: const Text('削除', style: TextStyle(color: Colors.red)),
-          ),
-        ],
-      ),
+      barrierDismissible: false,
+      builder: (context) {
+        bool isDeleting = false;
+        return StatefulBuilder(
+          builder: (context, setStateDialog) {
+            return AlertDialog(
+              title: const Text('削除確認'),
+              content: Text('$name さんの情報を削除しますか？\n※Authアカウントは別途削除が必要です。'),
+              actions: [
+                TextButton(
+                  onPressed: isDeleting ? null : () => Navigator.pop(context), 
+                  child: const Text('キャンセル')
+                ),
+                TextButton(
+                  onPressed: isDeleting ? null : () async {
+                    setStateDialog(() => isDeleting = true);
+                    
+                    try {
+                      await Future.any([
+                        _staffsRef.doc(docId).delete(),
+                        Future.delayed(const Duration(seconds: 5)).then((_) => throw TimeoutException('Delete timed out')),
+                      ]);
+
+                      if (context.mounted) {
+                         Navigator.pop(context);
+                         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('情報を削除しました')));
+                      }
+                    } catch (e) {
+                      if (context.mounted) {
+                         Navigator.pop(context);
+                         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('削除エラー: $e')));
+                      }
+                    }
+                  },
+                  child: isDeleting 
+                    ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                    : const Text('削除', style: TextStyle(color: Colors.red)),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 
@@ -226,10 +264,15 @@ class _StaffManageScreenState extends State<StaffManageScreen> {
     final roleCtrl = TextEditingController(text: data['role'] ?? '保育士');
     
     List<String> selectedClassrooms = List<String>.from(data['classrooms'] ?? []);
+    String? currentPhotoUrl = data['photoUrl'];
 
     showDialog(
       context: context,
+      barrierDismissible: false, 
       builder: (context) {
+        Uint8List? newImageBytes;
+        bool isUploading = false;
+
         return StatefulBuilder(
           builder: (context, setStateDialog) {
             final displayClassrooms = _classroomList.isNotEmpty 
@@ -237,6 +280,17 @@ class _StaffManageScreenState extends State<StaffManageScreen> {
                 : ['ビースマイリー湘南藤沢教室', 'ビースマイリー湘南台教室', 'ビースマイリープラス湘南藤沢教室'];
 
             final isAllSelected = displayClassrooms.isNotEmpty && selectedClassrooms.length == displayClassrooms.length;
+
+            Future<void> pickImage() async {
+              final picker = ImagePicker();
+              final picked = await picker.pickImage(source: ImageSource.gallery);
+              if (picked != null) {
+                final bytes = await picked.readAsBytes();
+                setStateDialog(() {
+                  newImageBytes = bytes;
+                });
+              }
+            }
 
             return AlertDialog(
               title: Text(isEditing ? 'スタッフ編集' : '新規追加'),
@@ -249,6 +303,41 @@ class _StaffManageScreenState extends State<StaffManageScreen> {
                       mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
+                        Center(
+                          child: GestureDetector(
+                            onTap: pickImage,
+                            child: Stack(
+                              children: [
+                                CircleAvatar(
+                                  radius: 40,
+                                  backgroundColor: Colors.grey.shade200,
+                                  backgroundImage: newImageBytes != null
+                                      ? MemoryImage(newImageBytes!)
+                                      : (currentPhotoUrl != null && currentPhotoUrl!.isNotEmpty
+                                          ? CachedNetworkImageProvider(currentPhotoUrl!)
+                                          : null) as ImageProvider?,
+                                  child: (newImageBytes == null && (currentPhotoUrl == null || currentPhotoUrl!.isEmpty))
+                                      ? const Icon(Icons.person, size: 40, color: Colors.grey)
+                                      : null,
+                                ),
+                                Positioned(
+                                  bottom: 0,
+                                  right: 0,
+                                  child: Container(
+                                    padding: const EdgeInsets.all(4),
+                                    decoration: const BoxDecoration(
+                                      color: Colors.blue,
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: const Icon(Icons.camera_alt, color: Colors.white, size: 16),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+
                         if (!isEditing)
                           const Padding(
                             padding: EdgeInsets.only(bottom: 16.0),
@@ -257,7 +346,7 @@ class _StaffManageScreenState extends State<StaffManageScreen> {
                               style: TextStyle(color: Colors.red, fontSize: 12),
                             ),
                           ),
-                        _buildTextField(loginIdCtrl, 'ログインID', icon: Icons.vpn_key, enabled: !isEditing), // IDは変更不可推奨
+                        _buildTextField(loginIdCtrl, 'ログインID', icon: Icons.vpn_key, enabled: !isEditing),
                         const SizedBox(height: 16),
                         Row(
                           children: [
@@ -335,42 +424,79 @@ class _StaffManageScreenState extends State<StaffManageScreen> {
                 ),
               ),
               actions: [
-                TextButton(onPressed: () => Navigator.pop(context), child: const Text('キャンセル')),
+                TextButton(
+                  onPressed: isUploading ? null : () => Navigator.pop(context),
+                  child: const Text('キャンセル')
+                ),
                 ElevatedButton(
-                  onPressed: () async {
-                    // 保存処理
+                  onPressed: isUploading ? null : () async {
+                    setStateDialog(() => isUploading = true);
+                    
                     try {
-                      if (isEditing) {
-                        // 編集モード: Firestore更新のみ
-                        await _staffsRef.doc(doc.id).update({
-                          'name': nameCtrl.text,
-                          'furigana': furiganaCtrl.text,
-                          'phone': phoneCtrl.text,
-                          'email': emailCtrl.text,
-                          'role': roleCtrl.text,
-                          'classrooms': selectedClassrooms,
-                        });
-                      } else {
-                        // ★新規モード: Authユーザー作成 -> Firestore保存
-                        await _registerNewStaff(
-                          loginId: loginIdCtrl.text,
-                          name: nameCtrl.text,
-                          furigana: furiganaCtrl.text,
-                          phone: phoneCtrl.text,
-                          email: emailCtrl.text,
-                          role: roleCtrl.text,
-                          classrooms: selectedClassrooms,
-                        );
-                      }
+                      // ★修正: 強力なタイムアウト付き実行
+                      await Future.any([
+                        Future(() async {
+                          if (isEditing) {
+                            // 編集モード
+                            String? uploadedUrl = currentPhotoUrl;
+                            if (newImageBytes != null) {
+                              final uid = data['uid'] ?? doc!.id;
+                              uploadedUrl = await _uploadStaffPhoto(newImageBytes!, uid);
+                            }
+                            await _staffsRef.doc(doc!.id).update({
+                              'name': nameCtrl.text,
+                              'furigana': furiganaCtrl.text,
+                              'phone': phoneCtrl.text,
+                              'email': emailCtrl.text,
+                              'role': roleCtrl.text,
+                              'classrooms': selectedClassrooms,
+                              'photoUrl': uploadedUrl,
+                            }).timeout(const Duration(seconds: 5));
+                          } else {
+                            // 新規登録 (復活ロジック付き)
+                            await _registerNewStaff(
+                              loginId: loginIdCtrl.text,
+                              name: nameCtrl.text,
+                              furigana: furiganaCtrl.text,
+                              phone: phoneCtrl.text,
+                              email: emailCtrl.text,
+                              role: roleCtrl.text,
+                              classrooms: selectedClassrooms,
+                              imageBytes: newImageBytes,
+                            );
+                          }
+                        }),
+                        Future.delayed(const Duration(seconds: 15)).then((_) => throw TimeoutException('処理がタイムアウトしました')),
+                      ]);
+
                       if (context.mounted) Navigator.pop(context);
                     } catch (e) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('エラー: $e')),
-                      );
+                      if (context.mounted) {
+                        Navigator.pop(context); // エラー時も必ず閉じる
+                        
+                        String msg = 'エラーが発生しました: $e';
+                        if (e.toString().contains('パスワードが変更されています')) {
+                          msg = 'IDが既に存在しますが、パスワードが変更されているため復旧できません。';
+                        } else if (e.toString().contains('email-already-in-use')) {
+                          msg = 'このIDは既に使用されています。';
+                        }
+                        
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(msg),
+                            backgroundColor: Colors.red,
+                            duration: const Duration(seconds: 5),
+                          ),
+                        );
+                      }
+                    } finally {
+                      if (context.mounted) setStateDialog(() => isUploading = false);
                     }
                   },
                   style: ElevatedButton.styleFrom(backgroundColor: Colors.blue, foregroundColor: Colors.white),
-                  child: const Text('保存'),
+                  child: isUploading 
+                      ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                      : const Text('保存'),
                 ),
               ],
             );
@@ -380,7 +506,51 @@ class _StaffManageScreenState extends State<StaffManageScreen> {
     );
   }
 
-  // ★新規スタッフ登録処理（Auth作成含む）
+  Future<String?> _uploadStaffPhoto(Uint8List bytes, String uid) async {
+    try {
+      final fileName = '${uid}_${DateTime.now().millisecondsSinceEpoch}.jpg';
+      final ref = FirebaseStorage.instance.ref().child('staff_photos/$fileName');
+      await ref.putData(bytes, SettableMetadata(contentType: 'image/jpeg')).timeout(const Duration(seconds: 10));
+      return await ref.getDownloadURL();
+    } catch (e) {
+      return null;
+    }
+  }
+
+  // データ保存処理（共通）
+  Future<void> _saveStaffDataToFirestore({
+    required String uid,
+    required String loginId,
+    required String name,
+    required String furigana,
+    required String phone,
+    required String email,
+    required String role,
+    required List<String> classrooms,
+    Uint8List? imageBytes,
+  }) async {
+    String? photoUrl;
+    if (imageBytes != null) {
+      photoUrl = await _uploadStaffPhoto(imageBytes, uid);
+    }
+
+    // ★修正: 書き込み処理にタイムアウトを設定（ここが止まる原因）
+    await _staffsRef.add({
+      'uid': uid,
+      'loginId': loginId,
+      'name': name,
+      'furigana': furigana,
+      'phone': phone,
+      'email': email,
+      'role': role,
+      'classrooms': classrooms,
+      'photoUrl': photoUrl,
+      'createdAt': FieldValue.serverTimestamp(),
+      'isInitialPassword': true,
+    }).timeout(const Duration(seconds: 5));
+  }
+
+  // 新規登録処理（アカウント復活機能付き）
   Future<void> _registerNewStaff({
     required String loginId,
     required String name,
@@ -389,43 +559,74 @@ class _StaffManageScreenState extends State<StaffManageScreen> {
     required String email,
     required String role,
     required List<String> classrooms,
+    Uint8List? imageBytes,
   }) async {
-    // 現在の管理者がログアウトしないよう、一時的なアプリを作成
-    FirebaseApp tempApp;
-    try {
-      tempApp = await Firebase.initializeApp(name: 'TempStaffRegister', options: Firebase.app().options);
-    } catch (e) {
-      tempApp = Firebase.app('TempStaffRegister');
-    }
-
-    final tempAuth = FirebaseAuth.instanceFor(app: tempApp);
-    final authEmail = '$loginId$_fixedDomain';
+    final String tempAppName = 'TempStaffRegister_${DateTime.now().millisecondsSinceEpoch}';
+    
+    FirebaseApp tempApp = await Firebase.initializeApp(
+      name: tempAppName, 
+      options: Firebase.app().options
+    );
 
     try {
-      // 1. Authユーザー作成
-      UserCredential userCredential = await tempAuth.createUserWithEmailAndPassword(
-        email: authEmail,
-        password: _defaultPassword,
-      );
+      final tempAuth = FirebaseAuth.instanceFor(app: tempApp);
+      final authEmail = '$loginId$_fixedDomain';
 
-      // 2. Firestore保存 (isInitialPassword: true を付与)
-      await _staffsRef.add({
-        'uid': userCredential.user!.uid,
-        'loginId': loginId,
-        'name': name,
-        'furigana': furigana,
-        'phone': phone,
-        'email': email,
-        'role': role,
-        'classrooms': classrooms,
-        'createdAt': FieldValue.serverTimestamp(),
-        'isInitialPassword': true, // ★ここが重要
-      });
+      try {
+        // 1. 新規作成
+        UserCredential userCredential = await tempAuth.createUserWithEmailAndPassword(
+          email: authEmail,
+          password: _defaultPassword,
+        ).timeout(const Duration(seconds: 10));
+        
+        await _saveStaffDataToFirestore(
+          uid: userCredential.user!.uid,
+          loginId: loginId,
+          name: name,
+          furigana: furigana,
+          phone: phone,
+          email: email,
+          role: role,
+          classrooms: classrooms,
+          imageBytes: imageBytes,
+        );
 
-      await tempApp.delete();
+      } on FirebaseAuthException catch (e) {
+        // 2. 既に存在する場合の復活処理
+        if (e.code == 'email-already-in-use') {
+          try {
+            // 初期パスワードでログイン試行
+            UserCredential userCredential = await tempAuth.signInWithEmailAndPassword(
+              email: authEmail,
+              password: _defaultPassword,
+            ).timeout(const Duration(seconds: 10));
+            
+            // 成功したら復活
+            await _saveStaffDataToFirestore(
+              uid: userCredential.user!.uid,
+              loginId: loginId,
+              name: name,
+              furigana: furigana,
+              phone: phone,
+              email: email,
+              role: role,
+              classrooms: classrooms,
+              imageBytes: imageBytes,
+            );
+            return;
+
+          } catch (signInError) {
+            throw 'パスワードが変更されています。復旧できません。';
+          }
+        } else {
+          rethrow;
+        }
+      }
     } catch (e) {
-      await tempApp.delete();
-      throw e;
+      rethrow;
+    } finally {
+      // awaitなしで削除 (フリーズ防止)
+      tempApp.delete(); 
     }
   }
 

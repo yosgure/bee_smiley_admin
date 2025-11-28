@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
-import 'assessment_edit_screen.dart'; 
+import 'assessment_edit_screen.dart';
+import 'assessment_detail_screen.dart';
+import 'app_theme.dart';
 
 class StudentDetailScreen extends StatefulWidget {
-  final String studentId; // format: "parentUid_childName"
+  final String studentId;
   final String studentName;
 
   const StudentDetailScreen({
@@ -109,7 +111,8 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> with SingleTi
     return Scaffold(
       backgroundColor: const Color(0xFFF2F2F7),
       appBar: AppBar(
-        title: const Text('アセスメント詳細', style: TextStyle(fontWeight: FontWeight.bold)),
+        title: Text(widget.studentName),
+        centerTitle: true,
         backgroundColor: Colors.white,
         elevation: 0,
         leading: IconButton(
@@ -128,9 +131,9 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> with SingleTi
             color: Colors.white,
             child: TabBar(
               controller: _tabController,
-              labelColor: Colors.orange,
+              labelColor: AppColors.primary,
               unselectedLabelColor: Colors.grey,
-              indicatorColor: Colors.orange,
+              indicatorColor: AppColors.primary,
               indicatorWeight: 3,
               labelStyle: const TextStyle(fontWeight: FontWeight.bold),
               tabs: const [
@@ -165,7 +168,7 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> with SingleTi
             ),
           );
         },
-        backgroundColor: Colors.orange,
+        backgroundColor: AppColors.primary,
         icon: const Icon(Icons.edit, color: Colors.white),
         label: Text(
           _tabController.index == 0 ? '週次アセスメント作成' : '月次サマリ作成',
@@ -185,8 +188,8 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> with SingleTi
           Container(
             width: 60,
             height: 60,
-            decoration: BoxDecoration(color: Colors.orange.shade100, shape: BoxShape.circle),
-            child: const Icon(Icons.person, size: 36, color: Colors.orange),
+            decoration: BoxDecoration(color: AppColors.primary.withOpacity(0.1), shape: BoxShape.circle),
+            child: Icon(Icons.person, size: 36, color: AppColors.primary),
           ),
           const SizedBox(width: 16),
           Expanded(
@@ -239,7 +242,6 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> with SingleTi
           .orderBy('date', descending: true)
           .snapshots(),
       builder: (context, snapshot) {
-        // ★修正: インデックスエラーを表示
         if (snapshot.hasError) {
           return Center(
             child: Padding(
@@ -266,110 +268,84 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> with SingleTi
 
         final docs = snapshot.data!.docs;
 
-        return ListView.builder(
-          padding: const EdgeInsets.all(16),
-          itemCount: docs.length,
-          itemBuilder: (context, index) {
-            final data = docs[index].data() as Map<String, dynamic>;
-            final docId = docs[index].id;
-            
-            final date = (data['date'] as Timestamp).toDate();
-            String dateStr;
-            if (type == 'weekly') {
-              // ★修正: 週次も特定の日付として表示
-              dateStr = DateFormat('yyyy/MM/dd (E)', 'ja').format(date);
-            } else {
-              dateStr = DateFormat('yyyy年 M月度').format(date);
-            }
+        return Align(
+          alignment: Alignment.topCenter,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 600),
+            child: ListView.builder(
+              padding: const EdgeInsets.all(16),
+              itemCount: docs.length,
+              itemBuilder: (context, index) {
+                final doc = docs[index];
+                final data = doc.data() as Map<String, dynamic>;
+                
+                final date = (data['date'] as Timestamp).toDate();
+                String dateStr;
+                if (type == 'weekly') {
+                  dateStr = DateFormat('yyyy/MM/dd (E)', 'ja').format(date);
+                } else {
+                  dateStr = DateFormat('yyyy年 M月度').format(date);
+                }
 
-            final staffName = data['staffName'] ?? '不明';
-            final content = data['content'] ?? data['summary'] ?? '';
-            final skills = List<String>.from(data['skills'] ?? []);
+                // 週次: 教具名を表示
+                String subtitle = '';
+                if (type == 'weekly') {
+                  final entries = List<Map<String, dynamic>>.from(data['entries'] ?? []);
+                  subtitle = entries.map((e) => e['tool'] as String? ?? '').where((t) => t.isNotEmpty).join('、');
+                } else {
+                  subtitle = data['summary'] ?? '';
+                }
 
-            return Card(
-              elevation: 0,
-              margin: const EdgeInsets.only(bottom: 12),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-                side: BorderSide(color: Colors.grey.shade200),
-              ),
-              child: InkWell(
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => AssessmentEditScreen(
-                        studentId: widget.studentId,
-                        studentName: widget.studentName,
-                        type: type,
-                        docId: docId,
-                        initialData: data,
-                      ),
-                    ),
-                  );
-                },
-                borderRadius: BorderRadius.circular(12),
-                child: Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                return Card(
+                  elevation: 0,
+                  margin: const EdgeInsets.only(bottom: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    side: BorderSide(color: Colors.grey.shade200),
+                  ),
+                  child: InkWell(
+                    onTap: () {
+                      // ★修正: AssessmentDetailScreenに遷移（記録タブと同じ）
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => AssessmentDetailScreen(doc: doc),
+                        ),
+                      );
+                    },
+                    borderRadius: BorderRadius.circular(12),
+                    child: Padding(
+                      padding: const EdgeInsets.all(16.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            dateStr,
-                            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.black87),
-                          ),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: type == 'weekly' ? Colors.blue.shade50 : Colors.orange.shade50,
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: Text(
-                              type == 'weekly' ? '週次' : '月次',
-                              style: TextStyle(
-                                fontSize: 11,
-                                color: type == 'weekly' ? Colors.blue.shade800 : Colors.orange.shade800,
-                                fontWeight: FontWeight.bold,
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                dateStr,
+                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                               ),
-                            ),
+                              const Icon(Icons.chevron_right, color: Colors.grey),
+                            ],
                           ),
+                          if (subtitle.isNotEmpty) ...[
+                            const SizedBox(height: 8),
+                            Text(
+                              subtitle,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(color: Colors.black87, fontSize: 14),
+                            ),
+                          ],
                         ],
                       ),
-                      const SizedBox(height: 8),
-                      Text('記入: $staffName', style: const TextStyle(fontSize: 12, color: Colors.grey)),
-                      const SizedBox(height: 8),
-                      Text(
-                        content,
-                        maxLines: 3,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontSize: 14, height: 1.5),
-                      ),
-                      if (skills.isNotEmpty) ...[
-                        const SizedBox(height: 12),
-                        Wrap(
-                          spacing: 8,
-                          runSpacing: 4,
-                          children: skills.map((skill) {
-                            return Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                              decoration: BoxDecoration(
-                                border: Border.all(color: Colors.grey.shade300),
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Text('#$skill', style: const TextStyle(fontSize: 11, color: Colors.black54)),
-                            );
-                          }).toList(),
-                        ),
-                      ],
-                    ],
+                    ),
                   ),
-                ),
-              ),
-            );
-          },
+                );
+              },
+            ),
+          ),
         );
       },
     );

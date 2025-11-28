@@ -7,11 +7,12 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:intl/intl.dart';
 import 'package:image_picker/image_picker.dart';
+import 'app_theme.dart';
 
 class AssessmentEditScreen extends StatefulWidget {
   final String studentId;
   final String studentName;
-  final String type; // 'weekly' or 'monthly'
+  final String type;
   final String? docId;
   final Map<String, dynamic>? initialData;
 
@@ -35,19 +36,14 @@ class _AssessmentEditScreenState extends State<AssessmentEditScreen> {
   DateTime _selectedDate = DateTime.now();
   bool _isSaving = false;
 
-  // --- 週次用データ ---
   List<Map<String, dynamic>> _weeklyEntries = [];
   List<Map<String, String>> _toolList = [];
   final List<String> _durationOptions = ['0〜5分', '6〜10分', '11〜20分', '20分以上'];
 
-  // --- 月次用データ ---
   final TextEditingController _monthlySummaryController = TextEditingController();
   final Set<String> _selectedSensitivePeriods = {}; 
-  
-  // 非認知能力と伸びている力のペアリスト
   List<Map<String, String?>> _monthlyEntries = [];
 
-  // マスタデータ
   Map<String, List<String>> _nonCognitiveSkillMap = {};
   List<String> _sensitivePeriodMaster = [];
 
@@ -93,7 +89,6 @@ class _AssessmentEditScreenState extends State<AssessmentEditScreen> {
         });
 
       } else {
-        // 月次マスタ取得
         final ncSnap = await FirebaseFirestore.instance.collection('non_cognitive_skills').get();
         final spSnap = await FirebaseFirestore.instance.collection('sensitive_periods').get();
 
@@ -102,7 +97,6 @@ class _AssessmentEditScreenState extends State<AssessmentEditScreen> {
           final data = doc.data();
           final name = data['name'] as String;
           
-          // ★修正: あらゆるフィールド名の可能性をチェック
           List<String> skills = List<String>.from(data['strengths'] ?? []);
           if (skills.isEmpty) {
             skills = List<String>.from(data['growing_skills'] ?? []);
@@ -111,20 +105,9 @@ class _AssessmentEditScreenState extends State<AssessmentEditScreen> {
             skills = List<String>.from(data['growingSkills'] ?? []);
           }
           
-          // ★重要修正: データが空でも勝手に文字を追加しない！
-          // if (skills.isEmpty) skills.add('$nameに関する力'); // ← これを削除しました
-          
           _nonCognitiveSkillMap[name] = skills;
         }
         
-        // マスタ自体が空の場合のみ開発用ダミーを入れる（本番では不要なら削除可）
-        if (_nonCognitiveSkillMap.isEmpty) {
-          _nonCognitiveSkillMap = {
-            '協調性': ['貸し借りができる', '順番を待てる'],
-            '自律心': ['身支度ができる', '片付けができる'],
-          };
-        }
-
         _sensitivePeriodMaster = spSnap.docs.map((d) => d['name'] as String).toList();
         if (_sensitivePeriodMaster.isEmpty) {
           _sensitivePeriodMaster = ['運動', '感覚', '言語', '秩序', '微小', '社会性'];
@@ -251,7 +234,7 @@ class _AssessmentEditScreenState extends State<AssessmentEditScreen> {
         'type': widget.type,
         'date': _selectedDate,
         'staffId': user?.uid,
-        'staffName': staffName,
+        'staffName': staffName, 
         'updatedAt': FieldValue.serverTimestamp(),
       };
 
@@ -339,76 +322,92 @@ class _AssessmentEditScreenState extends State<AssessmentEditScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF2F2F7),
+      backgroundColor: Colors.white,
       appBar: AppBar(
         title: Text(widget.type == 'weekly' ? '週次アセスメント編集' : '月次サマリ編集'),
-        backgroundColor: Colors.white,
-        elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.close, color: Colors.black),
+          icon: const Icon(Icons.close),
           onPressed: () => Navigator.pop(context),
         ),
         actions: [
-          TextButton(
-            onPressed: _isSaving ? null : _save,
-            child: const Text('保存', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: ElevatedButton(
+              onPressed: _isSaving ? null : _save,
+              child: _isSaving 
+                ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: AppColors.onPrimary, strokeWidth: 2))
+                : const Text('保存'),
+            ),
           ),
         ],
       ),
-      body: FutureBuilder(
-        future: _initializationFuture,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          
-          return SingleChildScrollView(
-            padding: const EdgeInsets.all(16),
-            child: Form(
-              key: _formKey,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildDateSelector(),
-                  const SizedBox(height: 24),
-                  if (widget.type == 'weekly') _buildWeeklyForm() else _buildMonthlyForm(),
-                ],
-              ),
-            ),
-          );
-        },
+      body: Align(
+        alignment: Alignment.topCenter,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 600),
+          child: FutureBuilder(
+            future: _initializationFuture,
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Center(child: CircularProgressIndicator());
+              }
+              
+              return SingleChildScrollView(
+                padding: const EdgeInsets.all(24),
+                child: Form(
+                  key: _formKey,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('対象児童: ${widget.studentName}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppColors.textMain)),
+                      const SizedBox(height: 16),
+                      
+                      _buildDateSelector(),
+                      const SizedBox(height: 24),
+                      if (widget.type == 'weekly') _buildWeeklyForm() else _buildMonthlyForm(),
+                      const SizedBox(height: 50),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
       ),
     );
   }
 
   Widget _buildDateSelector() {
     final isWeekly = widget.type == 'weekly';
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12)),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(isWeekly ? '対象日' : '対象月', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)),
-          const SizedBox(height: 8),
-          InkWell(
-            onTap: () async {
-              final picked = await showDatePicker(
-                context: context,
-                initialDate: _selectedDate,
-                firstDate: DateTime(2020),
-                lastDate: DateTime(2030),
-                locale: const Locale('ja'),
-              );
-              if (picked != null) {
-                setState(() {
-                  _selectedDate = picked;
-                });
-              }
-            },
-            child: Row(
+    return GestureDetector(
+      onTap: () async {
+        final picked = await showDatePicker(
+          context: context,
+          initialDate: _selectedDate,
+          firstDate: DateTime(2020),
+          lastDate: DateTime(2030),
+          locale: const Locale('ja'),
+        );
+        if (picked != null) {
+          setState(() {
+            _selectedDate = picked;
+          });
+        }
+      },
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: AppColors.inputFill,
+          borderRadius: AppStyles.radius,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(isWeekly ? '対象日' : '対象月', style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.textSub, fontSize: 12)),
+            const SizedBox(height: 8),
+            Row(
               children: [
-                const Icon(Icons.calendar_month, color: Colors.orange),
+                const Icon(Icons.calendar_month, color: AppColors.primary),
                 const SizedBox(width: 12),
                 Text(
                   isWeekly 
@@ -420,8 +419,8 @@ class _AssessmentEditScreenState extends State<AssessmentEditScreen> {
                 const Icon(Icons.arrow_drop_down, color: Colors.grey),
               ],
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -441,7 +440,7 @@ class _AssessmentEditScreenState extends State<AssessmentEditScreen> {
               decoration: BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(12),
-                boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 4)],
+                border: Border.all(color: Colors.grey.shade200),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -449,7 +448,7 @@ class _AssessmentEditScreenState extends State<AssessmentEditScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text('教具 ${index + 1}', style: const TextStyle(color: Colors.grey, fontSize: 12)),
+                      Text('教具 ${index + 1}', style: const TextStyle(color: AppColors.textSub, fontSize: 12)),
                       if (_weeklyEntries.length > 1)
                         IconButton(
                           icon: const Icon(Icons.close, color: Colors.grey, size: 20),
@@ -459,15 +458,16 @@ class _AssessmentEditScreenState extends State<AssessmentEditScreen> {
                         ),
                     ],
                   ),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 8),
+                  
                   InkWell(
                     onTap: () => _showToolSelectDialog(index),
                     child: Container(
                       width: double.infinity,
                       padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
                       decoration: BoxDecoration(
-                        border: Border.all(color: Colors.grey.shade300),
-                        borderRadius: BorderRadius.circular(8),
+                        color: AppColors.inputFill,
+                        borderRadius: AppStyles.radiusSmall,
                       ),
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -475,7 +475,7 @@ class _AssessmentEditScreenState extends State<AssessmentEditScreen> {
                           Text(
                             entry['tool'] ?? '教具を選択',
                             style: TextStyle(
-                              color: entry['tool'] == null ? Colors.grey.shade600 : Colors.black87,
+                              color: entry['tool'] == null ? Colors.grey : AppColors.textMain,
                               fontSize: 16,
                               fontWeight: entry['tool'] != null ? FontWeight.bold : FontWeight.normal,
                             ),
@@ -486,9 +486,10 @@ class _AssessmentEditScreenState extends State<AssessmentEditScreen> {
                     ),
                   ),
                   const SizedBox(height: 16),
+                  
                   Row(
                     children: [
-                      const Text('評価', style: TextStyle(fontSize: 12, color: Colors.grey, fontWeight: FontWeight.bold)),
+                      const Text('評価', style: TextStyle(fontSize: 12, color: AppColors.textSub, fontWeight: FontWeight.bold)),
                       const SizedBox(width: 12),
                       _buildCircleRating(index, '△', Colors.blue),
                       const SizedBox(width: 8),
@@ -498,7 +499,8 @@ class _AssessmentEditScreenState extends State<AssessmentEditScreen> {
                     ],
                   ),
                   const SizedBox(height: 16),
-                  const Text('所要時間', style: TextStyle(fontSize: 12, color: Colors.grey, fontWeight: FontWeight.bold)),
+
+                  const Text('所要時間', style: TextStyle(fontSize: 12, color: AppColors.textSub, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 8),
                   Wrap(
                     spacing: 8,
@@ -512,45 +514,43 @@ class _AssessmentEditScreenState extends State<AssessmentEditScreen> {
                             entry['duration'] = val ? option : null;
                           });
                         },
-                        backgroundColor: Colors.grey.shade100,
-                        selectedColor: Colors.orange.shade100,
+                        backgroundColor: AppColors.inputFill,
+                        selectedColor: AppColors.primary.withOpacity(0.1),
                         labelStyle: TextStyle(
-                          color: isSelected ? Colors.orange.shade900 : Colors.black87,
+                          color: isSelected ? AppColors.primary : Colors.black87,
                           fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
                           fontSize: 12,
                         ),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(20),
-                          side: BorderSide(color: isSelected ? Colors.orange : Colors.transparent),
+                          side: BorderSide(color: isSelected ? AppColors.primary : Colors.transparent),
                         ),
                         showCheckmark: false,
                       );
                     }).toList(),
                   ),
                   const SizedBox(height: 16),
+
                   TextFormField(
                     initialValue: entry['comment'],
                     decoration: const InputDecoration(
                       hintText: 'コメントを入力...',
-                      border: OutlineInputBorder(),
-                      contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                      isDense: true,
                     ),
                     maxLines: 2,
                     onChanged: (val) => entry['comment'] = val,
                   ),
                   const SizedBox(height: 16),
+                  
                   Row(
                     children: [
                       InkWell(
                         onTap: () => _pickImage(index),
                         borderRadius: BorderRadius.circular(8),
                         child: Container(
-                          width: 60, height: 60,
+                          width: 80, height: 80,
                           decoration: BoxDecoration(
-                            color: Colors.grey.shade100,
+                            color: AppColors.inputFill,
                             borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: Colors.grey.shade300),
                           ),
                           clipBehavior: Clip.antiAlias,
                           child: entry['localPhoto'] != null
@@ -559,11 +559,11 @@ class _AssessmentEditScreenState extends State<AssessmentEditScreen> {
                                   : Image.file(File(entry['localPhoto'].path), fit: BoxFit.cover))
                               : (entry['photoUrl'] != null
                                   ? Image.network(entry['photoUrl'], fit: BoxFit.cover)
-                                  : const Icon(Icons.add_a_photo, color: Colors.grey)),
+                                  : const Center(child: Icon(Icons.add_a_photo, color: Colors.grey))),
                         ),
                       ),
-                      const SizedBox(width: 8),
-                      const Text('写真を添付', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                      const SizedBox(width: 12),
+                      const Text('写真を添付', style: TextStyle(fontSize: 14, color: AppColors.textSub)),
                     ],
                   ),
                 ],
@@ -572,19 +572,16 @@ class _AssessmentEditScreenState extends State<AssessmentEditScreen> {
           },
         ),
         Center(
-          child: ElevatedButton.icon(
+          child: OutlinedButton.icon(
             onPressed: _addWeeklyEntry,
             icon: const Icon(Icons.add),
-            label: const Text('活動を追加'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.orange,
-              foregroundColor: Colors.white,
+            label: const Text('教具を追加'),
+            style: OutlinedButton.styleFrom(
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+              side: BorderSide(color: AppColors.primary),
             ),
           ),
         ),
-        const SizedBox(height: 40),
       ],
     );
   }
@@ -619,7 +616,7 @@ class _AssessmentEditScreenState extends State<AssessmentEditScreen> {
       children: [
         const Padding(
           padding: EdgeInsets.only(left: 4, bottom: 8),
-          child: Text('非認知能力・伸びている力', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)),
+          child: Text('非認知能力・伸びている力', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.textSub)),
         ),
         
         ListView.builder(
@@ -645,7 +642,7 @@ class _AssessmentEditScreenState extends State<AssessmentEditScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text('項目 ${index + 1}', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.grey, fontSize: 12)),
+                      Text('項目 ${index + 1}', style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.textSub, fontSize: 12)),
                       if (_monthlyEntries.length > 1)
                         IconButton(
                           icon: const Icon(Icons.close, size: 18, color: Colors.grey),
@@ -660,8 +657,6 @@ class _AssessmentEditScreenState extends State<AssessmentEditScreen> {
                     value: _nonCognitiveSkillMap.keys.contains(entry['category']) ? entry['category'] : null,
                     decoration: const InputDecoration(
                       labelText: '非認知能力',
-                      border: OutlineInputBorder(),
-                      contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                     ),
                     isExpanded: true,
                     items: _nonCognitiveSkillMap.keys.map((key) => DropdownMenuItem(value: key, child: Text(key))).toList(),
@@ -678,10 +673,8 @@ class _AssessmentEditScreenState extends State<AssessmentEditScreen> {
                     value: skillOptions.contains(entry['skill']) ? entry['skill'] : null,
                     decoration: InputDecoration(
                       labelText: '伸びている力',
-                      border: const OutlineInputBorder(),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                       filled: selectedCategory == null,
-                      fillColor: selectedCategory == null ? Colors.grey.shade100 : null,
+                      fillColor: selectedCategory == null ? Colors.grey.shade100 : AppColors.inputFill,
                     ),
                     isExpanded: true,
                     items: skillOptions.map((skill) => DropdownMenuItem(value: skill, child: Text(skill))).toList(),
@@ -696,27 +689,26 @@ class _AssessmentEditScreenState extends State<AssessmentEditScreen> {
         ),
 
         Center(
-          child: TextButton.icon(
+          child: OutlinedButton.icon(
             onPressed: _addMonthlyEntry,
             icon: const Icon(Icons.add),
-            label: const Text('非認知能力を追加'),
-            style: TextButton.styleFrom(
-              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-              backgroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: BorderSide(color: Colors.grey.shade300)),
-            ),
+            label: const Text('項目を追加'),
           ),
         ),
         const SizedBox(height: 24),
 
         const Padding(
           padding: EdgeInsets.only(left: 4, bottom: 8),
-          child: Text('敏感期', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)),
+          child: Text('敏感期', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.textSub)),
         ),
         Container(
           width: double.infinity,
           padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12)),
+          decoration: BoxDecoration(
+            color: AppColors.surface, 
+            borderRadius: AppStyles.radius,
+            border: AppStyles.borderLight,
+          ),
           child: Wrap(
             spacing: 8,
             runSpacing: 8,
@@ -727,12 +719,19 @@ class _AssessmentEditScreenState extends State<AssessmentEditScreen> {
                 selected: isSelected,
                 onSelected: (val) {
                   setState(() {
-                    if (val) _selectedSensitivePeriods.add(tag);
-                    else _selectedSensitivePeriods.remove(tag);
+                    if (val) {
+                      _selectedSensitivePeriods.add(tag);
+                    } else {
+                      _selectedSensitivePeriods.remove(tag);
+                    }
                   });
                 },
-                selectedColor: Colors.green.shade100,
-                checkmarkColor: Colors.green,
+                selectedColor: AppColors.primary.withOpacity(0.2),
+                checkmarkColor: AppColors.primary,
+                labelStyle: TextStyle(
+                  color: isSelected ? AppColors.primary : Colors.black87,
+                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                ),
               );
             }).toList(),
           ),
@@ -741,27 +740,20 @@ class _AssessmentEditScreenState extends State<AssessmentEditScreen> {
 
         const Padding(
           padding: EdgeInsets.only(left: 4, bottom: 8),
-          child: Text('月間総評', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)),
+          child: Text('月間総評', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.textSub)),
         ),
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12)),
-          child: TextFormField(
-            controller: _monthlySummaryController,
-            maxLines: 5,
-            decoration: const InputDecoration(
-              border: InputBorder.none,
-              hintText: '今月の様子や成長した点などを入力してください...',
-            ),
+        TextField(
+          controller: _monthlySummaryController,
+          maxLines: 6,
+          decoration: const InputDecoration(
+            hintText: '今月の様子や成長した点などを入力してください...',
           ),
         ),
-        const SizedBox(height: 40),
       ],
     );
   }
 }
 
-// 教具選択ダイアログ
 class _ToolSelectDialog extends StatefulWidget {
   final List<Map<String, String>> tools;
   final Function(String) onSelected;
@@ -794,19 +786,30 @@ class _ToolSelectDialogState extends State<_ToolSelectDialog> {
     });
   }
 
+  // ひらがなの五十音順でヘッダーを判定（Unicodeコードポイント使用）
   String _getIndexHeader(String kana) {
     if (kana.isEmpty) return '他';
-    final firstChar = kana.substring(0, 1);
-    if (firstChar.compareTo('あ') >= 0 && firstChar.compareTo('お') <= 0) return 'あ';
-    if (firstChar.compareTo('か') >= 0 && firstChar.compareTo('こ') <= 0) return 'か';
-    if (firstChar.compareTo('さ') >= 0 && firstChar.compareTo('そ') <= 0) return 'さ';
-    if (firstChar.compareTo('た') >= 0 && firstChar.compareTo('と') <= 0) return 'た';
-    if (firstChar.compareTo('な') >= 0 && firstChar.compareTo('の') <= 0) return 'な';
-    if (firstChar.compareTo('は') >= 0 && firstChar.compareTo('ほ') <= 0) return 'は';
-    if (firstChar.compareTo('ま') >= 0 && firstChar.compareTo('も') <= 0) return 'ま';
-    if (firstChar.compareTo('や') >= 0 && firstChar.compareTo('よ') <= 0) return 'や';
-    if (firstChar.compareTo('ら') >= 0 && firstChar.compareTo('ろ') <= 0) return 'ら';
-    if (firstChar.compareTo('わ') >= 0 && firstChar.compareTo('ん') <= 0) return 'わ';
+    final c = kana.codeUnitAt(0);
+    // あ行: U+3042(あ) - U+304A(お)
+    if (c >= 0x3042 && c <= 0x304A) return 'あ';
+    // か行: U+304B(か) - U+3054(ご) ※濁音含む
+    if (c >= 0x304B && c <= 0x3054) return 'か';
+    // さ行: U+3055(さ) - U+305E(ぞ)
+    if (c >= 0x3055 && c <= 0x305E) return 'さ';
+    // た行: U+305F(た) - U+3069(ど)
+    if (c >= 0x305F && c <= 0x3069) return 'た';
+    // な行: U+306A(な) - U+306E(の)
+    if (c >= 0x306A && c <= 0x306E) return 'な';
+    // は行: U+306F(は) - U+307D(ぽ)
+    if (c >= 0x306F && c <= 0x307D) return 'は';
+    // ま行: U+307E(ま) - U+3082(も)
+    if (c >= 0x307E && c <= 0x3082) return 'ま';
+    // や行: U+3084(や), U+3086(ゆ), U+3088(よ)
+    if (c >= 0x3083 && c <= 0x3088) return 'や';
+    // ら行: U+3089(ら) - U+308D(ろ)
+    if (c >= 0x3089 && c <= 0x308D) return 'ら';
+    // わ行: U+308F(わ) - U+3093(ん)
+    if (c >= 0x308E && c <= 0x3093) return 'わ';
     return '他';
   }
 
@@ -831,9 +834,6 @@ class _ToolSelectDialogState extends State<_ToolSelectDialog> {
                     decoration: const InputDecoration(
                       hintText: '教具名で検索...',
                       prefixIcon: Icon(Icons.search),
-                      border: OutlineInputBorder(),
-                      contentPadding: EdgeInsets.symmetric(horizontal: 12),
-                      isDense: true,
                     ),
                     onChanged: _onSearch,
                   ),
@@ -846,10 +846,10 @@ class _ToolSelectDialogState extends State<_ToolSelectDialog> {
                 itemCount: _filteredTools.length,
                 itemBuilder: (context, index) {
                   final tool = _filteredTools[index];
-                  final header = _getIndexHeader(tool['furigana']!);
+                  final header = _getIndexHeader(tool['furigana'] ?? '');
                   bool showHeader = true;
                   if (index > 0) {
-                    final prevHeader = _getIndexHeader(_filteredTools[index - 1]['furigana']!);
+                    final prevHeader = _getIndexHeader(_filteredTools[index - 1]['furigana'] ?? '');
                     if (prevHeader == header) showHeader = false;
                   }
 
@@ -857,8 +857,10 @@ class _ToolSelectDialogState extends State<_ToolSelectDialog> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       if (showHeader)
-                        Padding(
+                        Container(
+                          width: double.infinity,
                           padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                          color: AppColors.inputFill,
                           child: Text(header, style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey.shade700)),
                         ),
                       ListTile(

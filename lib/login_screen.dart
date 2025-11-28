@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -9,14 +10,12 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  // メールアドレスではなくログインID用コントローラー
   final TextEditingController _loginIdController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   
   bool _isLoading = false;
   String? _errorMessage;
 
-  // ★固定ドメイン
   static const String _fixedDomain = '@bee-smiley.com';
 
   Future<void> _login() async {
@@ -26,14 +25,17 @@ class _LoginScreenState extends State<LoginScreen> {
     });
 
     try {
-      // ★入力されたIDにドメインを結合してFirebaseに送信
       final email = _loginIdController.text.trim() + _fixedDomain;
 
-      await FirebaseAuth.instance.signInWithEmailAndPassword(
+      final credential = await FirebaseAuth.instance.signInWithEmailAndPassword(
         email: email,
         password: _passwordController.text.trim(),
       );
-      // 成功時は自動遷移
+
+      // ★ログイン成功後、ユーザー種別を判定して振り分け
+      if (credential.user != null && mounted) {
+        await _navigateBasedOnUserType(credential.user!.uid);
+      }
     } on FirebaseAuthException catch (e) {
       String message;
       if (e.code == 'user-not-found' || e.code == 'wrong-password' || e.code == 'invalid-credential') {
@@ -58,10 +60,60 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
+  /// ユーザー種別を判定して適切な画面に遷移
+  Future<void> _navigateBasedOnUserType(String uid) async {
+    try {
+      // staffsコレクションをチェック
+      final staffQuery = await FirebaseFirestore.instance
+          .collection('staffs')
+          .where('uid', isEqualTo: uid)
+          .limit(1)
+          .get();
+
+      if (staffQuery.docs.isNotEmpty) {
+        // スタッフ/管理者 → 管理者画面へ
+        if (mounted) {
+          Navigator.pushReplacementNamed(context, '/admin');
+        }
+        return;
+      }
+
+      // familiesコレクションをチェック
+      final familyQuery = await FirebaseFirestore.instance
+          .collection('families')
+          .where('uid', isEqualTo: uid)
+          .limit(1)
+          .get();
+
+      if (familyQuery.docs.isNotEmpty) {
+        // 保護者 → 保護者画面へ
+        if (mounted) {
+          Navigator.pushReplacementNamed(context, '/parent');
+        }
+        return;
+      }
+
+      // どちらにも存在しない場合
+      if (mounted) {
+        setState(() {
+          _errorMessage = 'アカウント情報が見つかりません。管理者にお問い合わせください。';
+        });
+        // ログアウト
+        await FirebaseAuth.instance.signOut();
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _errorMessage = 'ユーザー情報の取得に失敗しました。';
+        });
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white, // 背景は真っ白
+      backgroundColor: Colors.white,
       body: Center(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(32.0),
@@ -70,7 +122,7 @@ class _LoginScreenState extends State<LoginScreen> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                // ★ロゴ画像
+                // ロゴ画像
                 Image.asset(
                   'assets/logo_beesmiley.png',
                   height: 120,
@@ -82,13 +134,12 @@ class _LoginScreenState extends State<LoginScreen> {
                 Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    // ★ログインID入力欄
+                    // ログインID入力欄
                     TextField(
                       controller: _loginIdController,
                       decoration: InputDecoration(
-                        labelText: 'ログインID', // 表示名
-                        // hintText: '例: tanaka', // ★ここを削除しました
-                        prefixIcon: const Icon(Icons.person_outline), // アイコンを人型に
+                        labelText: 'ログインID',
+                        prefixIcon: const Icon(Icons.person_outline),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(10),
                           borderSide: BorderSide.none,

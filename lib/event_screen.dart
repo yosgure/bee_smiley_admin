@@ -1,4 +1,4 @@
-import 'dart:typed_data'; // Web対応用
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -6,11 +6,8 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:intl/intl.dart'; // 日付フォーマット用
+import 'package:intl/intl.dart';
 
-// ==========================================
-// 1. イベント一覧画面
-// ==========================================
 class EventScreen extends StatefulWidget {
   const EventScreen({super.key});
 
@@ -49,10 +46,10 @@ class _EventScreenState extends State<EventScreen> with SingleTickerProviderStat
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('イベント企画'),
+        title: const Text('イベント'),
+        centerTitle: true,
         backgroundColor: Colors.white,
         elevation: 0,
-        // タブバーを追加
         bottom: TabBar(
           controller: _tabController,
           labelColor: Colors.orange,
@@ -66,11 +63,10 @@ class _EventScreenState extends State<EventScreen> with SingleTickerProviderStat
       ),
       backgroundColor: const Color(0xFFF2F2F7),
       
-      // ★修正: 画面幅を制限して中央寄せにする (PCで見やすくするため)
       body: Align(
         alignment: Alignment.topCenter,
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 600), // スマホ程度の幅に制限
+          constraints: const BoxConstraints(maxWidth: 600),
           child: StreamBuilder<QuerySnapshot>(
             stream: _eventsRef.orderBy('createdAt', descending: true).snapshots(),
             builder: (context, snapshot) {
@@ -84,20 +80,17 @@ class _EventScreenState extends State<EventScreen> with SingleTickerProviderStat
               final allDocs = snapshot.data!.docs;
               final now = DateTime.now();
       
-              // 締め切りでデータを振り分け
               final activeEvents = <DocumentSnapshot>[];
               final pastEvents = <DocumentSnapshot>[];
       
               for (var doc in allDocs) {
                 final data = doc.data() as Map<String, dynamic>;
-                // 締め切り日を取得（なければ遠い未来扱い）
                 final Timestamp? deadlineTs = data['deadline'];
-                // 締め切り判定は日付の終わり(23:59:59)までを考慮
                 final DateTime deadline = (deadlineTs?.toDate() ?? DateTime(2100)).add(const Duration(days: 1)).subtract(const Duration(seconds: 1));
                 
-                if (deadline.isAfter(now)) { // 締め切りが現在時刻より後なら公開中
+                if (deadline.isAfter(now)) {
                   activeEvents.add(doc);
-                } else { // それ以外は終了分
+                } else {
                   pastEvents.add(doc);
                 }
               }
@@ -105,9 +98,7 @@ class _EventScreenState extends State<EventScreen> with SingleTickerProviderStat
               return TabBarView(
                 controller: _tabController,
                 children: [
-                  // 公開中リスト
                   _buildEventList(activeEvents, true),
-                  // 終了分リスト
                   _buildEventList(pastEvents, false),
                 ],
               );
@@ -156,7 +147,6 @@ class _EventScreenState extends State<EventScreen> with SingleTickerProviderStat
   }
 
   Widget _buildEventCard(String docId, Map<String, dynamic> event, bool isActive) {
-    // 日付と時間のフォーマット
     final Timestamp? eventDateTs = event['eventDate'];
     final Timestamp? deadlineTs = event['deadline'];
     final String startTime = event['startTime'] ?? '';
@@ -178,24 +168,22 @@ class _EventScreenState extends State<EventScreen> with SingleTickerProviderStat
 
     return Card(
       clipBehavior: Clip.antiAlias,
-      elevation: isActive ? 3 : 1, // 過去分は影を薄く
-      color: isActive ? Colors.white : Colors.grey.shade200, // 過去分は背景をグレーに
+      elevation: isActive ? 3 : 1,
+      color: isActive ? Colors.white : Colors.grey.shade200,
       margin: const EdgeInsets.only(bottom: 24),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // 1. 写真エリア (幅が制限されたのでシンプルにアスペクト比固定でOK)
           AspectRatio(
             aspectRatio: 16 / 9,
             child: Container(
               width: double.infinity,
-              color: Colors.grey.shade100, // ロード中の背景
+              color: Colors.grey.shade100,
               child: event['imageUrl'] != null && (event['imageUrl'] as String).isNotEmpty
                   ? CachedNetworkImage(
                       imageUrl: event['imageUrl'],
                       fit: BoxFit.cover,
-                      // 過去分は少し暗くする
                       color: isActive ? null : Colors.grey.withOpacity(0.5),
                       colorBlendMode: isActive ? null : BlendMode.saturation,
                       placeholder: (context, url) => Container(color: Colors.grey.shade200),
@@ -222,7 +210,6 @@ class _EventScreenState extends State<EventScreen> with SingleTickerProviderStat
                         style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                       ),
                     ),
-                    // 削除ボタン
                     IconButton(
                       icon: const Icon(Icons.delete_outline, color: Colors.grey),
                       onPressed: () => _deleteEvent(docId, event['title']),
@@ -234,12 +221,11 @@ class _EventScreenState extends State<EventScreen> with SingleTickerProviderStat
 
                 _buildIconText(Icons.calendar_today, eventDateTimeStr),
                 
-                // 締め切り情報を控えめに追加
                 if (deadlineTs != null && isActive) ...[
                   const SizedBox(height: 4),
                   Row(
                     children: [
-                      const SizedBox(width: 28), // アイコン分のインデント調整
+                      const SizedBox(width: 28),
                       Icon(Icons.timer_outlined, size: 14, color: Colors.grey.shade600),
                       const SizedBox(width: 4),
                       Text(
@@ -279,7 +265,7 @@ class _EventScreenState extends State<EventScreen> with SingleTickerProviderStat
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton.icon(
-                      onPressed: isActive ? () => _launchURL(context, event['link']) : null, // 過去分は押せない
+                      onPressed: isActive ? () => _launchURL(context, event['link']) : null,
                       icon: const Icon(Icons.open_in_new, size: 18),
                       label: const Text('申し込みページへ'),
                       style: ElevatedButton.styleFrom(
@@ -287,7 +273,7 @@ class _EventScreenState extends State<EventScreen> with SingleTickerProviderStat
                         foregroundColor: Colors.deepOrange,
                         elevation: 0,
                         padding: const EdgeInsets.symmetric(vertical: 12),
-                        disabledBackgroundColor: Colors.grey.shade300, // 無効時の色
+                        disabledBackgroundColor: Colors.grey.shade300,
                       ),
                     ),
                   ),
@@ -336,9 +322,6 @@ class _EventScreenState extends State<EventScreen> with SingleTickerProviderStat
   }
 }
 
-// ==========================================
-// 2. イベント作成画面 (日付・時間選択対応)
-// ==========================================
 class EventCreateScreen extends StatefulWidget {
   const EventCreateScreen({super.key});
 
@@ -353,11 +336,9 @@ class _EventCreateScreenState extends State<EventCreateScreen> {
   final _detailController = TextEditingController();
   final _linkController = TextEditingController();
   
-  // 日付管理
   DateTime _eventDate = DateTime.now().add(const Duration(days: 7));
   DateTime _deadlineDate = DateTime.now().add(const Duration(days: 6));
   
-  // 時間管理
   TimeOfDay? _startTime = TimeOfDay.now();
   TimeOfDay? _endTime = TimeOfDay.fromDateTime(DateTime.now().add(const Duration(hours: 1)));
 
@@ -449,8 +430,8 @@ class _EventCreateScreenState extends State<EventCreateScreen> {
       await FirebaseFirestore.instance.collection('events').add({
         'title': _titleController.text,
         'eventDate': Timestamp.fromDate(_eventDate),
-        'startTime': _startTime?.format(context), // 時間も文字列で保存
-        'endTime': _endTime?.format(context),     // 時間も文字列で保存
+        'startTime': _startTime?.format(context),
+        'endTime': _endTime?.format(context),
         'deadline': Timestamp.fromDate(_deadlineDate),
         'location': _locationController.text,
         'address': _addressController.text,
@@ -476,7 +457,8 @@ class _EventCreateScreenState extends State<EventCreateScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFFF2F2F7),
       appBar: AppBar(
-        title: const Text('新規イベント企画'),
+        title: const Text('新規イベント'),
+        centerTitle: true,
         backgroundColor: Colors.white,
         elevation: 0,
         leading: IconButton(
@@ -497,7 +479,6 @@ class _EventCreateScreenState extends State<EventCreateScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // 写真設定エリア
             GestureDetector(
               onTap: _pickImage,
               child: Container(
@@ -584,7 +565,7 @@ class _EventCreateScreenState extends State<EventCreateScreen> {
   Widget _buildTextField(TextEditingController controller, String hint, {int maxLines = 1}) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-      margin: const EdgeInsets.only(bottom: 8), // 少し間隔を追加
+      margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
@@ -606,7 +587,7 @@ class _EventCreateScreenState extends State<EventCreateScreen> {
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.all(16),
-        margin: const EdgeInsets.only(bottom: 8), // 少し間隔を追加
+        margin: const EdgeInsets.only(bottom: 8),
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(12),
@@ -637,17 +618,17 @@ class _EventCreateScreenState extends State<EventCreateScreen> {
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.all(16),
-        margin: const EdgeInsets.only(bottom: 8), // 少し間隔を追加
+        margin: const EdgeInsets.only(bottom: 8),
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(12),
         ),
         child: Row(
           children: [
-            Icon(Icons.access_time, color: Colors.blueGrey),
+            const Icon(Icons.access_time, color: Colors.blueGrey),
             const SizedBox(width: 12),
             Text(
-              time != null ? time.format(context) : label, // 時間が設定されていれば表示、なければラベル
+              time != null ? time.format(context) : label,
               style: TextStyle(
                 fontSize: 16, 
                 fontWeight: FontWeight.bold,

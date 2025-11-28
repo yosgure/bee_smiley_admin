@@ -18,7 +18,8 @@ class _NotificationScreenState extends State<NotificationScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFFF2F2F7),
       appBar: AppBar(
-        title: const Text('お知らせ配信'),
+        title: const Text('お知らせ'),
+        centerTitle: true,
         backgroundColor: Colors.white,
         elevation: 0,
         foregroundColor: Colors.black,
@@ -172,19 +173,17 @@ class _NotificationScreenState extends State<NotificationScreen> {
     );
   }
 
-  // ★修正: 全画面スライド（モーダル）で開くように変更
   void _openEditScreen(DocumentSnapshot? doc) {
     Navigator.push(
       context,
       MaterialPageRoute(
         builder: (context) => NotificationEditScreen(doc: doc),
-        fullscreenDialog: true, // これにより下からスライドして表示される動きになります
+        fullscreenDialog: true,
       ),
     );
   }
 }
 
-// ★修正: DialogではなくScaffoldを使った全画面Widgetに変更
 class NotificationEditScreen extends StatefulWidget {
   final DocumentSnapshot? doc;
 
@@ -293,7 +292,7 @@ class _NotificationEditScreenState extends State<NotificationEditScreen> {
       }
 
       if (mounted) {
-        Navigator.pop(context); // 画面を閉じる
+        Navigator.pop(context);
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('お知らせを保存しました')));
       }
     } catch (e) {
@@ -312,6 +311,7 @@ class _NotificationEditScreenState extends State<NotificationEditScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(isEditing ? 'お知らせ編集' : 'お知らせ作成'),
+        centerTitle: true,
         leading: IconButton(
           icon: const Icon(Icons.close),
           onPressed: () => Navigator.pop(context),
@@ -339,7 +339,6 @@ class _NotificationEditScreenState extends State<NotificationEditScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // タイトル入力
               const Text('タイトル', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
               const SizedBox(height: 8),
               TextField(
@@ -352,7 +351,6 @@ class _NotificationEditScreenState extends State<NotificationEditScreen> {
               ),
               const SizedBox(height: 24),
 
-              // 本文入力
               const Text('本文', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
               const SizedBox(height: 8),
               TextField(
@@ -366,7 +364,6 @@ class _NotificationEditScreenState extends State<NotificationEditScreen> {
               ),
               const SizedBox(height: 24),
 
-              // 配信対象
               const Text('配信対象', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
               const SizedBox(height: 8),
               Row(
@@ -389,7 +386,6 @@ class _NotificationEditScreenState extends State<NotificationEditScreen> {
                 ],
               ),
 
-              // 教室選択エリア（「教室を指定」の場合のみ表示）
               if (_targetType == 'specific') ...[
                 const SizedBox(height: 16),
                 Container(
@@ -404,7 +400,6 @@ class _NotificationEditScreenState extends State<NotificationEditScreen> {
                       ? const Center(child: CircularProgressIndicator())
                       : _classroomOptions.isEmpty
                           ? const Text('教室データがありません', style: TextStyle(color: Colors.grey))
-                          // ★修正: ListViewではなくColumnを使って安全に表示（スクロールは画面全体で行う）
                           : Column(
                               children: _classroomOptions.map((roomName) {
                                 return CheckboxListTile(
@@ -427,7 +422,6 @@ class _NotificationEditScreenState extends State<NotificationEditScreen> {
                             ),
                 ),
               ],
-              // 下部の余白
               const SizedBox(height: 50),
             ],
           ),

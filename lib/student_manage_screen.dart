@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 
 class StudentManageScreen extends StatefulWidget {
   const StudentManageScreen({super.key});
@@ -14,10 +15,11 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
   final CollectionReference _classroomsRef =
       FirebaseFirestore.instance.collection('classrooms');
 
-  // ★修正: 固定リストを廃止し、Firestoreから取得するリストを用意
+  // Cloud Functions（リージョン指定）
+  final FirebaseFunctions _functions = FirebaseFunctions.instanceFor(region: 'asia-northeast1');
+
   List<String> _classroomList = [];
 
-  // コースマスタ
   final List<String> _allCourses = [
     'プリスクール',
     'キッズコース',
@@ -27,13 +29,14 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
 
   final List<String> _genders = ['男', '女', 'その他'];
 
+  static const String _initialPassword = 'pass1234';
+
   @override
   void initState() {
     super.initState();
     _fetchClassrooms();
   }
 
-  // ★追加: 教室マスタを取得
   Future<void> _fetchClassrooms() async {
     try {
       final snapshot = await _classroomsRef.get();
@@ -44,7 +47,6 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
             .toList();
       });
     } catch (e) {
-      // エラー時はデフォルト値をセット（フォールバック）
       setState(() {
         _classroomList = [
           'ビースマイリー湘南藤沢教室',
@@ -98,6 +100,9 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
                 fullAddress = '〒${data['postalCode']} $fullAddress';
               }
 
+              final hasAccount = data['uid'] != null && data['uid'].toString().isNotEmpty;
+              final isInitialPassword = data['isInitialPassword'] == true;
+
               return Card(
                 margin: const EdgeInsets.only(bottom: 12),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -106,11 +111,44 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
                     backgroundColor: Colors.blue.shade100,
                     child: const Icon(Icons.family_restroom, color: Colors.blue),
                   ),
-                  title: Text(
-                    parentFullName.trim().isEmpty ? '名称未設定' : parentFullName,
-                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  title: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          parentFullName.trim().isEmpty ? '名称未設定' : parentFullName,
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                      if (hasAccount)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: isInitialPassword ? Colors.orange.shade100 : Colors.green.shade100,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            isInitialPassword ? '初期PW' : 'アクティブ',
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: isInitialPassword ? Colors.orange.shade800 : Colors.green.shade800,
+                            ),
+                          ),
+                        )
+                      else
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: Colors.grey.shade200,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            '未登録',
+                            style: TextStyle(fontSize: 10, color: Colors.grey.shade600),
+                          ),
+                        ),
+                    ],
                   ),
-                  subtitle: Text('児童数: ${children.length}名 / ID: ${data['loginId']}'),
+                  subtitle: Text('児童数: ${children.length}名 / ID: ${data['loginId'] ?? "未設定"}'),
                   children: [
                     Padding(
                       padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
@@ -139,10 +177,24 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
                           Row(
                             mainAxisAlignment: MainAxisAlignment.end,
                             children: [
+                              if (hasAccount)
+                                TextButton.icon(
+                                  icon: const Icon(Icons.lock_reset, color: Colors.orange),
+                                  label: const Text('PW初期化', style: TextStyle(color: Colors.orange)),
+                                  onPressed: () => _resetPassword(
+                                    familyDoc.id, 
+                                    data['uid'], 
+                                    parentFullName,
+                                  ),
+                                ),
                               TextButton.icon(
                                 icon: const Icon(Icons.delete, color: Colors.red),
                                 label: const Text('削除', style: TextStyle(color: Colors.red)),
-                                onPressed: () => _deleteFamily(familyDoc.id, parentFullName),
+                                onPressed: () => _deleteFamily(
+                                  familyDoc.id, 
+                                  data['uid'], 
+                                  parentFullName,
+                                ),
                               ),
                               const SizedBox(width: 8),
                               ElevatedButton.icon(
@@ -164,7 +216,6 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
           );
         },
       ),
-      // ★修正: 新規登録ボタンをビースマイリーマークに変更
       floatingActionButton: FloatingActionButton(
         onPressed: () => _showEditDialog(),
         backgroundColor: Colors.white,
@@ -230,22 +281,117 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
     );
   }
 
-  void _deleteFamily(String docId, String name) {
-    showDialog(
+  /// Cloud Functions経由でパスワードを初期化
+  Future<void> _resetPassword(String docId, String? targetUid, String name) async {
+    if (targetUid == null || targetUid.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('アカウントが作成されていません'), backgroundColor: Colors.red),
+      );
+      return;
+    }
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('パスワード初期化'),
+        content: Text('$name さんのパスワードを「$_initialPassword」に初期化しますか？\n\n次回ログイン時にパスワード変更が求められます。'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('キャンセル')),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.orange, foregroundColor: Colors.white),
+            child: const Text('初期化'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    try {
+      _showLoadingDialog('パスワードを初期化中...');
+
+      final callable = _functions.httpsCallable('resetParentPassword');
+      await callable.call({
+        'targetUid': targetUid,
+        'familyDocId': docId,
+      });
+
+      if (mounted) {
+        Navigator.pop(context); // ローディングを閉じる
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('$name さんのパスワードを初期化しました'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        Navigator.pop(context); // ローディングを閉じる
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('エラー: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  /// Cloud Functions経由でアカウントを削除
+  Future<void> _deleteFamily(String docId, String? targetUid, String name) async {
+    final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('削除確認'),
-        content: Text('$name さんの情報を削除しますか？'),
+        content: Text('$name さんの情報を削除しますか？\n\n※ログインアカウントも削除されます。'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('キャンセル')),
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('キャンセル')),
           TextButton(
-            onPressed: () async {
-              await _familiesRef.doc(docId).delete();
-              if (context.mounted) Navigator.pop(context);
-            },
+            onPressed: () => Navigator.pop(context, true),
             child: const Text('削除', style: TextStyle(color: Colors.red)),
           ),
         ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    try {
+      _showLoadingDialog('削除中...');
+
+      final callable = _functions.httpsCallable('deleteParentAccount');
+      await callable.call({
+        'targetUid': targetUid,
+        'familyDocId': docId,
+      });
+
+      if (mounted) {
+        Navigator.pop(context); // ローディングを閉じる
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('削除しました'), backgroundColor: Colors.green),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        Navigator.pop(context); // ローディングを閉じる
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('エラー: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  void _showLoadingDialog(String message) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        content: Row(
+          children: [
+            const CircularProgressIndicator(),
+            const SizedBox(width: 16),
+            Text(message),
+          ],
+        ),
       ),
     );
   }
@@ -280,11 +426,13 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
         'firstNameKana': '',
         'gender': '男',
         'birthDate': '',
-        'classroom': _classroomList.isNotEmpty ? _classroomList[0] : '', // 初期値
+        'classroom': _classroomList.isNotEmpty ? _classroomList[0] : '',
         'course': _allCourses[0],
         'allergy': '',
       });
     }
+
+    bool isLoading = false;
 
     showDialog(
       context: context,
@@ -302,8 +450,32 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       mainAxisSize: MainAxisSize.min,
                       children: [
+                        // 新規登録時の説明
+                        if (!isEditing)
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            margin: const EdgeInsets.only(bottom: 16),
+                            decoration: BoxDecoration(
+                              color: Colors.blue.shade50,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: Colors.blue.shade200),
+                            ),
+                            child: const Row(
+                              children: [
+                                Icon(Icons.info_outline, color: Colors.blue, size: 20),
+                                SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    '初期パスワード: pass1234\n初回ログイン時にパスワード変更が必要です。',
+                                    style: TextStyle(fontSize: 12, color: Colors.blue),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        
                         _buildSectionTitle('保護者情報'),
-                        _buildTextField(loginIdCtrl, 'ログインID', icon: Icons.vpn_key),
+                        _buildTextField(loginIdCtrl, 'ログインID', icon: Icons.vpn_key, enabled: !isEditing),
                         const SizedBox(height: 8),
                         Row(
                           children: [
@@ -477,9 +649,7 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
                                 ),
                                 const SizedBox(height: 8),
                                 
-                                // ★修正: Firestoreから取得した教室リストを表示
                                 DropdownButtonFormField<String>(
-                                  // 既存の値がリストにない場合は、リストの先頭を選択するかnullにする
                                   value: _classroomList.contains(child['classroom']) 
                                       ? child['classroom'] 
                                       : (_classroomList.isNotEmpty ? _classroomList[0] : null),
@@ -513,36 +683,96 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
                 ),
               ),
               actions: [
-                TextButton(onPressed: () => Navigator.pop(context), child: const Text('キャンセル')),
+                TextButton(
+                  onPressed: isLoading ? null : () => Navigator.pop(context), 
+                  child: const Text('キャンセル'),
+                ),
                 ElevatedButton(
-                  onPressed: () async {
-                    final saveData = {
-                      'loginId': loginIdCtrl.text,
-                      'lastName': lastNameCtrl.text,
-                      'firstName': firstNameCtrl.text,
-                      'lastNameKana': lastNameKanaCtrl.text,
-                      'firstNameKana': firstNameKanaCtrl.text,
-                      'relation': relationCtrl.text,
-                      'phone': phoneCtrl.text,
-                      'email': emailCtrl.text,
-                      'postalCode': postalCodeCtrl.text,
-                      'address': addressCtrl.text,
-                      'emergencyName': emNameCtrl.text,
-                      'emergencyRelation': emRelCtrl.text,
-                      'emergencyPhone': emPhoneCtrl.text,
-                      'children': children,
-                    };
-
-                    if (isEditing) {
-                      await _familiesRef.doc(familyDoc.id).update(saveData);
-                    } else {
-                      saveData['isInitialPassword'] = true;
-                      await _familiesRef.add(saveData);
+                  onPressed: isLoading ? null : () async {
+                    final loginId = loginIdCtrl.text.trim();
+                    
+                    if (loginId.isEmpty) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('ログインIDを入力してください'), backgroundColor: Colors.red),
+                      );
+                      return;
                     }
-                    if (context.mounted) Navigator.pop(context);
+
+                    setStateDialog(() => isLoading = true);
+
+                    try {
+                      if (isEditing) {
+                        // 編集の場合はFirestoreのみ更新
+                        final saveData = {
+                          'lastName': lastNameCtrl.text,
+                          'firstName': firstNameCtrl.text,
+                          'lastNameKana': lastNameKanaCtrl.text,
+                          'firstNameKana': firstNameKanaCtrl.text,
+                          'relation': relationCtrl.text,
+                          'phone': phoneCtrl.text,
+                          'email': emailCtrl.text,
+                          'postalCode': postalCodeCtrl.text,
+                          'address': addressCtrl.text,
+                          'emergencyName': emNameCtrl.text,
+                          'emergencyRelation': emRelCtrl.text,
+                          'emergencyPhone': emPhoneCtrl.text,
+                          'children': children,
+                        };
+                        await _familiesRef.doc(familyDoc.id).update(saveData);
+                      } else {
+                        // 新規作成の場合はCloud Functionsを使用
+                        final familyData = {
+                          'lastName': lastNameCtrl.text,
+                          'firstName': firstNameCtrl.text,
+                          'lastNameKana': lastNameKanaCtrl.text,
+                          'firstNameKana': firstNameKanaCtrl.text,
+                          'relation': relationCtrl.text,
+                          'phone': phoneCtrl.text,
+                          'email': emailCtrl.text,
+                          'postalCode': postalCodeCtrl.text,
+                          'address': addressCtrl.text,
+                          'emergencyName': emNameCtrl.text,
+                          'emergencyRelation': emRelCtrl.text,
+                          'emergencyPhone': emPhoneCtrl.text,
+                          'children': children,
+                        };
+
+                        final callable = _functions.httpsCallable('createParentAccount');
+                        await callable.call({
+                          'loginId': loginId,
+                          'familyData': familyData,
+                        });
+                      }
+
+                      if (context.mounted) {
+                        Navigator.pop(context);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(isEditing ? '更新しました' : '登録しました（初期PW: $_initialPassword）'),
+                            backgroundColor: Colors.green,
+                          ),
+                        );
+                      }
+                    } on FirebaseFunctionsException catch (e) {
+                      setStateDialog(() => isLoading = false);
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('エラー: ${e.message}'), backgroundColor: Colors.red),
+                        );
+                      }
+                    } catch (e) {
+                      setStateDialog(() => isLoading = false);
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('エラー: $e'), backgroundColor: Colors.red),
+                        );
+                      }
+                    }
                   },
                   style: ElevatedButton.styleFrom(backgroundColor: Colors.blue, foregroundColor: Colors.white),
-                  child: const Text('保存'),
+                  child: isLoading 
+                      ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                      : const Text('保存'),
                 ),
               ],
             );
@@ -564,16 +794,17 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
     );
   }
 
-  Widget _buildTextField(TextEditingController controller, String label, {IconData? icon, TextInputType? type}) {
+  Widget _buildTextField(TextEditingController controller, String label, {IconData? icon, TextInputType? type, bool enabled = true}) {
     return TextField(
       controller: controller,
       keyboardType: type,
+      enabled: enabled,
       decoration: InputDecoration(
         labelText: label,
         prefixIcon: icon != null ? Icon(icon, color: Colors.grey, size: 20) : null,
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
         filled: true,
-        fillColor: Colors.white,
+        fillColor: enabled ? Colors.white : Colors.grey.shade200,
         contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
         isDense: true,
       ),
