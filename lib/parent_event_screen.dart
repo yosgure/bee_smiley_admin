@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'app_theme.dart';
+import 'skeleton_loading.dart';
 
 class ParentEventScreen extends StatefulWidget {
   final String? childId;
@@ -32,7 +33,7 @@ class _ParentEventScreenState extends State<ParentEventScreen> {
 
   Widget _buildHeader(String title) {
     return Container(
-      height: 56,
+      height: 40,
       padding: const EdgeInsets.symmetric(horizontal: 16),
       decoration: BoxDecoration(
         color: Colors.white,
@@ -72,7 +73,7 @@ class _ParentEventScreenState extends State<ParentEventScreen> {
           );
         }
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
+          return const EventListSkeleton();
         }
         if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
           return const Center(
@@ -164,7 +165,7 @@ class _ParentEventScreenState extends State<ParentEventScreen> {
               placeholder: (context, url) => Container(
                 height: 180,
                 color: Colors.grey.shade200,
-                child: const Center(child: CircularProgressIndicator()),
+                child: const EventListSkeleton(),
               ),
               errorWidget: (context, url, error) => Container(
                 height: 180,

@@ -87,7 +87,7 @@ class _ParentSettingsScreenState extends State<ParentSettingsScreen> {
 
   Widget _buildHeader(String title) {
     return Container(
-      height: 56,
+      height: 40,
       padding: const EdgeInsets.symmetric(horizontal: 16),
       decoration: BoxDecoration(
         color: Colors.white,

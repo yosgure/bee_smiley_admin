@@ -130,7 +130,13 @@ class _ParentMainScreenState extends State<ParentMainScreen> {
       body: SafeArea(
         child: screens[_selectedIndex],
       ),
-      bottomNavigationBar: BottomNavigationBar(
+      bottomNavigationBar: Theme(
+        data: Theme.of(context).copyWith(
+          splashColor: Colors.transparent,
+          highlightColor: Colors.transparent,
+          splashFactory: NoSplash.splashFactory,
+        ),
+        child: BottomNavigationBar(
         type: BottomNavigationBarType.fixed,
         currentIndex: _selectedIndex,
         onTap: (index) => setState(() => _selectedIndex = index),
@@ -166,6 +172,7 @@ class _ParentMainScreenState extends State<ParentMainScreen> {
             label: '設定',
           ),
         ],
+        ),
       ),
     );
   }

@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'app_theme.dart';
+import 'skeleton_loading.dart';
 
 class ParentAssessmentScreen extends StatefulWidget {
   final String? childId;
@@ -93,7 +94,7 @@ class _ParentAssessmentScreenState extends State<ParentAssessmentScreen> with Si
     final hasMultipleChildren = widget.allChildren.length > 1;
 
     return Container(
-      height: 56,
+      height: 40,
       padding: const EdgeInsets.symmetric(horizontal: 16),
       decoration: BoxDecoration(
         color: Colors.white,
@@ -225,7 +226,7 @@ class _ParentAssessmentScreenState extends State<ParentAssessmentScreen> with Si
         }
 
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
+          return const AssessmentSkeleton();
         }
 
         if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
@@ -334,7 +335,7 @@ class _ParentAssessmentScreenState extends State<ParentAssessmentScreen> with Si
                 .snapshots(),
             builder: (context, snapshot) {
               if (!snapshot.hasData) {
-                return const Center(child: CircularProgressIndicator());
+                return const AssessmentSkeleton();
               }
 
               final data = snapshot.data!.data() as Map<String, dynamic>?;
