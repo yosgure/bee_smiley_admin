@@ -146,7 +146,7 @@ class _ToolMasterScreenState extends State<ToolMasterScreen> {
           );
         },
       ),
-      floatingActionButton: FloatingActionButton(
+      floatingActionButton: FloatingActionButton(heroTag: null, 
         onPressed: () => _showEditDialog(),
         backgroundColor: Colors.orange,
         child: const Icon(Icons.add),

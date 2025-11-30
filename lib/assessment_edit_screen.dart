@@ -72,6 +72,7 @@ class _AssessmentEditScreenState extends State<AssessmentEditScreen> {
           return {
             'name': (data['name'] ?? '') as String,
             'furigana': (data['furigana'] ?? '') as String,
+            'task': (data['task'] ?? '') as String,
           };
         }).toList();
 
@@ -253,6 +254,7 @@ class _AssessmentEditScreenState extends State<AssessmentEditScreen> {
             'duration': entry['duration'],
             'comment': entry['comment'],
             'photoUrl': photoUrl,
+            'task': _toolList.firstWhere((t) => t['name'] == entry['tool'], orElse: () => {'task': ''})['task'] ?? '',
           });
         }
         data['entries'] = savedEntries;
@@ -497,37 +499,6 @@ class _AssessmentEditScreenState extends State<AssessmentEditScreen> {
                       const SizedBox(width: 8),
                       _buildCircleRating(index, '◎', Colors.red),
                     ],
-                  ),
-                  const SizedBox(height: 16),
-
-                  const Text('所要時間', style: TextStyle(fontSize: 12, color: AppColors.textSub, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 8,
-                    children: _durationOptions.map((option) {
-                      final isSelected = entry['duration'] == option;
-                      return ChoiceChip(
-                        label: Text(option),
-                        selected: isSelected,
-                        onSelected: (val) {
-                          setState(() {
-                            entry['duration'] = val ? option : null;
-                          });
-                        },
-                        backgroundColor: AppColors.inputFill,
-                        selectedColor: AppColors.primary.withOpacity(0.1),
-                        labelStyle: TextStyle(
-                          color: isSelected ? AppColors.primary : Colors.black87,
-                          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                          fontSize: 12,
-                        ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(20),
-                          side: BorderSide(color: isSelected ? AppColors.primary : Colors.transparent),
-                        ),
-                        showCheckmark: false,
-                      );
-                    }).toList(),
                   ),
                   const SizedBox(height: 16),
 

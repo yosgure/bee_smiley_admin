@@ -157,7 +157,7 @@ class _SensitivePeriodMasterScreenState extends State<SensitivePeriodMasterScree
           );
         },
       ),
-      floatingActionButton: FloatingActionButton(
+      floatingActionButton: FloatingActionButton(heroTag: null, 
         onPressed: () => _showEditDialog(),
         backgroundColor: Colors.purple,
         child: const Icon(Icons.add),

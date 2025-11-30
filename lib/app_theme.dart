@@ -43,11 +43,13 @@ ThemeData getAppTheme() {
     scaffoldBackgroundColor: AppColors.background,
     
     appBarTheme: const AppBarTheme(
+      toolbarHeight: 40,
       backgroundColor: AppColors.surface,
       elevation: 0,
       centerTitle: false,
       foregroundColor: AppColors.textMain,
       iconTheme: IconThemeData(color: AppColors.textMain),
+      titleTextStyle: TextStyle(fontSize: 18, fontWeight: FontWeight.normal, color: AppColors.textMain),
     ),
     
     elevatedButtonTheme: ElevatedButtonThemeData(

@@ -424,7 +424,7 @@ class _ChatMessageListState extends State<_ChatMessageList> {
     if (type == 'image') {
       content = GestureDetector(
         onTap: () => _showImagePreview(msg['url']),
-        onLongPress: () => setState(() => _selectedMessageId = msgId),
+        onLongPress: () => _showActionSheet(msgId, isMe, type, text),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(12),
           child: Image.network(
@@ -522,13 +522,6 @@ class _ChatMessageListState extends State<_ChatMessageList> {
                     ),
                 ],
               ),
-              if (isSelected)
-                Positioned(
-                  top: -48,
-                  right: isMe ? 0 : null,
-                  left: isMe ? null : 0,
-                  child: GestureDetector(onTap: () {}, child: _buildActionMenu(msgId, isMe, type, text)),
-                ),
             ],
           ),
         ),
@@ -536,7 +529,7 @@ class _ChatMessageListState extends State<_ChatMessageList> {
     }
 
     return GestureDetector(
-      onLongPress: () => setState(() => _selectedMessageId = msgId),
+      onLongPress: () => _showActionSheet(msgId, isMe, type, text),
       child: Align(
         alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
         child: Container(
@@ -588,13 +581,6 @@ class _ChatMessageListState extends State<_ChatMessageList> {
                     ),
                 ],
               ),
-              if (isSelected)
-                Positioned(
-                  top: -48,
-                  right: isMe ? 0 : null,
-                  left: isMe ? null : 0,
-                  child: GestureDetector(onTap: () {}, child: _buildActionMenu(msgId, isMe, type, text)),
-                ),
             ],
           ),
         ),
@@ -633,6 +619,57 @@ class _ChatMessageListState extends State<_ChatMessageList> {
               onTap: () => setState(() => _selectedMessageId = null),
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  void _showActionSheet(String msgId, bool isMe, String type, String text) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (sheetContext) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.emoji_emotions_outlined),
+                title: const Text("スタンプを追加"),
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  _showEmojiPicker(msgId);
+                },
+              ),
+              if (isMe && type == "text")
+                ListTile(
+                  leading: const Icon(Icons.edit),
+                  title: const Text("編集"),
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    _showEditDialog(msgId, text);
+                  },
+                ),
+              if (isMe)
+                ListTile(
+                  leading: const Icon(Icons.delete, color: Colors.red),
+                  title: const Text("削除", style: TextStyle(color: Colors.red)),
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    _deleteMessage(msgId);
+                  },
+                ),
+              ListTile(
+                leading: const Icon(Icons.close),
+                title: const Text("キャンセル"),
+                onTap: () => Navigator.pop(sheetContext),
+              ),
+            ],
+          ),
         ),
       ),
     );

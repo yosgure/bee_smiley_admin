@@ -145,13 +145,17 @@ class AssessmentDetailScreen extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 12),
+              // タスク
+              if ((entry['task'] ?? '').isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(entry['task'], style: TextStyle(fontSize: 14, color: Colors.grey.shade600)),
+                ),
 
               // 評価と時間
               Row(
                 children: [
-                  _buildTag(Icons.star_outline, '評価: ${entry['rating'] ?? '-'}'),
-                  const SizedBox(width: 12),
-                  _buildTag(Icons.timer_outlined, '時間: ${entry['duration'] ?? '-'}'),
+                  Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), decoration: BoxDecoration(color: Colors.grey.shade100, borderRadius: BorderRadius.circular(8)), child: Text('評価: ${entry['rating'] ?? '-'}', style: const TextStyle(fontSize: 12))),
                 ],
               ),
               const SizedBox(height: 16),

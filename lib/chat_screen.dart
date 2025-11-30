@@ -133,7 +133,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
 
   Widget _buildCommonHeader(String title, {bool isLeftPane = false, List<Widget>? actions, bool showBackButton = false}) {
     return Container(
-      height: 60,
+      height: 40,
       padding: const EdgeInsets.symmetric(horizontal: 8),
       decoration: BoxDecoration(
         color: Colors.white,
@@ -186,7 +186,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
                               MaterialPageRoute(
                                 builder: (_) => Scaffold(
                                   appBar: PreferredSize(
-                                    preferredSize: const Size.fromHeight(60),
+                                    preferredSize: const Size.fromHeight(40),
                                     child: SafeArea(
                                       child: _buildCommonHeader(name, showBackButton: true, actions: [
                                         _buildChatMenu(roomId, isGroup, memberNames, false),
@@ -242,7 +242,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
 
         return Scaffold(
           appBar: PreferredSize(
-            preferredSize: const Size.fromHeight(60),
+            preferredSize: const Size.fromHeight(40),
             child: _buildCommonHeader(roomName, actions: [
               _buildChatMenu(_selectedRoomId!, isGroup, memberNames, true),
             ]),
@@ -389,7 +389,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
                     MaterialPageRoute(
                       builder: (context) => Scaffold(
                         appBar: PreferredSize(
-                          preferredSize: const Size.fromHeight(60),
+                          preferredSize: const Size.fromHeight(40),
                           child: SafeArea(child: _buildCommonHeader(roomName, showBackButton: true, actions: [
                             _buildChatMenu(roomId, isGroup, memberNames, false)
                           ])),
@@ -935,7 +935,7 @@ class _ChatDetailViewState extends State<ChatDetailView> {
       children: [
         if (widget.showAppBar) ...[
           Container(
-            height: 60,
+            height: 40,
             padding: const EdgeInsets.symmetric(horizontal: 16),
             decoration: BoxDecoration(color: Colors.white, border: Border(bottom: BorderSide(color: Colors.grey.shade300, width: 1))),
             child: Row(
@@ -1057,7 +1057,7 @@ class _ChatDetailViewState extends State<ChatDetailView> {
               ),
             ),
             const SizedBox(width: 8),
-            FloatingActionButton(onPressed: _sendMessage, mini: true, backgroundColor: AppColors.primary, child: const Icon(Icons.send, color: Colors.white, size: 18)),
+            FloatingActionButton(heroTag: null, onPressed: _sendMessage, mini: true, backgroundColor: AppColors.primary, child: const Icon(Icons.send, color: Colors.white, size: 18)),
           ],
         ),
       ),

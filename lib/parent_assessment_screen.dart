@@ -2,6 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'dart:io';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:http/http.dart' as http;
+import 'package:path_provider/path_provider.dart';
+import 'package:gal/gal.dart';
 import 'app_theme.dart';
 import 'skeleton_loading.dart';
 
@@ -72,7 +77,7 @@ class _ParentAssessmentScreenState extends State<ParentAssessmentScreen> with Si
             indicatorColor: AppColors.primary,
             indicatorWeight: 3,
             tabs: const [
-              Tab(text: '週次記録'),
+              Tab(text: '週次アセスメント'),
               Tab(text: '月次サマリ'),
             ],
           ),
@@ -190,7 +195,7 @@ class _ParentAssessmentScreenState extends State<ParentAssessmentScreen> with Si
                   )
                 else
                   Text(
-                    '${widget.childName}のアセスメント',
+                    _selectedType == 'weekly' ? '週次アセスメント' : '月次サマリ',
                     style: const TextStyle(fontSize: 18, fontWeight: FontWeight.normal),
                   ),
               ],
@@ -241,7 +246,7 @@ class _ParentAssessmentScreenState extends State<ParentAssessmentScreen> with Si
                 ),
                 const SizedBox(height: 16),
                 Text(
-                  type == 'weekly' ? '週次記録はまだありません' : '月次サマリはまだありません',
+                  type == 'weekly' ? '週次アセスメントはまだありません' : '月次サマリはまだありません',
                   style: const TextStyle(color: Colors.grey),
                 ),
               ],
@@ -411,6 +416,7 @@ class _ParentAssessmentScreenState extends State<ParentAssessmentScreen> with Si
     final duration = entry['duration'] ?? '';
     final comment = entry['comment'] ?? '';
     final photoUrl = entry['photoUrl'] as String?;
+    final task = entry['task'] ?? '';
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
@@ -438,14 +444,17 @@ class _ParentAssessmentScreenState extends State<ParentAssessmentScreen> with Si
               ],
             ),
             const SizedBox(height: 12),
+            // タスク
+            if (task.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Text(task, style: TextStyle(fontSize: 13, color: Colors.grey.shade600)),
+              ),
             
             // 評価と時間
             Row(
               children: [
-                _buildTag(Icons.star_outline, '評価: $rating'),
-                const SizedBox(width: 12),
-                if (duration.isNotEmpty)
-                  _buildTag(Icons.timer_outlined, '時間: $duration'),
+                Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), decoration: BoxDecoration(color: Colors.grey.shade100, borderRadius: BorderRadius.circular(8)), child: Text('評価: $rating', style: const TextStyle(fontSize: 12))),
               ],
             ),
             
@@ -663,20 +672,14 @@ class _ParentAssessmentScreenState extends State<ParentAssessmentScreen> with Si
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.primary,
                     foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(20),
-                    ),
                   ),
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(width: 16),
                 ElevatedButton(
                   onPressed: () => Navigator.pop(context),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.white,
-                    foregroundColor: Colors.black87,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(20),
-                    ),
+                    backgroundColor: Colors.grey.shade600,
+                    foregroundColor: Colors.white,
                   ),
                   child: const Text('閉じる'),
                 ),
@@ -689,14 +692,41 @@ class _ParentAssessmentScreenState extends State<ParentAssessmentScreen> with Si
   }
 
   Future<void> _downloadImage(String url) async {
-    try {
-      // Web: 新しいタブで開く
-      // ignore: deprecated_member_use
+    if (kIsWeb) {
       await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+      return;
+    }
+    try {
+      final hasAccess = await Gal.hasAccess(toAlbum: true);
+      if (!hasAccess) {
+        final granted = await Gal.requestAccess(toAlbum: true);
+        if (!granted) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text("写真へのアクセスが許可されていません")),
+            );
+          }
+          return;
+        }
+      }
+      final response = await http.get(Uri.parse(url));
+      if (response.statusCode == 200) {
+        final tempDir = await getTemporaryDirectory();
+        final fileName = "beesmiley_${DateTime.now().millisecondsSinceEpoch}.jpg";
+        final file = File("${tempDir.path}/$fileName");
+        await file.writeAsBytes(response.bodyBytes);
+        await Gal.putImage(file.path, album: "Beesmiley");
+        await file.delete();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("写真を保存しました")),
+          );
+        }
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('ダウンロードに失敗しました: $e')),
+          SnackBar(content: Text("保存に失敗しました: $e")),
         );
       }
     }

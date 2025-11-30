@@ -136,7 +136,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
           );
         },
       ),
-      floatingActionButton: FloatingActionButton(
+      floatingActionButton: FloatingActionButton(heroTag: null, 
         onPressed: () => _openEditScreen(null),
         backgroundColor: Colors.white,
         child: Container(

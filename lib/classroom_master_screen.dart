@@ -131,7 +131,7 @@ class _ClassroomMasterScreenState extends State<ClassroomMasterScreen> {
           );
         },
       ),
-      floatingActionButton: FloatingActionButton(
+      floatingActionButton: FloatingActionButton(heroTag: null, 
         onPressed: () => _showEditDialog(), // 新規作成
         backgroundColor: Colors.brown,
         child: const Icon(Icons.add),

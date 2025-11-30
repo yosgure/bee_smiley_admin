@@ -216,7 +216,7 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
           );
         },
       ),
-      floatingActionButton: FloatingActionButton(
+      floatingActionButton: FloatingActionButton(heroTag: null, 
         onPressed: () => _showEditDialog(),
         backgroundColor: Colors.white,
         elevation: 4,

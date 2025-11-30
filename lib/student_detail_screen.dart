@@ -154,7 +154,7 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> with SingleTi
         ],
       ),
       
-      floatingActionButton: FloatingActionButton.extended(
+      floatingActionButton: FloatingActionButton.extended(heroTag: null, 
         onPressed: () {
           final type = _tabController.index == 0 ? 'weekly' : 'monthly';
           Navigator.push(

@@ -209,16 +209,40 @@ class _CalendarScreenState extends State<CalendarScreen> {
         titleSpacing: showSidebar ? 24 : 0, 
         title: Row(
           children: [
-            OutlinedButton(
-              onPressed: _goToToday,
-              style: OutlinedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                side: BorderSide(color: Colors.grey.shade300),
-                shape: RoundedRectangleBorder(borderRadius: AppStyles.radiusSmall),
-                foregroundColor: AppColors.textMain,
+            // スマホ用: Googleカレンダー風の今日ボタン
+            if (!showSidebar)
+              GestureDetector(
+                onTap: _goToToday,
+                child: Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    border: Border.all(color: Colors.grey.shade300),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        '今日',
+                        style: TextStyle(fontSize: 10, color: Colors.grey.shade600),
+                      ),
+                    ],
+                  ),
+                ),
               ),
-              child: const Text('今日'),
-            ),
+            // PC用: 従来の今日ボタン
+            if (showSidebar)
+              OutlinedButton(
+                onPressed: _goToToday,
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                  side: BorderSide(color: Colors.grey.shade300),
+                  shape: RoundedRectangleBorder(borderRadius: AppStyles.radiusSmall),
+                  foregroundColor: AppColors.textMain,
+                ),
+                child: const Text('今日'),
+              ),
             // PC表示の時のみ矢印ボタンを表示
             if (showSidebar) ...[
               const SizedBox(width: 20),
@@ -405,10 +429,10 @@ class _CalendarScreenState extends State<CalendarScreen> {
                                 borderRadius: BorderRadius.circular(4),
                                 border: Border.all(color: AppColors.error.withOpacity(0.5)),
                               ),
-                              padding: const EdgeInsets.symmetric(horizontal: 4),
-                              alignment: isSmallScreen ? Alignment.center : Alignment.centerLeft,
+                              padding: const EdgeInsets.symmetric(horizontal: 2),
+                              alignment: Alignment.centerLeft,
                               child: Row(
-                                mainAxisAlignment: isSmallScreen ? MainAxisAlignment.center : MainAxisAlignment.start,
+                                mainAxisAlignment: MainAxisAlignment.start,
                                 crossAxisAlignment: CrossAxisAlignment.center,
                                 children: [
                                   const Icon(Icons.check_circle_outline, size: 10, color: AppColors.error),
@@ -437,10 +461,10 @@ class _CalendarScreenState extends State<CalendarScreen> {
                                 color: AppColors.secondary, 
                                 borderRadius: BorderRadius.circular(4),
                               ),
-                              padding: const EdgeInsets.symmetric(horizontal: 4),
-                              alignment: isSmallScreen ? Alignment.center : Alignment.centerLeft,
+                              padding: const EdgeInsets.symmetric(horizontal: 2),
+                              alignment: Alignment.centerLeft,
                               child: Row(
-                                mainAxisAlignment: isSmallScreen ? MainAxisAlignment.center : MainAxisAlignment.start,
+                                mainAxisAlignment: MainAxisAlignment.start,
                                 crossAxisAlignment: CrossAxisAlignment.center,
                                 children: [
                                   const Icon(Icons.check_circle_outline, size: 10, color: Colors.white), 
@@ -470,8 +494,8 @@ class _CalendarScreenState extends State<CalendarScreen> {
                               color: appointment.color,
                               borderRadius: BorderRadius.circular(4),
                             ),
-                            alignment: isSmallScreen ? Alignment.center : Alignment.centerLeft,
-                            padding: const EdgeInsets.symmetric(horizontal: 4),
+                            alignment: Alignment.centerLeft,
+                            padding: const EdgeInsets.symmetric(horizontal: 2),
                             child: Text(
                               appointment.subject,
                               style: const TextStyle(
@@ -501,7 +525,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
         },
       ),
       
-      floatingActionButton: FloatingActionButton(
+      floatingActionButton: FloatingActionButton(heroTag: null, 
         onPressed: () => _showAddEventDialog(),
         backgroundColor: AppColors.surface,
         elevation: 4,

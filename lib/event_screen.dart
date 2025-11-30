@@ -107,7 +107,7 @@ class _EventScreenState extends State<EventScreen> with SingleTickerProviderStat
         ),
       ),
       
-      floatingActionButton: FloatingActionButton(
+      floatingActionButton: FloatingActionButton(heroTag: null, 
         onPressed: () {
           Navigator.push(
             context,

@@ -284,7 +284,7 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
             ),
           ],
         ),
-        floatingActionButton: FloatingActionButton(
+        floatingActionButton: FloatingActionButton(heroTag: null, 
           onPressed: _onAddPressed,
           backgroundColor: AppColors.surface,
           elevation: 4,

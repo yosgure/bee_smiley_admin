@@ -21,6 +21,13 @@ import 'parent_main.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  
+  // エラーハンドリング
+  FlutterError.onError = (FlutterErrorDetails details) {
+    FlutterError.presentError(details);
+    debugPrint('FlutterError: ${details.exception}');
+  };
+  
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
@@ -74,61 +81,137 @@ class UserStatus {
   static const unknown = UserStatus(type: UserType.unknown, isInitialPassword: false);
 }
 
-class AuthCheckWrapper extends StatelessWidget {
+class AuthCheckWrapper extends StatefulWidget {
   const AuthCheckWrapper({super.key});
+
+  @override
+  State<AuthCheckWrapper> createState() => _AuthCheckWrapperState();
+}
+
+class _AuthCheckWrapperState extends State<AuthCheckWrapper> with WidgetsBindingObserver {
+  UserStatus? _cachedStatus;
+  bool _isCheckingStatus = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    debugPrint('📱 App lifecycle state: $state');
+    if (state == AppLifecycleState.resumed) {
+      // アプリがフォアグラウンドに戻った時、状態を再確認
+      setState(() {});
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<User?>(
       stream: FirebaseAuth.instance.authStateChanges(),
       builder: (context, snapshot) {
+        debugPrint('🔄 AuthState: connectionState=${snapshot.connectionState}, hasData=${snapshot.hasData}, data=${snapshot.data?.uid}');
+        
         // 接続待ち
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const _LoadingScreen();
         }
         
+        // エラーの場合
+        if (snapshot.hasError) {
+          debugPrint('❌ Auth stream error: ${snapshot.error}');
+          return const LoginScreen();
+        }
+        
         // ログイン済み
         if (snapshot.hasData && snapshot.data != null) {
+          final uid = snapshot.data!.uid;
+          
+          // キャッシュされた状態がある場合はそれを使用
+          if (_cachedStatus != null && !_isCheckingStatus) {
+            return _buildScreenForStatus(_cachedStatus!);
+          }
+          
           return FutureBuilder<UserStatus>(
-            future: _checkUserStatus(snapshot.data!.uid),
+            future: _checkUserStatusWithCache(uid),
             builder: (context, statusSnapshot) {
               if (statusSnapshot.connectionState == ConnectionState.waiting) {
+                // キャッシュがあれば表示、なければローディング
+                if (_cachedStatus != null) {
+                  return _buildScreenForStatus(_cachedStatus!);
+                }
                 return const _LoadingScreen();
               }
               
-              final status = statusSnapshot.data ?? UserStatus.unknown;
-              
-              debugPrint('🎯 Final status: type=${status.type}, isInitialPassword=${status.isInitialPassword}');
-              
-              // ユーザーが見つからない場合は強制ログアウト
-              if (status.type == UserType.unknown) {
+              if (statusSnapshot.hasError) {
+                debugPrint('❌ Status check error: ${statusSnapshot.error}');
+                // エラーでもキャッシュがあれば表示
+                if (_cachedStatus != null) {
+                  return _buildScreenForStatus(_cachedStatus!);
+                }
                 return const _ForceLogout();
               }
               
-              // 初回パスワード変更が必要
-              if (status.isInitialPassword) {
-                return const ForceChangePasswordScreen();
-              }
+              final status = statusSnapshot.data ?? UserStatus.unknown;
+              _cachedStatus = status;
               
-              // ユーザー種別に応じて画面を切り替え
-              switch (status.type) {
-                case UserType.staff:
-                  debugPrint('🏢 Navigating to AdminShell');
-                  return const AdminShell();
-                case UserType.parent:
-                  debugPrint('👨‍👩‍👧 Navigating to ParentMainScreen');
-                  return const ParentMainScreen();
-                default:
-                  return const _ForceLogout();
-              }
+              debugPrint('🎯 Final status: type=${status.type}, isInitialPassword=${status.isInitialPassword}');
+              
+              return _buildScreenForStatus(status);
             },
           );
         }
         
-        // 未ログイン
+        // 未ログイン - キャッシュをクリア
+        _cachedStatus = null;
         return const LoginScreen();
       },
     );
+  }
+
+  Widget _buildScreenForStatus(UserStatus status) {
+    // ユーザーが見つからない場合は強制ログアウト
+    if (status.type == UserType.unknown) {
+      return const _ForceLogout();
+    }
+    
+    // 初回パスワード変更が必要
+    if (status.isInitialPassword) {
+      return const ForceChangePasswordScreen();
+    }
+    
+    // ユーザー種別に応じて画面を切り替え
+    switch (status.type) {
+      case UserType.staff:
+        debugPrint('🏢 Navigating to AdminShell');
+        return const AdminShell();
+      case UserType.parent:
+        debugPrint('👨‍👩‍👧 Navigating to ParentMainScreen');
+        return const ParentMainScreen();
+      default:
+        return const _ForceLogout();
+    }
+  }
+
+  /// ユーザーのステータスを確認（キャッシュ対応）
+  Future<UserStatus> _checkUserStatusWithCache(String uid) async {
+    _isCheckingStatus = true;
+    try {
+      final status = await _checkUserStatus(uid);
+      _isCheckingStatus = false;
+      return status;
+    } catch (e) {
+      _isCheckingStatus = false;
+      rethrow;
+    }
   }
 
   /// ユーザーのステータスを確認
@@ -176,7 +259,7 @@ class AuthCheckWrapper extends StatelessWidget {
       return UserStatus.unknown;
     } catch (e) {
       debugPrint('❌ Error checking user status: $e');
-      return UserStatus.unknown;
+      rethrow;
     }
   }
 }

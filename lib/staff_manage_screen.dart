@@ -175,7 +175,7 @@ class _StaffManageScreenState extends State<StaffManageScreen> {
           );
         },
       ),
-      floatingActionButton: FloatingActionButton(
+      floatingActionButton: FloatingActionButton(heroTag: null, 
         onPressed: () => _showEditDialog(),
         backgroundColor: Colors.white,
         elevation: 4,

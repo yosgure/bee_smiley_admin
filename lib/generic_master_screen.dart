@@ -52,7 +52,7 @@ class _GenericMasterScreenState extends State<GenericMasterScreen> {
           );
         },
       ),
-      floatingActionButton: FloatingActionButton(
+      floatingActionButton: FloatingActionButton(heroTag: null, 
         onPressed: () => _showEditDialog(),
         backgroundColor: Colors.orange,
         child: const Icon(Icons.add),
