@@ -46,6 +46,9 @@ class _CalendarScreenState extends State<CalendarScreen> {
   @override
   void initState() {
     super.initState();
+    // 初期表示を8:00に設定
+    final now = DateTime.now();
+    _controller.displayDate = DateTime(now.year, now.month, now.day, 8, 0);
     _initData();
 
     // 安全装置
@@ -203,23 +206,9 @@ class _CalendarScreenState extends State<CalendarScreen> {
             ),
       appBar: AppBar(
         backgroundColor: Colors.white,
+        surfaceTintColor: Colors.white,
         elevation: 0,
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(1),
-          child: Container(
-            height: 1,
-            decoration: BoxDecoration(
-              color: Colors.grey.shade200,
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.08),
-                  blurRadius: 4,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-          ),
-        ),
+        
         titleSpacing: showSidebar ? 24 : 0, 
         title: showSidebar 
           ? Row(
@@ -254,18 +243,28 @@ class _CalendarScreenState extends State<CalendarScreen> {
                 ),
               ],
             )
-          : Row(
-              children: [
-                Text(
-                  _headerText,
-                  style: const TextStyle(
-                    color: AppColors.textMain, fontSize: 20, fontWeight: FontWeight.w400,
-                  ),
-                ),
-                const SizedBox(width: 16),
-                _buildSegmentedControl(),
-              ],
+          : null,
+        centerTitle: true,
+        leadingWidth: 100,
+        leading: Row(
+          children: [
+            IconButton(
+              icon: const Icon(Icons.menu, color: AppColors.textMain),
+              onPressed: () => Scaffold.of(context).openDrawer(),
             ),
+            Text(
+              _headerText,
+              style: const TextStyle(
+                color: AppColors.textMain, fontSize: 20, fontWeight: FontWeight.w400,
+              ),
+            ),
+          ],
+        ),
+        flexibleSpace: SafeArea(
+          child: Center(
+            child: _buildSegmentedControl(),
+          ),
+        ),
         actions: [
           // スマホ用: 今日ボタン（日付アイコン風）
           if (!showSidebar)
@@ -274,25 +273,21 @@ class _CalendarScreenState extends State<CalendarScreen> {
               child: GestureDetector(
                 onTap: _goToToday,
                 child: Container(
-                  width: 28,
-                  height: 28,
+                  width: 24,
+                  height: 24,
                   decoration: BoxDecoration(
-                    border: Border.all(color: Colors.grey.shade400),
+                    border: Border.all(color: Colors.grey.shade400, width: 1.5),
                     borderRadius: BorderRadius.circular(4),
                   ),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(
-                        '${DateTime.now().day}',
-                        style: const TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.textMain,
-                          height: 1.0,
-                        ),
-                      ),
-                    ],
+                  alignment: Alignment.center,
+                  child: Text(
+                    '${DateTime.now().day}',
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.textMain,
+                      height: 1.0,
+                    ),
                   ),
                 ),
               ),
@@ -489,6 +484,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
                           }
 
                           if (isTask) {
+                            final isMonthView = _calendarView == CalendarView.month;
                             return Container(
                               margin: const EdgeInsets.symmetric(vertical: 1),
                               decoration: BoxDecoration(
@@ -522,14 +518,17 @@ class _CalendarScreenState extends State<CalendarScreen> {
                           }
                           
                           // 通常の予定
+                          final isMonthView = _calendarView == CalendarView.month;
                           return Container(
                             margin: const EdgeInsets.symmetric(vertical: 1),
                             decoration: BoxDecoration(
                               color: appointment.color,
                               borderRadius: BorderRadius.circular(4),
                             ),
-                            alignment: Alignment.centerLeft,
-                            padding: const EdgeInsets.symmetric(horizontal: 2),
+                            alignment: isMonthView ? Alignment.centerLeft : Alignment.topLeft,
+                            padding: isMonthView 
+                              ? const EdgeInsets.symmetric(horizontal: 2)
+                              : const EdgeInsets.only(left: 4, top: 2, right: 2),
                             child: Text(
                               appointment.subject,
                               style: const TextStyle(
@@ -537,7 +536,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
                                 fontSize: 10,
                                 height: 1.0,
                               ),
-                              maxLines: 1,
+                              maxLines: isMonthView ? 1 : 3,
                               overflow: TextOverflow.clip,
                             ),
                           );
@@ -551,25 +550,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
                         ),
                       ),
                     ),
-                        // viewHeader下の影
-                        Positioned(
-                          top: 70,
-                          left: 0,
-                          right: 0,
-                          child: Container(
-                            height: 4,
-                            decoration: BoxDecoration(
-                              gradient: LinearGradient(
-                                begin: Alignment.topCenter,
-                                end: Alignment.bottomCenter,
-                                colors: [
-                                  Colors.black.withOpacity(0.08),
-                                  Colors.transparent,
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
+
                       ],
                     ),
                   ),
@@ -719,44 +700,69 @@ class _CalendarScreenState extends State<CalendarScreen> {
     final views = [CalendarView.day, CalendarView.week, CalendarView.month];
     final labels = ['日', '週', '月'];
     final selectedIndex = views.indexOf(_calendarView);
+    const double buttonWidth = 48.0;
+    const double buttonHeight = 32.0;
+    const double containerPadding = 3.0;
     
     return Container(
-      height: 32,
+      width: buttonWidth * 3 + containerPadding * 2,
+      height: buttonHeight + containerPadding * 2,
+      padding: EdgeInsets.all(containerPadding),
       decoration: BoxDecoration(
         color: Colors.grey.shade200,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(10),
       ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: List.generate(3, (index) {
-          final isSelected = selectedIndex == index;
-          return GestureDetector(
-            onTap: () => setState(() {
-              _calendarView = views[index];
-              _controller.view = views[index];
-            }),
+      child: Stack(
+        children: [
+          // スライドする白インジケーター
+          AnimatedPositioned(
+            duration: const Duration(milliseconds: 200),
+            curve: Curves.easeInOut,
+            left: selectedIndex * buttonWidth,
+            top: 0,
             child: Container(
-              width: 48,
-              height: 32,
+              width: buttonWidth,
+              height: buttonHeight,
               decoration: BoxDecoration(
-                color: isSelected ? Colors.white : Colors.transparent,
-                borderRadius: BorderRadius.circular(8),
-                border: index < 2 ? Border(
-                  right: BorderSide(color: Colors.grey.shade300, width: 1),
-                ) : null,
-              ),
-              alignment: Alignment.center,
-              child: Text(
-                labels[index],
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
-                  color: isSelected ? AppColors.textMain : AppColors.textSub,
-                ),
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(7),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.1),
+                    blurRadius: 1,
+                    offset: const Offset(0, 1),
+                  ),
+                ],
               ),
             ),
-          );
-        }),
+          ),
+          // ボタンテキスト
+          Row(
+            children: List.generate(3, (index) {
+              final isSelected = selectedIndex == index;
+              return GestureDetector(
+                onTap: () => setState(() {
+                  _calendarView = views[index];
+                  _controller.view = views[index];
+                }),
+                child: Container(
+                  width: buttonWidth,
+                  height: buttonHeight,
+                  color: Colors.transparent,
+                  alignment: Alignment.center,
+                  child: Text(
+                    labels[index],
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                      color: isSelected ? AppColors.textMain : AppColors.textSub,
+                    ),
+                  ),
+                ),
+              );
+            }),
+          ),
+        ],
       ),
     );
   }
@@ -871,9 +877,27 @@ class _CalendarScreenState extends State<CalendarScreen> {
   }
 
   Future<void> _showAddEventDialog({DateTime? initialDate}) async {
-    await showDialog(
+    await showModalBottomSheet(
       context: context,
-      builder: (context) => AddEventDialog(initialStartDate: initialDate),
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        height: MediaQuery.of(context).size.height * 0.9,
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.only(
+            topLeft: Radius.circular(20),
+            topRight: Radius.circular(20),
+          ),
+        ),
+        child: ClipRRect(
+          borderRadius: const BorderRadius.only(
+            topLeft: Radius.circular(20),
+            topRight: Radius.circular(20),
+          ),
+          child: AddEventDialog(initialStartDate: initialDate),
+        ),
+      ),
     );
   }
 

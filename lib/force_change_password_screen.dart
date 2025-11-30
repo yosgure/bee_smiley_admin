@@ -68,7 +68,7 @@ class _ForceChangePasswordScreenState extends State<ForceChangePasswordScreen> {
       // 完了したらメイン画面へ (再ログイン不要な場合)
       if (mounted) {
         Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (context) => const AdminShell()),
+          MaterialPageRoute(builder: (context) => const AuthCheckWrapper()),
         );
       }
     } on FirebaseAuthException catch (e) {

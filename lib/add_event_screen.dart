@@ -3,12 +3,12 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'app_theme.dart'; // テーマ定義をインポート
+import 'app_theme.dart';
 
 class AddEventDialog extends StatefulWidget {
   final DateTime? initialStartDate;
-  final DocumentSnapshot? appointment; // 編集用 (予定)
-  final DocumentSnapshot? taskDoc;     // 編集用 (タスク)
+  final DocumentSnapshot? appointment;
+  final DocumentSnapshot? taskDoc;
 
   const AddEventDialog({
     super.key,
@@ -25,15 +25,15 @@ class _AddEventDialogState extends State<AddEventDialog> {
   final _formKey = GlobalKey<FormState>();
   
   bool _isTaskMode = false;
-
+  bool _isAllDay = false;
   late TextEditingController _subjectController;
   late TextEditingController _notesController;
   late TextEditingController _locationController;
   
   bool _isLoading = false;
   bool _isEditing = false;
+  bool _showDetailOptions = false;
 
-  // --- 予定用データ ---
   late DateTime _startDate;
   late DateTime _endDate;
   
@@ -57,15 +57,12 @@ class _AddEventDialogState extends State<AddEventDialog> {
   final Map<String, String> _staffNamesMap = {};
   final Map<String, DateTime> _studentTransferDates = {};
   final Set<String> _absentStudentIds = {};
-  static const String _manualInputKey = '__MANUAL_INPUT__';
 
-  // --- タスク用データ ---
   late DateTime _taskDate;
 
   @override
   void initState() {
     super.initState();
-    
     _subjectController = TextEditingController();
     _notesController = TextEditingController();
     _locationController = TextEditingController();
@@ -90,9 +87,7 @@ class _AddEventDialogState extends State<AddEventDialog> {
 
     _fetchClassrooms().then((_) {
       if (!_isEditing && !_isTaskMode && mounted && _classroomList.isNotEmpty) {
-        setState(() {
-          _selectedClassroom = _classroomList.first;
-        });
+        setState(() => _selectedClassroom = _classroomList.first);
       }
     });
   }
@@ -103,11 +98,18 @@ class _AddEventDialogState extends State<AddEventDialog> {
     _startDate = (data['startTime'] as Timestamp).toDate();
     _endDate = (data['endTime'] as Timestamp).toDate();
     _selectedCategory = data['category'] ?? 'レッスン';
+    _isAllDay = data['isAllDay'] ?? false;
 
     final location = data['classroom'] as String?;
     if (location != null && location.isNotEmpty) {
-      _selectedClassroom = location; 
-      _isManualLocation = false; 
+      if (_classroomList.contains(location)) {
+        _selectedClassroom = location;
+        _isManualLocation = false;
+      } else {
+        _locationController.text = location;
+        _isManualLocation = true;
+        _selectedClassroom = null;
+      }
     }
 
     final rrule = data['recurrenceRule'] as String?;
@@ -115,7 +117,6 @@ class _AddEventDialogState extends State<AddEventDialog> {
       if (rrule.contains('FREQ=DAILY')) _recurrenceType = '毎日';
       else if (rrule.contains('FREQ=WEEKLY')) _recurrenceType = '毎週';
       else if (rrule.contains('FREQ=YEARLY')) _recurrenceType = '毎年';
-      else if (rrule.contains('BYDAY=1') && rrule.contains('BYDAY=2')) _recurrenceType = '第1・2・3週(月次)';
       else _recurrenceType = 'なし';
     }
 
@@ -140,8 +141,7 @@ class _AddEventDialogState extends State<AddEventDialog> {
     transferMap.forEach((key, value) {
       if (value is Timestamp) _studentTransferDates[key] = value.toDate();
     });
-    final absentList = List<String>.from(data['absentStudentIds'] ?? []);
-    _absentStudentIds.addAll(absentList);
+    _absentStudentIds.addAll(List<String>.from(data['absentStudentIds'] ?? []));
   }
 
   void _initializeTaskData(Map<String, dynamic> data) {
@@ -156,21 +156,8 @@ class _AddEventDialogState extends State<AddEventDialog> {
     try {
       final snapshot = await FirebaseFirestore.instance.collection('classrooms').get();
       final list = snapshot.docs.map((d) => d['name'] as String).toList();
-      if (mounted) {
-        setState(() {
-          _classroomList = list;
-          if (_isEditing && !_isTaskMode && _selectedClassroom != null) {
-             if (!_classroomList.contains(_selectedClassroom)) {
-               _locationController.text = _selectedClassroom!;
-               _selectedClassroom = _manualInputKey;
-               _isManualLocation = true;
-             }
-          }
-        });
-      }
-    } catch (e) {
-      // ignore
-    }
+      if (mounted) setState(() => _classroomList = list);
+    } catch (e) {}
   }
 
   @override
@@ -181,17 +168,19 @@ class _AddEventDialogState extends State<AddEventDialog> {
     super.dispose();
   }
 
+  String? get _locationValue {
+    if (_isManualLocation) {
+      return _locationController.text.trim().isEmpty ? null : _locationController.text.trim();
+    }
+    return _selectedClassroom;
+  }
+
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _isLoading = true);
-
     try {
-      if (_isTaskMode) {
-        await _saveTask();
-      } else {
-        await _saveEvent();
-      }
-      
+      if (_isTaskMode) await _saveTask();
+      else await _saveEvent();
       if (mounted) Navigator.pop(context, true);
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('エラー: $e')));
@@ -202,7 +191,6 @@ class _AddEventDialogState extends State<AddEventDialog> {
 
   Future<void> _saveTask() async {
     final user = FirebaseAuth.instance.currentUser;
-    
     final taskData = {
       'userId': user?.uid,
       'title': _subjectController.text.trim(),
@@ -211,7 +199,6 @@ class _AddEventDialogState extends State<AddEventDialog> {
       'isCompleted': widget.taskDoc?['isCompleted'] ?? false, 
       'updatedAt': FieldValue.serverTimestamp(),
     };
-
     if (_isEditing && widget.taskDoc != null) {
       await widget.taskDoc!.reference.update(taskData);
     } else {
@@ -222,52 +209,36 @@ class _AddEventDialogState extends State<AddEventDialog> {
 
   Future<void> _saveEvent() async {
     final colorValue = _categories.firstWhere((c) => c['label'] == _selectedCategory)['color'] as int;
-    
     String? rrule;
     if (_recurrenceType == '毎日') rrule = 'FREQ=DAILY;INTERVAL=1';
     else if (_recurrenceType == '毎週') rrule = 'FREQ=WEEKLY;INTERVAL=1';
     else if (_recurrenceType == '毎年') rrule = 'FREQ=YEARLY;INTERVAL=1';
-    else if (_recurrenceType == '第1・2・3週(月次)') {
-      const weekDays = ['MO', 'TU', 'WE', 'TH', 'FR', 'SA', 'SU'];
-      final dayStr = weekDays[_startDate.weekday - 1];
-      rrule = 'FREQ=MONTHLY;INTERVAL=1;BYDAY=1$dayStr,2$dayStr,3$dayStr';
-    }
 
-    String? locationToSave;
-    if (_isManualLocation) {
-      locationToSave = _locationController.text.trim();
-    } else {
-      if (_selectedClassroom != _manualInputKey) {
-        locationToSave = _selectedClassroom;
-      }
+    DateTime startToSave = _startDate;
+    DateTime endToSave = _endDate;
+    if (_isAllDay) {
+      startToSave = DateTime(_startDate.year, _startDate.month, _startDate.day, 0, 0);
+      endToSave = DateTime(_endDate.year, _endDate.month, _endDate.day, 23, 59);
     }
-
-    final List<String> studentNames = _selectedStudentIds
-        .map((id) => _studentNamesMap[id] ?? '')
-        .where((s) => s.isNotEmpty).toList();
-        
-    final List<String> staffNames = _selectedStaffIds
-        .map((id) => _staffNamesMap[id] ?? '')
-        .where((s) => s.isNotEmpty).toList();
 
     final eventData = {
       'subject': _subjectController.text,
-      'startTime': _startDate,
-      'endTime': _endDate,
+      'startTime': startToSave,
+      'endTime': endToSave,
+      'isAllDay': _isAllDay,
       'color': colorValue,
       'notes': _notesController.text,
       'category': _selectedCategory,
-      'classroom': locationToSave,
+      'classroom': _locationValue,
       'recurrenceRule': rrule,
       'studentIds': _selectedStudentIds.toList(),
       'staffIds': _selectedStaffIds.toList(),
-      'studentNames': studentNames,
-      'staffNames': staffNames,
+      'studentNames': _selectedStudentIds.map((id) => _studentNamesMap[id] ?? '').where((s) => s.isNotEmpty).toList(),
+      'staffNames': _selectedStaffIds.map((id) => _staffNamesMap[id] ?? '').where((s) => s.isNotEmpty).toList(),
       'studentTransferDates': _studentTransferDates,
       'absentStudentIds': _absentStudentIds.toList(),
       'updatedAt': FieldValue.serverTimestamp(),
     };
-
     if (_isEditing && widget.appointment != null) {
       await widget.appointment!.reference.update(eventData);
     } else {
@@ -276,308 +247,71 @@ class _AddEventDialogState extends State<AddEventDialog> {
     }
   }
 
-  // --- UIパーツ ---
-
-  Widget _buildTaskDatePicker() {
-    return InkWell(
-      onTap: () async {
-        final picked = await showDatePicker(
-          context: context,
-          initialDate: _taskDate,
-          firstDate: DateTime(2020),
-          lastDate: DateTime(2030),
-          locale: const Locale('ja'),
-        );
-        if (picked != null) {
-          setState(() => _taskDate = picked);
-        }
-      },
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        decoration: BoxDecoration(
-          color: AppColors.inputFill,
-          borderRadius: AppStyles.radiusSmall,
-        ),
-        child: Row(
-          children: [
-            const Icon(Icons.calendar_today, size: 20, color: Colors.grey),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                DateFormat('yyyy年MM月dd日 (E)', 'ja').format(_taskDate),
-                style: const TextStyle(fontSize: 15, color: AppColors.textMain),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
-    String title = _isEditing ? '編集' : '追加';
-    if (_isTaskMode) title = 'タスクを$title';
-    else title = '予定を$title';
-
-    return AlertDialog(
-      title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
-      backgroundColor: AppColors.surface,
-      surfaceTintColor: AppColors.surface,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      content: SizedBox(
-        width: 500,
-        height: 600, 
-        child: SingleChildScrollView(
-          child: Form(
-            key: _formKey,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (!_isEditing) 
-                  Container(
-                    width: double.infinity,
-                    margin: const EdgeInsets.only(bottom: 24),
-                    child: SegmentedButton<bool>(
-                      segments: const [
-                        ButtonSegment<bool>(value: false, label: Text('予定'), icon: Icon(Icons.event)),
-                        ButtonSegment<bool>(value: true, label: Text('タスク'), icon: Icon(Icons.check_circle_outline)),
-                      ],
-                      selected: {_isTaskMode},
-                      onSelectionChanged: (Set<bool> newSelection) {
-                        setState(() {
-                          _isTaskMode = newSelection.first;
-                        });
-                      },
-                      style: ButtonStyle(
-                        side: WidgetStateProperty.all(BorderSide(color: AppColors.primary.withOpacity(0.5))),
-                        backgroundColor: WidgetStateProperty.resolveWith<Color?>((states) {
-                          if (states.contains(WidgetState.selected)) return AppColors.primary.withOpacity(0.2);
-                          return null;
-                        }),
-                        foregroundColor: WidgetStateProperty.resolveWith<Color?>((states) {
-                          if (states.contains(WidgetState.selected)) return AppColors.primary;
-                          return Colors.grey.shade700;
-                        }),
-                      ),
-                    ),
-                  ),
-
-                // タイトル入力 (枠線なし・背景色あり)
-                TextFormField(
-                  controller: _subjectController,
-                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                  decoration: InputDecoration(
-                    hintText: _isTaskMode ? 'タスクを追加' : 'タイトルを追加',
-                    // Themeで設定した inputDecorationTheme が適用されるため、個別の枠線指定は削除
-                  ),
-                  validator: (value) => value == null || value.isEmpty ? '入力してください' : null,
-                ),
-                const SizedBox(height: 24),
-
-                if (_isTaskMode) ...[
-                  // --- タスクモード ---
-                  _buildTaskDatePicker(),
-                  const SizedBox(height: 24),
-                  TextFormField(
-                    controller: _notesController,
-                    maxLines: 8, 
-                    decoration: const InputDecoration(
-                      hintText: '詳細・メモを追加',
-                    ),
-                  ),
-                ] 
-                else ...[
-                  // --- 予定モード ---
-                  Row(
-                    children: [
-                      _buildDateTimePicker('開始', _startDate, (dt) {
-                        setState(() {
-                          _startDate = dt;
-                          if (_endDate.isBefore(_startDate)) {
-                            _endDate = _startDate.add(const Duration(hours: 1));
-                          }
-                        });
-                      }),
-                      const Padding(
-                        padding: EdgeInsets.symmetric(horizontal: 8),
-                        child: Icon(Icons.arrow_forward, color: Colors.grey, size: 20),
-                      ),
-                      _buildDateTimePicker('終了', _endDate, (dt) {
-                        setState(() => _endDate = dt);
-                      }),
-                    ],
-                  ),
-                  const SizedBox(height: 24),
-
-                  // カテゴリ選択チップ
-                  Wrap(
-                    spacing: 8,
-                    children: _categories.map((cat) {
-                      final isSelected = _selectedCategory == cat['label'];
-                      return ChoiceChip(
-                        label: Text(cat['label']),
-                        selected: isSelected,
-                        showCheckmark: false,
-                        selectedColor: Color(cat['color']),
-                        backgroundColor: AppColors.inputFill,
-                        labelStyle: TextStyle(
-                          color: isSelected ? Colors.white : AppColors.textMain,
-                          fontWeight: FontWeight.bold,
-                        ),
-                        side: BorderSide.none,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                        onSelected: (val) => setState(() {
-                          _selectedCategory = cat['label'];
-                          if (_selectedCategory == 'レッスン') {
-                             _isManualLocation = false;
-                             if (_selectedClassroom == _manualInputKey && _classroomList.isNotEmpty) {
-                               _selectedClassroom = _classroomList.first;
-                             }
-                          }
-                        }),
-                      );
-                    }).toList(),
-                  ),
-                  const SizedBox(height: 24),
-
-                  // ★修正: 繰り返しと場所を縦に並べる (狭いので)
-                  DropdownButtonFormField<String>(
-                    value: _recurrenceType,
-                    decoration: const InputDecoration(
-                      labelText: '繰り返し',
-                    ),
-                    items: _recurrenceOptions.map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
-                    onChanged: (val) => setState(() => _recurrenceType = val!),
-                  ),
-                  
-                  const SizedBox(height: 16),
-                  
-                  Column(
-                    children: [
-                      DropdownButtonFormField<String>(
-                        value: _selectedClassroom,
-                        decoration: const InputDecoration(
-                          labelText: '場所',
-                        ),
-                        isExpanded: true,
-                        items: [
-                          ..._classroomList.map((e) => DropdownMenuItem(value: e, child: Text(e, overflow: TextOverflow.ellipsis))),
-                          if (_selectedCategory != 'レッスン')
-                            const DropdownMenuItem(
-                              value: _manualInputKey, 
-                              child: Text('その他（直接入力）', style: TextStyle(color: AppColors.primary)),
-                            ),
-                        ],
-                        onChanged: (val) {
-                          setState(() {
-                            _selectedClassroom = val;
-                            _isManualLocation = (val == _manualInputKey);
-                            if (!_isEditing) {
-                              _selectedStudentIds.clear();
-                              _studentNamesMap.clear();
-                            }
-                          });
-                        },
-                      ),
-                      if (_isManualLocation)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 8),
-                          child: TextFormField(
-                            controller: _locationController,
-                            decoration: const InputDecoration(
-                              hintText: '場所名を入力',
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
-                  const SizedBox(height: 24),
-
-                  _buildSectionHeader(
-                    (_selectedCategory == 'イベント') ? '担当スタッフ' : (_selectedCategory == 'その他') ? '参加者' : '担当講師', 
-                    Icons.badge
-                  ),
-                  _buildPersonList(
-                    ids: _selectedStaffIds,
-                    namesMap: _staffNamesMap,
-                    onAdd: _showStaffSelectDialog,
-                  ),
-                  const SizedBox(height: 24),
-
-                  if (_selectedCategory != 'その他') ...[
-                    _buildSectionHeader('参加生徒', Icons.face),
-                    _buildStudentList(),
-                    const SizedBox(height: 24),
-                  ],
-
-                  TextFormField(
-                    controller: _notesController,
-                    maxLines: 3,
-                    decoration: const InputDecoration(
-                      hintText: '詳細・メモを追加',
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-        ),
-      ),
-      actionsPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('キャンセル', style: TextStyle(color: Colors.grey)),
-        ),
-        ElevatedButton(
-          onPressed: _isLoading ? null : _save,
-          style: ElevatedButton.styleFrom(
-            backgroundColor: _isTaskMode ? AppColors.secondary : AppColors.primary, 
-          ),
-          child: _isLoading 
-              ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) 
-              : Text(_isEditing ? '更新' : '保存', style: const TextStyle(fontWeight: FontWeight.bold)),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildDateTimePicker(String label, DateTime dateTime, Function(DateTime) onChanged) {
-    return Expanded(
-      child: InkWell(
-        onTap: () async {
-          final date = await showDatePicker(
-            context: context,
-            initialDate: dateTime,
-            firstDate: DateTime(2020),
-            lastDate: DateTime(2030),
-            locale: const Locale('ja'),
-          );
-          if (date != null && mounted) {
-            final time = await showTimePicker(
-              context: context,
-              initialTime: TimeOfDay.fromDateTime(dateTime),
-            );
-            if (time != null) {
-              onChanged(DateTime(date.year, date.month, date.day, time.hour, time.minute));
-            }
-          }
-        },
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-          decoration: BoxDecoration(
-            color: AppColors.inputFill,
-            borderRadius: AppStyles.radiusSmall,
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    return Scaffold(
+      backgroundColor: Colors.white,
+      body: SafeArea(
+        child: Form(
+          key: _formKey,
+          child: Column(
             children: [
-              Text(label, style: const TextStyle(color: Colors.grey, fontSize: 12)),
-              Text(
-                DateFormat('M/d HH:mm', 'ja').format(dateTime),
-                style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+              Center(
+                child: Container(
+                  margin: const EdgeInsets.only(top: 12, bottom: 8),
+                  width: 40, height: 4,
+                  decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2)),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    TextButton(onPressed: () => Navigator.pop(context), child: const Text('キャンセル', style: TextStyle(color: AppColors.primary, fontSize: 16))),
+                    TextButton(
+                      onPressed: _isLoading ? null : _save,
+                      child: _isLoading
+                          ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                          : const Text('保存', style: TextStyle(color: AppColors.primary, fontSize: 16, fontWeight: FontWeight.bold)),
+                    ),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(56, 8, 16, 8),
+                        child: TextFormField(
+                          controller: _subjectController,
+                          style: const TextStyle(fontSize: 24, color: AppColors.textMain),
+                          decoration: const InputDecoration(
+                            hintText: 'タイトルを追加',
+                            hintStyle: TextStyle(color: Colors.grey, fontSize: 24),
+                            border: InputBorder.none,
+                            filled: true,
+                            fillColor: Colors.white,
+                          ),
+                          validator: (v) => v == null || v.isEmpty ? '入力してください' : null,
+                        ),
+                      ),
+                      if (!_isEditing)
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(56, 0, 16, 16),
+                          child: Row(children: [
+                            _buildModeChip('予定', !_isTaskMode, () => setState(() => _isTaskMode = false)),
+                            const SizedBox(width: 8),
+                            _buildModeChip('タスク', _isTaskMode, () => setState(() => _isTaskMode = true)),
+                          ]),
+                        ),
+                      const Divider(height: 1),
+                      if (_isTaskMode) _buildTaskContent() else _buildEventContent(),
+                    ],
+                  ),
+                ),
               ),
             ],
           ),
@@ -586,236 +320,270 @@ class _AddEventDialogState extends State<AddEventDialog> {
     );
   }
 
-  Widget _buildStudentList() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        if (_selectedStudentIds.isNotEmpty)
-          Container(
-            width: double.infinity,
-            decoration: BoxDecoration(
-              color: AppColors.surface,
-              borderRadius: AppStyles.radiusSmall,
-              border: Border.all(color: Colors.grey.shade200), // 枠線は薄く
-            ),
-            child: Column(
-              children: _selectedStudentIds.map((id) {
-                final name = _studentNamesMap[id] ?? '不明';
-                final isAbsent = _absentStudentIds.contains(id);
-                final transferDate = _studentTransferDates[id];
-                
-                return Container(
-                  decoration: BoxDecoration(
-                    border: Border(bottom: BorderSide(color: Colors.grey.shade100)),
-                  ),
-                  padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              name,
-                              style: TextStyle(
-                                fontSize: 14,
-                                color: isAbsent ? Colors.grey : AppColors.textMain,
-                                decoration: isAbsent ? TextDecoration.lineThrough : null,
-                              ),
-                            ),
-                            if (transferDate != null)
-                              Text(
-                                '${DateFormat('M/d').format(transferDate)}振替分',
-                                style: const TextStyle(fontSize: 10, color: AppColors.primary, fontWeight: FontWeight.bold),
-                              ),
-                          ],
-                        ),
-                      ),
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          IconButton(
-                            icon: Icon(isAbsent ? Icons.close : Icons.event_busy, size: 20, color: isAbsent ? AppColors.error : Colors.grey),
-                            tooltip: isAbsent ? '欠席取消' : '欠席にする',
-                            onPressed: () => _toggleAbsent(id),
-                          ),
-                          IconButton(
-                            icon: Icon(Icons.swap_horiz, size: 20, color: transferDate != null ? AppColors.primary : Colors.grey),
-                            tooltip: '振替元の日付を設定',
-                            onPressed: () => _pickTransferDate(id),
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.remove_circle_outline, size: 20, color: Colors.grey),
-                            tooltip: 'リストから削除',
-                            onPressed: () {
-                              setState(() {
-                                _selectedStudentIds.remove(id);
-                                _studentTransferDates.remove(id);
-                                _absentStudentIds.remove(id);
-                              });
-                            },
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                );
-              }).toList(),
-            ),
-          ),
-        
-        if (!_isManualLocation && _selectedClassroom == null)
-          const Padding(
-            padding: EdgeInsets.only(top: 8, bottom: 8),
-            child: Text('※先に教室を選択してください', style: TextStyle(color: AppColors.error, fontSize: 12)),
-          ),
-
-        const SizedBox(height: 8),
-        OutlinedButton.icon(
-          onPressed: (!_isManualLocation && _selectedClassroom == null) 
-              ? null 
-              : _showStudentSelectDialog,
-          icon: const Icon(Icons.add, size: 18),
-          label: const Text('追加'),
-          style: OutlinedButton.styleFrom(
-            // テーマ対応
-            side: BorderSide(color: Colors.grey.shade300),
-          ),
+  Widget _buildModeChip(String label, bool isSelected, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        decoration: BoxDecoration(
+          color: isSelected ? AppColors.primary : Colors.transparent,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: isSelected ? AppColors.primary : Colors.grey.shade400),
         ),
-      ],
-    );
-  }
-
-  Widget _buildPersonList({
-    required Set<String> ids,
-    required Map<String, String> namesMap,
-    required VoidCallback? onAdd,
-  }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        if (ids.isNotEmpty)
-          Container(
-            width: double.infinity,
-            decoration: BoxDecoration(
-              color: AppColors.surface,
-              borderRadius: AppStyles.radiusSmall,
-              border: Border.all(color: Colors.grey.shade200),
-            ),
-            child: Column(
-              children: ids.map((id) {
-                final name = namesMap[id] ?? '不明';
-                return Container(
-                  decoration: BoxDecoration(
-                    border: Border(bottom: BorderSide(color: Colors.grey.shade100)),
-                  ),
-                  child: ListTile(
-                    dense: true,
-                    contentPadding: const EdgeInsets.only(left: 12, right: 4),
-                    title: Text(name, style: const TextStyle(fontSize: 14)),
-                    trailing: IconButton(
-                      icon: const Icon(Icons.close, size: 18, color: Colors.grey),
-                      onPressed: () {
-                        setState(() {
-                          ids.remove(id);
-                        });
-                      },
-                    ),
-                  ),
-                );
-              }).toList(),
-            ),
-          ),
-        
-        const SizedBox(height: 8),
-        OutlinedButton.icon(
-          onPressed: onAdd,
-          icon: const Icon(Icons.add, size: 18),
-          label: const Text('追加'),
-          style: OutlinedButton.styleFrom(
-            side: BorderSide(color: Colors.grey.shade300),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildSectionHeader(String title, IconData icon) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Row(
-        children: [
-          Icon(icon, size: 18, color: Colors.grey),
-          const SizedBox(width: 8),
-          Text(title, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.grey)),
-        ],
+        child: Text(label, style: TextStyle(color: isSelected ? Colors.white : Colors.grey.shade600, fontWeight: FontWeight.w500)),
       ),
     );
   }
 
-  // 既存の _pickTransferDate, _toggleAbsent, _showStudentSelectDialog, _showStaffSelectDialog, _PersonSelectDialog
-  // これらはロジックなので変更なし（省略せず記述）
-  Future<void> _pickTransferDate(String studentId) async {
-    final initial = _studentTransferDates[studentId] ?? DateTime.now();
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: initial,
-      firstDate: DateTime(2023),
-      lastDate: DateTime(2030),
-      helpText: '振替元の日付を選択',
-    );
+  Widget _buildTaskContent() {
+    return Column(children: [
+      _buildListTile(icon: Icons.access_time, child: InkWell(
+        onTap: () async {
+          final picked = await showDatePicker(context: context, initialDate: _taskDate, firstDate: DateTime(2020), lastDate: DateTime(2030), locale: const Locale('ja'));
+          if (picked != null) setState(() => _taskDate = picked);
+        },
+        child: Padding(padding: const EdgeInsets.symmetric(vertical: 16), child: Text(DateFormat('M月d日 (E)', 'ja').format(_taskDate), style: const TextStyle(fontSize: 16, color: AppColors.textMain))),
+      )),
+      const Divider(height: 1),
+      _buildListTile(icon: Icons.notes, child: TextFormField(
+        controller: _notesController,
+        maxLines: 5,
+        decoration: const InputDecoration(
+          hintText: 'メモを追加',
+          hintStyle: TextStyle(color: Colors.grey),
+          border: InputBorder.none,
+          filled: true,
+          fillColor: Colors.white,
+        ),
+      )),
+    ]);
+  }
+
+  Widget _buildEventContent() {
+    final bool allowFreeLocation = _selectedCategory == 'イベント' || _selectedCategory == 'その他';
     
-    if (picked != null) {
-      setState(() {
-        _studentTransferDates[studentId] = picked;
-        _absentStudentIds.remove(studentId);
-      });
+    return Column(children: [
+      _buildListTile(icon: Icons.access_time, child: Column(children: [
+        Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+          const Text('終日', style: TextStyle(fontSize: 16, color: AppColors.textMain)),
+          Switch(value: _isAllDay, onChanged: (v) => setState(() => _isAllDay = v), activeColor: AppColors.primary),
+        ]),
+        InkWell(onTap: () => _pickDateTime(isStart: true), child: Padding(padding: const EdgeInsets.symmetric(vertical: 12), child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+          Text(DateFormat('M月d日 (E)', 'ja').format(_startDate), style: const TextStyle(fontSize: 16, color: AppColors.textMain)),
+          if (!_isAllDay) Text(DateFormat('H:mm').format(_startDate), style: const TextStyle(fontSize: 16, color: AppColors.textMain)),
+        ]))),
+        InkWell(onTap: () => _pickDateTime(isStart: false), child: Padding(padding: const EdgeInsets.symmetric(vertical: 12), child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+          Text(DateFormat('M月d日 (E)', 'ja').format(_endDate), style: const TextStyle(fontSize: 16, color: AppColors.textMain)),
+          if (!_isAllDay) Text(DateFormat('H:mm').format(_endDate), style: const TextStyle(fontSize: 16, color: AppColors.textMain)),
+        ]))),
+        InkWell(onTap: () => setState(() => _showDetailOptions = !_showDetailOptions), child: Padding(padding: const EdgeInsets.symmetric(vertical: 12), child: Row(children: [
+          Text('詳細オプション', style: TextStyle(fontSize: 14, color: Colors.grey.shade600)),
+          Icon(_showDetailOptions ? Icons.expand_less : Icons.expand_more, color: Colors.grey.shade600),
+        ]))),
+        if (_showDetailOptions) InkWell(onTap: _showRecurrenceDialog, child: Padding(padding: const EdgeInsets.only(left: 16, top: 8, bottom: 16), child: Row(children: [
+          const Icon(Icons.repeat, size: 20, color: Colors.grey), const SizedBox(width: 16),
+          Text(_recurrenceType == 'なし' ? '繰り返しなし' : _recurrenceType, style: const TextStyle(fontSize: 14, color: AppColors.textMain)),
+        ]))),
+      ])),
+      const Divider(height: 1),
+      
+      _buildListTile(icon: Icons.category, child: Padding(padding: const EdgeInsets.symmetric(vertical: 8), child: Wrap(spacing: 8, children: _categories.map((cat) {
+        final isSelected = _selectedCategory == cat['label'];
+        return GestureDetector(onTap: () => setState(() {
+          _selectedCategory = cat['label'];
+          if (cat['label'] == 'レッスン') {
+            _isManualLocation = false;
+          }
+        }), child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          decoration: BoxDecoration(color: isSelected ? Color(cat['color']) : Colors.transparent, borderRadius: BorderRadius.circular(16), border: Border.all(color: isSelected ? Color(cat['color']) : Colors.grey.shade400)),
+          child: Text(cat['label'], style: TextStyle(color: isSelected ? Colors.white : Colors.grey.shade600, fontSize: 13)),
+        ));
+      }).toList()))),
+      const Divider(height: 1),
+      
+      if (allowFreeLocation)
+        _buildListTile(icon: Icons.location_on_outlined, child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.only(top: 8, bottom: 8),
+              child: Row(children: [
+                _buildLocationTab('教室から選択', !_isManualLocation, () => setState(() => _isManualLocation = false)),
+                const SizedBox(width: 8),
+                _buildLocationTab('自由入力', _isManualLocation, () => setState(() => _isManualLocation = true)),
+              ]),
+            ),
+            if (_isManualLocation)
+              TextFormField(
+                controller: _locationController,
+                decoration: const InputDecoration(
+                  hintText: '場所を入力',
+                  hintStyle: TextStyle(color: Colors.grey),
+                  border: InputBorder.none,
+                  filled: true,
+                  fillColor: Colors.white,
+                ),
+              )
+            else
+              InkWell(
+                onTap: _showClassroomDialog,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                    Text(_selectedClassroom ?? '教室を選択', style: TextStyle(fontSize: 16, color: _selectedClassroom == null ? Colors.grey : AppColors.textMain)),
+                    Icon(Icons.chevron_right, color: Colors.grey.shade400),
+                  ]),
+                ),
+              ),
+          ],
+        ))
+      else
+        _buildListTile(icon: Icons.location_on_outlined, child: InkWell(onTap: _showClassroomDialog, child: Padding(padding: const EdgeInsets.symmetric(vertical: 16), child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+          Text(_selectedClassroom ?? '教室を選択', style: TextStyle(fontSize: 16, color: _selectedClassroom == null ? Colors.grey : AppColors.textMain)),
+          Icon(Icons.chevron_right, color: Colors.grey.shade400),
+        ])))),
+      const Divider(height: 1),
+      
+      _buildListTile(icon: Icons.person_outline, child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        InkWell(onTap: _showStaffSelectSheet, child: Padding(padding: const EdgeInsets.symmetric(vertical: 16), child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+          Text(_selectedStaffIds.isEmpty ? '担当者を追加' : '${_selectedStaffIds.length}名選択中', style: TextStyle(fontSize: 16, color: _selectedStaffIds.isEmpty ? Colors.grey : AppColors.textMain)),
+          Icon(Icons.chevron_right, color: Colors.grey.shade400),
+        ]))),
+        if (_selectedStaffIds.isNotEmpty) Padding(padding: const EdgeInsets.only(bottom: 12), child: Wrap(spacing: 8, runSpacing: 8, children: _selectedStaffIds.map((id) => Chip(
+          label: Text(_staffNamesMap[id] ?? '不明', style: const TextStyle(fontSize: 12)),
+          deleteIcon: const Icon(Icons.close, size: 16),
+          onDeleted: () => setState(() => _selectedStaffIds.remove(id)),
+          backgroundColor: Colors.grey.shade100, side: BorderSide.none,
+        )).toList())),
+      ])),
+      const Divider(height: 1),
+      
+      if (_selectedCategory != 'その他') ...[
+        _buildListTile(icon: Icons.face_outlined, child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          InkWell(onTap: (_selectedClassroom == null && !_isManualLocation) ? null : _showStudentSelectSheet, child: Padding(padding: const EdgeInsets.symmetric(vertical: 16), child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+            Text(_selectedStudentIds.isEmpty ? ((_selectedClassroom == null && !_isManualLocation) ? '先に教室を選択' : '生徒を追加') : '${_selectedStudentIds.length}名選択中', style: TextStyle(fontSize: 16, color: (_selectedClassroom == null && !_isManualLocation) ? Colors.grey.shade300 : (_selectedStudentIds.isEmpty ? Colors.grey : AppColors.textMain))),
+            Icon(Icons.chevron_right, color: Colors.grey.shade400),
+          ]))),
+          if (_selectedStudentIds.isNotEmpty) Padding(padding: const EdgeInsets.only(bottom: 12), child: Wrap(spacing: 8, runSpacing: 8, children: _selectedStudentIds.map((id) {
+            final name = _studentNamesMap[id] ?? '不明';
+            final isAbsent = _absentStudentIds.contains(id);
+            return GestureDetector(onTap: () => _showStudentActionSheet(id), child: Chip(
+              label: Text(name, style: TextStyle(fontSize: 12, decoration: isAbsent ? TextDecoration.lineThrough : null)),
+              deleteIcon: const Icon(Icons.close, size: 16),
+              onDeleted: () => setState(() { _selectedStudentIds.remove(id); _studentTransferDates.remove(id); _absentStudentIds.remove(id); }),
+              backgroundColor: isAbsent ? Colors.grey.shade200 : Colors.grey.shade100, side: BorderSide.none,
+            ));
+          }).toList())),
+        ])),
+        const Divider(height: 1),
+      ],
+      
+      _buildListTile(icon: Icons.notes, child: TextFormField(
+        controller: _notesController,
+        maxLines: 3,
+        decoration: const InputDecoration(
+          hintText: 'メモを追加',
+          hintStyle: TextStyle(color: Colors.grey),
+          border: InputBorder.none,
+          filled: true,
+          fillColor: Colors.white,
+        ),
+      )),
+      const SizedBox(height: 40),
+    ]);
+  }
+
+  Widget _buildLocationTab(String label, bool isSelected, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: isSelected ? AppColors.primary.withOpacity(0.1) : Colors.transparent,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: isSelected ? AppColors.primary : Colors.grey.shade400),
+        ),
+        child: Text(label, style: TextStyle(color: isSelected ? AppColors.primary : Colors.grey.shade600, fontSize: 12)),
+      ),
+    );
+  }
+
+  Widget _buildListTile({required IconData icon, required Widget child}) {
+    return Padding(padding: const EdgeInsets.only(left: 16, right: 16), child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Padding(padding: const EdgeInsets.only(top: 16), child: Icon(icon, color: Colors.grey.shade600, size: 24)),
+      const SizedBox(width: 16),
+      Expanded(child: child),
+    ]));
+  }
+
+  Future<void> _pickDateTime({required bool isStart}) async {
+    final initialDate = isStart ? _startDate : _endDate;
+    final date = await showDatePicker(context: context, initialDate: initialDate, firstDate: DateTime(2020), lastDate: DateTime(2030), locale: const Locale('ja'));
+    if (date != null && mounted) {
+      if (_isAllDay) {
+        setState(() { if (isStart) { _startDate = DateTime(date.year, date.month, date.day); if (_endDate.isBefore(_startDate)) _endDate = _startDate; } else { _endDate = DateTime(date.year, date.month, date.day); } });
+      } else {
+        final time = await showTimePicker(context: context, initialTime: TimeOfDay.fromDateTime(initialDate));
+        if (time != null) setState(() { if (isStart) { _startDate = DateTime(date.year, date.month, date.day, time.hour, time.minute); if (_endDate.isBefore(_startDate)) _endDate = _startDate.add(const Duration(hours: 1)); } else { _endDate = DateTime(date.year, date.month, date.day, time.hour, time.minute); } });
+      }
     }
   }
 
-  void _toggleAbsent(String studentId) {
-    setState(() {
-      if (_absentStudentIds.contains(studentId)) {
-        _absentStudentIds.remove(studentId);
-      } else {
-        _absentStudentIds.add(studentId);
-        _studentTransferDates.remove(studentId);
-      }
-    });
+  void _showRecurrenceDialog() {
+    showDialog(context: context, builder: (ctx) => SimpleDialog(title: const Text('繰り返し'), children: _recurrenceOptions.map((opt) => SimpleDialogOption(onPressed: () { setState(() => _recurrenceType = opt); Navigator.pop(ctx); }, child: Row(children: [if (_recurrenceType == opt) const Icon(Icons.check, color: AppColors.primary, size: 20) else const SizedBox(width: 20), const SizedBox(width: 12), Text(opt)]))).toList()));
   }
 
-  void _showStudentSelectDialog() {
-    final filter = _isManualLocation ? null : _selectedClassroom;
-    showDialog(
+  void _showClassroomDialog() {
+    showModalBottomSheet(context: context, builder: (ctx) => SafeArea(child: Column(mainAxisSize: MainAxisSize.min, children: [
+      const Padding(padding: EdgeInsets.all(16), child: Text('教室を選択', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold))),
+      ..._classroomList.map((room) => ListTile(leading: _selectedClassroom == room ? const Icon(Icons.check, color: AppColors.primary) : const SizedBox(width: 24), title: Text(room), onTap: () { setState(() { _selectedClassroom = room; if (!_isEditing) { _selectedStudentIds.clear(); _studentNamesMap.clear(); } }); Navigator.pop(ctx); })),
+    ])));
+  }
+
+  void _showStudentActionSheet(String studentId) {
+    showModalBottomSheet(context: context, builder: (ctx) => SafeArea(child: Column(mainAxisSize: MainAxisSize.min, children: [
+      ListTile(leading: const Icon(Icons.event_busy), title: Text(_absentStudentIds.contains(studentId) ? '欠席を取り消す' : '欠席にする'), onTap: () { Navigator.pop(ctx); setState(() { if (_absentStudentIds.contains(studentId)) _absentStudentIds.remove(studentId); else { _absentStudentIds.add(studentId); _studentTransferDates.remove(studentId); } }); }),
+      ListTile(leading: const Icon(Icons.swap_horiz), title: const Text('振替元の日付を設定'), onTap: () async { Navigator.pop(ctx); final picked = await showDatePicker(context: context, initialDate: _studentTransferDates[studentId] ?? DateTime.now(), firstDate: DateTime(2023), lastDate: DateTime(2030)); if (picked != null) setState(() { _studentTransferDates[studentId] = picked; _absentStudentIds.remove(studentId); }); }),
+      ListTile(leading: const Icon(Icons.delete_outline, color: Colors.red), title: const Text('削除', style: TextStyle(color: Colors.red)), onTap: () { Navigator.pop(ctx); setState(() { _selectedStudentIds.remove(studentId); _studentTransferDates.remove(studentId); _absentStudentIds.remove(studentId); }); }),
+    ])));
+  }
+
+  void _showStudentSelectSheet() {
+    showModalBottomSheet(
       context: context,
-      builder: (ctx) => _PersonSelectDialog(
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => _PersonSelectSheet(
         title: '生徒を選択',
         type: 'student',
-        filterKey: filter, 
+        filterKey: _isManualLocation ? null : _selectedClassroom,
         initialSelectedIds: _selectedStudentIds,
-        onConfirmed: (selectedItems) {
+        onConfirmed: (items) {
           setState(() {
             _selectedStudentIds.clear();
-            _selectedStudentIds.addAll(selectedItems.keys);
-            _studentNamesMap.addAll(selectedItems);
+            _selectedStudentIds.addAll(items.keys);
+            _studentNamesMap.addAll(items);
           });
         },
       ),
     );
   }
 
-  void _showStaffSelectDialog() {
-    showDialog(
+  void _showStaffSelectSheet() {
+    showModalBottomSheet(
       context: context,
-      builder: (ctx) => _PersonSelectDialog(
-        title: '講師を選択',
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => _PersonSelectSheet(
+        title: '担当者を選択',
         type: 'staff',
         initialSelectedIds: _selectedStaffIds,
-        onConfirmed: (selectedItems) {
+        onConfirmed: (items) {
           setState(() {
             _selectedStaffIds.clear();
-            _selectedStaffIds.addAll(selectedItems.keys);
-            _staffNamesMap.addAll(selectedItems);
+            _selectedStaffIds.addAll(items.keys);
+            _staffNamesMap.addAll(items);
           });
         },
       ),
@@ -823,228 +591,230 @@ class _AddEventDialogState extends State<AddEventDialog> {
   }
 }
 
-class _PersonSelectDialog extends StatefulWidget {
+class _PersonSelectSheet extends StatefulWidget {
   final String title;
-  final String type; 
-  final String? filterKey; 
+  final String type;
+  final String? filterKey;
   final Set<String> initialSelectedIds;
-  final Function(Map<String, String>) onConfirmed; 
-
-  const _PersonSelectDialog({
+  final Function(Map<String, String>) onConfirmed;
+  
+  const _PersonSelectSheet({
     required this.title,
     required this.type,
     this.filterKey,
     required this.initialSelectedIds,
     required this.onConfirmed,
   });
-
+  
   @override
-  State<_PersonSelectDialog> createState() => _PersonSelectDialogState();
+  State<_PersonSelectSheet> createState() => _PersonSelectSheetState();
 }
 
-class _PersonSelectDialogState extends State<_PersonSelectDialog> {
+class _PersonSelectSheetState extends State<_PersonSelectSheet> {
   List<Map<String, dynamic>> _people = [];
   List<Map<String, dynamic>> _filteredPeople = [];
   final Map<String, String> _selectedMap = {};
   final TextEditingController _searchCtrl = TextEditingController();
   bool _isLoading = true;
 
+  // あいうえお行のマッピング
+  static const Map<String, String> _kanaToGroup = {
+    'あ': 'あ', 'い': 'あ', 'う': 'あ', 'え': 'あ', 'お': 'あ',
+    'ア': 'あ', 'イ': 'あ', 'ウ': 'あ', 'エ': 'あ', 'オ': 'あ',
+    'か': 'か', 'き': 'か', 'く': 'か', 'け': 'か', 'こ': 'か',
+    'カ': 'か', 'キ': 'か', 'ク': 'か', 'ケ': 'か', 'コ': 'か',
+    'が': 'か', 'ぎ': 'か', 'ぐ': 'か', 'げ': 'か', 'ご': 'か',
+    'ガ': 'か', 'ギ': 'か', 'グ': 'か', 'ゲ': 'か', 'ゴ': 'か',
+    'さ': 'さ', 'し': 'さ', 'す': 'さ', 'せ': 'さ', 'そ': 'さ',
+    'サ': 'さ', 'シ': 'さ', 'ス': 'さ', 'セ': 'さ', 'ソ': 'さ',
+    'ざ': 'さ', 'じ': 'さ', 'ず': 'さ', 'ぜ': 'さ', 'ぞ': 'さ',
+    'ザ': 'さ', 'ジ': 'さ', 'ズ': 'さ', 'ゼ': 'さ', 'ゾ': 'さ',
+    'た': 'た', 'ち': 'た', 'つ': 'た', 'て': 'た', 'と': 'た',
+    'タ': 'た', 'チ': 'た', 'ツ': 'た', 'テ': 'た', 'ト': 'た',
+    'だ': 'た', 'ぢ': 'た', 'づ': 'た', 'で': 'た', 'ど': 'た',
+    'ダ': 'た', 'ヂ': 'た', 'ヅ': 'た', 'デ': 'た', 'ド': 'た',
+    'な': 'な', 'に': 'な', 'ぬ': 'な', 'ね': 'な', 'の': 'な',
+    'ナ': 'な', 'ニ': 'な', 'ヌ': 'な', 'ネ': 'な', 'ノ': 'な',
+    'は': 'は', 'ひ': 'は', 'ふ': 'は', 'へ': 'は', 'ほ': 'は',
+    'ハ': 'は', 'ヒ': 'は', 'フ': 'は', 'ヘ': 'は', 'ホ': 'は',
+    'ば': 'は', 'び': 'は', 'ぶ': 'は', 'べ': 'は', 'ぼ': 'は',
+    'バ': 'は', 'ビ': 'は', 'ブ': 'は', 'ベ': 'は', 'ボ': 'は',
+    'ぱ': 'は', 'ぴ': 'は', 'ぷ': 'は', 'ぺ': 'は', 'ぽ': 'は',
+    'パ': 'は', 'ピ': 'は', 'プ': 'は', 'ペ': 'は', 'ポ': 'は',
+    'ま': 'ま', 'み': 'ま', 'む': 'ま', 'め': 'ま', 'も': 'ま',
+    'マ': 'ま', 'ミ': 'ま', 'ム': 'ま', 'メ': 'ま', 'モ': 'ま',
+    'や': 'や', 'ゆ': 'や', 'よ': 'や',
+    'ヤ': 'や', 'ユ': 'や', 'ヨ': 'や',
+    'ら': 'ら', 'り': 'ら', 'る': 'ら', 'れ': 'ら', 'ろ': 'ら',
+    'ラ': 'ら', 'リ': 'ら', 'ル': 'ら', 'レ': 'ら', 'ロ': 'ら',
+    'わ': 'わ', 'を': 'わ', 'ん': 'わ',
+    'ワ': 'わ', 'ヲ': 'わ', 'ン': 'わ',
+  };
+
+  String _getGroup(String kana) {
+    if (kana.isEmpty) return '他';
+    final firstChar = kana[0];
+    return _kanaToGroup[firstChar] ?? '他';
+  }
+
   @override
   void initState() {
     super.initState();
-    for (var id in widget.initialSelectedIds) {
-      _selectedMap[id] = ''; 
-    }
+    for (var id in widget.initialSelectedIds) _selectedMap[id] = '';
     _fetchData();
   }
 
   Future<void> _fetchData() async {
     try {
       final List<Map<String, dynamic>> loaded = [];
-
       if (widget.type == 'student') {
         final snapshot = await FirebaseFirestore.instance.collection('families').get();
         for (var doc in snapshot.docs) {
           final data = doc.data();
           final parentLastName = data['lastName'] ?? '';
+          final parentLastNameKana = data['lastNameKana'] ?? parentLastName;
           final children = List<Map<String, dynamic>>.from(data['children'] ?? []);
-          
           for (var child in children) {
-            if (widget.filterKey != null && child['classroom'] != widget.filterKey) {
-              continue;
-            }
-            
+            if (widget.filterKey != null && child['classroom'] != widget.filterKey) continue;
             final childName = child['firstName'] ?? '';
-            final childNameKana = child['firstNameKana'] ?? childName;
             final fullName = '$parentLastName $childName';
             final uniqueId = '${data['uid']}_$childName';
-
-            loaded.add({
-              'id': uniqueId,
-              'name': fullName,
-              'kana': childNameKana,
-            });
-            
-            if (_selectedMap.containsKey(uniqueId)) {
-              _selectedMap[uniqueId] = fullName;
-            }
+            // ふりがなは姓のかなを使用
+            final kana = parentLastNameKana;
+            loaded.add({'id': uniqueId, 'name': fullName, 'kana': kana, 'group': _getGroup(kana)});
+            if (_selectedMap.containsKey(uniqueId)) _selectedMap[uniqueId] = fullName;
           }
         }
       } else {
         final snapshot = await FirebaseFirestore.instance.collection('staffs').get();
         for (var doc in snapshot.docs) {
           final data = doc.data();
-          String name = data['name'] ?? '';
-          if (name.isEmpty) {
-            name = '${data['lastName']??''} ${data['firstName']??''}';
-          }
-          String kana = data['furigana'] ?? '';
-          if (kana.isEmpty) kana = name;
-
+          String name = data['name'] ?? '${data['lastName'] ?? ''} ${data['firstName'] ?? ''}';
           final uid = data['uid'] ?? doc.id;
-
-          loaded.add({
-            'id': uid,
-            'name': name,
-            'kana': kana,
-          });
-
-          if (_selectedMap.containsKey(uid)) {
-            _selectedMap[uid] = name;
-          }
+          final kana = data['furigana'] ?? data['lastNameKana'] ?? name;
+          loaded.add({'id': uid, 'name': name, 'kana': kana, 'group': _getGroup(kana)});
+          if (_selectedMap.containsKey(uid)) _selectedMap[uid] = name;
         }
       }
-
+      // あいうえお順でソート
       loaded.sort((a, b) => (a['kana'] as String).compareTo(b['kana'] as String));
-
-      setState(() {
-        _people = loaded;
-        _filteredPeople = loaded;
-        _isLoading = false;
-      });
-    } catch (e) {
-      setState(() => _isLoading = false);
-    }
+      setState(() { _people = loaded; _filteredPeople = loaded; _isLoading = false; });
+    } catch (e) { setState(() => _isLoading = false); }
   }
 
-  void _onSearch(String query) {
-    setState(() {
-      if (query.isEmpty) {
-        _filteredPeople = _people;
-      } else {
-        _filteredPeople = _people.where((p) => 
-          p['name'].contains(query) || p['kana'].contains(query)
-        ).toList();
+  // グループ化されたリストを構築
+  List<dynamic> _buildGroupedList() {
+    final List<dynamic> result = [];
+    String? currentGroup;
+    
+    for (var person in _filteredPeople) {
+      final group = person['group'] as String;
+      if (group != currentGroup) {
+        currentGroup = group;
+        result.add({'type': 'header', 'group': group});
       }
-    });
-  }
-
-  String _getIndexHeader(String kana) {
-    if (kana.isEmpty) return '他';
-    final firstChar = kana.substring(0, 1);
-    if (firstChar.compareTo('あ') >= 0 && firstChar.compareTo('お') <= 0) return 'あ';
-    if (firstChar.compareTo('か') >= 0 && firstChar.compareTo('こ') <= 0) return 'か';
-    if (firstChar.compareTo('さ') >= 0 && firstChar.compareTo('そ') <= 0) return 'さ';
-    if (firstChar.compareTo('た') >= 0 && firstChar.compareTo('と') <= 0) return 'た';
-    if (firstChar.compareTo('な') >= 0 && firstChar.compareTo('の') <= 0) return 'な';
-    if (firstChar.compareTo('は') >= 0 && firstChar.compareTo('ほ') <= 0) return 'は';
-    if (firstChar.compareTo('ま') >= 0 && firstChar.compareTo('も') <= 0) return 'ま';
-    if (firstChar.compareTo('や') >= 0 && firstChar.compareTo('よ') <= 0) return 'や';
-    if (firstChar.compareTo('ら') >= 0 && firstChar.compareTo('ろ') <= 0) return 'ら';
-    if (firstChar.compareTo('わ') >= 0 && firstChar.compareTo('ん') <= 0) return 'わ';
-    return '他';
+      result.add({'type': 'person', 'data': person});
+    }
+    return result;
   }
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      contentPadding: EdgeInsets.zero,
-      backgroundColor: AppColors.surface, // テーマ色
-      surfaceTintColor: AppColors.surface,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      content: SizedBox(
-        width: 400,
-        height: 600,
-        child: Column(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                children: [
-                  Text(widget.title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: _searchCtrl,
-                    decoration: const InputDecoration(
-                      hintText: '名前で検索...',
-                      prefixIcon: Icon(Icons.search),
-                    ),
-                    onChanged: _onSearch,
-                  ),
-                ],
-              ),
-            ),
-            const Divider(height: 1, color: Colors.grey),
-            Expanded(
-              child: _isLoading
-                  ? const Center(child: CircularProgressIndicator())
-                  : _filteredPeople.isEmpty
-                      ? const Center(child: Text('該当者がいません', style: TextStyle(color: Colors.grey)))
-                      : ListView.builder(
-                          itemCount: _filteredPeople.length,
-                          itemBuilder: (context, index) {
-                            final person = _filteredPeople[index];
-                            final header = _getIndexHeader(person['kana']);
-                            bool showHeader = true;
-                            if (index > 0) {
-                              final prevHeader = _getIndexHeader(_filteredPeople[index - 1]['kana']);
-                              if (prevHeader == header) showHeader = false;
-                            }
-
-                            return Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                if (showHeader)
-                                  Padding(
-                                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-                                    child: Text(header, style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey.shade700)),
-                                  ),
-                                CheckboxListTile(
-                                  value: _selectedMap.containsKey(person['id']),
-                                  activeColor: AppColors.primary,
-                                  title: Text(person['name']),
-                                  onChanged: (val) {
-                                    setState(() {
-                                      if (val == true) {
-                                        _selectedMap[person['id']] = person['name'];
-                                      } else {
-                                        _selectedMap.remove(person['id']);
-                                      }
-                                    });
-                                  },
-                                ),
-                              ],
-                            );
-                          },
-                        ),
-            ),
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: () {
-                    widget.onConfirmed(_selectedMap);
-                    Navigator.pop(context);
-                  },
-                  // テーマでスタイルは適用済み
-                  child: Text('${_selectedMap.length}名を選択して完了', style: const TextStyle(fontWeight: FontWeight.bold)),
-                ),
-              ),
-            ),
-          ],
-        ),
+    final groupedList = _buildGroupedList();
+    
+    return Container(
+      height: MediaQuery.of(context).size.height * 0.85,
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
+      child: Column(children: [
+        Center(
+          child: Container(
+            margin: const EdgeInsets.only(top: 12, bottom: 8),
+            width: 40, height: 4,
+            decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2)),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(children: [
+            Text(widget.title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _searchCtrl,
+              decoration: InputDecoration(
+                hintText: '名前で検索...',
+                prefixIcon: const Icon(Icons.search),
+                filled: true,
+                fillColor: Colors.grey.shade100,
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
+              ),
+              onChanged: (q) => setState(() => _filteredPeople = q.isEmpty ? _people : _people.where((p) => p['name'].contains(q) || p['kana'].contains(q)).toList()),
+            ),
+          ]),
+        ),
+        const Divider(height: 1),
+        Expanded(
+          child: _isLoading
+              ? const Center(child: CircularProgressIndicator())
+              : _filteredPeople.isEmpty
+                  ? const Center(child: Text('該当者がいません'))
+                  : ListView.builder(
+                      itemCount: groupedList.length,
+                      itemBuilder: (context, index) {
+                        final item = groupedList[index];
+                        
+                        if (item['type'] == 'header') {
+                          // グループヘッダー（あ、か、さ...）
+                          return Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                            color: Colors.grey.shade100,
+                            child: Text(
+                              item['group'],
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.grey.shade700,
+                              ),
+                            ),
+                          );
+                        } else {
+                          // 人のリストアイテム
+                          final person = item['data'];
+                          return CheckboxListTile(
+                            value: _selectedMap.containsKey(person['id']),
+                            activeColor: AppColors.primary,
+                            title: Text(person['name']),
+                            subtitle: Text(person['kana'], style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
+                            onChanged: (val) => setState(() {
+                              if (val == true) _selectedMap[person['id']] = person['name'];
+                              else _selectedMap.remove(person['id']);
+                            }),
+                          );
+                        }
+                      },
+                    ),
+        ),
+        Padding(
+          padding: const EdgeInsets.all(16),
+          child: SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: () {
+                widget.onConfirmed(_selectedMap);
+                Navigator.pop(context);
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+              child: Text('${_selectedMap.length}名を選択して完了', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+            ),
+          ),
+        ),
+      ]),
     );
   }
 }

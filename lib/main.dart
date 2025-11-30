@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -55,8 +56,9 @@ enum UserType { staff, parent, unknown }
 class UserStatus {
   final UserType type;
   final bool isInitialPassword;
-  const UserStatus({required this.type, required this.isInitialPassword});
-  static const unknown = UserStatus(type: UserType.unknown, isInitialPassword: false);
+  final String uid;
+  const UserStatus({required this.type, required this.isInitialPassword, required this.uid});
+  static const unknown = UserStatus(type: UserType.unknown, isInitialPassword: false, uid: '');
 }
 
 class AuthCheckWrapper extends StatefulWidget {
@@ -68,47 +70,66 @@ class AuthCheckWrapper extends StatefulWidget {
 class _AuthCheckWrapperState extends State<AuthCheckWrapper> {
   UserStatus? _status;
   bool _loading = true;
+  StreamSubscription<User?>? _authSubscription;
 
   @override
   void initState() {
     super.initState();
-    _checkAuth();
+    _setupAuthListener();
   }
 
-  Future<void> _checkAuth() async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user != null) {
-      final status = await _checkUserStatus(user.uid);
-      if (mounted) setState(() { _status = status; _loading = false; });
-    } else {
-      if (mounted) setState(() { _status = null; _loading = false; });
-    }
-    
-    // Authの変更を監視
-    FirebaseAuth.instance.authStateChanges().listen((user) async {
+  @override
+  void dispose() {
+    _authSubscription?.cancel();
+    super.dispose();
+  }
+
+  void _setupAuthListener() {
+    _authSubscription = FirebaseAuth.instance.authStateChanges().listen((user) async {
+      debugPrint("🔄 Auth state changed: ${user?.uid}");
+      
+      if (!mounted) return;
+      setState(() => _loading = true);
+      
       if (user != null) {
         final status = await _checkUserStatus(user.uid);
-        if (mounted) setState(() { _status = status; });
+        debugPrint("📋 New status for ${user.uid}: ${status.type}");
+        if (mounted) {
+          setState(() {
+            _status = status;
+            _loading = false;
+          });
+        }
       } else {
-        if (mounted) setState(() { _status = null; });
+        debugPrint("🚪 User logged out - clearing status");
+        if (mounted) {
+          setState(() {
+            _status = null;
+            _loading = false;
+          });
+        }
       }
     });
   }
 
   Future<UserStatus> _checkUserStatus(String uid) async {
+    debugPrint("🔍 Checking user status for uid: $uid");
     try {
       final staffSnap = await FirebaseFirestore.instance
           .collection('staffs').where('uid', isEqualTo: uid).limit(1).get();
       if (staffSnap.docs.isNotEmpty) {
+        debugPrint("✅ Found in staffs collection");
         final data = staffSnap.docs.first.data();
-        return UserStatus(type: UserType.staff, isInitialPassword: data['isInitialPassword'] == true);
+        return UserStatus(type: UserType.staff, isInitialPassword: data['isInitialPassword'] == true, uid: uid);
       }
       final familySnap = await FirebaseFirestore.instance
           .collection('families').where('uid', isEqualTo: uid).limit(1).get();
       if (familySnap.docs.isNotEmpty) {
+        debugPrint("✅ Found in families collection");
         final data = familySnap.docs.first.data();
-        return UserStatus(type: UserType.parent, isInitialPassword: data['isInitialPassword'] == true);
+        return UserStatus(type: UserType.parent, isInitialPassword: data['isInitialPassword'] == true, uid: uid);
       }
+      debugPrint("❌ User not found in any collection");
       return UserStatus.unknown;
     } catch (e) {
       debugPrint('Error: $e');
@@ -118,12 +139,22 @@ class _AuthCheckWrapperState extends State<AuthCheckWrapper> {
 
   @override
   Widget build(BuildContext context) {
+    debugPrint("🏗️ AuthCheckWrapper build: loading=$_loading, type=${_status?.type}, uid=${_status?.uid}");
+    
     if (_loading) return const _LoadingScreen();
     if (_status == null) return const LoginScreen();
     if (_status!.type == UserType.unknown) return const _ForceLogout();
     if (_status!.isInitialPassword) return const ForceChangePasswordScreen();
-    if (_status!.type == UserType.staff) return const AdminShell();
-    if (_status!.type == UserType.parent) return const ParentMainScreen();
+    
+    // 重要: KeyにユーザーUIDを使用して、ユーザーが変わったときにウィジェットを完全に再作成
+    if (_status!.type == UserType.staff) {
+      debugPrint("🔵 Returning AdminShell for uid: ${_status!.uid}");
+      return AdminShell(key: ValueKey('admin_${_status!.uid}'));
+    }
+    if (_status!.type == UserType.parent) {
+      debugPrint("🟢 Returning ParentMainScreen for uid: ${_status!.uid}");
+      return ParentMainScreen(key: ValueKey('parent_${_status!.uid}'));
+    }
     return const LoginScreen();
   }
 }
@@ -179,6 +210,12 @@ class _AdminShellState extends State<AdminShell> {
     NotificationScreen(), EventScreen(), AdminScreen(),
   ];
 
+  @override
+  void initState() {
+    super.initState();
+    debugPrint("🔵 AdminShell initState called");
+  }
+
   Future<void> _logout() async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -196,6 +233,7 @@ class _AdminShellState extends State<AdminShell> {
 
   @override
   Widget build(BuildContext context) {
+    debugPrint("🔵 AdminShell build called");
     final isWebLayout = MediaQuery.of(context).size.width >= 600;
     return Scaffold(
       body: Row(

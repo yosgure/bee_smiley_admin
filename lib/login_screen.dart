@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -27,15 +26,11 @@ class _LoginScreenState extends State<LoginScreen> {
     try {
       final email = _loginIdController.text.trim() + _fixedDomain;
 
-      final credential = await FirebaseAuth.instance.signInWithEmailAndPassword(
+      await FirebaseAuth.instance.signInWithEmailAndPassword(
         email: email,
         password: _passwordController.text.trim(),
       );
-
-      // ★ログイン成功後、ユーザー種別を判定して振り分け
-      if (credential.user != null && mounted) {
-        await _navigateBasedOnUserType(credential.user!.uid);
-      }
+      // ログイン成功後、AuthCheckWrapperがauthStateChangesを検知して自動的に適切な画面に遷移する
     } on FirebaseAuthException catch (e) {
       String message;
       if (e.code == 'user-not-found' || e.code == 'wrong-password' || e.code == 'invalid-credential') {
@@ -55,56 +50,6 @@ class _LoginScreenState extends State<LoginScreen> {
       if (mounted) {
         setState(() {
           _isLoading = false;
-        });
-      }
-    }
-  }
-
-  /// ユーザー種別を判定して適切な画面に遷移
-  Future<void> _navigateBasedOnUserType(String uid) async {
-    try {
-      // staffsコレクションをチェック
-      final staffQuery = await FirebaseFirestore.instance
-          .collection('staffs')
-          .where('uid', isEqualTo: uid)
-          .limit(1)
-          .get();
-
-      if (staffQuery.docs.isNotEmpty) {
-        // スタッフ/管理者 → 管理者画面へ
-        if (mounted) {
-          Navigator.pushReplacementNamed(context, '/admin');
-        }
-        return;
-      }
-
-      // familiesコレクションをチェック
-      final familyQuery = await FirebaseFirestore.instance
-          .collection('families')
-          .where('uid', isEqualTo: uid)
-          .limit(1)
-          .get();
-
-      if (familyQuery.docs.isNotEmpty) {
-        // 保護者 → 保護者画面へ
-        if (mounted) {
-          Navigator.pushReplacementNamed(context, '/parent');
-        }
-        return;
-      }
-
-      // どちらにも存在しない場合
-      if (mounted) {
-        setState(() {
-          _errorMessage = 'アカウント情報が見つかりません。管理者にお問い合わせください。';
-        });
-        // ログアウト
-        await FirebaseAuth.instance.signOut();
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _errorMessage = 'ユーザー情報の取得に失敗しました。';
         });
       }
     }
