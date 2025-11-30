@@ -55,7 +55,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
           _isLocaleInitialized = true;
           _isLoadingStaffInfo = false;
           if (_headerText.isEmpty) {
-             _headerText = DateFormat('yyyy年 M月', 'ja').format(DateTime.now());
+             _headerText = DateFormat('M月', 'ja').format(DateTime.now());
           }
         });
       }
@@ -72,7 +72,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
     if (mounted) {
       setState(() {
         _isLocaleInitialized = true;
-        _headerText = DateFormat('yyyy年 M月', 'ja').format(DateTime.now());
+        _headerText = DateFormat('M月', 'ja').format(DateTime.now());
       });
     }
 
@@ -140,7 +140,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
   void _updateHeaderText(DateTime date) {
     if (!mounted) return;
     setState(() {
-      _headerText = DateFormat('yyyy年 M月', 'ja').format(date);
+      _headerText = DateFormat('M月', 'ja').format(date);
     });
   }
 
@@ -202,75 +202,107 @@ class _CalendarScreenState extends State<CalendarScreen> {
               ),
             ),
       appBar: AppBar(
+        backgroundColor: Colors.white,
+        elevation: 0,
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1),
-          child: Container(color: Colors.grey.shade300, height: 1),
+          child: Container(
+            height: 1,
+            decoration: BoxDecoration(
+              color: Colors.grey.shade200,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.08),
+                  blurRadius: 4,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+          ),
         ),
         titleSpacing: showSidebar ? 24 : 0, 
-        title: Row(
-          children: [
-            // スマホ用: Googleカレンダー風の今日ボタン
-            if (!showSidebar)
-              GestureDetector(
+        title: showSidebar 
+          ? Row(
+              children: [
+                OutlinedButton(
+                  onPressed: _goToToday,
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                    side: BorderSide(color: Colors.grey.shade300),
+                    shape: RoundedRectangleBorder(borderRadius: AppStyles.radiusSmall),
+                    foregroundColor: AppColors.textMain,
+                  ),
+                  child: const Text('今日'),
+                ),
+                const SizedBox(width: 20),
+                IconButton(
+                  icon: const Icon(Icons.chevron_left, color: AppColors.textSub),
+                  onPressed: () => _controller.backward!(),
+                  splashRadius: 20,
+                ),
+                IconButton(
+                  icon: const Icon(Icons.chevron_right, color: AppColors.textSub),
+                  onPressed: () => _controller.forward!(),
+                  splashRadius: 20,
+                ),
+                const SizedBox(width: 16),
+                Text(
+                  _headerText,
+                  style: const TextStyle(
+                    color: AppColors.textMain, fontSize: 22, fontWeight: FontWeight.w400,
+                  ),
+                ),
+              ],
+            )
+          : Row(
+              children: [
+                Text(
+                  _headerText,
+                  style: const TextStyle(
+                    color: AppColors.textMain, fontSize: 20, fontWeight: FontWeight.w400,
+                  ),
+                ),
+                const SizedBox(width: 16),
+                _buildSegmentedControl(),
+              ],
+            ),
+        actions: [
+          // スマホ用: 今日ボタン（日付アイコン風）
+          if (!showSidebar)
+            Padding(
+              padding: const EdgeInsets.only(right: 16),
+              child: GestureDetector(
                 onTap: _goToToday,
                 child: Container(
-                  width: 40,
-                  height: 40,
+                  width: 28,
+                  height: 28,
                   decoration: BoxDecoration(
-                    border: Border.all(color: Colors.grey.shade300),
-                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.grey.shade400),
+                    borderRadius: BorderRadius.circular(4),
                   ),
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Text(
-                        '今日',
-                        style: TextStyle(fontSize: 10, color: Colors.grey.shade600),
+                        '${DateTime.now().day}',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.textMain,
+                          height: 1.0,
+                        ),
                       ),
                     ],
                   ),
                 ),
               ),
-            // PC用: 従来の今日ボタン
-            if (showSidebar)
-              OutlinedButton(
-                onPressed: _goToToday,
-                style: OutlinedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                  side: BorderSide(color: Colors.grey.shade300),
-                  shape: RoundedRectangleBorder(borderRadius: AppStyles.radiusSmall),
-                  foregroundColor: AppColors.textMain,
-                ),
-                child: const Text('今日'),
-              ),
-            // PC表示の時のみ矢印ボタンを表示
-            if (showSidebar) ...[
-              const SizedBox(width: 20),
-              IconButton(
-                icon: const Icon(Icons.chevron_left, color: AppColors.textSub),
-                onPressed: () => _controller.backward!(),
-                splashRadius: 20,
-              ),
-              IconButton(
-                icon: const Icon(Icons.chevron_right, color: AppColors.textSub),
-                onPressed: () => _controller.forward!(),
-                splashRadius: 20,
-              ),
-            ],
-            const SizedBox(width: 16),
-            Text(
-              _headerText,
-              style: const TextStyle(
-                color: AppColors.textMain, fontSize: 22, fontWeight: FontWeight.w400,
-              ),
             ),
-          ],
-        ),
-        actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 24),
-            child: _buildViewSwitcher(),
-          ),
+          // PC用: 従来のビュー切り替え
+          if (showSidebar)
+            Padding(
+              padding: const EdgeInsets.only(right: 24),
+              child: _buildViewSwitcher(),
+            ),
         ],
       ),
       body: StreamBuilder<QuerySnapshot>(
@@ -378,12 +410,14 @@ class _CalendarScreenState extends State<CalendarScreen> {
                     ),
                   
                   Expanded(
-                    child: SfCalendarTheme(
-                      data: SfCalendarThemeData(
-                        selectionBorderColor: Colors.transparent,
-                        todayHighlightColor: AppColors.primary,
-                      ),
-                      child: SfCalendar(
+                    child: Stack(
+                      children: [
+                        SfCalendarTheme(
+                          data: SfCalendarThemeData(
+                            selectionBorderColor: Colors.transparent,
+                            todayHighlightColor: AppColors.primary,
+                          ),
+                          child: SfCalendar(
                         view: _calendarView,
                         controller: _controller,
                         firstDayOfWeek: 1,
@@ -516,6 +550,27 @@ class _CalendarScreenState extends State<CalendarScreen> {
                           dayFormat: 'EEE',
                         ),
                       ),
+                    ),
+                        // viewHeader下の影
+                        Positioned(
+                          top: 70,
+                          left: 0,
+                          right: 0,
+                          child: Container(
+                            height: 4,
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                begin: Alignment.topCenter,
+                                end: Alignment.bottomCenter,
+                                colors: [
+                                  Colors.black.withOpacity(0.08),
+                                  Colors.transparent,
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ],
@@ -656,6 +711,53 @@ class _CalendarScreenState extends State<CalendarScreen> {
           ),
         ),
       ],
+    );
+  }
+
+  // スマホ用セグメントコントロール（中央配置・スライド式）
+  Widget _buildSegmentedControl() {
+    final views = [CalendarView.day, CalendarView.week, CalendarView.month];
+    final labels = ['日', '週', '月'];
+    final selectedIndex = views.indexOf(_calendarView);
+    
+    return Container(
+      height: 32,
+      decoration: BoxDecoration(
+        color: Colors.grey.shade200,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: List.generate(3, (index) {
+          final isSelected = selectedIndex == index;
+          return GestureDetector(
+            onTap: () => setState(() {
+              _calendarView = views[index];
+              _controller.view = views[index];
+            }),
+            child: Container(
+              width: 48,
+              height: 32,
+              decoration: BoxDecoration(
+                color: isSelected ? Colors.white : Colors.transparent,
+                borderRadius: BorderRadius.circular(8),
+                border: index < 2 ? Border(
+                  right: BorderSide(color: Colors.grey.shade300, width: 1),
+                ) : null,
+              ),
+              alignment: Alignment.center,
+              child: Text(
+                labels[index],
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                  color: isSelected ? AppColors.textMain : AppColors.textSub,
+                ),
+              ),
+            ),
+          );
+        }),
+      ),
     );
   }
 
@@ -946,7 +1048,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
                     await doc.reference.delete();
                     if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('タスクを完了しました')));
                   },
-                  child: const Text('完了とする', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.primary)),
+                  child: const Text('完了とする', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.primary)),
                 ),
               ],
             );
