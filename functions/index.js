@@ -1,344 +1,281 @@
-const { onCall, HttpsError } = require('firebase-functions/v2/https');
-const admin = require('firebase-admin');
+// Firebase Cloud Functions for Push Notifications (v2)
 
-admin.initializeApp();
+const { onDocumentCreated, onDocumentUpdated } = require("firebase-functions/v2/firestore");
+const { initializeApp } = require("firebase-admin/app");
+const { getFirestore } = require("firebase-admin/firestore");
+const { getMessaging } = require("firebase-admin/messaging");
 
-const FIXED_DOMAIN = '@bee-smiley.com';
-const INITIAL_PASSWORD = 'pass1234';
+initializeApp();
 
-/**
- * 保護者アカウントを作成する
- */
-exports.createParentAccount = onCall({ region: 'asia-northeast1' }, async (request) => {
-  // 認証チェック
-  if (!request.auth) {
-    throw new HttpsError('unauthenticated', '認証が必要です');
-  }
+const db = getFirestore();
+const messaging = getMessaging();
 
-  // 呼び出し元がスタッフかどうか確認
-  const callerUid = request.auth.uid;
-  const staffDoc = await admin.firestore()
-    .collection('staffs')
-    .where('uid', '==', callerUid)
-    .limit(1)
-    .get();
+// ==========================================
+// チャットメッセージ送信時の通知
+// ==========================================
+exports.onChatMessageCreated = onDocumentCreated(
+  {
+    document: "chats/{chatId}/messages/{messageId}",
+    region: "asia-northeast1",
+  },
+  async (event) => {
+    const message = event.data.data();
+    const chatId = event.params.chatId;
 
-  if (staffDoc.empty) {
-    throw new HttpsError('permission-denied', '管理者権限が必要です');
-  }
+    try {
+      const chatDoc = await db.collection("chats").doc(chatId).get();
+      if (!chatDoc.exists) return null;
 
-  const { loginId, familyData } = request.data;
+      const chatData = chatDoc.data();
+      const senderId = message.senderId;
+      const senderName = message.senderName || "不明";
 
-  if (!loginId || loginId.trim() === '') {
-    throw new HttpsError('invalid-argument', 'ログインIDが必要です');
-  }
+      const participants = chatData.participants || [];
+      const recipientIds = participants.filter((id) => id !== senderId);
 
-  const email = loginId.trim() + FIXED_DOMAIN;
+      if (recipientIds.length === 0) return null;
 
-  try {
-    // Firebase Authでユーザー作成
-    const userRecord = await admin.auth().createUser({
-      email: email,
-      password: INITIAL_PASSWORD,
-      emailVerified: false,
-    });
+      const tokens = [];
 
-    // Firestoreに保護者データを保存
-    const saveData = {
-      ...familyData,
-      loginId: loginId.trim(),
-      uid: userRecord.uid,
-      isInitialPassword: true,
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
-    };
+      for (const recipientId of recipientIds) {
+        const staffSnap = await db
+          .collection("staffs")
+          .where("uid", "==", recipientId)
+          .limit(1)
+          .get();
 
-    const docRef = await admin.firestore().collection('families').add(saveData);
+        if (!staffSnap.empty) {
+          const staffData = staffSnap.docs[0].data();
+          if (staffData.notifyChat !== false && staffData.fcmTokens) {
+            tokens.push(...staffData.fcmTokens);
+          }
+          continue;
+        }
 
-    return {
-      success: true,
-      uid: userRecord.uid,
-      docId: docRef.id,
-      message: '保護者アカウントを作成しました',
-    };
+        const familySnap = await db
+          .collection("families")
+          .where("uid", "==", recipientId)
+          .limit(1)
+          .get();
 
-  } catch (error) {
-    console.error('Error creating parent account:', error);
-
-    if (error.code === 'auth/email-already-exists') {
-      throw new HttpsError('already-exists', 'このログインIDは既に使用されています');
-    }
-
-    throw new HttpsError('internal', error.message);
-  }
-});
-
-/**
- * パスワードを初期化する
- */
-exports.resetParentPassword = onCall({ region: 'asia-northeast1' }, async (request) => {
-  // 認証チェック
-  if (!request.auth) {
-    throw new HttpsError('unauthenticated', '認証が必要です');
-  }
-
-  // 呼び出し元がスタッフかどうか確認
-  const callerUid = request.auth.uid;
-  const staffDoc = await admin.firestore()
-    .collection('staffs')
-    .where('uid', '==', callerUid)
-    .limit(1)
-    .get();
-
-  if (staffDoc.empty) {
-    throw new HttpsError('permission-denied', '管理者権限が必要です');
-  }
-
-  const { targetUid, familyDocId } = request.data;
-
-  if (!targetUid) {
-    throw new HttpsError('invalid-argument', '対象ユーザーIDが必要です');
-  }
-
-  try {
-    // パスワードをリセット
-    await admin.auth().updateUser(targetUid, {
-      password: INITIAL_PASSWORD,
-    });
-
-    // Firestoreのフラグを更新
-    if (familyDocId) {
-      await admin.firestore().collection('families').doc(familyDocId).update({
-        isInitialPassword: true,
-      });
-    }
-
-    return {
-      success: true,
-      message: 'パスワードを初期化しました',
-    };
-
-  } catch (error) {
-    console.error('Error resetting password:', error);
-    throw new HttpsError('internal', error.message);
-  }
-});
-
-/**
- * 保護者アカウントを削除する
- */
-exports.deleteParentAccount = onCall({ region: 'asia-northeast1' }, async (request) => {
-  // 認証チェック
-  if (!request.auth) {
-    throw new HttpsError('unauthenticated', '認証が必要です');
-  }
-
-  // 呼び出し元がスタッフかどうか確認
-  const callerUid = request.auth.uid;
-  const staffDoc = await admin.firestore()
-    .collection('staffs')
-    .where('uid', '==', callerUid)
-    .limit(1)
-    .get();
-
-  if (staffDoc.empty) {
-    throw new HttpsError('permission-denied', '管理者権限が必要です');
-  }
-
-  const { targetUid, familyDocId } = request.data;
-
-  try {
-    // Firebase Authからユーザー削除
-    if (targetUid) {
-      try {
-        await admin.auth().deleteUser(targetUid);
-      } catch (authError) {
-        // ユーザーが存在しない場合は無視
-        if (authError.code !== 'auth/user-not-found') {
-          throw authError;
+        if (!familySnap.empty) {
+          const familyData = familySnap.docs[0].data();
+          if (familyData.notifyChat !== false && familyData.fcmTokens) {
+            tokens.push(...familyData.fcmTokens);
+          }
         }
       }
-    }
 
-    // Firestoreから削除
-    if (familyDocId) {
-      await admin.firestore().collection('families').doc(familyDocId).delete();
-    }
+      if (tokens.length === 0) return null;
 
-    return {
-      success: true,
-      message: 'アカウントを削除しました',
-    };
+      const payload = {
+        notification: {
+          title: `${senderName}`,
+          body: message.type === "image" ? "画像を送信しました" : message.text,
+        },
+        data: {
+          type: "chat",
+          chatId: chatId,
+        },
+      };
 
-  } catch (error) {
-    console.error('Error deleting account:', error);
-    throw new HttpsError('internal', error.message);
-  }
-});
-
-/**
- * スタッフアカウントを作成する
- */
-exports.createStaffAccount = onCall({ region: 'asia-northeast1' }, async (request) => {
-  // 認証チェック
-  if (!request.auth) {
-    throw new HttpsError('unauthenticated', '認証が必要です');
-  }
-
-  // 呼び出し元がスタッフかどうか確認
-  const callerUid = request.auth.uid;
-  const staffDoc = await admin.firestore()
-    .collection('staffs')
-    .where('uid', '==', callerUid)
-    .limit(1)
-    .get();
-
-  if (staffDoc.empty) {
-    throw new HttpsError('permission-denied', '管理者権限が必要です');
-  }
-
-  const { loginId, staffData } = request.data;
-
-  if (!loginId || loginId.trim() === '') {
-    throw new HttpsError('invalid-argument', 'ログインIDが必要です');
-  }
-
-  const email = loginId.trim() + FIXED_DOMAIN;
-
-  try {
-    // Firebase Authでユーザー作成
-    const userRecord = await admin.auth().createUser({
-      email: email,
-      password: INITIAL_PASSWORD,
-      emailVerified: false,
-    });
-
-    // Firestoreにスタッフデータを保存
-    const saveData = {
-      ...staffData,
-      loginId: loginId.trim(),
-      uid: userRecord.uid,
-      isInitialPassword: true,
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
-    };
-
-    const docRef = await admin.firestore().collection('staffs').add(saveData);
-
-    return {
-      success: true,
-      uid: userRecord.uid,
-      docId: docRef.id,
-      message: 'スタッフアカウントを作成しました',
-    };
-
-  } catch (error) {
-    console.error('Error creating staff account:', error);
-
-    if (error.code === 'auth/email-already-exists') {
-      throw new HttpsError('already-exists', 'このログインIDは既に使用されています');
-    }
-
-    throw new HttpsError('internal', error.message);
-  }
-});
-
-/**
- * スタッフのパスワードを初期化する
- */
-exports.resetStaffPassword = onCall({ region: 'asia-northeast1' }, async (request) => {
-  // 認証チェック
-  if (!request.auth) {
-    throw new HttpsError('unauthenticated', '認証が必要です');
-  }
-
-  // 呼び出し元がスタッフかどうか確認
-  const callerUid = request.auth.uid;
-  const staffDoc = await admin.firestore()
-    .collection('staffs')
-    .where('uid', '==', callerUid)
-    .limit(1)
-    .get();
-
-  if (staffDoc.empty) {
-    throw new HttpsError('permission-denied', '管理者権限が必要です');
-  }
-
-  const { targetUid, staffDocId } = request.data;
-
-  if (!targetUid) {
-    throw new HttpsError('invalid-argument', '対象ユーザーIDが必要です');
-  }
-
-  try {
-    // パスワードをリセット
-    await admin.auth().updateUser(targetUid, {
-      password: INITIAL_PASSWORD,
-    });
-
-    // Firestoreのフラグを更新
-    if (staffDocId) {
-      await admin.firestore().collection('staffs').doc(staffDocId).update({
-        isInitialPassword: true,
+      const response = await messaging.sendEachForMulticast({
+        tokens: tokens,
+        ...payload,
       });
+
+      console.log(`チャット通知送信: ${response.successCount}件成功`);
+      return null;
+    } catch (error) {
+      console.error("チャット通知エラー:", error);
+      return null;
     }
-
-    return {
-      success: true,
-      message: 'パスワードを初期化しました',
-    };
-
-  } catch (error) {
-    console.error('Error resetting password:', error);
-    throw new HttpsError('internal', error.message);
   }
-});
+);
 
-/**
- * スタッフアカウントを削除する
- */
-exports.deleteStaffAccount = onCall({ region: 'asia-northeast1' }, async (request) => {
-  // 認証チェック
-  if (!request.auth) {
-    throw new HttpsError('unauthenticated', '認証が必要です');
-  }
+// ==========================================
+// お知らせ作成時の通知
+// ==========================================
+exports.onNotificationCreated = onDocumentCreated(
+  {
+    document: "notifications/{notificationId}",
+    region: "asia-northeast1",
+  },
+  async (event) => {
+    const notification = event.data.data();
 
-  // 呼び出し元がスタッフかどうか確認
-  const callerUid = request.auth.uid;
-  const staffDoc = await admin.firestore()
-    .collection('staffs')
-    .where('uid', '==', callerUid)
-    .limit(1)
-    .get();
+    try {
+      const tokens = [];
+      const target = notification.target || "all";
+      const targetClassrooms = notification.targetClassrooms || [];
 
-  if (staffDoc.empty) {
-    throw new HttpsError('permission-denied', '管理者権限が必要です');
-  }
+      const familiesSnap = await db.collection("families").get();
 
-  const { targetUid, staffDocId } = request.data;
+      for (const familyDoc of familiesSnap.docs) {
+        const familyData = familyDoc.data();
 
-  try {
-    // Firebase Authからユーザー削除
-    if (targetUid) {
-      try {
-        await admin.auth().deleteUser(targetUid);
-      } catch (authError) {
-        if (authError.code !== 'auth/user-not-found') {
-          throw authError;
+        if (familyData.notifyAnnouncement === false) continue;
+
+        if (target === "specific" && targetClassrooms.length > 0) {
+          const children = familyData.children || [];
+          const isTarget = children.some((child) =>
+            targetClassrooms.includes(child.classroom)
+          );
+          if (!isTarget) continue;
+        }
+
+        if (familyData.fcmTokens) {
+          tokens.push(...familyData.fcmTokens);
         }
       }
+
+      if (tokens.length === 0) return null;
+
+      const payload = {
+        notification: {
+          title: notification.title || "お知らせ",
+          body: notification.body || "",
+        },
+        data: {
+          type: "announcement",
+          notificationId: event.params.notificationId,
+        },
+      };
+
+      const response = await messaging.sendEachForMulticast({
+        tokens: tokens,
+        ...payload,
+      });
+
+      console.log(`お知らせ通知送信: ${response.successCount}件成功`);
+      return null;
+    } catch (error) {
+      console.error("お知らせ通知エラー:", error);
+      return null;
     }
-
-    // Firestoreから削除
-    if (staffDocId) {
-      await admin.firestore().collection('staffs').doc(staffDocId).delete();
-    }
-
-    return {
-      success: true,
-      message: 'アカウントを削除しました',
-    };
-
-  } catch (error) {
-    console.error('Error deleting account:', error);
-    throw new HttpsError('internal', error.message);
   }
-});
+);
+
+// ==========================================
+// イベント作成時の通知
+// ==========================================
+exports.onEventCreated = onDocumentCreated(
+  {
+    document: "events/{eventId}",
+    region: "asia-northeast1",
+  },
+  async (event) => {
+    const eventData = event.data.data();
+
+    if (eventData.isPublished !== true) return null;
+
+    try {
+      const tokens = [];
+
+      const familiesSnap = await db.collection("families").get();
+
+      for (const familyDoc of familiesSnap.docs) {
+        const familyData = familyDoc.data();
+
+        if (familyData.notifyEvent === false) continue;
+
+        if (familyData.fcmTokens) {
+          tokens.push(...familyData.fcmTokens);
+        }
+      }
+
+      if (tokens.length === 0) return null;
+
+      const payload = {
+        notification: {
+          title: "新しいイベント",
+          body: eventData.title || "新しいイベントが登録されました",
+        },
+        data: {
+          type: "event",
+          eventId: event.params.eventId,
+        },
+      };
+
+      const response = await messaging.sendEachForMulticast({
+        tokens: tokens,
+        ...payload,
+      });
+
+      console.log(`イベント通知送信: ${response.successCount}件成功`);
+      return null;
+    } catch (error) {
+      console.error("イベント通知エラー:", error);
+      return null;
+    }
+  }
+);
+
+// ==========================================
+// アセスメント公開時の通知
+// ==========================================
+exports.onAssessmentPublished = onDocumentUpdated(
+  {
+    document: "assessments/{assessmentId}",
+    region: "asia-northeast1",
+  },
+  async (event) => {
+    const before = event.data.before.data();
+    const after = event.data.after.data();
+
+    if (before.isPublished === true || after.isPublished !== true) {
+      return null;
+    }
+
+    try {
+      const childId = after.childId;
+      if (!childId) return null;
+
+      const familiesSnap = await db.collection("families").get();
+      const tokens = [];
+
+      for (const familyDoc of familiesSnap.docs) {
+        const familyData = familyDoc.data();
+
+        if (familyData.notifyAssessment === false) continue;
+
+        const children = familyData.children || [];
+        const hasChild = children.some(
+          (child) =>
+            child.id === childId || child.firstName === after.childFirstName
+        );
+
+        if (!hasChild) continue;
+
+        if (familyData.fcmTokens) {
+          tokens.push(...familyData.fcmTokens);
+        }
+      }
+
+      if (tokens.length === 0) return null;
+
+      const childName = after.childLastName + " " + after.childFirstName;
+      const payload = {
+        notification: {
+          title: "アセスメントが公開されました",
+          body: `${childName}さんのアセスメントが公開されました`,
+        },
+        data: {
+          type: "assessment",
+          assessmentId: event.params.assessmentId,
+        },
+      };
+
+      const response = await messaging.sendEachForMulticast({
+        tokens: tokens,
+        ...payload,
+      });
+
+      console.log(`アセスメント通知送信: ${response.successCount}件成功`);
+      return null;
+    } catch (error) {
+      console.error("アセスメント通知エラー:", error);
+      return null;
+    }
+  }
+);

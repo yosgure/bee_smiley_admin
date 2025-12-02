@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:image/image.dart' as img;
 import 'app_theme.dart';
 
 class ParentSettingsScreen extends StatefulWidget {
@@ -41,6 +42,37 @@ class _ParentSettingsScreenState extends State<ParentSettingsScreen> {
     final lastName = widget.familyData!['lastName'] ?? '';
     final firstName = _currentChild!['firstName'] ?? '';
     return '$lastName $firstName';
+  }
+
+  // プロフィール写真用の圧縮（長辺300px、目標100KB）
+  Future<Uint8List> _compressProfileImage(Uint8List bytes) async {
+    final original = img.decodeImage(bytes);
+    if (original == null) return bytes;
+
+    const int targetSize = 100 * 1024; // 100KB
+    const int maxDimension = 300; // 長辺300px
+    
+    // リサイズ
+    img.Image resized;
+    if (original.width > original.height) {
+      resized = original.width > maxDimension 
+          ? img.copyResize(original, width: maxDimension)
+          : original;
+    } else {
+      resized = original.height > maxDimension 
+          ? img.copyResize(original, height: maxDimension)
+          : original;
+    }
+
+    // 品質を下げながら圧縮
+    for (int quality = 85; quality >= 40; quality -= 10) {
+      final compressed = img.encodeJpg(resized, quality: quality);
+      if (compressed.length <= targetSize) {
+        return Uint8List.fromList(compressed);
+      }
+    }
+
+    return Uint8List.fromList(img.encodeJpg(resized, quality: 40));
   }
 
   @override
@@ -293,21 +325,25 @@ class _ParentSettingsScreenState extends State<ParentSettingsScreen> {
 
   Future<void> _pickAndUploadPhoto() async {
     final picker = ImagePicker();
-    final picked = await picker.pickImage(source: ImageSource.gallery, maxWidth: 512, maxHeight: 512);
+    final picked = await picker.pickImage(source: ImageSource.gallery);
     if (picked == null) return;
 
     setState(() => _isUploading = true);
 
     try {
       final bytes = await picked.readAsBytes();
+      
+      // 画像を圧縮（長辺300px、目標100KB）
+      final compressed = await _compressProfileImage(bytes);
+      
       final uid = widget.familyData?['uid'];
       final firstName = _currentChild?['firstName'];
       if (uid == null || firstName == null) throw Exception('データが不足しています');
 
       // Firebase Storageにアップロード
-      final fileName = '${uid}_$firstName.jpg';
+      final fileName = '${uid}_${firstName}_${DateTime.now().millisecondsSinceEpoch}.jpg';
       final ref = FirebaseStorage.instance.ref().child('child_photos/$fileName');
-      await ref.putData(bytes, SettableMetadata(contentType: 'image/jpeg'));
+      await ref.putData(compressed, SettableMetadata(contentType: 'image/jpeg'));
       final photoUrl = await ref.getDownloadURL();
 
       // Firestoreを更新
@@ -341,14 +377,14 @@ class _ParentSettingsScreenState extends State<ParentSettingsScreen> {
 
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('写真を更新しました')),
+            const SnackBar(content: Text('写真を更新しました'), backgroundColor: Colors.green),
           );
         }
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('アップロードに失敗しました: $e')),
+          SnackBar(content: Text('アップロードに失敗しました: $e'), backgroundColor: Colors.red),
         );
       }
     } finally {

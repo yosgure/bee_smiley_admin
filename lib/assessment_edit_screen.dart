@@ -7,6 +7,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:intl/intl.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:image/image.dart' as img;
 import 'app_theme.dart';
 
 class AssessmentEditScreen extends StatefulWidget {
@@ -41,11 +42,12 @@ class _AssessmentEditScreenState extends State<AssessmentEditScreen> {
   final List<String> _durationOptions = ['0〜5分', '6〜10分', '11〜20分', '20分以上'];
 
   final TextEditingController _monthlySummaryController = TextEditingController();
-  final Set<String> _selectedSensitivePeriods = {}; 
+  final TextEditingController _sensitivePeriodCommentController = TextEditingController(); // ★追加
   List<Map<String, String?>> _monthlyEntries = [];
+  List<Map<String, String?>> _sensitivePeriodEntries = []; // ★追加: 敏感期エントリー
 
   Map<String, List<String>> _nonCognitiveSkillMap = {};
-  List<String> _sensitivePeriodMaster = [];
+  Map<String, List<String>> _sensitivePeriodMap = {}; // ★変更: マップ形式に
 
   @override
   void initState() {
@@ -109,9 +111,25 @@ class _AssessmentEditScreenState extends State<AssessmentEditScreen> {
           _nonCognitiveSkillMap[name] = skills;
         }
         
-        _sensitivePeriodMaster = spSnap.docs.map((d) => d['name'] as String).toList();
-        if (_sensitivePeriodMaster.isEmpty) {
-          _sensitivePeriodMaster = ['運動', '感覚', '言語', '秩序', '微小', '社会性'];
+        // ★変更: 敏感期もカテゴリ→詳細のマップ形式に
+        _sensitivePeriodMap = {};
+        for (var doc in spSnap.docs) {
+          final data = doc.data();
+          final name = data['name'] as String;
+          List<String> details = List<String>.from(data['details'] ?? []);
+          _sensitivePeriodMap[name] = details;
+        }
+        
+        // マスターが空の場合はデフォルト値
+        if (_sensitivePeriodMap.isEmpty) {
+          _sensitivePeriodMap = {
+            '運動の敏感期': ['歩く', '走る', '跳ぶ', '手を使う'],
+            '感覚の敏感期': ['視覚', '聴覚', '触覚', '味覚', '嗅覚'],
+            '言語の敏感期': ['話す', '書く', '読む'],
+            '秩序の敏感期': ['場所', '順番', '所有'],
+            '微小の敏感期': ['小さいもの', '細かいもの'],
+            '社会性の敏感期': ['礼儀', 'マナー', '協力'],
+          };
         }
       }
     } catch (e) {
@@ -124,6 +142,7 @@ class _AssessmentEditScreenState extends State<AssessmentEditScreen> {
       _addWeeklyEntry();
     } else {
       _addMonthlyEntry();
+      _addSensitivePeriodEntry(); // ★追加
     }
   }
 
@@ -148,8 +167,9 @@ class _AssessmentEditScreenState extends State<AssessmentEditScreen> {
       if (_weeklyEntries.isEmpty) _addWeeklyEntry();
     } else {
       _monthlySummaryController.text = data['summary'] ?? '';
-      _selectedSensitivePeriods.addAll(List<String>.from(data['sensitivePeriods'] ?? []));
+      _sensitivePeriodCommentController.text = data['sensitivePeriodComment'] ?? ''; // ★追加
       
+      // 非認知能力エントリー
       final savedEntries = List<Map<String, dynamic>>.from(data['monthlyEntries'] ?? []);
       for (var entry in savedEntries) {
         _monthlyEntries.add({
@@ -158,6 +178,16 @@ class _AssessmentEditScreenState extends State<AssessmentEditScreen> {
         });
       }
       if (_monthlyEntries.isEmpty) _addMonthlyEntry();
+      
+      // ★追加: 敏感期エントリー
+      final savedSpEntries = List<Map<String, dynamic>>.from(data['sensitivePeriodEntries'] ?? []);
+      for (var entry in savedSpEntries) {
+        _sensitivePeriodEntries.add({
+          'period': entry['period'] as String?,
+          'detail': entry['detail'] as String?,
+        });
+      }
+      if (_sensitivePeriodEntries.isEmpty) _addSensitivePeriodEntry();
     }
   }
 
@@ -205,19 +235,80 @@ class _AssessmentEditScreenState extends State<AssessmentEditScreen> {
     });
   }
 
+  // ★追加: 敏感期エントリーの追加
+  void _addSensitivePeriodEntry() {
+    setState(() {
+      _sensitivePeriodEntries.add({
+        'period': null,
+        'detail': null,
+      });
+    });
+  }
+
+  // ★追加: 敏感期エントリーの削除
+  void _removeSensitivePeriodEntry(int index) {
+    setState(() {
+      _sensitivePeriodEntries.removeAt(index);
+    });
+  }
+
+  // ★修正: 画像を圧縮してアップロード（目標: 約500KB以下）
   Future<String?> _uploadImage(XFile file) async {
     try {
-      final Uint8List fileBytes = await file.readAsBytes();
+      Uint8List fileBytes = await file.readAsBytes();
+      
+      // 画像を圧縮
+      fileBytes = await _compressImage(fileBytes);
+      
       final String fileName = '${DateTime.now().millisecondsSinceEpoch}_${file.name}';
       final ref = FirebaseStorage.instance.ref().child('assessment_photos/$fileName');
       await ref.putData(fileBytes, SettableMetadata(contentType: 'image/jpeg'));
       return await ref.getDownloadURL();
     } catch (e) {
+      debugPrint('Error uploading image: $e');
       return null;
     }
   }
 
-  Future<void> _save() async {
+  // ★追加: 画像圧縮処理（目標: 約500KB）
+  Future<Uint8List> _compressImage(Uint8List bytes) async {
+    try {
+      // 画像をデコード
+      img.Image? image = img.decodeImage(bytes);
+      if (image == null) return bytes;
+
+      // 長辺を1200pxに制限（これで大体500KB以下になる）
+      const int maxDimension = 1200;
+      if (image.width > maxDimension || image.height > maxDimension) {
+        if (image.width > image.height) {
+          image = img.copyResize(image, width: maxDimension);
+        } else {
+          image = img.copyResize(image, height: maxDimension);
+        }
+      }
+
+      // JPEG品質80%で圧縮
+      final compressed = img.encodeJpg(image, quality: 80);
+      
+      debugPrint('Image compressed: ${bytes.length} -> ${compressed.length} bytes');
+      return Uint8List.fromList(compressed);
+    } catch (e) {
+      debugPrint('Error compressing image: $e');
+      return bytes; // 圧縮に失敗した場合は元の画像を返す
+    }
+  }
+
+  // 下書き保存
+  Future<void> _saveDraft() async {
+    await _save(isPublished: false);
+  }
+
+  // 公開保存
+  Future<void> _publish() async {
+    await _save(isPublished: true);
+  }
+
+  Future<void> _save({required bool isPublished}) async {
     if (!_formKey.currentState!.validate()) return;
     
     setState(() => _isSaving = true);
@@ -237,6 +328,7 @@ class _AssessmentEditScreenState extends State<AssessmentEditScreen> {
         'staffId': user?.uid,
         'staffName': staffName, 
         'updatedAt': FieldValue.serverTimestamp(),
+        'isPublished': isPublished, // ★追加: 公開フラグ
       };
 
       if (widget.type == 'weekly') {
@@ -268,7 +360,8 @@ class _AssessmentEditScreenState extends State<AssessmentEditScreen> {
         }
       } else {
         data['summary'] = _monthlySummaryController.text;
-        data['sensitivePeriods'] = _selectedSensitivePeriods.toList();
+        data['sensitivePeriodComment'] = _sensitivePeriodCommentController.text;
+        data['sensitivePeriodEntries'] = _sensitivePeriodEntries;
         
         data['monthlyEntries'] = _monthlyEntries;
         
@@ -284,11 +377,19 @@ class _AssessmentEditScreenState extends State<AssessmentEditScreen> {
             .toSet()
             .toList();
 
+        final flatPeriods = _sensitivePeriodEntries
+            .map((e) => e['period'])
+            .where((p) => p != null)
+            .cast<String>()
+            .toSet()
+            .toList();
+
+        data['sensitivePeriods'] = flatPeriods;
         data['strengths'] = flatSkills;
         data['skills'] = [
           ...flatCategories,
           ...flatSkills,
-          ..._selectedSensitivePeriods
+          ...flatPeriods
         ];
       }
 
@@ -301,7 +402,9 @@ class _AssessmentEditScreenState extends State<AssessmentEditScreen> {
 
       if (mounted) Navigator.pop(context);
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('エラー: $e')));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('エラー: $e')));
+      }
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
@@ -323,6 +426,9 @@ class _AssessmentEditScreenState extends State<AssessmentEditScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // 既に公開済みかどうか
+    final isAlreadyPublished = widget.initialData?['isPublished'] == true;
+    
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
@@ -332,13 +438,33 @@ class _AssessmentEditScreenState extends State<AssessmentEditScreen> {
           onPressed: () => Navigator.pop(context),
         ),
         actions: [
+          // 公開済みでない場合は「下書き保存」ボタンを表示
+          if (!isAlreadyPublished)
+            Padding(
+              padding: const EdgeInsets.only(right: 8, top: 10, bottom: 10),
+              child: OutlinedButton(
+                onPressed: _isSaving ? null : _saveDraft,
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  side: const BorderSide(color: AppColors.primary),
+                ),
+                child: _isSaving 
+                  ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                  : const Text('下書き保存', style: TextStyle(fontSize: 13, color: AppColors.primary)),
+              ),
+            ),
+          // 公開ボタン（公開済みの場合は「更新」）
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            padding: const EdgeInsets.only(right: 12, top: 10, bottom: 10),
             child: ElevatedButton(
-              onPressed: _isSaving ? null : _save,
+              onPressed: _isSaving ? null : _publish,
+              style: ElevatedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                minimumSize: const Size(60, 36),
+              ),
               child: _isSaving 
-                ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: AppColors.onPrimary, strokeWidth: 2))
-                : const Text('保存'),
+                ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: AppColors.onPrimary, strokeWidth: 2))
+                : Text(isAlreadyPublished ? '更新' : '公開', style: const TextStyle(fontSize: 13)),
             ),
           ),
         ],
@@ -668,43 +794,76 @@ class _AssessmentEditScreenState extends State<AssessmentEditScreen> {
         ),
         const SizedBox(height: 24),
 
+        // ★変更: 敏感期を選択式に（詳細なし）
         const Padding(
           padding: EdgeInsets.only(left: 4, bottom: 8),
           child: Text('敏感期', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.textSub)),
         ),
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: AppColors.surface, 
-            borderRadius: AppStyles.radius,
-            border: AppStyles.borderLight,
+        
+        ListView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: _sensitivePeriodEntries.length,
+          itemBuilder: (context, index) {
+            final entry = _sensitivePeriodEntries[index];
+
+            return Container(
+              margin: const EdgeInsets.only(bottom: 8),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      decoration: BoxDecoration(
+                        color: AppColors.inputFill,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.grey.shade300),
+                      ),
+                      child: DropdownButtonHideUnderline(
+                        child: DropdownButton<String>(
+                          value: _sensitivePeriodMap.keys.contains(entry['period']) ? entry['period'] : null,
+                          hint: const Text('敏感期を選択'),
+                          isExpanded: true,
+                          items: _sensitivePeriodMap.keys.map((key) => DropdownMenuItem(value: key, child: Text(key))).toList(),
+                          onChanged: (val) {
+                            setState(() {
+                              entry['period'] = val;
+                            });
+                          },
+                        ),
+                      ),
+                    ),
+                  ),
+                  if (_sensitivePeriodEntries.length > 1)
+                    IconButton(
+                      icon: const Icon(Icons.close, size: 20, color: Colors.grey),
+                      onPressed: () => _removeSensitivePeriodEntry(index),
+                      padding: const EdgeInsets.only(left: 8),
+                      constraints: const BoxConstraints(),
+                    ),
+                ],
+              ),
+            );
+          },
+        ),
+        const SizedBox(height: 12),
+        
+        // 敏感期コメント欄
+        TextField(
+          controller: _sensitivePeriodCommentController,
+          maxLines: 3,
+          decoration: const InputDecoration(
+            hintText: '敏感期に関するコメントを入力...',
           ),
-          child: Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: _sensitivePeriodMaster.map((tag) {
-              final isSelected = _selectedSensitivePeriods.contains(tag);
-              return FilterChip(
-                label: Text(tag),
-                selected: isSelected,
-                onSelected: (val) {
-                  setState(() {
-                    if (val) {
-                      _selectedSensitivePeriods.add(tag);
-                    } else {
-                      _selectedSensitivePeriods.remove(tag);
-                    }
-                  });
-                },
-                selectedColor: AppColors.primary.withOpacity(0.2),
-                checkmarkColor: AppColors.primary,
-                labelStyle: TextStyle(
-                  color: isSelected ? AppColors.primary : Colors.black87,
-                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                ),
-              );
-            }).toList(),
+        ),
+        const SizedBox(height: 12),
+
+        // 項目を追加ボタン（コメント欄の下）
+        Center(
+          child: OutlinedButton.icon(
+            onPressed: _addSensitivePeriodEntry,
+            icon: const Icon(Icons.add),
+            label: const Text('項目を追加'),
           ),
         ),
         const SizedBox(height: 24),

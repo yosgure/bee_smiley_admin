@@ -6,7 +6,15 @@ import 'assessment_detail_screen.dart';
 import 'app_theme.dart';
 
 class AssessmentScreen extends StatefulWidget {
-  const AssessmentScreen({super.key});
+  // ★追加: カレンダーなど外部から生徒指定で開く場合に使用
+  final String? initialStudentId;
+  final String? initialStudentName;
+
+  const AssessmentScreen({
+    super.key,
+    this.initialStudentId,
+    this.initialStudentName,
+  });
 
   @override
   State<AssessmentScreen> createState() => _AssessmentScreenState();
@@ -24,9 +32,13 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
 
   int _currentTabIndex = 0;
 
+  // ★追加: 外部から生徒指定で開いた場合は教室選択を非表示にするフラグ
+  bool _isDirectAccess = false;
+
   @override
   void initState() {
     super.initState();
+    _isDirectAccess = widget.initialStudentId != null;
     _fetchData();
   }
 
@@ -71,10 +83,27 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
           _classrooms = classList;
           _allStudents = studentList;
           
-          if (_classrooms.isNotEmpty) {
-            _selectedClassroom = _classrooms.first;
+          // ★修正: 外部から生徒指定で開いた場合はその生徒を選択
+          if (_isDirectAccess && widget.initialStudentId != null) {
+            _selectedStudentId = widget.initialStudentId;
+            _selectedStudentName = widget.initialStudentName ?? '';
+            
+            // その生徒の教室を選択状態にする
+            final student = _allStudents.firstWhere(
+              (s) => s['id'] == widget.initialStudentId,
+              orElse: () => {},
+            );
+            if (student.isNotEmpty) {
+              _selectedClassroom = student['classroom'] as String?;
+              _selectedStudentName = student['name'] as String;
+            }
+            _filterStudentsKeepSelection();
+          } else {
+            if (_classrooms.isNotEmpty) {
+              _selectedClassroom = _classrooms.first;
+            }
+            _filterStudents();
           }
-          _filterStudents();
         });
       }
     } catch (e) {
@@ -98,6 +127,19 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
       } else {
         _selectedStudentId = null;
         _selectedStudentName = '';
+      }
+    });
+  }
+
+  // ★追加: 選択中の生徒を維持したままフィルタ
+  void _filterStudentsKeepSelection() {
+    setState(() {
+      if (_selectedClassroom == null) {
+        _filteredStudents = List.from(_allStudents);
+      } else {
+        _filteredStudents = _allStudents
+            .where((s) => s['classroom'] == _selectedClassroom)
+            .toList();
       }
     });
   }
@@ -179,10 +221,17 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
       child: Scaffold(
         backgroundColor: Colors.white,
         appBar: AppBar(
-          title: const Text('アセスメント'),
+          title: Text(_isDirectAccess ? _selectedStudentName : 'アセスメント'),
           centerTitle: true,
           backgroundColor: Colors.white,
           elevation: 0,
+          // ★修正: 外部から開いた場合は戻るボタンを表示
+          leading: _isDirectAccess 
+            ? IconButton(
+                icon: const Icon(Icons.arrow_back_ios, color: AppColors.textMain),
+                onPressed: () => Navigator.pop(context),
+              )
+            : null,
           bottom: TabBar(
             onTap: (index) => setState(() => _currentTabIndex = index),
             labelColor: AppColors.primary,
@@ -196,79 +245,80 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
         ),
         body: Column(
           children: [
-            // 上部フィルタエリア（中央寄せ・幅制限）
-            Container(
-              color: Colors.white,
-              padding: const EdgeInsets.symmetric(vertical: 16),
-              child: Center(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 500),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text('教室', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: AppColors.textSub)),
-                        const SizedBox(height: 4),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12),
-                          margin: const EdgeInsets.only(bottom: 12),
-                          decoration: BoxDecoration(
-                            color: AppColors.inputFill,
-                            borderRadius: AppStyles.radiusSmall,
-                          ),
-                          child: DropdownButtonHideUnderline(
-                            child: DropdownButton<String>(
-                              value: _selectedClassroom,
-                              isExpanded: true,
-                              hint: const Text('教室を選択'),
-                              items: _classrooms.map((c) {
-                                return DropdownMenuItem(value: c, child: Text(c));
-                              }).toList(),
-                              onChanged: (val) {
-                                setState(() {
-                                  _selectedClassroom = val;
-                                  _filterStudents();
-                                });
-                              },
+            // ★修正: 外部から生徒指定で開いた場合はフィルタエリアを非表示
+            if (!_isDirectAccess)
+              Container(
+                color: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                child: Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 500),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('教室', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: AppColors.textSub)),
+                          const SizedBox(height: 4),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                            margin: const EdgeInsets.only(bottom: 12),
+                            decoration: BoxDecoration(
+                              color: AppColors.inputFill,
+                              borderRadius: AppStyles.radiusSmall,
+                            ),
+                            child: DropdownButtonHideUnderline(
+                              child: DropdownButton<String>(
+                                value: _selectedClassroom,
+                                isExpanded: true,
+                                hint: const Text('教室を選択'),
+                                items: _classrooms.map((c) {
+                                  return DropdownMenuItem(value: c, child: Text(c));
+                                }).toList(),
+                                onChanged: (val) {
+                                  setState(() {
+                                    _selectedClassroom = val;
+                                    _filterStudents();
+                                  });
+                                },
+                              ),
                             ),
                           ),
-                        ),
 
-                        const Text('対象児童', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: AppColors.textSub)),
-                        const SizedBox(height: 4),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12),
-                          decoration: BoxDecoration(
-                            color: AppColors.inputFill,
-                            borderRadius: AppStyles.radiusSmall,
-                          ),
-                          child: DropdownButtonHideUnderline(
-                            child: DropdownButton<String>(
-                              value: _selectedStudentId,
-                              isExpanded: true,
-                              hint: const Text('児童を選択してください'),
-                              menuMaxHeight: 400,
-                              items: _buildStudentDropdownItems(),
-                              onChanged: (val) {
-                                if (val != null && val.startsWith('HEADER_')) return;
-                                final name = _filteredStudents.firstWhere((s) => s['id'] == val)['name'] as String;
-                                setState(() {
-                                  _selectedStudentId = val;
-                                  _selectedStudentName = name;
-                                });
-                              },
+                          const Text('対象児童', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: AppColors.textSub)),
+                          const SizedBox(height: 4),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                            decoration: BoxDecoration(
+                              color: AppColors.inputFill,
+                              borderRadius: AppStyles.radiusSmall,
+                            ),
+                            child: DropdownButtonHideUnderline(
+                              child: DropdownButton<String>(
+                                value: _selectedStudentId,
+                                isExpanded: true,
+                                hint: const Text('児童を選択してください'),
+                                menuMaxHeight: 400,
+                                items: _buildStudentDropdownItems(),
+                                onChanged: (val) {
+                                  if (val != null && val.startsWith('HEADER_')) return;
+                                  final name = _filteredStudents.firstWhere((s) => s['id'] == val)['name'] as String;
+                                  setState(() {
+                                    _selectedStudentId = val;
+                                    _selectedStudentName = name;
+                                  });
+                                },
+                              ),
                             ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
                 ),
               ),
-            ),
             
-            const Divider(height: 1),
+            if (!_isDirectAccess) const Divider(height: 1),
             
             // リスト本体（中央寄せ・幅制限）
             Expanded(
@@ -284,17 +334,15 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
             ),
           ],
         ),
-        floatingActionButton: FloatingActionButton(heroTag: null, 
+        floatingActionButton: FloatingActionButton.extended(
+          heroTag: null, 
           onPressed: _onAddPressed,
-          backgroundColor: AppColors.surface,
+          backgroundColor: AppColors.primary,
           elevation: 4,
-          shape: const CircleBorder(),
-          child: Padding(
-            padding: const EdgeInsets.all(8.0),
-            child: Image.asset(
-              'assets/logo_beesmileymark.png',
-              errorBuilder: (context, error, stackTrace) => const Icon(Icons.add, color: AppColors.primary),
-            ),
+          icon: const Icon(Icons.edit, color: Colors.white),
+          label: Text(
+            _currentTabIndex == 0 ? '週次アセスメント作成' : '月次サマリ作成',
+            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
           ),
         ),
       ),
@@ -351,12 +399,15 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
                               Text(
                                 DateFormat('yyyy/MM/dd (E)', 'ja').format(date),
                                 style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                               ),
+                              const SizedBox(width: 8),
+                              // 下書き/公開バッジ
+                              _buildStatusBadge(data['isPublished'] == true),
+                              const Spacer(),
                               const Icon(Icons.chevron_right, color: AppColors.textSub),
                             ],
                           ),
@@ -427,12 +478,15 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
                               Text(
                                 DateFormat('yyyy年 MM月', 'ja').format(date),
                                 style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                               ),
+                              const SizedBox(width: 8),
+                              // 下書き/公開バッジ
+                              _buildStatusBadge(data['isPublished'] == true),
+                              const Spacer(),
                               const Icon(Icons.chevron_right, color: AppColors.textSub),
                             ],
                           ),
@@ -453,6 +507,29 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
           ),
         );
       },
+    );
+  }
+
+  // ステータスバッジ
+  Widget _buildStatusBadge(bool isPublished) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      decoration: BoxDecoration(
+        color: isPublished ? Colors.green.shade50 : Colors.orange.shade50,
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(
+          color: isPublished ? Colors.green : Colors.orange,
+          width: 0.5,
+        ),
+      ),
+      child: Text(
+        isPublished ? '公開中' : '下書き',
+        style: TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.bold,
+          color: isPublished ? Colors.green.shade700 : Colors.orange.shade700,
+        ),
+      ),
     );
   }
 }

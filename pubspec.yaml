@@ -32,9 +32,11 @@ dependencies:
   cloud_firestore: ^6.1.0
   firebase_storage: ^13.0.4
   cloud_functions: ^6.0.4
+  firebase_messaging: ^16.0.4  # プッシュ通知
 
   # Image & URL
   image_picker: ^1.2.1
+  image: ^4.3.0
   cached_network_image: ^3.4.1
   url_launcher: ^6.3.2
   file_picker: ^10.3.6
@@ -45,6 +47,9 @@ dependencies:
   http: ^1.2.0
   path_provider: ^2.1.2
   gal: ^2.3.2
+
+  # Local Notifications (フォアグラウンド通知表示用)
+  flutter_local_notifications: ^18.0.1
 
 dev_dependencies:
   flutter_test:

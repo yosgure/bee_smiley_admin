@@ -7,6 +7,8 @@ import 'package:image_picker/image_picker.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:intl/intl.dart';
+import 'package:image/image.dart' as img;
+import 'app_theme.dart';
 
 class EventScreen extends StatefulWidget {
   const EventScreen({super.key});
@@ -52,16 +54,16 @@ class _EventScreenState extends State<EventScreen> with SingleTickerProviderStat
         elevation: 0,
         bottom: TabBar(
           controller: _tabController,
-          labelColor: Colors.orange,
-          unselectedLabelColor: Colors.grey,
-          indicatorColor: Colors.orange,
+          labelColor: AppColors.primary,
+          unselectedLabelColor: AppColors.textSub,
+          indicatorColor: AppColors.primary,
           tabs: const [
             Tab(text: '公開中'),
             Tab(text: '終了分 (アーカイブ)'),
           ],
         ),
       ),
-      backgroundColor: const Color(0xFFF2F2F7),
+      backgroundColor: AppColors.background,
       
       body: Align(
         alignment: Alignment.topCenter,
@@ -107,7 +109,8 @@ class _EventScreenState extends State<EventScreen> with SingleTickerProviderStat
         ),
       ),
       
-      floatingActionButton: FloatingActionButton(heroTag: null, 
+      floatingActionButton: FloatingActionButton(
+        heroTag: null, 
         onPressed: () {
           Navigator.push(
             context,
@@ -130,7 +133,7 @@ class _EventScreenState extends State<EventScreen> with SingleTickerProviderStat
       return Center(
         child: Text(
           isActive ? '現在公開中のイベントはありません' : '過去のイベントはありません',
-          style: const TextStyle(color: Colors.grey),
+          style: const TextStyle(color: AppColors.textSub),
         ),
       );
     }
@@ -166,20 +169,30 @@ class _EventScreenState extends State<EventScreen> with SingleTickerProviderStat
         ? DateFormat('MM/dd').format(deadlineTs.toDate())
         : '-';
 
-    return Card(
+    return Container(
+      margin: const EdgeInsets.only(bottom: 20),
+      decoration: BoxDecoration(
+        color: isActive ? Colors.white : Colors.grey.shade100,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey.shade200),
+        boxShadow: isActive ? [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ] : null,
+      ),
       clipBehavior: Clip.antiAlias,
-      elevation: isActive ? 3 : 1,
-      color: isActive ? Colors.white : Colors.grey.shade200,
-      margin: const EdgeInsets.only(bottom: 24),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // 画像部分
           AspectRatio(
             aspectRatio: 16 / 9,
             child: Container(
               width: double.infinity,
-              color: Colors.grey.shade100,
+              color: AppColors.inputFill,
               child: event['imageUrl'] != null && (event['imageUrl'] as String).isNotEmpty
                   ? CachedNetworkImage(
                       imageUrl: event['imageUrl'],
@@ -190,90 +203,115 @@ class _EventScreenState extends State<EventScreen> with SingleTickerProviderStat
                       errorWidget: (context, url, error) => const Center(child: Icon(Icons.broken_image, color: Colors.grey)),
                     )
                   : Container(
-                      color: Colors.grey.shade300,
-                      child: const Center(child: Icon(Icons.event, size: 50, color: Colors.grey)),
+                      color: Colors.grey.shade200,
+                      child: Center(
+                        child: Icon(Icons.event, size: 50, color: Colors.grey.shade400),
+                      ),
                     ),
             ),
           ),
 
+          // コンテンツ部分
           Padding(
             padding: const EdgeInsets.all(16.0),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // タイトル行
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Expanded(
                       child: Text(
                         event['title'] ?? '名称未設定',
-                        style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                        style: const TextStyle(
+                          fontSize: 18, 
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.textMain,
+                        ),
                       ),
                     ),
                     IconButton(
-                      icon: const Icon(Icons.delete_outline, color: Colors.grey),
+                      icon: Icon(Icons.delete_outline, color: Colors.grey.shade400, size: 20),
                       onPressed: () => _deleteEvent(docId, event['title']),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
                     ),
                   ],
                 ),
                 
-                const SizedBox(height: 8),
+                const SizedBox(height: 12),
 
-                _buildIconText(Icons.calendar_today, eventDateTimeStr),
+                // 日程
+                _buildInfoRow(Icons.calendar_today, eventDateTimeStr),
                 
+                // 締め切り
                 if (deadlineTs != null && isActive) ...[
-                  const SizedBox(height: 4),
-                  Row(
-                    children: [
-                      const SizedBox(width: 28),
-                      Icon(Icons.timer_outlined, size: 14, color: Colors.grey.shade600),
-                      const SizedBox(width: 4),
-                      Text(
-                        '申込締切: $deadlineStr まで',
-                        style: TextStyle(
-                          color: Colors.grey.shade600,
-                          fontSize: 13,
+                  const SizedBox(height: 6),
+                  Padding(
+                    padding: const EdgeInsets.only(left: 26),
+                    child: Row(
+                      children: [
+                        Icon(Icons.timer_outlined, size: 14, color: Colors.grey.shade500),
+                        const SizedBox(width: 6),
+                        Text(
+                          '申込締切: $deadlineStr まで',
+                          style: TextStyle(
+                            color: Colors.grey.shade600,
+                            fontSize: 12,
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ],
 
-                const SizedBox(height: 6),
-                _buildIconText(Icons.place, event['location'] ?? ''),
+                // 場所
+                const SizedBox(height: 8),
+                _buildInfoRow(Icons.place, event['location'] ?? ''),
                 if ((event['address'] ?? '').isNotEmpty)
                   Padding(
-                    padding: const EdgeInsets.only(left: 28),
+                    padding: const EdgeInsets.only(left: 26, top: 2),
                     child: Text(
                       event['address'],
-                      style: const TextStyle(color: Colors.grey, fontSize: 12),
+                      style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
                     ),
                   ),
                 
                 const SizedBox(height: 16),
-                const Divider(),
-                const SizedBox(height: 8),
+                Divider(color: Colors.grey.shade200),
+                const SizedBox(height: 12),
 
+                // 詳細
                 Text(
                   event['detail'] ?? '',
-                  style: const TextStyle(color: Colors.black87, height: 1.5),
+                  style: const TextStyle(
+                    color: AppColors.textMain, 
+                    height: 1.6,
+                    fontSize: 14,
+                  ),
                 ),
                 
-                const SizedBox(height: 24),
+                const SizedBox(height: 20),
 
+                // 申し込みボタン
                 if ((event['link'] ?? '').isNotEmpty)
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton.icon(
                       onPressed: isActive ? () => _launchURL(context, event['link']) : null,
-                      icon: const Icon(Icons.open_in_new, size: 18),
+                      icon: const Icon(Icons.open_in_new, size: 16),
                       label: const Text('申し込みページへ'),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.orange.shade50,
-                        foregroundColor: Colors.deepOrange,
+                        backgroundColor: AppColors.primary.withOpacity(0.1),
+                        foregroundColor: AppColors.primary,
                         elevation: 0,
                         padding: const EdgeInsets.symmetric(vertical: 12),
-                        disabledBackgroundColor: Colors.grey.shade300,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        disabledBackgroundColor: Colors.grey.shade200,
+                        disabledForegroundColor: Colors.grey,
                       ),
                     ),
                   ),
@@ -285,16 +323,20 @@ class _EventScreenState extends State<EventScreen> with SingleTickerProviderStat
     );
   }
 
-  Widget _buildIconText(IconData icon, String text) {
+  Widget _buildInfoRow(IconData icon, String text) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(icon, size: 18, color: Colors.orange),
+        Icon(icon, size: 16, color: AppColors.primary),
         const SizedBox(width: 10),
         Expanded(
           child: Text(
             text,
-            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+            style: const TextStyle(
+              fontSize: 14, 
+              fontWeight: FontWeight.w500,
+              color: AppColors.textMain,
+            ),
           ),
         ),
       ],
@@ -308,13 +350,16 @@ class _EventScreenState extends State<EventScreen> with SingleTickerProviderStat
         title: const Text('削除確認'),
         content: Text('$title を削除しますか？'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('キャンセル')),
+          TextButton(
+            onPressed: () => Navigator.pop(context), 
+            child: const Text('キャンセル'),
+          ),
           TextButton(
             onPressed: () async {
               await _eventsRef.doc(docId).delete();
               if (context.mounted) Navigator.pop(context);
             },
-            child: const Text('削除', style: TextStyle(color: Colors.red)),
+            child: const Text('削除', style: TextStyle(color: AppColors.error)),
           ),
         ],
       ),
@@ -322,6 +367,9 @@ class _EventScreenState extends State<EventScreen> with SingleTickerProviderStat
   }
 }
 
+// ============================================
+// イベント作成画面
+// ============================================
 class EventCreateScreen extends StatefulWidget {
   const EventCreateScreen({super.key});
 
@@ -345,13 +393,48 @@ class _EventCreateScreenState extends State<EventCreateScreen> {
   Uint8List? _imageBytes;
   bool _isUploading = false;
 
+  // 画像圧縮（目標500KB）
+  Future<Uint8List> _compressImage(Uint8List bytes) async {
+    final original = img.decodeImage(bytes);
+    if (original == null) return bytes;
+
+    const int targetSize = 500 * 1024; // 500KB
+    
+    // 既に小さければそのまま返す
+    if (bytes.length <= targetSize) return bytes;
+
+    // リサイズ（長辺1200px）
+    img.Image resized;
+    if (original.width > original.height) {
+      resized = original.width > 1200 
+          ? img.copyResize(original, width: 1200)
+          : original;
+    } else {
+      resized = original.height > 1200 
+          ? img.copyResize(original, height: 1200)
+          : original;
+    }
+
+    // 品質を下げながら圧縮
+    for (int quality = 85; quality >= 30; quality -= 10) {
+      final compressed = img.encodeJpg(resized, quality: quality);
+      if (compressed.length <= targetSize) {
+        return Uint8List.fromList(compressed);
+      }
+    }
+
+    return Uint8List.fromList(img.encodeJpg(resized, quality: 30));
+  }
+
   Future<void> _pickImage() async {
     final picker = ImagePicker();
     final picked = await picker.pickImage(source: ImageSource.gallery);
     if (picked != null) {
       final bytes = await picked.readAsBytes();
+      // 圧縮処理
+      final compressed = await _compressImage(bytes);
       setState(() {
-        _imageBytes = bytes;
+        _imageBytes = compressed;
       });
     }
   }
@@ -401,12 +484,16 @@ class _EventCreateScreenState extends State<EventCreateScreen> {
 
   Future<void> _submit() async {
     if (_titleController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('イベント名を入力してください')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('イベント名を入力してください')),
+      );
       return;
     }
     if (_deadlineDate.isAfter(_eventDate)) {
-       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('締め切り日はイベント日程より前に設定してください')));
-       return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('締め切り日はイベント日程より前に設定してください')),
+      );
+      return;
     }
 
     setState(() => _isUploading = true);
@@ -443,10 +530,14 @@ class _EventCreateScreenState extends State<EventCreateScreen> {
 
       if (mounted) {
         Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('イベントを公開しました')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('イベントを公開しました')),
+        );
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('エラー: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('エラー: $e')),
+      );
     } finally {
       if (mounted) setState(() => _isUploading = false);
     }
@@ -455,101 +546,128 @@ class _EventCreateScreenState extends State<EventCreateScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF2F2F7),
+      backgroundColor: AppColors.background,
       appBar: AppBar(
         title: const Text('新規イベント'),
         centerTitle: true,
         backgroundColor: Colors.white,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.close, color: Colors.black),
+          icon: const Icon(Icons.close, color: AppColors.textMain),
           onPressed: () => Navigator.pop(context),
         ),
         actions: [
-          TextButton(
-            onPressed: _isUploading ? null : _submit,
-            child: _isUploading 
-              ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
-              : const Text('公開', style: TextStyle(color: Colors.orange, fontWeight: FontWeight.bold, fontSize: 16)),
+          Padding(
+            padding: const EdgeInsets.only(right: 8, top: 6, bottom: 6),
+            child: ElevatedButton(
+              onPressed: _isUploading ? null : _submit,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+              ),
+              child: _isUploading 
+                ? const SizedBox(
+                    width: 18, 
+                    height: 18, 
+                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                  )
+                : const Text('公開', style: TextStyle(fontWeight: FontWeight.bold)),
+            ),
           ),
         ],
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            GestureDetector(
-              onTap: _pickImage,
-              child: Container(
-                height: 200,
-                width: double.infinity,
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade300,
-                  borderRadius: BorderRadius.circular(12),
-                  image: _imageBytes != null
-                      ? DecorationImage(image: MemoryImage(_imageBytes!), fit: BoxFit.cover)
-                      : null,
-                ),
-                child: _imageBytes == null
-                    ? const Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.add_a_photo, size: 40, color: Colors.grey),
-                          SizedBox(height: 8),
-                          Text('カバー写真を追加', style: TextStyle(color: Colors.grey)),
-                        ],
-                      )
-                    : null,
-              ),
-            ),
-            const SizedBox(height: 24),
-
-            _buildLabel('イベント名'),
-            _buildTextField(_titleController, '例：秋の収穫体験'),
-
-            _buildLabel('日程'),
-            _buildDatePicker(
-              date: _eventDate, 
-              onTap: () => _pickDate(true),
-            ),
-            Row(
+      body: Align(
+        alignment: Alignment.topCenter,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 600),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Expanded(child: _buildTimePicker(
-                  time: _startTime,
-                  onTap: () => _pickTime(true),
-                  label: '開始時間',
-                )),
-                const SizedBox(width: 16),
-                Expanded(child: _buildTimePicker(
-                  time: _endTime,
-                  onTap: () => _pickTime(false),
-                  label: '終了時間',
-                )),
+                // カバー写真
+                GestureDetector(
+                  onTap: _pickImage,
+                  child: Container(
+                    height: 180,
+                    width: double.infinity,
+                    decoration: BoxDecoration(
+                      color: AppColors.inputFill,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.grey.shade300),
+                      image: _imageBytes != null
+                          ? DecorationImage(image: MemoryImage(_imageBytes!), fit: BoxFit.cover)
+                          : null,
+                    ),
+                    child: _imageBytes == null
+                        ? Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.add_a_photo, size: 36, color: Colors.grey.shade400),
+                              const SizedBox(height: 8),
+                              Text(
+                                'カバー写真を追加',
+                                style: TextStyle(color: Colors.grey.shade500, fontSize: 14),
+                              ),
+                            ],
+                          )
+                        : null,
+                  ),
+                ),
+                const SizedBox(height: 24),
+
+                _buildLabel('イベント名'),
+                _buildTextField(_titleController, '例：秋の収穫体験'),
+
+                _buildLabel('日程'),
+                _buildDatePicker(
+                  date: _eventDate, 
+                  onTap: () => _pickDate(true),
+                ),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _buildTimePicker(
+                        time: _startTime,
+                        onTap: () => _pickTime(true),
+                        label: '開始時間',
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _buildTimePicker(
+                        time: _endTime,
+                        onTap: () => _pickTime(false),
+                        label: '終了時間',
+                      ),
+                    ),
+                  ],
+                ),
+
+                _buildLabel('申し込み締め切り'),
+                _buildDatePicker(
+                  date: _deadlineDate, 
+                  onTap: () => _pickDate(false),
+                  isDeadline: true,
+                ),
+
+                _buildLabel('場所名'),
+                _buildTextField(_locationController, '例：近所の農園'),
+
+                _buildLabel('住所'),
+                _buildTextField(_addressController, '例：藤沢市...'),
+
+                _buildLabel('詳細'),
+                _buildTextField(_detailController, 'イベントの内容や持ち物などを入力...', maxLines: 5),
+
+                _buildLabel('申し込みリンク'),
+                _buildTextField(_linkController, 'https://...'),
+                
+                const SizedBox(height: 40),
               ],
             ),
-
-            _buildLabel('申し込み締め切り'),
-            _buildDatePicker(
-              date: _deadlineDate, 
-              onTap: () => _pickDate(false),
-              isAlert: true,
-            ),
-
-            _buildLabel('場所名'),
-            _buildTextField(_locationController, '例：近所の農園'),
-
-            _buildLabel('住所'),
-            _buildTextField(_addressController, '例：藤沢市...'),
-
-            _buildLabel('詳細'),
-            _buildTextField(_detailController, 'イベントの内容や持ち物などを入力...', maxLines: 5),
-
-            _buildLabel('申し込みリンク'),
-            _buildTextField(_linkController, 'https://...'),
-            
-            const SizedBox(height: 40),
-          ],
+          ),
         ),
       ),
     );
@@ -557,18 +675,24 @@ class _EventCreateScreenState extends State<EventCreateScreen> {
 
   Widget _buildLabel(String label) {
     return Padding(
-      padding: const EdgeInsets.only(top: 16, bottom: 8, left: 4),
-      child: Text(label, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)),
+      padding: const EdgeInsets.only(top: 16, bottom: 8),
+      child: Text(
+        label, 
+        style: const TextStyle(
+          fontWeight: FontWeight.w600, 
+          color: AppColors.textMain,
+          fontSize: 13,
+        ),
+      ),
     );
   }
 
   Widget _buildTextField(TextEditingController controller, String hint, {int maxLines = 1}) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-      margin: const EdgeInsets.only(bottom: 8),
+      margin: const EdgeInsets.only(bottom: 4),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
+        color: AppColors.inputFill,
+        borderRadius: BorderRadius.circular(8),
       ),
       child: TextField(
         controller: controller,
@@ -576,67 +700,79 @@ class _EventCreateScreenState extends State<EventCreateScreen> {
         decoration: InputDecoration(
           hintText: hint,
           border: InputBorder.none,
-          hintStyle: TextStyle(color: Colors.grey.shade400),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 14),
         ),
       ),
     );
   }
 
-  Widget _buildDatePicker({required DateTime date, required VoidCallback onTap, bool isAlert = false}) {
+  Widget _buildDatePicker({
+    required DateTime date, 
+    required VoidCallback onTap, 
+    bool isDeadline = false,
+  }) {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         margin: const EdgeInsets.only(bottom: 8),
         decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(12),
-          border: isAlert ? Border.all(color: Colors.red.shade100) : null,
+          color: AppColors.inputFill,
+          borderRadius: BorderRadius.circular(8),
         ),
         child: Row(
           children: [
-            Icon(Icons.calendar_month, color: isAlert ? Colors.red : Colors.orange),
-            const SizedBox(width: 12),
+            Icon(
+              Icons.calendar_month, 
+              size: 18,
+              color: isDeadline ? AppColors.error : AppColors.primary,
+            ),
+            const SizedBox(width: 10),
             Text(
               DateFormat('yyyy年 MM月 dd日 (E)', 'ja').format(date),
               style: TextStyle(
-                fontSize: 16, 
-                fontWeight: FontWeight.bold,
-                color: isAlert ? Colors.red : Colors.black87,
+                fontSize: 14, 
+                fontWeight: FontWeight.w500,
+                color: isDeadline ? AppColors.error : AppColors.textMain,
               ),
             ),
             const Spacer(),
-            const Icon(Icons.arrow_drop_down, color: Colors.grey),
+            Icon(Icons.arrow_drop_down, color: Colors.grey.shade400),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildTimePicker({TimeOfDay? time, required VoidCallback onTap, required String label}) {
+  Widget _buildTimePicker({
+    TimeOfDay? time, 
+    required VoidCallback onTap, 
+    required String label,
+  }) {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         margin: const EdgeInsets.only(bottom: 8),
         decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(12),
+          color: AppColors.inputFill,
+          borderRadius: BorderRadius.circular(8),
         ),
         child: Row(
           children: [
-            const Icon(Icons.access_time, color: Colors.blueGrey),
-            const SizedBox(width: 12),
+            Icon(Icons.access_time, size: 18, color: AppColors.primary),
+            const SizedBox(width: 10),
             Text(
               time != null ? time.format(context) : label,
               style: TextStyle(
-                fontSize: 16, 
-                fontWeight: FontWeight.bold,
-                color: time != null ? Colors.black87 : Colors.grey,
+                fontSize: 14, 
+                fontWeight: FontWeight.w500,
+                color: time != null ? AppColors.textMain : Colors.grey.shade400,
               ),
             ),
             const Spacer(),
-            const Icon(Icons.arrow_drop_down, color: Colors.grey),
+            Icon(Icons.arrow_drop_down, color: Colors.grey.shade400),
           ],
         ),
       ),

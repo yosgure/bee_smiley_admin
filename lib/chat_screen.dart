@@ -130,7 +130,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
                 if (actions != null) ...actions,
                 if (isLeftPane)
                   IconButton(
-                    icon: const Icon(Icons.add_comment_rounded, color: AppColors.primary, size: 28),
+                    icon: const Icon(Icons.add, color: AppColors.primary, size: 24),
                     tooltip: '新規チャット',
                     onPressed: () => showDialog(
                       context: context,
@@ -302,18 +302,41 @@ class _RoomListTile extends StatelessWidget {
 
   const _RoomListTile({required this.roomDoc, required this.myUid, required this.isSelected, required this.onTap});
 
+  // 保護者情報を取得（子供の写真も含む）
   Future<Map<String, dynamic>> _fetchPeerInfo(String peerId) async {
+    // スタッフを確認
     var snap = await FirebaseFirestore.instance.collection('staffs').where('uid', isEqualTo: peerId).limit(1).get();
-    if (snap.docs.isNotEmpty) return snap.docs.first.data();
+    if (snap.docs.isNotEmpty) {
+      final d = snap.docs.first.data();
+      return {
+        'name': d['name'] ?? 'スタッフ',
+        'photoUrl': d['photoUrl'],
+        'isStaff': true,
+      };
+    }
+    
+    // 保護者を確認
     snap = await FirebaseFirestore.instance.collection('families').where('uid', isEqualTo: peerId).limit(1).get();
     if (snap.docs.isNotEmpty) {
       final d = snap.docs.first.data();
       final lastName = d['lastName'] ?? '';
       final firstName = d['firstName'] ?? '';
       final fullName = '$lastName $firstName'.trim();
-      return {'name': fullName.isNotEmpty ? fullName : '保護者', 'photoUrl': null};
+      
+      // 子供の写真を取得（最初の子供）
+      String? childPhotoUrl;
+      final children = List<Map<String, dynamic>>.from(d['children'] ?? []);
+      if (children.isNotEmpty) {
+        childPhotoUrl = children.first['photoUrl'] as String?;
+      }
+      
+      return {
+        'name': fullName.isNotEmpty ? fullName : '保護者',
+        'photoUrl': childPhotoUrl, // 子供の写真を使用
+        'isStaff': false,
+      };
     }
-    return {'name': '不明', 'photoUrl': null};
+    return {'name': '不明', 'photoUrl': null, 'isStaff': false};
   }
 
   String _formatTime(DateTime date) {
@@ -341,14 +364,16 @@ class _RoomListTile extends StatelessWidget {
       final photoUrl = room['photoUrl'] as String?;
       return ListTile(
         selected: isSelected,
-        selectedTileColor: Colors.orange.shade50,
+        selectedTileColor: AppColors.primary.withOpacity(0.1),
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         leading: CircleAvatar(
-          backgroundColor: Colors.blue.shade100,
+          backgroundColor: AppColors.primary.withOpacity(0.15),
           backgroundImage: photoUrl != null && photoUrl.isNotEmpty ? NetworkImage(photoUrl) : null,
-          child: (photoUrl == null || photoUrl.isEmpty) ? Text(groupName.isNotEmpty ? groupName[0] : 'G', style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.bold)) : null,
+          child: (photoUrl == null || photoUrl.isEmpty) 
+              ? Text(groupName.isNotEmpty ? groupName[0] : 'G', style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold)) 
+              : null,
         ),
-        title: Text(groupName, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontWeight: isSelected ? FontWeight.bold : FontWeight.normal)),
+        title: Text(groupName, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontWeight: isSelected ? FontWeight.bold : FontWeight.normal, color: isSelected ? AppColors.primary : AppColors.textMain)),
         subtitle: Text(room['lastMessage'] ?? '', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12, color: Colors.grey)),
         trailing: Text(timeStr, style: const TextStyle(fontSize: 11, color: Colors.grey)),
         onTap: () => onTap(roomId, groupName, true, memberNames),
@@ -364,17 +389,20 @@ class _RoomListTile extends StatelessWidget {
         final peerData = snapshot.data;
         final name = peerData?['name'] ?? memberNames[peerId] ?? '読み込み中...';
         final photoUrl = peerData?['photoUrl'] as String?;
+        final isStaff = peerData?['isStaff'] == true;
 
         return ListTile(
           selected: isSelected,
-          selectedTileColor: Colors.orange.shade50,
+          selectedTileColor: AppColors.primary.withOpacity(0.1),
           contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           leading: CircleAvatar(
-            backgroundColor: Colors.orange.shade100,
+            backgroundColor: isStaff ? AppColors.primary.withOpacity(0.15) : Colors.orange.shade100,
             backgroundImage: photoUrl != null && photoUrl.isNotEmpty ? NetworkImage(photoUrl) : null,
-            child: (photoUrl == null || photoUrl.isEmpty) ? Text(name.isNotEmpty ? name[0] : '?', style: const TextStyle(color: Colors.orange, fontWeight: FontWeight.bold)) : null,
+            child: (photoUrl == null || photoUrl.isEmpty) 
+                ? Text(name.isNotEmpty ? name[0] : '?', style: TextStyle(color: isStaff ? AppColors.primary : Colors.orange, fontWeight: FontWeight.bold)) 
+                : null,
           ),
-          title: Text(name, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontWeight: isSelected ? FontWeight.bold : FontWeight.normal)),
+          title: Text(name, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontWeight: isSelected ? FontWeight.bold : FontWeight.normal, color: isSelected ? AppColors.primary : AppColors.textMain)),
           subtitle: Text(room['lastMessage'] ?? '', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12, color: Colors.grey)),
           trailing: Text(timeStr, style: const TextStyle(fontSize: 11, color: Colors.grey)),
           onTap: () => onTap(roomId, name, false, memberNames),
@@ -445,17 +473,19 @@ class _NewChatDialogState extends State<NewChatDialog> with SingleTickerProvider
         if (d['uid'] == widget.myUid) continue;
         final name = '${d['lastName'] ?? ''} ${d['firstName'] ?? ''}'.trim();
         final kana = '${d['lastNameKana'] ?? ''} ${d['firstNameKana'] ?? ''}'.trim();
-        // 子供の教室情報を取得
+        // 子供の情報を取得
         final children = List<Map<String, dynamic>>.from(d['children'] ?? []);
         String? classroom;
+        String? childPhotoUrl;
         if (children.isNotEmpty) {
           classroom = children.first['classroom'];
+          childPhotoUrl = children.first['photoUrl'] as String?;
         }
         tempFamilies.add({
           'uid': d['uid'] ?? doc.id,
           'name': name.isEmpty ? '名称未設定' : name,
           'kana': kana.isEmpty ? name : kana,
-          'photoUrl': null,
+          'photoUrl': childPhotoUrl, // 子供の写真
           'classroom': classroom,
         });
       }
@@ -551,9 +581,9 @@ class _NewChatDialogState extends State<NewChatDialog> with SingleTickerProvider
               return ListTile(
                 contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
                 leading: CircleAvatar(
-                  backgroundColor: isStaffTab ? Colors.blue.shade100 : Colors.orange.shade100,
+                  backgroundColor: isStaffTab ? AppColors.primary.withOpacity(0.15) : Colors.orange.shade100,
                   backgroundImage: photoUrl != null && photoUrl.isNotEmpty ? NetworkImage(photoUrl) : null,
-                  child: (photoUrl == null || photoUrl.isEmpty) ? Text(name.isNotEmpty ? name[0] : '?', style: TextStyle(color: isStaffTab ? Colors.blue : Colors.orange, fontWeight: FontWeight.bold)) : null,
+                  child: (photoUrl == null || photoUrl.isEmpty) ? Text(name.isNotEmpty ? name[0] : '?', style: TextStyle(color: isStaffTab ? AppColors.primary : Colors.orange, fontWeight: FontWeight.bold)) : null,
                 ),
                 title: Text(name, style: const TextStyle(fontSize: 16)),
                 trailing: isStaffTab && _isGroupMode ? Checkbox(value: isSelected, activeColor: AppColors.primary, onChanged: (val) => _toggleSelection(uid)) : null,
@@ -795,7 +825,7 @@ class ChatDetailView extends StatefulWidget {
 class _ChatDetailViewState extends State<ChatDetailView> {
   final TextEditingController _textController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
-  final FocusNode _focusNode = FocusNode(); // ★追加
+  final FocusNode _focusNode = FocusNode();
   final currentUser = FirebaseAuth.instance.currentUser;
   bool _isUploading = false;
 
@@ -803,11 +833,10 @@ class _ChatDetailViewState extends State<ChatDetailView> {
   void dispose() {
     _textController.dispose();
     _scrollController.dispose();
-    _focusNode.dispose(); // ★追加
+    _focusNode.dispose();
     super.dispose();
   }
 
-  // ★キーボードを閉じる
   void _dismissKeyboard() {
     _focusNode.unfocus();
   }
@@ -815,7 +844,7 @@ class _ChatDetailViewState extends State<ChatDetailView> {
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: _dismissKeyboard, // ★画面タップでキーボードを閉じる
+      onTap: _dismissKeyboard,
       child: Column(
         children: [
           if (widget.showAppBar) ...[
@@ -926,7 +955,7 @@ class _ChatDetailViewState extends State<ChatDetailView> {
             Expanded(
               child: TextField(
                 controller: _textController,
-                focusNode: _focusNode, // ★追加
+                focusNode: _focusNode,
                 maxLines: null, minLines: 1,
                 keyboardType: TextInputType.multiline,
                 decoration: InputDecoration(hintText: 'メッセージを入力', filled: true, fillColor: Colors.grey.shade100, border: OutlineInputBorder(borderRadius: BorderRadius.circular(24), borderSide: BorderSide.none), contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10)),
@@ -944,7 +973,6 @@ class _ChatDetailViewState extends State<ChatDetailView> {
     final isMe = msg['senderId'] == currentUser?.uid;
     final String text = msg['text'] ?? '';
     final String type = msg['type'] ?? 'text';
-    // ★スタンプ形式を変更: { emoji: [uid1, uid2, ...] }
     final stamps = Map<String, dynamic>.from(msg['stamps'] ?? {});
     final readBy = List<String>.from(msg['readBy'] ?? []);
     final isRead = isMe && readBy.any((uid) => uid != currentUser!.uid);
@@ -961,10 +989,23 @@ class _ChatDetailViewState extends State<ChatDetailView> {
     }
 
     Widget content;
+    final bool isImageOnly = type == 'image' && text.isEmpty; // 画像のみ（テキストなし）
+    
     if (type == 'image') {
       content = Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        GestureDetector(onTap: () => _showImagePreview(msg['url']), child: ClipRRect(borderRadius: BorderRadius.circular(8), child: Image.network(msg['url'], width: 200, fit: BoxFit.cover, errorBuilder: (c, e, s) => const Icon(Icons.broken_image)))),
-        if (text.isNotEmpty) ...[const SizedBox(height: 4), Text(text, style: const TextStyle(fontSize: 15))]
+        GestureDetector(
+          onTap: () => _showImagePreview(msg['url']), 
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(12), 
+            child: Image.network(
+              msg['url'], 
+              width: 200, 
+              fit: BoxFit.cover, 
+              errorBuilder: (c, e, s) => const Icon(Icons.broken_image),
+            ),
+          ),
+        ),
+        if (text.isNotEmpty) ...[const SizedBox(height: 8), Text(text, style: const TextStyle(fontSize: 15))]
       ]);
     } else if (type == 'file') {
       content = InkWell(onTap: () async { final Uri url = Uri.parse(msg['url']); if (await canLaunchUrl(url)) await launchUrl(url); }, child: Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: Colors.grey.shade100, borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.grey.shade300)), child: Row(mainAxisSize: MainAxisSize.min, children: [const Icon(Icons.description, color: AppColors.primary), const SizedBox(width: 8), Flexible(child: Text(msg['fileName'] ?? 'ファイル', style: const TextStyle(fontSize: 14, decoration: TextDecoration.underline), overflow: TextOverflow.ellipsis))])));
@@ -996,7 +1037,18 @@ class _ChatDetailViewState extends State<ChatDetailView> {
                     ]),
                     const SizedBox(width: 8)
                   ],
-                  Flexible(child: Container(padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12), decoration: BoxDecoration(color: isMe ? AppColors.primary.withOpacity(0.2) : Colors.white, borderRadius: BorderRadius.circular(12), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 2, offset: const Offset(0, 1))]), child: content)),
+                  Flexible(
+                    child: isImageOnly
+                      ? content  // 画像のみの場合は背景なし
+                      : Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12), 
+                          decoration: BoxDecoration(
+                            color: isMe ? AppColors.primary.withOpacity(0.2) : Colors.white, 
+                            borderRadius: BorderRadius.circular(12),
+                          ), 
+                          child: content,
+                        ),
+                  ),
                   if (!isMe) ...[const SizedBox(width: 8), Text(timeStr, style: const TextStyle(fontSize: 10, color: Colors.grey))],
                 ],
               ),
@@ -1057,9 +1109,7 @@ class _ChatDetailViewState extends State<ChatDetailView> {
     );
   }
 
-  // ★スタンプ表示を修正（ユーザーリスト対応）
   Widget _buildReactionChip(String msgId, String emoji, dynamic users, bool isMe) {
-    // usersがListの場合は新形式、intの場合は旧形式
     final List<String> userList = users is List ? List<String>.from(users) : [];
     final int count = users is List ? users.length : (users is int ? users : 1);
     final bool alreadyReacted = userList.contains(currentUser?.uid);
@@ -1082,7 +1132,7 @@ class _ChatDetailViewState extends State<ChatDetailView> {
   }
 
   Future<void> _pickAndUploadImage() async {
-    _dismissKeyboard(); // ★キーボードを閉じる
+    _dismissKeyboard();
     final picker = ImagePicker();
     final XFile? image = await picker.pickImage(source: ImageSource.gallery);
     if (image == null) return;
@@ -1099,7 +1149,7 @@ class _ChatDetailViewState extends State<ChatDetailView> {
   }
 
   Future<void> _pickAndUploadFile() async {
-    _dismissKeyboard(); // ★キーボードを閉じる
+    _dismissKeyboard();
     final result = await FilePicker.platform.pickFiles(type: FileType.any, withData: true);
     if (result == null) return;
     setState(() => _isUploading = true);
@@ -1120,7 +1170,7 @@ class _ChatDetailViewState extends State<ChatDetailView> {
     final msgText = text ?? _textController.text;
     if (msgText.trim().isEmpty && type == 'text') return;
     
-    _dismissKeyboard(); // ★メッセージ送信後にキーボードを閉じる
+    _dismissKeyboard();
     
     if (type == 'text') _textController.clear();
     final roomRef = FirebaseFirestore.instance.collection('chat_rooms').doc(widget.roomId);
@@ -1134,7 +1184,6 @@ class _ChatDetailViewState extends State<ChatDetailView> {
     await roomRef.update({'lastMessage': lastMsg, 'lastMessageTime': FieldValue.serverTimestamp()});
   }
 
-  // ★スタンプのトグル処理を修正（同じ人は1回のみ）
   Future<void> _toggleReaction(String msgId, String emoji) async {
     final msgRef = FirebaseFirestore.instance.collection('chat_rooms').doc(widget.roomId).collection('messages').doc(msgId);
     final uid = currentUser!.uid;
@@ -1145,17 +1194,14 @@ class _ChatDetailViewState extends State<ChatDetailView> {
       final data = snapshot.data() as Map<String, dynamic>;
       final stamps = Map<String, dynamic>.from(data['stamps'] ?? {});
       
-      // 新形式: { emoji: [uid1, uid2, ...] }
       List<String> userList = [];
       if (stamps[emoji] is List) {
         userList = List<String>.from(stamps[emoji]);
       } else if (stamps[emoji] is int) {
-        // 旧形式からの移行
         userList = [];
       }
       
       if (userList.contains(uid)) {
-        // 既にリアクション済み → 削除
         userList.remove(uid);
         if (userList.isEmpty) {
           stamps.remove(emoji);
@@ -1163,7 +1209,6 @@ class _ChatDetailViewState extends State<ChatDetailView> {
           stamps[emoji] = userList;
         }
       } else {
-        // 未リアクション → 追加
         userList.add(uid);
         stamps[emoji] = userList;
       }

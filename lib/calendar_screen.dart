@@ -17,6 +17,9 @@ class CalendarScreen extends StatefulWidget {
 }
 
 class _CalendarScreenState extends State<CalendarScreen> {
+  // ★追加: ScaffoldKey
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+  
   CalendarView _calendarView = CalendarView.month;
   final CalendarController _controller = CalendarController();
   final CalendarController _miniCalendarController = CalendarController();
@@ -193,32 +196,32 @@ class _CalendarScreenState extends State<CalendarScreen> {
     final bool showSidebar = MediaQuery.of(context).size.width >= 800;
 
     return Scaffold(
+      // ★追加: keyを設定
+      key: _scaffoldKey,
       backgroundColor: Colors.white,
       drawer: showSidebar
           ? null
           : Drawer(
               backgroundColor: AppColors.surface,
               width: 300,
-              shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero), // 角丸なし
+              shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
               child: SafeArea(
                 child: Padding(
                   padding: const EdgeInsets.only(top: 16, left: 12, right: 12),
-                  child: _buildDrawerContent(), // スマホ用（カレンダーなし）
+                  child: _buildDrawerContent(),
                 ),
               ),
             ),
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        surfaceTintColor: Colors.white,
-        elevation: 0,
-        // ★修正: PC版でトップバーの高さを広げる
-        toolbarHeight: showSidebar ? 64 : kToolbarHeight,
-        
-        titleSpacing: showSidebar ? 24 : 0, 
-        title: showSidebar 
-          ? Row(
+      appBar: showSidebar 
+        // PC版AppBar
+        ? AppBar(
+            backgroundColor: Colors.white,
+            surfaceTintColor: Colors.white,
+            elevation: 0,
+            toolbarHeight: 64,
+            titleSpacing: 24, 
+            title: Row(
               children: [
-                // ★修正: 「今日」ボタンの高さを「週▼」と統一（36px）
                 SizedBox(
                   height: 36,
                   child: OutlinedButton(
@@ -244,7 +247,6 @@ class _CalendarScreenState extends State<CalendarScreen> {
                   splashRadius: 20,
                 ),
                 const SizedBox(width: 16),
-                // ★修正: 年月表記に変更
                 Text(
                   _headerTextWithYear,
                   style: const TextStyle(
@@ -252,70 +254,78 @@ class _CalendarScreenState extends State<CalendarScreen> {
                   ),
                 ),
               ],
-            )
-          : Row(
-              mainAxisSize: MainAxisSize.min,
+            ),
+            actions: [
+              Padding(
+                padding: const EdgeInsets.only(right: 24),
+                child: _buildViewSwitcher(),
+              ),
+            ],
+          )
+        // スマホ版AppBar - Stackで日週月を絶対中央に
+        : AppBar(
+            backgroundColor: Colors.white,
+            surfaceTintColor: Colors.white,
+            elevation: 0,
+            toolbarHeight: kToolbarHeight,
+            automaticallyImplyLeading: false,
+            titleSpacing: 0,
+            title: Stack(
+              alignment: Alignment.center,
               children: [
-                Text(
-                  _headerText,
-                  style: const TextStyle(
-                    color: AppColors.textMain, fontSize: 20, fontWeight: FontWeight.w400,
-                  ),
+                // 中央: 日週月（絶対中央）
+                Center(
+                  child: _buildSegmentedControl(),
+                ),
+                // 左右の要素
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    // 左: ハンバーガー + 12月
+                    Row(
+                      children: [
+                        IconButton(
+                          icon: const Icon(Icons.menu, color: AppColors.textMain),
+                          onPressed: () => _scaffoldKey.currentState?.openDrawer(),
+                        ),
+                        Text(
+                          _headerText,
+                          style: const TextStyle(
+                            color: AppColors.textMain, fontSize: 20, fontWeight: FontWeight.w400,
+                          ),
+                        ),
+                      ],
+                    ),
+                    // 右: 今日ボタン
+                    Padding(
+                      padding: const EdgeInsets.only(right: 16),
+                      child: GestureDetector(
+                        onTap: _goToToday,
+                        child: Container(
+                          width: 24,
+                          height: 24,
+                          decoration: BoxDecoration(
+                            border: Border.all(color: Colors.grey.shade400, width: 1.5),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          alignment: Alignment.center,
+                          child: Text(
+                            '${DateTime.now().day}',
+                            style: const TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.textMain,
+                              height: 1.0,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
-        centerTitle: !showSidebar,
-        // PC版ではleadingを非表示、スマホ版のみハンバーガーメニュー
-        leadingWidth: showSidebar ? 0 : 56,
-        leading: showSidebar 
-          ? const SizedBox.shrink()
-          : IconButton(
-              icon: const Icon(Icons.menu, color: AppColors.textMain),
-              onPressed: () => Scaffold.of(context).openDrawer(),
-            ),
-        // flexibleSpaceはスマホ版のみ（セグメントコントロール）
-        flexibleSpace: showSidebar
-          ? null
-          : SafeArea(
-              child: Center(
-                child: _buildSegmentedControl(),
-              ),
-            ),
-        actions: [
-          // スマホ用: 今日ボタン（日付アイコン風）
-          if (!showSidebar)
-            Padding(
-              padding: const EdgeInsets.only(right: 16),
-              child: GestureDetector(
-                onTap: _goToToday,
-                child: Container(
-                  width: 24,
-                  height: 24,
-                  decoration: BoxDecoration(
-                    border: Border.all(color: Colors.grey.shade400, width: 1.5),
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  alignment: Alignment.center,
-                  child: Text(
-                    '${DateTime.now().day}',
-                    style: const TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.textMain,
-                      height: 1.0,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          // PC用: ビュー切り替え（週▼）- 高さを統一（36px）
-          if (showSidebar)
-            Padding(
-              padding: const EdgeInsets.only(right: 24),
-              child: _buildViewSwitcher(),
-            ),
-        ],
-      ),
+          ),
       body: StreamBuilder<QuerySnapshot>(
         stream: _eventsRef.snapshots(),
         builder: (context, eventSnapshot) {
@@ -415,7 +425,6 @@ class _CalendarScreenState extends State<CalendarScreen> {
                       padding: const EdgeInsets.only(top: 16, left: 12, right: 12),
                       decoration: const BoxDecoration(
                         color: AppColors.surface,
-                        // 罫線削除
                       ),
                       child: _buildSidebarContent(),
                     ),
@@ -427,153 +436,148 @@ class _CalendarScreenState extends State<CalendarScreen> {
                           data: SfCalendarThemeData(
                             selectionBorderColor: Colors.transparent,
                             todayHighlightColor: AppColors.primary,
-                            // ★修正: ホバー時の太い線を非表示に
                             cellBorderColor: Colors.grey.shade400,
                           ),
                           child: SfCalendar(
-                        view: _calendarView,
-                        controller: _controller,
-                        firstDayOfWeek: 1,
-                        dataSource: _DataSource(appointments),
-                        onTap: calendarTapped, 
-                        onViewChanged: _onViewChanged,
-                        backgroundColor: AppColors.surface,
-                        // ★修正: 罫線をさらに太く（見やすく）
-                        cellBorderColor: Colors.grey.shade400,
-                        headerHeight: 0,
-                        viewHeaderHeight: 70,
-                        allowViewNavigation: false, // ダブルクリックでの遷移を無効化
-                        // ★修正: 選択時・ホバー時の装飾を完全に透明に
-                        selectionDecoration: BoxDecoration(
-                          color: Colors.transparent,
-                          border: Border.all(color: Colors.transparent, width: 0),
-                        ),
-                        viewHeaderStyle: const ViewHeaderStyle(
-                          dayTextStyle: TextStyle(fontSize: 11, color: AppColors.textSub, fontWeight: FontWeight.bold),
-                          dateTextStyle: TextStyle(fontSize: 20, color: AppColors.textMain, fontWeight: FontWeight.w400),
-                        ),
-                        monthViewSettings: const MonthViewSettings(
-                          appointmentDisplayMode: MonthAppointmentDisplayMode.appointment,
-                          appointmentDisplayCount: 4,
-                          showAgenda: false,
-                          monthCellStyle: MonthCellStyle(
-                            textStyle: TextStyle(fontSize: 12, color: AppColors.textMain),
-                            trailingDatesTextStyle: TextStyle(fontSize: 12, color: AppColors.textSub),
-                            leadingDatesTextStyle: TextStyle(fontSize: 12, color: AppColors.textSub),
-                            todayBackgroundColor: Colors.transparent, 
-                            todayTextStyle: TextStyle(fontSize: 12, color: AppColors.primary, fontWeight: FontWeight.bold),
+                            view: _calendarView,
+                            controller: _controller,
+                            firstDayOfWeek: 1,
+                            dataSource: _DataSource(appointments),
+                            onTap: calendarTapped, 
+                            onViewChanged: _onViewChanged,
+                            backgroundColor: AppColors.surface,
+                            cellBorderColor: Colors.grey.shade400,
+                            headerHeight: 0,
+                            viewHeaderHeight: 70,
+                            allowViewNavigation: false,
+                            selectionDecoration: BoxDecoration(
+                              color: Colors.transparent,
+                              border: Border.all(color: Colors.transparent, width: 0),
+                            ),
+                            viewHeaderStyle: const ViewHeaderStyle(
+                              dayTextStyle: TextStyle(fontSize: 11, color: AppColors.textSub, fontWeight: FontWeight.bold),
+                              dateTextStyle: TextStyle(fontSize: 20, color: AppColors.textMain, fontWeight: FontWeight.w400),
+                            ),
+                            monthViewSettings: const MonthViewSettings(
+                              appointmentDisplayMode: MonthAppointmentDisplayMode.appointment,
+                              appointmentDisplayCount: 4,
+                              showAgenda: false,
+                              monthCellStyle: MonthCellStyle(
+                                textStyle: TextStyle(fontSize: 12, color: AppColors.textMain),
+                                trailingDatesTextStyle: TextStyle(fontSize: 12, color: AppColors.textSub),
+                                leadingDatesTextStyle: TextStyle(fontSize: 12, color: AppColors.textSub),
+                                todayBackgroundColor: Colors.transparent, 
+                                todayTextStyle: TextStyle(fontSize: 12, color: AppColors.primary, fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                            appointmentBuilder: (context, calendarAppointmentDetails) {
+                              final Appointment appointment = calendarAppointmentDetails.appointments.first;
+                              
+                              final bool isPending = appointment.id == _pendingTasksId;
+                              final bool isTask = appointment.notes == _taskNoteMarker;
+                              
+                              final isSmallScreen = MediaQuery.of(context).size.width < 800;
+
+                              if (isPending) {
+                                return Container(
+                                  margin: const EdgeInsets.symmetric(vertical: 1),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.surface,
+                                    borderRadius: BorderRadius.circular(4),
+                                    border: Border.all(color: AppColors.error.withOpacity(0.5)),
+                                  ),
+                                  padding: const EdgeInsets.symmetric(horizontal: 2),
+                                  alignment: Alignment.centerLeft,
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.start,
+                                    crossAxisAlignment: CrossAxisAlignment.center,
+                                    children: [
+                                      const Icon(Icons.check_circle_outline, size: 10, color: AppColors.error),
+                                      const SizedBox(width: 2),
+                                      Expanded(
+                                        child: Text(
+                                          appointment.subject.replaceAll('⚠️ ', ''), 
+                                          style: const TextStyle(
+                                            color: AppColors.error, 
+                                            fontSize: 10,
+                                            height: 1.0, 
+                                          ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.clip,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              }
+
+                              if (isTask) {
+                                final isMonthView = _calendarView == CalendarView.month;
+                                return Container(
+                                  margin: const EdgeInsets.symmetric(vertical: 1),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.secondary, 
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  padding: const EdgeInsets.symmetric(horizontal: 2),
+                                  alignment: Alignment.centerLeft,
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.start,
+                                    crossAxisAlignment: CrossAxisAlignment.center,
+                                    children: [
+                                      const Icon(Icons.check_circle_outline, size: 10, color: Colors.white), 
+                                      const SizedBox(width: 2),
+                                      Expanded(
+                                        child: Text(
+                                          appointment.subject.replaceAll('◯ ', ''),
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 10, 
+                                            decoration: TextDecoration.none,
+                                            height: 1.0,
+                                          ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.clip,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              }
+                              
+                              // 通常の予定
+                              final isMonthView = _calendarView == CalendarView.month;
+                              return Container(
+                                margin: const EdgeInsets.symmetric(vertical: 1),
+                                decoration: BoxDecoration(
+                                  color: appointment.color,
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                alignment: isMonthView ? Alignment.centerLeft : Alignment.topLeft,
+                                padding: isMonthView 
+                                  ? const EdgeInsets.symmetric(horizontal: 2)
+                                  : const EdgeInsets.only(left: 4, top: 2, right: 2),
+                                child: Text(
+                                  appointment.subject,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 10,
+                                    height: 1.0,
+                                  ),
+                                  maxLines: isMonthView ? 1 : 3,
+                                  overflow: TextOverflow.clip,
+                                ),
+                              );
+                            },
+                            timeSlotViewSettings: const TimeSlotViewSettings(
+                              timeIntervalHeight: 60,
+                              timeFormat: 'H:mm',
+                              timeTextStyle: TextStyle(color: AppColors.textSub, fontSize: 11),
+                              dateFormat: 'd',
+                              dayFormat: 'EEE',
+                            ),
                           ),
                         ),
-                        appointmentBuilder: (context, calendarAppointmentDetails) {
-                          final Appointment appointment = calendarAppointmentDetails.appointments.first;
-                          
-                          final bool isPending = appointment.id == _pendingTasksId;
-                          final bool isTask = appointment.notes == _taskNoteMarker;
-                          
-                          // スマホ時のみ中央寄せ
-                          final isSmallScreen = MediaQuery.of(context).size.width < 800;
-
-                          if (isPending) {
-                            return Container(
-                              margin: const EdgeInsets.symmetric(vertical: 1),
-                              decoration: BoxDecoration(
-                                color: AppColors.surface,
-                                borderRadius: BorderRadius.circular(4),
-                                border: Border.all(color: AppColors.error.withOpacity(0.5)),
-                              ),
-                              padding: const EdgeInsets.symmetric(horizontal: 2),
-                              alignment: Alignment.centerLeft,
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.start,
-                                crossAxisAlignment: CrossAxisAlignment.center,
-                                children: [
-                                  const Icon(Icons.check_circle_outline, size: 10, color: AppColors.error),
-                                  const SizedBox(width: 2),
-                                  Expanded(
-                                    child: Text(
-                                      appointment.subject.replaceAll('⚠️ ', ''), 
-                                      style: const TextStyle(
-                                        color: AppColors.error, 
-                                        fontSize: 10,
-                                        height: 1.0, 
-                                      ),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.clip,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            );
-                          }
-
-                          if (isTask) {
-                            final isMonthView = _calendarView == CalendarView.month;
-                            return Container(
-                              margin: const EdgeInsets.symmetric(vertical: 1),
-                              decoration: BoxDecoration(
-                                color: AppColors.secondary, 
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              padding: const EdgeInsets.symmetric(horizontal: 2),
-                              alignment: Alignment.centerLeft,
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.start,
-                                crossAxisAlignment: CrossAxisAlignment.center,
-                                children: [
-                                  const Icon(Icons.check_circle_outline, size: 10, color: Colors.white), 
-                                  const SizedBox(width: 2),
-                                  Expanded(
-                                    child: Text(
-                                      appointment.subject.replaceAll('◯ ', ''),
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 10, 
-                                        decoration: TextDecoration.none,
-                                        height: 1.0,
-                                      ),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.clip,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            );
-                          }
-                          
-                          // 通常の予定
-                          final isMonthView = _calendarView == CalendarView.month;
-                          return Container(
-                            margin: const EdgeInsets.symmetric(vertical: 1),
-                            decoration: BoxDecoration(
-                              color: appointment.color,
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            alignment: isMonthView ? Alignment.centerLeft : Alignment.topLeft,
-                            padding: isMonthView 
-                              ? const EdgeInsets.symmetric(horizontal: 2)
-                              : const EdgeInsets.only(left: 4, top: 2, right: 2),
-                            child: Text(
-                              appointment.subject,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 10,
-                                height: 1.0,
-                              ),
-                              maxLines: isMonthView ? 1 : 3,
-                              overflow: TextOverflow.clip,
-                            ),
-                          );
-                        },
-                        timeSlotViewSettings: const TimeSlotViewSettings(
-                          timeIntervalHeight: 60,
-                          timeFormat: 'H:mm',
-                          timeTextStyle: TextStyle(color: AppColors.textSub, fontSize: 11),
-                          dateFormat: 'd',
-                          dayFormat: 'EEE',
-                        ),
-                      ),
-                    ),
-
                       ],
                     ),
                   ),
@@ -604,7 +608,6 @@ class _CalendarScreenState extends State<CalendarScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // ★修正: ミニカレンダーの幅と曜日表示を修正
         SizedBox(
           height: 280,
           child: SfCalendarTheme(
@@ -615,12 +618,11 @@ class _CalendarScreenState extends State<CalendarScreen> {
             child: SfCalendar(
               controller: _miniCalendarController,
               view: CalendarView.month,
-              headerDateFormat: 'yyyy年 M月', // ★修正: MM月からM月に変更（右側が切れないように）
+              headerDateFormat: 'yyyy年 M月',
               backgroundColor: Colors.transparent,
               cellBorderColor: Colors.transparent,
               headerHeight: 40,
               viewHeaderHeight: 30,
-              // ★修正: 曜日のスタイルを明示的に設定
               viewHeaderStyle: const ViewHeaderStyle(
                 dayTextStyle: TextStyle(fontSize: 11, color: AppColors.textSub, fontWeight: FontWeight.w500),
               ),
@@ -684,7 +686,6 @@ class _CalendarScreenState extends State<CalendarScreen> {
     );
   }
 
-  // スマホ用ドロワー（カレンダーなし）
   Widget _buildDrawerContent() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -718,7 +719,6 @@ class _CalendarScreenState extends State<CalendarScreen> {
     );
   }
 
-  // スマホ用セグメントコントロール（中央配置・スライド式）
   Widget _buildSegmentedControl() {
     final views = [CalendarView.day, CalendarView.week, CalendarView.month];
     final labels = ['日', '週', '月'];
@@ -737,7 +737,6 @@ class _CalendarScreenState extends State<CalendarScreen> {
       ),
       child: Stack(
         children: [
-          // スライドする白インジケーター
           AnimatedPositioned(
             duration: const Duration(milliseconds: 200),
             curve: Curves.easeInOut,
@@ -759,7 +758,6 @@ class _CalendarScreenState extends State<CalendarScreen> {
               ),
             ),
           ),
-          // ボタンテキスト
           Row(
             children: List.generate(3, (index) {
               final isSelected = selectedIndex == index;
@@ -807,7 +805,6 @@ class _CalendarScreenState extends State<CalendarScreen> {
         const PopupMenuItem(value: CalendarView.week, child: Text('週')),
         const PopupMenuItem(value: CalendarView.month, child: Text('月')),
       ],
-      // ★修正: 高さを「今日」ボタンと統一（36px）
       child: Container(
         height: 36,
         padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -905,7 +902,6 @@ class _CalendarScreenState extends State<CalendarScreen> {
     final bool showSidebar = MediaQuery.of(context).size.width >= 800;
     
     if (showSidebar) {
-      // PC版: 中央モーダル（ダイアログ）
       await showDialog(
         context: context,
         barrierDismissible: true,
@@ -924,7 +920,6 @@ class _CalendarScreenState extends State<CalendarScreen> {
         ),
       );
     } else {
-      // スマホ版: 従来のボトムシート（変更なし）
       await showModalBottomSheet(
         context: context,
         isScrollControlled: true,
@@ -986,7 +981,6 @@ class _CalendarScreenState extends State<CalendarScreen> {
                 return d1.compareTo(d2);
               });
 
-              // 高さをタスク数に応じて可変に（最小200、最大500）
               final contentHeight = pendingDocs.isEmpty 
                 ? 100.0 
                 : (pendingDocs.length * 72.0).clamp(100.0, 400.0);
@@ -996,7 +990,6 @@ class _CalendarScreenState extends State<CalendarScreen> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    // タイトル行
                     Padding(
                       padding: const EdgeInsets.fromLTRB(24, 20, 12, 12),
                       child: Row(
@@ -1013,7 +1006,6 @@ class _CalendarScreenState extends State<CalendarScreen> {
                         ],
                       ),
                     ),
-                    // コンテンツ（罫線なし）
                     SizedBox(
                       height: contentHeight,
                       child: pendingDocs.isEmpty
@@ -1035,7 +1027,6 @@ class _CalendarScreenState extends State<CalendarScreen> {
                                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                                 child: Row(
                                   children: [
-                                    // タスク情報
                                     Expanded(
                                       child: Column(
                                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1052,7 +1043,6 @@ class _CalendarScreenState extends State<CalendarScreen> {
                                         ],
                                       ),
                                     ),
-                                    // アクションボタン
                                     IconButton(
                                       icon: const Icon(Icons.check_circle_outline, size: 26, color: AppColors.primary),
                                       tooltip: '完了にする',
@@ -1066,7 +1056,6 @@ class _CalendarScreenState extends State<CalendarScreen> {
                                       tooltip: '編集',
                                       onPressed: () {
                                         Navigator.pop(context);
-                                        // 直接タスク編集画面へ遷移
                                         _showEditTaskDialog(doc);
                                       },
                                     ),
@@ -1087,12 +1076,10 @@ class _CalendarScreenState extends State<CalendarScreen> {
     );
   }
 
-  // タスク編集ダイアログ（PC版は中央モーダル、スマホ版はボトムシート）
   void _showEditTaskDialog(DocumentSnapshot doc) {
     final bool showSidebar = MediaQuery.of(context).size.width >= 800;
     
     if (showSidebar) {
-      // PC版: 中央モーダル
       showDialog(
         context: context,
         barrierDismissible: true,
@@ -1111,7 +1098,6 @@ class _CalendarScreenState extends State<CalendarScreen> {
         ),
       );
     } else {
-      // スマホ版: ボトムシート
       showModalBottomSheet(
         context: context,
         isScrollControlled: true,

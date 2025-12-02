@@ -1,6 +1,10 @@
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_storage/firebase_storage.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:image/image.dart' as img;
 import 'student_manage_screen.dart';
 import 'tool_master_screen.dart';
 import 'generic_master_screen.dart';
@@ -11,9 +15,32 @@ import 'classroom_master_screen.dart';
 import 'staff_csv_import_screen.dart';
 import 'family_csv_import_screen.dart';
 import 'tool_csv_import_screen.dart';
+import 'csv_export_screen.dart';
+import 'notification_settings_screen.dart';
 
-class AdminScreen extends StatelessWidget {
+class AdminScreen extends StatefulWidget {
   const AdminScreen({super.key});
+
+  @override
+  State<AdminScreen> createState() => _AdminScreenState();
+}
+
+class _AdminScreenState extends State<AdminScreen> {
+  Map<String, dynamic>? _staffData;
+  bool _isUploadingPhoto = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadStaffInfo();
+  }
+
+  Future<void> _loadStaffInfo() async {
+    final data = await _getStaffInfo();
+    if (mounted) {
+      setState(() => _staffData = data);
+    }
+  }
 
   Future<void> _logout(BuildContext context) async {
     final confirmed = await showDialog<bool>(
@@ -65,25 +92,11 @@ class AdminScreen extends StatelessWidget {
                 destination: const StaffManageScreen(),
               ),
               _MenuData(
-                title: 'スタッフCSV登録',
-                icon: Icons.upload_file,
-                color: Colors.green,
-                description: 'CSVで一括登録する',
-                destination: const StaffCsvImportScreen(),
-              ),
-              _MenuData(
                 title: '保護者・児童',
                 icon: Icons.family_restroom,
                 color: Colors.blue,
                 description: '児童情報と連絡先の管理',
                 destination: const StudentManageScreen(),
-              ),
-              _MenuData(
-                title: '保護者CSV登録',
-                icon: Icons.upload_file,
-                color: Colors.green,
-                description: '保護者・児童を一括登録',
-                destination: const FamilyCsvImportScreen(),
               ),
             ],
           ),
@@ -101,13 +114,6 @@ class AdminScreen extends StatelessWidget {
                 color: Colors.orange,
                 description: 'アセスメントで使う教具一覧',
                 destination: const ToolMasterScreen(),
-              ),
-              _MenuData(
-                title: '教具CSV登録',
-                icon: Icons.upload_file,
-                color: Colors.green,
-                description: '教具を一括登録',
-                destination: const ToolCsvImportScreen(),
               ),
               _MenuData(
                 title: '非認知能力',
@@ -145,7 +151,12 @@ class AdminScreen extends StatelessWidget {
 
           const SizedBox(height: 24),
 
-          // 4. アカウント
+          // 4. CSV管理
+          _buildCsvSection(context),
+
+          const SizedBox(height: 24),
+
+          // 5. アカウント
           _buildAccountSection(context),
 
           const SizedBox(height: 40),
@@ -154,126 +165,560 @@ class AdminScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildAccountSection(BuildContext context) {
-    return FutureBuilder<Map<String, dynamic>?>(
-      future: _getStaffInfo(),
-      builder: (context, snapshot) {
-        final staffData = snapshot.data;
-        final name = staffData?['displayName'] ?? '';
-        final loginId = staffData?['loginId'] ?? '';
-
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Padding(
-              padding: const EdgeInsets.only(left: 12, bottom: 8),
-              child: Text(
-                'アカウント',
-                style: TextStyle(
-                  color: Colors.grey.shade600,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 13,
-                ),
-              ),
+  // CSV管理セクション
+  Widget _buildCsvSection(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(left: 12, bottom: 8),
+          child: Text(
+            'CSV管理',
+            style: TextStyle(
+              color: Colors.grey.shade600,
+              fontWeight: FontWeight.bold,
+              fontSize: 13,
             ),
-            Container(
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(10),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.05),
-                    blurRadius: 2,
-                    offset: const Offset(0, 1),
-                  ),
-                ],
+          ),
+        ),
+        Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(10),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.05),
+                blurRadius: 2,
+                offset: const Offset(0, 1),
               ),
-              child: Column(
-                children: [
-                  // 氏名
-                  ListTile(
-                    leading: Container(
-                      padding: const EdgeInsets.all(6),
-                      decoration: BoxDecoration(
-                        color: Colors.blue.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: const Icon(Icons.person, color: Colors.blue, size: 24),
-                    ),
-                    title: const Text(
-                      '氏名',
-                      style: TextStyle(fontSize: 12, color: Colors.grey),
-                    ),
-                    subtitle: Text(
-                      name.isNotEmpty ? name : '---',
-                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.black87),
-                    ),
+            ],
+          ),
+          child: Column(
+            children: [
+              // インポート（登録）
+              ListTile(
+                leading: Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: Colors.teal.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
                   ),
-                  const Divider(height: 1, indent: 60),
-                  // ID
-                  ListTile(
-                    leading: Container(
-                      padding: const EdgeInsets.all(6),
-                      decoration: BoxDecoration(
-                        color: Colors.green.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: const Icon(Icons.badge, color: Colors.green, size: 24),
-                    ),
-                    title: const Text(
-                      'ID',
-                      style: TextStyle(fontSize: 12, color: Colors.grey),
-                    ),
-                    subtitle: Text(
-                      loginId.isNotEmpty ? loginId : '---',
-                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.black87),
-                    ),
-                  ),
-                  const Divider(height: 1, indent: 60),
-                  // パスワード変更
-                  ListTile(
-                    leading: Container(
-                      padding: const EdgeInsets.all(6),
-                      decoration: BoxDecoration(
-                        color: Colors.orange.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: const Icon(Icons.lock, color: Colors.orange, size: 24),
-                    ),
-                    title: const Text(
-                      'パスワード変更',
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                    ),
-                    trailing: const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey),
-                    onTap: () => _showChangePasswordDialog(context),
-                  ),
-                  const Divider(height: 1, indent: 60),
-                  // ログアウト
-                  ListTile(
-                    leading: Container(
-                      padding: const EdgeInsets.all(6),
-                      decoration: BoxDecoration(
-                        color: Colors.red.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: const Icon(Icons.logout, color: Colors.red, size: 24),
-                    ),
-                    title: const Text(
-                      'ログアウト',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.red,
-                      ),
-                    ),
-                    onTap: () => _logout(context),
-                  ),
-                ],
+                  child: const Icon(Icons.upload_file, color: Colors.teal, size: 24),
+                ),
+                title: const Text(
+                  'インポート（登録）',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+                subtitle: const Text(
+                  'CSVファイルから一括登録',
+                  style: TextStyle(fontSize: 12, color: Colors.grey),
+                ),
+                trailing: const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey),
+                onTap: () => _showCsvImportMenu(context),
               ),
+              const Divider(height: 1, indent: 60),
+              // エクスポート（出力）
+              ListTile(
+                leading: Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: Colors.indigo.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(Icons.download, color: Colors.indigo, size: 24),
+                ),
+                title: const Text(
+                  'エクスポート（出力）',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+                subtitle: const Text(
+                  'データをCSVファイルに出力',
+                  style: TextStyle(fontSize: 12, color: Colors.grey),
+                ),
+                trailing: const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey),
+                onTap: () => _showCsvExportMenu(context),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  // CSVインポートメニュー
+  void _showCsvImportMenu(BuildContext context) {
+    final isWide = MediaQuery.of(context).size.width >= 600;
+    
+    if (isWide) {
+      // PC版: ダイアログ
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('CSVインポート'),
+          content: SizedBox(
+            width: 400,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ListTile(
+                  leading: const Icon(Icons.badge, color: Colors.blue),
+                  title: const Text('スタッフ'),
+                  subtitle: const Text('先生・職員を一括登録'),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    Navigator.push(context, MaterialPageRoute(
+                      builder: (_) => const StaffCsvImportScreen(),
+                    ));
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.family_restroom, color: Colors.blue),
+                  title: const Text('保護者・児童'),
+                  subtitle: const Text('保護者と児童を一括登録'),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    Navigator.push(context, MaterialPageRoute(
+                      builder: (_) => const FamilyCsvImportScreen(),
+                    ));
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.extension, color: Colors.orange),
+                  title: const Text('教具'),
+                  subtitle: const Text('教具マスタを一括登録'),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    Navigator.push(context, MaterialPageRoute(
+                      builder: (_) => const ToolCsvImportScreen(),
+                    ));
+                  },
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('閉じる'),
             ),
           ],
-        );
-      },
+        ),
+      );
+    } else {
+      // スマホ版: ボトムシート
+      showModalBottomSheet(
+        context: context,
+        backgroundColor: Colors.white,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+        ),
+        builder: (ctx) => SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 40,
+                  height: 4,
+                  margin: const EdgeInsets.only(bottom: 16),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade300,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                const Text(
+                  'CSVインポート',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 16),
+                ListTile(
+                  leading: const Icon(Icons.badge, color: Colors.blue),
+                  title: const Text('スタッフ'),
+                  subtitle: const Text('先生・職員を一括登録'),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    Navigator.push(context, MaterialPageRoute(
+                      builder: (_) => const StaffCsvImportScreen(),
+                    ));
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.family_restroom, color: Colors.blue),
+                  title: const Text('保護者・児童'),
+                  subtitle: const Text('保護者と児童を一括登録'),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    Navigator.push(context, MaterialPageRoute(
+                      builder: (_) => const FamilyCsvImportScreen(),
+                    ));
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.extension, color: Colors.orange),
+                  title: const Text('教具'),
+                  subtitle: const Text('教具マスタを一括登録'),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    Navigator.push(context, MaterialPageRoute(
+                      builder: (_) => const ToolCsvImportScreen(),
+                    ));
+                  },
+                ),
+                const SizedBox(height: 8),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+  }
+
+  // CSVエクスポートメニュー
+  void _showCsvExportMenu(BuildContext context) {
+    final isWide = MediaQuery.of(context).size.width >= 600;
+    
+    if (isWide) {
+      // PC版: ダイアログ
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('CSVエクスポート'),
+          content: SizedBox(
+            width: 400,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ListTile(
+                  leading: const Icon(Icons.badge, color: Colors.blue),
+                  title: const Text('スタッフ'),
+                  subtitle: const Text('スタッフ一覧をCSV出力'),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    Navigator.push(context, MaterialPageRoute(
+                      builder: (_) => const StaffCsvExportScreen(),
+                    ));
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.family_restroom, color: Colors.blue),
+                  title: const Text('保護者・児童'),
+                  subtitle: const Text('保護者・児童一覧をCSV出力'),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    Navigator.push(context, MaterialPageRoute(
+                      builder: (_) => const FamilyCsvExportScreen(),
+                    ));
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.extension, color: Colors.orange),
+                  title: const Text('教具'),
+                  subtitle: const Text('教具マスタをCSV出力'),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    Navigator.push(context, MaterialPageRoute(
+                      builder: (_) => const ToolCsvExportScreen(),
+                    ));
+                  },
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('閉じる'),
+            ),
+          ],
+        ),
+      );
+    } else {
+      // スマホ版: ボトムシート
+      showModalBottomSheet(
+        context: context,
+        backgroundColor: Colors.white,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+        ),
+        builder: (ctx) => SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 40,
+                  height: 4,
+                  margin: const EdgeInsets.only(bottom: 16),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade300,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                const Text(
+                  'CSVエクスポート',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 16),
+                ListTile(
+                  leading: const Icon(Icons.badge, color: Colors.blue),
+                  title: const Text('スタッフ'),
+                  subtitle: const Text('スタッフ一覧をCSV出力'),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    Navigator.push(context, MaterialPageRoute(
+                      builder: (_) => const StaffCsvExportScreen(),
+                    ));
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.family_restroom, color: Colors.blue),
+                  title: const Text('保護者・児童'),
+                  subtitle: const Text('保護者・児童一覧をCSV出力'),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    Navigator.push(context, MaterialPageRoute(
+                      builder: (_) => const FamilyCsvExportScreen(),
+                    ));
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.extension, color: Colors.orange),
+                  title: const Text('教具'),
+                  subtitle: const Text('教具マスタをCSV出力'),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    Navigator.push(context, MaterialPageRoute(
+                      builder: (_) => const ToolCsvExportScreen(),
+                    ));
+                  },
+                ),
+                const SizedBox(height: 8),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+  }
+
+  Widget _buildAccountSection(BuildContext context) {
+    final name = _staffData?['displayName'] ?? '';
+    final loginId = _staffData?['loginId'] ?? '';
+    final photoUrl = _staffData?['photoUrl'] as String?;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(left: 12, bottom: 8),
+          child: Text(
+            'アカウント',
+            style: TextStyle(
+              color: Colors.grey.shade600,
+              fontWeight: FontWeight.bold,
+              fontSize: 13,
+            ),
+          ),
+        ),
+        Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(10),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.05),
+                blurRadius: 2,
+                offset: const Offset(0, 1),
+              ),
+            ],
+          ),
+          child: Column(
+            children: [
+              // プロフィール写真 + 氏名
+              ListTile(
+                leading: GestureDetector(
+                  onTap: _isUploadingPhoto ? null : _pickAndUploadPhoto,
+                  child: Stack(
+                    children: [
+                      CircleAvatar(
+                        radius: 24,
+                        backgroundColor: Colors.grey.shade200,
+                        backgroundImage: photoUrl != null && photoUrl.isNotEmpty
+                            ? NetworkImage(photoUrl)
+                            : null,
+                        child: photoUrl == null || photoUrl.isEmpty
+                            ? Icon(Icons.person, size: 24, color: Colors.grey.shade400)
+                            : null,
+                      ),
+                      if (_isUploadingPhoto)
+                        Positioned.fill(
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: Colors.black.withOpacity(0.5),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Center(
+                              child: SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                              ),
+                            ),
+                          ),
+                        )
+                      else
+                        Positioned(
+                          bottom: 0,
+                          right: 0,
+                          child: Container(
+                            padding: const EdgeInsets.all(2),
+                            decoration: BoxDecoration(
+                              color: Colors.blue,
+                              shape: BoxShape.circle,
+                              border: Border.all(color: Colors.white, width: 1.5),
+                            ),
+                            child: const Icon(Icons.camera_alt, size: 10, color: Colors.white),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                title: const Text(
+                  '氏名',
+                  style: TextStyle(fontSize: 12, color: Colors.grey),
+                ),
+                subtitle: Text(
+                  name.isNotEmpty ? name : '---',
+                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.black87),
+                ),
+                trailing: photoUrl != null && photoUrl.isNotEmpty
+                    ? TextButton(
+                        onPressed: _isUploadingPhoto ? null : _deletePhoto,
+                        style: TextButton.styleFrom(
+                          padding: EdgeInsets.zero,
+                          minimumSize: const Size(50, 30),
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                        child: const Text('削除', style: TextStyle(color: Colors.red, fontSize: 12)),
+                      )
+                    : null,
+              ),
+              const Divider(height: 1, indent: 60),
+              // ID
+              ListTile(
+                leading: Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: Colors.green.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(Icons.badge, color: Colors.green, size: 24),
+                ),
+                title: const Text(
+                  'ログインID',
+                  style: TextStyle(fontSize: 12, color: Colors.grey),
+                ),
+                subtitle: Text(
+                  loginId.isNotEmpty ? loginId : '---',
+                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.black87),
+                ),
+              ),
+              const Divider(height: 1, indent: 60),
+              // 通知設定
+              ListTile(
+                leading: Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(Icons.notifications_outlined, color: Colors.blue, size: 24),
+                ),
+                title: const Text(
+                  '通知設定',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+                trailing: const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey),
+                onTap: () {
+                  Navigator.push(context, MaterialPageRoute(
+                    builder: (_) => const NotificationSettingsScreen(),
+                  ));
+                },
+              ),
+              const Divider(height: 1, indent: 60),
+              // 通知設定
+              ListTile(
+                leading: Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(Icons.notifications_outlined, color: Colors.blue, size: 24),
+                ),
+                title: const Text(
+                  '通知設定',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+                trailing: const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey),
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => const NotificationSettingsScreen()),
+                  );
+                },
+              ),
+              const Divider(height: 1, indent: 60),
+              // パスワード変更
+              ListTile(
+                leading: Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(Icons.lock, color: Colors.orange, size: 24),
+                ),
+                title: const Text(
+                  'パスワード変更',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+                trailing: const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey),
+                onTap: () => _showChangePasswordDialog(context),
+              ),
+              const Divider(height: 1, indent: 60),
+              // ログアウト
+              ListTile(
+                leading: Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: Colors.red.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(Icons.logout, color: Colors.red, size: 24),
+                ),
+                title: const Text(
+                  'ログアウト',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.red,
+                  ),
+                ),
+                onTap: () => _logout(context),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 
@@ -301,6 +746,7 @@ class AdminScreen extends StatelessWidget {
         
         return {
           ...data,
+          'docId': snap.docs.first.id,
           'displayName': name,
         };
       }
@@ -308,6 +754,128 @@ class AdminScreen extends StatelessWidget {
       debugPrint('Error getting staff info: $e');
     }
     return null;
+  }
+
+  // プロフィール写真用の圧縮（小さめ：長辺300px、目標100KB）
+  Future<Uint8List> _compressProfileImage(Uint8List bytes) async {
+    final original = img.decodeImage(bytes);
+    if (original == null) return bytes;
+
+    const int targetSize = 100 * 1024; // 100KB
+    const int maxDimension = 300; // 長辺300px
+    
+    // リサイズ
+    img.Image resized;
+    if (original.width > original.height) {
+      resized = original.width > maxDimension 
+          ? img.copyResize(original, width: maxDimension)
+          : original;
+    } else {
+      resized = original.height > maxDimension 
+          ? img.copyResize(original, height: maxDimension)
+          : original;
+    }
+
+    // 品質を下げながら圧縮
+    for (int quality = 85; quality >= 40; quality -= 10) {
+      final compressed = img.encodeJpg(resized, quality: quality);
+      if (compressed.length <= targetSize) {
+        return Uint8List.fromList(compressed);
+      }
+    }
+
+    return Uint8List.fromList(img.encodeJpg(resized, quality: 40));
+  }
+
+  Future<void> _pickAndUploadPhoto() async {
+    final docId = _staffData?['docId'];
+    if (docId == null) return;
+
+    final picker = ImagePicker();
+    final picked = await picker.pickImage(source: ImageSource.gallery);
+    if (picked == null) return;
+
+    setState(() => _isUploadingPhoto = true);
+
+    try {
+      final bytes = await picked.readAsBytes();
+      final compressed = await _compressProfileImage(bytes);
+      
+      final user = FirebaseAuth.instance.currentUser;
+      final fileName = '${user!.uid}_${DateTime.now().millisecondsSinceEpoch}.jpg';
+      final ref = FirebaseStorage.instance.ref().child('staff_photos/$fileName');
+      
+      await ref.putData(compressed, SettableMetadata(contentType: 'image/jpeg'));
+      final photoUrl = await ref.getDownloadURL();
+
+      // Firestoreを更新
+      await FirebaseFirestore.instance.collection('staffs').doc(docId).update({
+        'photoUrl': photoUrl,
+      });
+
+      // 状態を更新
+      await _loadStaffInfo();
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('プロフィール写真を更新しました'), backgroundColor: Colors.green),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('エラー: $e'), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isUploadingPhoto = false);
+    }
+  }
+
+  Future<void> _deletePhoto() async {
+    final docId = _staffData?['docId'];
+    if (docId == null) return;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('写真を削除'),
+        content: const Text('プロフィール写真を削除しますか？'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('キャンセル')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('削除', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    setState(() => _isUploadingPhoto = true);
+
+    try {
+      await FirebaseFirestore.instance.collection('staffs').doc(docId).update({
+        'photoUrl': FieldValue.delete(),
+      });
+
+      await _loadStaffInfo();
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('写真を削除しました')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('エラー: $e'), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isUploadingPhoto = false);
+    }
   }
 
   void _showChangePasswordDialog(BuildContext context) {

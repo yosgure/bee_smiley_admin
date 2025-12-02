@@ -3,9 +3,11 @@ import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'firebase_options.dart';
 import 'app_theme.dart';
+import 'notification_service.dart';
 
 // 管理者用画面のインポート
 import 'calendar_screen.dart';
@@ -26,6 +28,9 @@ void main() async {
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
+
+  // バックグラウンドメッセージハンドラの設定
+  FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
 
   runApp(const BeeSmileyApp());
 }
@@ -94,6 +99,14 @@ class _AuthCheckWrapperState extends State<AuthCheckWrapper> {
       if (user != null) {
         final status = await _checkUserStatus(user.uid);
         debugPrint("📋 New status for ${user.uid}: ${status.type}");
+        
+        // 通知サービスの初期化とトークン保存
+        if (status.type != UserType.unknown) {
+          final notificationService = NotificationService();
+          await notificationService.initialize();
+          await notificationService.saveTokenToFirestore();
+        }
+        
         if (mounted) {
           setState(() {
             _status = status;
@@ -216,21 +229,6 @@ class _AdminShellState extends State<AdminShell> {
     debugPrint("🔵 AdminShell initState called");
   }
 
-  Future<void> _logout() async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('ログアウト'),
-        content: const Text('ログアウトしますか？'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('キャンセル')),
-          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('ログアウト', style: TextStyle(color: Colors.red))),
-        ],
-      ),
-    );
-    if (confirmed == true) await FirebaseAuth.instance.signOut();
-  }
-
   @override
   Widget build(BuildContext context) {
     debugPrint("🔵 AdminShell build called");
@@ -246,7 +244,6 @@ class _AdminShellState extends State<AdminShell> {
             selectedIconTheme: const IconThemeData(color: AppColors.primary),
             selectedLabelTextStyle: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold),
             leading: Padding(padding: const EdgeInsets.all(12), child: Image.asset('assets/logo_beesmileymark.png', width: 50, height: 50)),
-            trailing: Expanded(child: Align(alignment: Alignment.bottomCenter, child: Padding(padding: const EdgeInsets.only(bottom: 20), child: IconButton(icon: const Icon(Icons.logout, color: Colors.grey), onPressed: _logout)))),
             destinations: const [
               NavigationRailDestination(icon: Icon(Icons.calendar_month), label: Text('予定')),
               NavigationRailDestination(icon: Icon(Icons.edit_note), label: Text('記録')),

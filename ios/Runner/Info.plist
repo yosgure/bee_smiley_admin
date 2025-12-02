@@ -1,9 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
-<key>NSPhotoLibraryAddUsageDescription</key>
-<string>写真を保存するために写真ライブラリへのアクセスが必要です</string>
 <dict>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>写真を選択してアップロードするために写真ライブラリへのアクセスが必要です</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>写真を保存するために写真ライブラリへのアクセスが必要です</string>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
 	<key>CFBundleDevelopmentRegion</key>
@@ -46,6 +48,11 @@
 		<string>UIInterfaceOrientationPortraitUpsideDown</string>
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
+	</array>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>fetch</string>
+		<string>remote-notification</string>
 	</array>
 </dict>
 </plist>
