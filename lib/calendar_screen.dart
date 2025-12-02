@@ -22,6 +22,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
   final CalendarController _miniCalendarController = CalendarController();
   
   String _headerText = '';
+  String _headerTextWithYear = '';
   String _myUid = '';
   
   List<String> _myClassrooms = [];
@@ -76,6 +77,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
       setState(() {
         _isLocaleInitialized = true;
         _headerText = DateFormat('M月', 'ja').format(DateTime.now());
+        _headerTextWithYear = DateFormat('yyyy年M月', 'ja').format(DateTime.now());
       });
     }
 
@@ -144,6 +146,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
     if (!mounted) return;
     setState(() {
       _headerText = DateFormat('M月', 'ja').format(date);
+      _headerTextWithYear = DateFormat('yyyy年M月', 'ja').format(date);
     });
   }
 
@@ -208,20 +211,26 @@ class _CalendarScreenState extends State<CalendarScreen> {
         backgroundColor: Colors.white,
         surfaceTintColor: Colors.white,
         elevation: 0,
+        // ★修正: PC版でトップバーの高さを広げる
+        toolbarHeight: showSidebar ? 64 : kToolbarHeight,
         
         titleSpacing: showSidebar ? 24 : 0, 
         title: showSidebar 
           ? Row(
               children: [
-                OutlinedButton(
-                  onPressed: _goToToday,
-                  style: OutlinedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                    side: BorderSide(color: Colors.grey.shade300),
-                    shape: RoundedRectangleBorder(borderRadius: AppStyles.radiusSmall),
-                    foregroundColor: AppColors.textMain,
+                // ★修正: 「今日」ボタンの高さを「週▼」と統一（36px）
+                SizedBox(
+                  height: 36,
+                  child: OutlinedButton(
+                    onPressed: _goToToday,
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      side: BorderSide(color: Colors.grey.shade300),
+                      shape: RoundedRectangleBorder(borderRadius: AppStyles.radiusSmall),
+                      foregroundColor: AppColors.textMain,
+                    ),
+                    child: const Text('今日'),
                   ),
-                  child: const Text('今日'),
                 ),
                 const SizedBox(width: 20),
                 IconButton(
@@ -235,36 +244,43 @@ class _CalendarScreenState extends State<CalendarScreen> {
                   splashRadius: 20,
                 ),
                 const SizedBox(width: 16),
+                // ★修正: 年月表記に変更
                 Text(
-                  _headerText,
+                  _headerTextWithYear,
                   style: const TextStyle(
                     color: AppColors.textMain, fontSize: 22, fontWeight: FontWeight.w400,
                   ),
                 ),
               ],
             )
-          : null,
-        centerTitle: true,
-        leadingWidth: 100,
-        leading: Row(
-          children: [
-            IconButton(
+          : Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  _headerText,
+                  style: const TextStyle(
+                    color: AppColors.textMain, fontSize: 20, fontWeight: FontWeight.w400,
+                  ),
+                ),
+              ],
+            ),
+        centerTitle: !showSidebar,
+        // PC版ではleadingを非表示、スマホ版のみハンバーガーメニュー
+        leadingWidth: showSidebar ? 0 : 56,
+        leading: showSidebar 
+          ? const SizedBox.shrink()
+          : IconButton(
               icon: const Icon(Icons.menu, color: AppColors.textMain),
               onPressed: () => Scaffold.of(context).openDrawer(),
             ),
-            Text(
-              _headerText,
-              style: const TextStyle(
-                color: AppColors.textMain, fontSize: 20, fontWeight: FontWeight.w400,
+        // flexibleSpaceはスマホ版のみ（セグメントコントロール）
+        flexibleSpace: showSidebar
+          ? null
+          : SafeArea(
+              child: Center(
+                child: _buildSegmentedControl(),
               ),
             ),
-          ],
-        ),
-        flexibleSpace: SafeArea(
-          child: Center(
-            child: _buildSegmentedControl(),
-          ),
-        ),
         actions: [
           // スマホ用: 今日ボタン（日付アイコン風）
           if (!showSidebar)
@@ -292,7 +308,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
                 ),
               ),
             ),
-          // PC用: 従来のビュー切り替え
+          // PC用: ビュー切り替え（週▼）- 高さを統一（36px）
           if (showSidebar)
             Padding(
               padding: const EdgeInsets.only(right: 24),
@@ -395,11 +411,11 @@ class _CalendarScreenState extends State<CalendarScreen> {
                 children: [
                   if (showSidebar)
                     Container(
-                      width: 280, // ★修正: 幅を256から280に拡大
+                      width: 280,
                       padding: const EdgeInsets.only(top: 16, left: 12, right: 12),
-                      decoration: BoxDecoration(
+                      decoration: const BoxDecoration(
                         color: AppColors.surface,
-                        border: Border(right: BorderSide(color: Colors.grey.shade200)),
+                        // 罫線削除
                       ),
                       child: _buildSidebarContent(),
                     ),
@@ -411,6 +427,8 @@ class _CalendarScreenState extends State<CalendarScreen> {
                           data: SfCalendarThemeData(
                             selectionBorderColor: Colors.transparent,
                             todayHighlightColor: AppColors.primary,
+                            // ★修正: ホバー時の太い線を非表示に
+                            cellBorderColor: Colors.grey.shade400,
                           ),
                           child: SfCalendar(
                         view: _calendarView,
@@ -420,11 +438,16 @@ class _CalendarScreenState extends State<CalendarScreen> {
                         onTap: calendarTapped, 
                         onViewChanged: _onViewChanged,
                         backgroundColor: AppColors.surface,
-                        cellBorderColor: Colors.grey.shade200,
+                        // ★修正: 罫線をさらに太く（見やすく）
+                        cellBorderColor: Colors.grey.shade400,
                         headerHeight: 0,
                         viewHeaderHeight: 70,
                         allowViewNavigation: false, // ダブルクリックでの遷移を無効化
-                        selectionDecoration: const BoxDecoration(), // 完全に空に
+                        // ★修正: 選択時・ホバー時の装飾を完全に透明に
+                        selectionDecoration: BoxDecoration(
+                          color: Colors.transparent,
+                          border: Border.all(color: Colors.transparent, width: 0),
+                        ),
                         viewHeaderStyle: const ViewHeaderStyle(
                           dayTextStyle: TextStyle(fontSize: 11, color: AppColors.textSub, fontWeight: FontWeight.bold),
                           dateTextStyle: TextStyle(fontSize: 20, color: AppColors.textMain, fontWeight: FontWeight.w400),
@@ -784,8 +807,10 @@ class _CalendarScreenState extends State<CalendarScreen> {
         const PopupMenuItem(value: CalendarView.week, child: Text('週')),
         const PopupMenuItem(value: CalendarView.month, child: Text('月')),
       ],
+      // ★修正: 高さを「今日」ボタンと統一（36px）
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        height: 36,
+        padding: const EdgeInsets.symmetric(horizontal: 12),
         decoration: BoxDecoration(
           border: Border.all(color: Colors.grey.shade300),
           borderRadius: AppStyles.radiusSmall,
@@ -877,115 +902,239 @@ class _CalendarScreenState extends State<CalendarScreen> {
   }
 
   Future<void> _showAddEventDialog({DateTime? initialDate}) async {
-    await showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) => Container(
-        height: MediaQuery.of(context).size.height * 0.9,
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.only(
-            topLeft: Radius.circular(20),
-            topRight: Radius.circular(20),
+    final bool showSidebar = MediaQuery.of(context).size.width >= 800;
+    
+    if (showSidebar) {
+      // PC版: 中央モーダル（ダイアログ）
+      await showDialog(
+        context: context,
+        barrierDismissible: true,
+        builder: (context) => Dialog(
+          backgroundColor: Colors.white,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          insetPadding: const EdgeInsets.symmetric(horizontal: 40, vertical: 24),
+          child: SizedBox(
+            width: 500,
+            height: MediaQuery.of(context).size.height * 0.85,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(16),
+              child: AddEventDialog(initialStartDate: initialDate),
+            ),
           ),
         ),
-        child: ClipRRect(
-          borderRadius: const BorderRadius.only(
-            topLeft: Radius.circular(20),
-            topRight: Radius.circular(20),
+      );
+    } else {
+      // スマホ版: 従来のボトムシート（変更なし）
+      await showModalBottomSheet(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: Colors.transparent,
+        builder: (context) => Container(
+          height: MediaQuery.of(context).size.height * 0.9,
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.only(
+              topLeft: Radius.circular(20),
+              topRight: Radius.circular(20),
+            ),
           ),
-          child: AddEventDialog(initialStartDate: initialDate),
+          child: ClipRRect(
+            borderRadius: const BorderRadius.only(
+              topLeft: Radius.circular(20),
+              topRight: Radius.circular(20),
+            ),
+            child: AddEventDialog(initialStartDate: initialDate),
+          ),
         ),
-      ),
-    );
+      );
+    }
   }
 
   void _showPendingTasksListDialog() {
     showDialog(
       context: context,
       builder: (context) {
-        return AlertDialog(
-          title: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text('保留中のタスク', style: TextStyle(fontWeight: FontWeight.bold)),
-              IconButton(
-                icon: const Icon(Icons.close),
-                onPressed: () => Navigator.pop(context),
-              ),
-            ],
-          ),
-          content: SizedBox(
-            width: 400,
-            height: 400,
-            child: StreamBuilder<QuerySnapshot>(
-              stream: _tasksRef
-                  .where('userId', isEqualTo: _myUid)
-                  .snapshots(),
-              builder: (context, snapshot) {
-                if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
-                final allDocs = snapshot.data!.docs;
-                
-                final today = DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
-                final pendingDocs = allDocs.where((doc) {
-                  final data = doc.data() as Map<String, dynamic>;
-                  final isCompleted = data['isCompleted'] ?? false;
-                  final date = (data['date'] as Timestamp).toDate();
-                  final taskDate = DateTime(date.year, date.month, date.day);
-                  return !isCompleted && taskDate.isBefore(today);
-                }).toList();
+        return Dialog(
+          backgroundColor: Colors.white,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          child: StreamBuilder<QuerySnapshot>(
+            stream: _tasksRef
+                .where('userId', isEqualTo: _myUid)
+                .snapshots(),
+            builder: (context, snapshot) {
+              if (!snapshot.hasData) {
+                return const SizedBox(
+                  width: 400,
+                  height: 200,
+                  child: Center(child: CircularProgressIndicator()),
+                );
+              }
+              
+              final allDocs = snapshot.data!.docs;
+              final today = DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
+              final pendingDocs = allDocs.where((doc) {
+                final data = doc.data() as Map<String, dynamic>;
+                final isCompleted = data['isCompleted'] ?? false;
+                final date = (data['date'] as Timestamp).toDate();
+                final taskDate = DateTime(date.year, date.month, date.day);
+                return !isCompleted && taskDate.isBefore(today);
+              }).toList();
 
-                pendingDocs.sort((a, b) {
-                  final d1 = (a['date'] as Timestamp).toDate();
-                  final d2 = (b['date'] as Timestamp).toDate();
-                  return d1.compareTo(d2);
-                });
+              pendingDocs.sort((a, b) {
+                final d1 = (a['date'] as Timestamp).toDate();
+                final d2 = (b['date'] as Timestamp).toDate();
+                return d1.compareTo(d2);
+              });
 
-                if (pendingDocs.isEmpty) {
-                  return const Center(child: Text('保留中のタスクはありません'));
-                }
-                
-                return ListView.builder(
-                  itemCount: pendingDocs.length,
-                  itemBuilder: (context, index) {
-                    final doc = pendingDocs[index];
-                    final data = doc.data() as Map<String, dynamic>;
-                    final date = (data['date'] as Timestamp).toDate();
-                    
-                    return ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      title: Text(data['title'] ?? '無題', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
-                      subtitle: Text(DateFormat('yyyy/MM/dd').format(date), style: const TextStyle(fontSize: 12, color: AppColors.error)),
-                      trailing: Row(
-                        mainAxisSize: MainAxisSize.min,
+              // 高さをタスク数に応じて可変に（最小200、最大500）
+              final contentHeight = pendingDocs.isEmpty 
+                ? 100.0 
+                : (pendingDocs.length * 72.0).clamp(100.0, 400.0);
+
+              return SizedBox(
+                width: 450,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // タイトル行
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(24, 20, 12, 12),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          IconButton(
-                            icon: const Icon(Icons.check_circle_outline, color: AppColors.primary),
-                            tooltip: '完了',
-                            onPressed: () async {
-                              await doc.reference.delete();
-                            },
+                          const Text(
+                            '保留中のタスク',
+                            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                           ),
                           IconButton(
-                            icon: const Icon(Icons.edit, size: 20, color: Colors.grey),
-                            onPressed: () {
-                              Navigator.pop(context);
-                              _showTaskDetail(doc);
-                            },
+                            icon: const Icon(Icons.close, size: 24),
+                            onPressed: () => Navigator.pop(context),
                           ),
                         ],
                       ),
-                    );
-                  },
-                );
-              },
-            ),
+                    ),
+                    // コンテンツ（罫線なし）
+                    SizedBox(
+                      height: contentHeight,
+                      child: pendingDocs.isEmpty
+                        ? const Center(
+                            child: Text(
+                              '保留中のタスクはありません',
+                              style: TextStyle(color: AppColors.textSub),
+                            ),
+                          )
+                        : ListView.builder(
+                            padding: const EdgeInsets.symmetric(vertical: 8),
+                            itemCount: pendingDocs.length,
+                            itemBuilder: (context, index) {
+                              final doc = pendingDocs[index];
+                              final data = doc.data() as Map<String, dynamic>;
+                              final date = (data['date'] as Timestamp).toDate();
+                              
+                              return Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                child: Row(
+                                  children: [
+                                    // タスク情報
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            data['title'] ?? '無題',
+                                            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                                          ),
+                                          const SizedBox(height: 4),
+                                          Text(
+                                            DateFormat('yyyy/MM/dd').format(date),
+                                            style: const TextStyle(fontSize: 13, color: AppColors.error),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    // アクションボタン
+                                    IconButton(
+                                      icon: const Icon(Icons.check_circle_outline, size: 26, color: AppColors.primary),
+                                      tooltip: '完了にする',
+                                      onPressed: () async {
+                                        await doc.reference.delete();
+                                      },
+                                    ),
+                                    const SizedBox(width: 4),
+                                    IconButton(
+                                      icon: Icon(Icons.edit_outlined, size: 24, color: Colors.grey.shade600),
+                                      tooltip: '編集',
+                                      onPressed: () {
+                                        Navigator.pop(context);
+                                        // 直接タスク編集画面へ遷移
+                                        _showEditTaskDialog(doc);
+                                      },
+                                    ),
+                                  ],
+                                ),
+                              );
+                            },
+                          ),
+                    ),
+                    const SizedBox(height: 8),
+                  ],
+                ),
+              );
+            },
           ),
-          actions: const [],
         );
       },
     );
+  }
+
+  // タスク編集ダイアログ（PC版は中央モーダル、スマホ版はボトムシート）
+  void _showEditTaskDialog(DocumentSnapshot doc) {
+    final bool showSidebar = MediaQuery.of(context).size.width >= 800;
+    
+    if (showSidebar) {
+      // PC版: 中央モーダル
+      showDialog(
+        context: context,
+        barrierDismissible: true,
+        builder: (context) => Dialog(
+          backgroundColor: Colors.white,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          insetPadding: const EdgeInsets.symmetric(horizontal: 40, vertical: 24),
+          child: SizedBox(
+            width: 500,
+            height: MediaQuery.of(context).size.height * 0.85,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(16),
+              child: AddEventDialog(taskDoc: doc),
+            ),
+          ),
+        ),
+      );
+    } else {
+      // スマホ版: ボトムシート
+      showModalBottomSheet(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: Colors.transparent,
+        builder: (context) => Container(
+          height: MediaQuery.of(context).size.height * 0.9,
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.only(
+              topLeft: Radius.circular(20),
+              topRight: Radius.circular(20),
+            ),
+          ),
+          child: ClipRRect(
+            borderRadius: const BorderRadius.only(
+              topLeft: Radius.circular(20),
+              topRight: Radius.circular(20),
+            ),
+            child: AddEventDialog(taskDoc: doc),
+          ),
+        ),
+      );
+    }
   }
 
   void _showTaskDetail(DocumentSnapshot doc) {

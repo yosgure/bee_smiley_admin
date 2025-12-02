@@ -534,11 +534,92 @@ class _AddEventDialogState extends State<AddEventDialog> {
     showDialog(context: context, builder: (ctx) => SimpleDialog(title: const Text('繰り返し'), children: _recurrenceOptions.map((opt) => SimpleDialogOption(onPressed: () { setState(() => _recurrenceType = opt); Navigator.pop(ctx); }, child: Row(children: [if (_recurrenceType == opt) const Icon(Icons.check, color: AppColors.primary, size: 20) else const SizedBox(width: 20), const SizedBox(width: 12), Text(opt)]))).toList()));
   }
 
+  // ★修正: PC版は中央モーダル、スマホ版はボトムシート
   void _showClassroomDialog() {
-    showModalBottomSheet(context: context, builder: (ctx) => SafeArea(child: Column(mainAxisSize: MainAxisSize.min, children: [
-      const Padding(padding: EdgeInsets.all(16), child: Text('教室を選択', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold))),
-      ..._classroomList.map((room) => ListTile(leading: _selectedClassroom == room ? const Icon(Icons.check, color: AppColors.primary) : const SizedBox(width: 24), title: Text(room), onTap: () { setState(() { _selectedClassroom = room; if (!_isEditing) { _selectedStudentIds.clear(); _studentNamesMap.clear(); } }); Navigator.pop(ctx); })),
-    ])));
+    final bool isPC = MediaQuery.of(context).size.width >= 800;
+    
+    if (isPC) {
+      // PC版: 中央モーダル
+      showDialog(
+        context: context,
+        barrierDismissible: true,
+        builder: (ctx) => Dialog(
+          backgroundColor: Colors.white,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          child: SizedBox(
+            width: 400,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 16, 8, 8),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text('教室を選択', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                      IconButton(
+                        icon: const Icon(Icons.close),
+                        onPressed: () => Navigator.pop(ctx),
+                      ),
+                    ],
+                  ),
+                ),
+                const Divider(height: 1),
+                ..._classroomList.map((room) => ListTile(
+                  leading: _selectedClassroom == room 
+                    ? const Icon(Icons.check, color: AppColors.primary) 
+                    : const SizedBox(width: 24),
+                  title: Text(room),
+                  onTap: () {
+                    setState(() {
+                      _selectedClassroom = room;
+                      if (!_isEditing) {
+                        _selectedStudentIds.clear();
+                        _studentNamesMap.clear();
+                      }
+                    });
+                    Navigator.pop(ctx);
+                  },
+                )),
+                const SizedBox(height: 8),
+              ],
+            ),
+          ),
+        ),
+      );
+    } else {
+      // スマホ版: 従来のボトムシート
+      showModalBottomSheet(
+        context: context,
+        builder: (ctx) => SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Padding(
+                padding: EdgeInsets.all(16),
+                child: Text('教室を選択', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              ),
+              ..._classroomList.map((room) => ListTile(
+                leading: _selectedClassroom == room 
+                  ? const Icon(Icons.check, color: AppColors.primary) 
+                  : const SizedBox(width: 24),
+                title: Text(room),
+                onTap: () {
+                  setState(() {
+                    _selectedClassroom = room;
+                    if (!_isEditing) {
+                      _selectedStudentIds.clear();
+                      _studentNamesMap.clear();
+                    }
+                  });
+                  Navigator.pop(ctx);
+                },
+              )),
+            ],
+          ),
+        ),
+      );
+    }
   }
 
   void _showStudentActionSheet(String studentId) {
@@ -549,45 +630,118 @@ class _AddEventDialogState extends State<AddEventDialog> {
     ])));
   }
 
+  // ★修正: PC版は中央モーダル、スマホ版はボトムシート
   void _showStudentSelectSheet() {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) => _PersonSelectSheet(
-        title: '生徒を選択',
-        type: 'student',
-        filterKey: _isManualLocation ? null : _selectedClassroom,
-        initialSelectedIds: _selectedStudentIds,
-        onConfirmed: (items) {
-          setState(() {
-            _selectedStudentIds.clear();
-            _selectedStudentIds.addAll(items.keys);
-            _studentNamesMap.addAll(items);
-          });
-        },
-      ),
-    );
+    final bool isPC = MediaQuery.of(context).size.width >= 800;
+    
+    if (isPC) {
+      // PC版: 中央モーダル
+      showDialog(
+        context: context,
+        barrierDismissible: true,
+        builder: (ctx) => Dialog(
+          backgroundColor: Colors.white,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          insetPadding: const EdgeInsets.symmetric(horizontal: 40, vertical: 24),
+          child: SizedBox(
+            width: 500,
+            height: MediaQuery.of(context).size.height * 0.8,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(16),
+              child: _PersonSelectSheet(
+                title: '生徒を選択',
+                type: 'student',
+                filterKey: _isManualLocation ? null : _selectedClassroom,
+                initialSelectedIds: _selectedStudentIds,
+                onConfirmed: (items) {
+                  setState(() {
+                    _selectedStudentIds.clear();
+                    _selectedStudentIds.addAll(items.keys);
+                    _studentNamesMap.addAll(items);
+                  });
+                },
+              ),
+            ),
+          ),
+        ),
+      );
+    } else {
+      // スマホ版: 従来のボトムシート
+      showModalBottomSheet(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: Colors.transparent,
+        builder: (ctx) => _PersonSelectSheet(
+          title: '生徒を選択',
+          type: 'student',
+          filterKey: _isManualLocation ? null : _selectedClassroom,
+          initialSelectedIds: _selectedStudentIds,
+          onConfirmed: (items) {
+            setState(() {
+              _selectedStudentIds.clear();
+              _selectedStudentIds.addAll(items.keys);
+              _studentNamesMap.addAll(items);
+            });
+          },
+        ),
+      );
+    }
   }
 
+  // ★修正: PC版は中央モーダル、スマホ版はボトムシート
   void _showStaffSelectSheet() {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) => _PersonSelectSheet(
-        title: '担当者を選択',
-        type: 'staff',
-        initialSelectedIds: _selectedStaffIds,
-        onConfirmed: (items) {
-          setState(() {
-            _selectedStaffIds.clear();
-            _selectedStaffIds.addAll(items.keys);
-            _staffNamesMap.addAll(items);
-          });
-        },
-      ),
-    );
+    final bool isPC = MediaQuery.of(context).size.width >= 800;
+    
+    if (isPC) {
+      // PC版: 中央モーダル
+      showDialog(
+        context: context,
+        barrierDismissible: true,
+        builder: (ctx) => Dialog(
+          backgroundColor: Colors.white,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          insetPadding: const EdgeInsets.symmetric(horizontal: 40, vertical: 24),
+          child: SizedBox(
+            width: 500,
+            height: MediaQuery.of(context).size.height * 0.8,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(16),
+              child: _PersonSelectSheet(
+                title: '担当者を選択',
+                type: 'staff',
+                initialSelectedIds: _selectedStaffIds,
+                onConfirmed: (items) {
+                  setState(() {
+                    _selectedStaffIds.clear();
+                    _selectedStaffIds.addAll(items.keys);
+                    _staffNamesMap.addAll(items);
+                  });
+                },
+              ),
+            ),
+          ),
+        ),
+      );
+    } else {
+      // スマホ版: 従来のボトムシート
+      showModalBottomSheet(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: Colors.transparent,
+        builder: (ctx) => _PersonSelectSheet(
+          title: '担当者を選択',
+          type: 'staff',
+          initialSelectedIds: _selectedStaffIds,
+          onConfirmed: (items) {
+            setState(() {
+              _selectedStaffIds.clear();
+              _selectedStaffIds.addAll(items.keys);
+              _staffNamesMap.addAll(items);
+            });
+          },
+        ),
+      );
+    }
   }
 }
 
@@ -721,25 +875,44 @@ class _PersonSelectSheetState extends State<_PersonSelectSheet> {
   @override
   Widget build(BuildContext context) {
     final groupedList = _buildGroupedList();
+    final bool isPC = MediaQuery.of(context).size.width >= 800;
     
     return Container(
-      height: MediaQuery.of(context).size.height * 0.85,
-      decoration: const BoxDecoration(
+      // PC版では高さを親に任せる、スマホ版では85%
+      height: isPC ? null : MediaQuery.of(context).size.height * 0.85,
+      decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: isPC 
+          ? BorderRadius.circular(16)
+          : const BorderRadius.vertical(top: Radius.circular(20)),
       ),
       child: Column(children: [
-        Center(
-          child: Container(
-            margin: const EdgeInsets.only(top: 12, bottom: 8),
-            width: 40, height: 4,
-            decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2)),
+        // スマホ版のみドラッグハンドルを表示
+        if (!isPC)
+          Center(
+            child: Container(
+              margin: const EdgeInsets.only(top: 12, bottom: 8),
+              width: 40, height: 4,
+              decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2)),
+            ),
           ),
-        ),
         Padding(
-          padding: const EdgeInsets.all(16),
+          padding: EdgeInsets.all(isPC ? 20 : 16),
           child: Column(children: [
-            Text(widget.title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            // PC版ではタイトル行に閉じるボタンを追加
+            if (isPC)
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(widget.title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                ],
+              )
+            else
+              Text(widget.title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
             const SizedBox(height: 16),
             TextField(
               controller: _searchCtrl,
@@ -786,7 +959,8 @@ class _PersonSelectSheetState extends State<_PersonSelectSheet> {
                             value: _selectedMap.containsKey(person['id']),
                             activeColor: AppColors.primary,
                             title: Text(person['name']),
-                            subtitle: Text(person['kana'], style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
+                            // スマホ版のみふりがなを表示
+                            subtitle: isPC ? null : Text(person['kana'], style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
                             onChanged: (val) => setState(() {
                               if (val == true) _selectedMap[person['id']] = person['name'];
                               else _selectedMap.remove(person['id']);
