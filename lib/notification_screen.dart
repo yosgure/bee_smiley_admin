@@ -136,18 +136,16 @@ class _NotificationScreenState extends State<NotificationScreen> {
           );
         },
       ),
-      floatingActionButton: FloatingActionButton(heroTag: null, 
+      // ★修正: イベント画面と同じFABデザイン
+      floatingActionButton: FloatingActionButton(
+        heroTag: null, 
         onPressed: () => _openEditScreen(null),
         backgroundColor: Colors.white,
-        child: Container(
-          width: 32,
-          height: 32,
-          decoration: const BoxDecoration(
-            image: DecorationImage(
-              image: AssetImage('assets/logo_beesmileymark.png'),
-              fit: BoxFit.contain,
-            ),
-          ),
+        elevation: 4,
+        shape: const CircleBorder(),
+        child: Padding(
+          padding: const EdgeInsets.all(8.0),
+          child: Image.asset('assets/logo_beesmileymark.png'),
         ),
       ),
     );
