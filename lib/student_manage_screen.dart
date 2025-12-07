@@ -171,7 +171,7 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
                           const SizedBox(height: 12),
                           const Text('【児童詳細】', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)),
                           if (children.isEmpty) const Text('登録なし', style: TextStyle(color: Colors.grey)),
-                          ...children.map((child) => _buildChildCard(child)).toList(),
+                          ...children.map((child) => _buildChildCard(child)),
 
                           const SizedBox(height: 16),
                           Row(
@@ -676,7 +676,7 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
                               ],
                             ),
                           );
-                        }).toList(),
+                        }),
                       ],
                     ),
                   ),

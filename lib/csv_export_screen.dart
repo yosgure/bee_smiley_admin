@@ -256,6 +256,23 @@ class _FamilyCsvExportScreenState extends State<FamilyCsvExportScreen> {
     });
   }
 
+  // birthDateを安全に文字列に変換
+  String _formatBirthDate(dynamic birthDate) {
+    if (birthDate == null) return '';
+    
+    // 既にStringの場合はそのまま返す
+    if (birthDate is String) {
+      return birthDate;
+    }
+    
+    // Timestampの場合はフォーマットして返す
+    if (birthDate is Timestamp) {
+      return DateFormat('yyyy/MM/dd').format(birthDate.toDate());
+    }
+    
+    return birthDate.toString();
+  }
+
   Future<void> _exportCsv() async {
     setState(() => _isLoading = true);
 
@@ -265,19 +282,33 @@ class _FamilyCsvExportScreenState extends State<FamilyCsvExportScreen> {
           .orderBy('lastNameKana')
           .get();
 
-      // ヘッダー行
+      // ヘッダー行（全フィールド）
       final headers = [
+        // 保護者情報
+        'ログインID',
         '保護者姓',
         '保護者名',
         '保護者姓カナ',
         '保護者名カナ',
-        'メールアドレス',
+        '続柄',
         '電話番号',
+        'メールアドレス',
+        '郵便番号',
+        '住所',
+        // 緊急連絡先
+        '緊急連絡先氏名',
+        '緊急連絡先続柄',
+        '緊急連絡先電話',
+        // アカウント状態
+        'アカウント状態',
+        // 児童情報
         '児童名',
         '児童カナ',
-        '生年月日',
         '性別',
+        '生年月日',
         '教室',
+        'コース',
+        'アレルギー・特記事項',
       ];
 
       final rows = <List<String>>[headers];
@@ -286,36 +317,60 @@ class _FamilyCsvExportScreenState extends State<FamilyCsvExportScreen> {
         final d = doc.data();
         final children = List<Map<String, dynamic>>.from(d['children'] ?? []);
 
+        // アカウント状態を判定
+        final hasAccount = d['uid'] != null && d['uid'].toString().isNotEmpty;
+        final isInitialPassword = d['isInitialPassword'] == true;
+        String accountStatus = '未登録';
+        if (hasAccount) {
+          accountStatus = isInitialPassword ? '初期PW' : 'アクティブ';
+        }
+
         if (children.isEmpty) {
           // 児童がいない場合は保護者情報のみ
           rows.add([
+            CsvExporter.escapeCsvValue(d['loginId']),
             CsvExporter.escapeCsvValue(d['lastName']),
             CsvExporter.escapeCsvValue(d['firstName']),
             CsvExporter.escapeCsvValue(d['lastNameKana']),
             CsvExporter.escapeCsvValue(d['firstNameKana']),
-            CsvExporter.escapeCsvValue(d['email']),
+            CsvExporter.escapeCsvValue(d['relation']),
             CsvExporter.escapeCsvValue(d['phone']),
-            '', '', '', '', '',
+            CsvExporter.escapeCsvValue(d['email']),
+            CsvExporter.escapeCsvValue(d['postalCode']),
+            CsvExporter.escapeCsvValue(d['address']),
+            CsvExporter.escapeCsvValue(d['emergencyName']),
+            CsvExporter.escapeCsvValue(d['emergencyRelation']),
+            CsvExporter.escapeCsvValue(d['emergencyPhone']),
+            CsvExporter.escapeCsvValue(accountStatus),
+            '', '', '', '', '', '', '',
           ]);
         } else {
           // 児童ごとに1行
           for (var child in children) {
-            final birthDate = child['birthDate'] != null
-                ? DateFormat('yyyy/MM/dd').format((child['birthDate'] as Timestamp).toDate())
-                : '';
+            final birthDate = _formatBirthDate(child['birthDate']);
 
             rows.add([
+              CsvExporter.escapeCsvValue(d['loginId']),
               CsvExporter.escapeCsvValue(d['lastName']),
               CsvExporter.escapeCsvValue(d['firstName']),
               CsvExporter.escapeCsvValue(d['lastNameKana']),
               CsvExporter.escapeCsvValue(d['firstNameKana']),
-              CsvExporter.escapeCsvValue(d['email']),
+              CsvExporter.escapeCsvValue(d['relation']),
               CsvExporter.escapeCsvValue(d['phone']),
-              CsvExporter.escapeCsvValue(child['name']),
-              CsvExporter.escapeCsvValue(child['nameKana']),
-              CsvExporter.escapeCsvValue(birthDate),
+              CsvExporter.escapeCsvValue(d['email']),
+              CsvExporter.escapeCsvValue(d['postalCode']),
+              CsvExporter.escapeCsvValue(d['address']),
+              CsvExporter.escapeCsvValue(d['emergencyName']),
+              CsvExporter.escapeCsvValue(d['emergencyRelation']),
+              CsvExporter.escapeCsvValue(d['emergencyPhone']),
+              CsvExporter.escapeCsvValue(accountStatus),
+              CsvExporter.escapeCsvValue(child['firstName']),
+              CsvExporter.escapeCsvValue(child['firstNameKana']),
               CsvExporter.escapeCsvValue(child['gender']),
+              CsvExporter.escapeCsvValue(birthDate),
               CsvExporter.escapeCsvValue(child['classroom']),
+              CsvExporter.escapeCsvValue(child['course']),
+              CsvExporter.escapeCsvValue(child['allergy']),
             ]);
           }
         }
@@ -391,7 +446,7 @@ class _FamilyCsvExportScreenState extends State<FamilyCsvExportScreen> {
                       ),
                       const SizedBox(height: 24),
                       const Text(
-                        '出力項目: 保護者姓名、カナ、メール、電話、\n児童名、カナ、生年月日、性別、教室',
+                        '出力項目: ログインID、保護者情報、続柄、連絡先、\n住所、緊急連絡先、アカウント状態、\n児童名、カナ、性別、生年月日、教室、コース、特記事項',
                         textAlign: TextAlign.center,
                         style: TextStyle(fontSize: 12, color: Colors.grey),
                       ),

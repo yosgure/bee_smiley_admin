@@ -7,6 +7,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'add_event_screen.dart';
 import 'student_detail_screen.dart';
+import 'plus_schedule_screen.dart';
 import 'app_theme.dart';
 
 class CalendarScreen extends StatefulWidget {
@@ -17,7 +18,6 @@ class CalendarScreen extends StatefulWidget {
 }
 
 class _CalendarScreenState extends State<CalendarScreen> {
-  // ★追加: ScaffoldKey
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   
   CalendarView _calendarView = CalendarView.month;
@@ -33,6 +33,9 @@ class _CalendarScreenState extends State<CalendarScreen> {
   
   bool _isLocaleInitialized = false;
   bool _isLoadingStaffInfo = true;
+
+  // ★追加: プラス予定表示フラグ
+  bool _showPlusSchedule = false;
 
   // フィルタ
   bool _showMySchedule = true;
@@ -50,12 +53,10 @@ class _CalendarScreenState extends State<CalendarScreen> {
   @override
   void initState() {
     super.initState();
-    // 初期表示を8:00に設定
     final now = DateTime.now();
     _controller.displayDate = DateTime(now.year, now.month, now.day, 8, 0);
     _initData();
 
-    // 安全装置
     Future.delayed(const Duration(seconds: 5), () {
       if (mounted && (_isLoadingStaffInfo || !_isLocaleInitialized)) {
         setState(() {
@@ -195,8 +196,18 @@ class _CalendarScreenState extends State<CalendarScreen> {
 
     final bool showSidebar = MediaQuery.of(context).size.width >= 800;
 
+    // ★変更: プラス予定表示時は専用のWidgetを返す
+    if (_showPlusSchedule) {
+      return Scaffold(
+        key: _scaffoldKey,
+        backgroundColor: Colors.white,
+        body: PlusScheduleContent(
+          onBack: () => setState(() => _showPlusSchedule = false),
+        ),
+      );
+    }
+
     return Scaffold(
-      // ★追加: keyを設定
       key: _scaffoldKey,
       backgroundColor: Colors.white,
       drawer: showSidebar
@@ -213,7 +224,6 @@ class _CalendarScreenState extends State<CalendarScreen> {
               ),
             ),
       appBar: showSidebar 
-        // PC版AppBar
         ? AppBar(
             backgroundColor: Colors.white,
             surfaceTintColor: Colors.white,
@@ -262,7 +272,6 @@ class _CalendarScreenState extends State<CalendarScreen> {
               ),
             ],
           )
-        // スマホ版AppBar - Stackで日週月を絶対中央に
         : AppBar(
             backgroundColor: Colors.white,
             surfaceTintColor: Colors.white,
@@ -273,15 +282,12 @@ class _CalendarScreenState extends State<CalendarScreen> {
             title: Stack(
               alignment: Alignment.center,
               children: [
-                // 中央: 日週月（絶対中央）
                 Center(
                   child: _buildSegmentedControl(),
                 ),
-                // 左右の要素
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    // 左: ハンバーガー + 12月
                     Row(
                       children: [
                         IconButton(
@@ -296,7 +302,6 @@ class _CalendarScreenState extends State<CalendarScreen> {
                         ),
                       ],
                     ),
-                    // 右: 今日ボタン
                     Padding(
                       padding: const EdgeInsets.only(right: 16),
                       child: GestureDetector(
@@ -335,7 +340,6 @@ class _CalendarScreenState extends State<CalendarScreen> {
               
               List<Appointment> appointments = [];
               
-              // 1. 予定の処理
               if (eventSnapshot.hasData) {
                 for (var doc in eventSnapshot.data!.docs) {
                   final data = doc.data() as Map<String, dynamic>;
@@ -370,7 +374,6 @@ class _CalendarScreenState extends State<CalendarScreen> {
                 }
               }
 
-              // 2. タスクの処理
               if (taskSnapshot.hasData) {
                 int pendingCount = 0;
                 final now = DateTime.now();
@@ -545,7 +548,6 @@ class _CalendarScreenState extends State<CalendarScreen> {
                                 );
                               }
                               
-                              // 通常の予定
                               final isMonthView = _calendarView == CalendarView.month;
                               return Container(
                                 margin: const EdgeInsets.symmetric(vertical: 1),
@@ -679,6 +681,30 @@ class _CalendarScreenState extends State<CalendarScreen> {
                     color, 
                   );
                 }),
+              
+              // プラス予定ボタン
+              const SizedBox(height: 16),
+              const Divider(),
+              const SizedBox(height: 8),
+              InkWell(
+                onTap: () => setState(() => _showPlusSchedule = true),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.green.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.green.withOpacity(0.3)),
+                  ),
+                  child: const Row(
+                    children: [
+                      Icon(Icons.grid_view, color: Colors.green, size: 20),
+                      SizedBox(width: 8),
+                      Expanded(child: Text('プラス予定', style: TextStyle(fontSize: 13, color: Colors.green, fontWeight: FontWeight.w500))),
+                      Icon(Icons.arrow_forward_ios, color: Colors.green, size: 14),
+                    ],
+                  ),
+                ),
+              ),
             ],
           ),
         ),
@@ -712,6 +738,32 @@ class _CalendarScreenState extends State<CalendarScreen> {
                     color, 
                   );
                 }),
+              
+              const SizedBox(height: 16),
+              const Divider(),
+              const SizedBox(height: 8),
+              InkWell(
+                onTap: () {
+                  Navigator.pop(context);
+                  Navigator.push(context, MaterialPageRoute(builder: (_) => const PlusScheduleScreen()));
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.green.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.green.withOpacity(0.3)),
+                  ),
+                  child: const Row(
+                    children: [
+                      Icon(Icons.grid_view, color: Colors.green, size: 20),
+                      SizedBox(width: 8),
+                      Expanded(child: Text('プラス予定', style: TextStyle(fontSize: 13, color: Colors.green, fontWeight: FontWeight.w500))),
+                      Icon(Icons.arrow_forward_ios, color: Colors.green, size: 14),
+                    ],
+                  ),
+                ),
+              ),
             ],
           ),
         ),

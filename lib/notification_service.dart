@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:async'; // 追加
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
@@ -22,6 +23,13 @@ class NotificationService {
   
   bool _initialized = false;
 
+  // ▼ 追加: 画面遷移の命令を送るための「放送局」
+  final _navigationController = StreamController<String>.broadcast();
+  Stream<String> get navigationStream => _navigationController.stream;
+
+  // ▼ 追加: アプリ起動時に「どの画面を開くか」を一時保存する変数
+  String? initialRoute;
+
   /// 通知サービスの初期化
   Future<void> initialize() async {
     if (_initialized) return;
@@ -35,7 +43,7 @@ class NotificationService {
     // フォアグラウンドメッセージのリスナー設定
     FirebaseMessaging.onMessage.listen(_handleForegroundMessage);
     
-    // 通知タップ時のハンドラ
+    // 通知タップ時のハンドラ（バックグラウンドからの復帰）
     FirebaseMessaging.onMessageOpenedApp.listen(_handleNotificationTap);
     
     // アプリが終了状態から通知タップで起動した場合
@@ -78,6 +86,10 @@ class NotificationService {
       initSettings,
       onDidReceiveNotificationResponse: (response) {
         debugPrint('🔔 ローカル通知タップ: ${response.payload}');
+        // ローカル通知タップ時も画面遷移処理へ回す
+        if (response.payload != null) {
+           _navigationController.add(response.payload!);
+        }
       },
     );
 
@@ -123,14 +135,21 @@ class NotificationService {
           presentSound: true,
         ),
       ),
-      payload: message.data['type'],
+      payload: message.data['type'], // タップ時に使うデータを渡す
     );
   }
 
   /// 通知タップ時の処理
   void _handleNotificationTap(RemoteMessage message) {
     debugPrint('👆 通知タップ: ${message.data}');
-    // TODO: 画面遷移などの処理
+    
+    final type = message.data['type'];
+    if (type != null) {
+      // 1. アプリ起動直後（init未完了）用に変数をセット
+      initialRoute = type;
+      // 2. 既に起動している画面に向けて放送する
+      _navigationController.add(type);
+    }
   }
 
   /// FCMトークンを取得してFirestoreに保存
@@ -142,14 +161,10 @@ class NotificationService {
       String? token;
       
       if (kIsWeb) {
-        // Web用のVAPIDキーが必要な場合はここで設定
-        // token = await _messaging.getToken(vapidKey: 'YOUR_VAPID_KEY');
         token = await _messaging.getToken();
       } else {
-        // iOSではAPNsトークンを先に取得する必要がある
         String? apnsToken = await _messaging.getAPNSToken();
         if (apnsToken == null) {
-          // APNsトークンがまだない場合は少し待つ
           await Future.delayed(const Duration(seconds: 3));
           apnsToken = await _messaging.getAPNSToken();
         }
@@ -167,10 +182,8 @@ class NotificationService {
       
       debugPrint('🔑 FCMトークン: ${token.substring(0, 20)}...');
       
-      // スタッフか保護者かを判定してトークンを保存
       await _saveTokenForUser(user.uid, token);
       
-      // トークンのリフレッシュを監視
       _messaging.onTokenRefresh.listen((newToken) {
         _saveTokenForUser(user.uid, newToken);
       });
@@ -184,7 +197,6 @@ class NotificationService {
   Future<void> _saveTokenForUser(String uid, String token) async {
     final firestore = FirebaseFirestore.instance;
     
-    // スタッフコレクションを確認
     final staffSnap = await firestore
         .collection('staffs')
         .where('uid', isEqualTo: uid)
@@ -200,7 +212,6 @@ class NotificationService {
       return;
     }
     
-    // 保護者コレクションを確認
     final familySnap = await firestore
         .collection('families')
         .where('uid', isEqualTo: uid)
@@ -230,7 +241,6 @@ class NotificationService {
       
       final firestore = FirebaseFirestore.instance;
       
-      // スタッフから削除
       final staffSnap = await firestore
           .collection('staffs')
           .where('uid', isEqualTo: user.uid)
@@ -243,7 +253,6 @@ class NotificationService {
         });
       }
       
-      // 保護者から削除
       final familySnap = await firestore
           .collection('families')
           .where('uid', isEqualTo: user.uid)
@@ -267,7 +276,6 @@ class NotificationService {
     try {
       final firestore = FirebaseFirestore.instance;
       
-      // スタッフを確認
       final staffSnap = await firestore
           .collection('staffs')
           .where('uid', isEqualTo: uid)
@@ -284,7 +292,6 @@ class NotificationService {
         };
       }
       
-      // 保護者を確認
       final familySnap = await firestore
           .collection('families')
           .where('uid', isEqualTo: uid)
@@ -324,7 +331,6 @@ class NotificationService {
         'notifyAssessment': settings['assessment'] ?? true,
       };
       
-      // スタッフを確認
       final staffSnap = await firestore
           .collection('staffs')
           .where('uid', isEqualTo: uid)
@@ -337,7 +343,6 @@ class NotificationService {
         return;
       }
       
-      // 保護者を確認
       final familySnap = await firestore
           .collection('families')
           .where('uid', isEqualTo: uid)

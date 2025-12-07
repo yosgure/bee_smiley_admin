@@ -218,6 +218,11 @@ class AdminShell extends StatefulWidget {
 
 class _AdminShellState extends State<AdminShell> {
   int _selectedIndex = 0;
+
+  // 通知バッジ用の状態変数
+  bool _hasUnreadSchedule = false; // 予定
+  bool _hasUnreadChat = false;     // チャット
+
   final List<Widget> _screens = const [
     CalendarScreen(), AssessmentScreen(), ChatListScreen(),
     NotificationScreen(), EventScreen(), AdminScreen(),
@@ -227,30 +232,118 @@ class _AdminShellState extends State<AdminShell> {
   void initState() {
     super.initState();
     debugPrint("🔵 AdminShell initState called");
+    _setupNotificationListener(); // バッジ表示用
+    _setupNavigationListener();   // 画面遷移用
+  }
+
+  // バッジ表示用のリスナー
+  void _setupNotificationListener() {
+    FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+      final type = message.data['type'];
+      if (!mounted) return;
+      setState(() {
+        if (type == 'chat') {
+          _hasUnreadChat = true;
+        } else if (type == 'schedule') {
+          _hasUnreadSchedule = true;
+        }
+      });
+    });
+  }
+
+  // 画面遷移用のリスナー
+  void _setupNavigationListener() {
+    final service = NotificationService();
+
+    // 1. アプリ起動時のチェック
+    if (service.initialRoute != null) {
+      _navigateByType(service.initialRoute!);
+      service.initialRoute = null;
+    }
+
+    // 2. 起動中の監視
+    service.navigationStream.listen((type) {
+      if (!mounted) return;
+      _navigateByType(type);
+    });
+  }
+
+  // タイプに応じてタブを切り替える共通処理
+  void _navigateByType(String type) {
+    int newIndex = _selectedIndex;
+
+    switch (type) {
+      case 'schedule':
+        newIndex = 0; // 予定タブ
+        break;
+      case 'record':
+        newIndex = 1; // 記録タブ
+        break;
+      case 'chat':
+        newIndex = 2; // チャットタブ
+        break;
+      case 'info':
+        newIndex = 3; // お知らせタブ
+        break;
+      case 'event':
+        newIndex = 4; // イベントタブ
+        break;
+    }
+
+    if (newIndex != _selectedIndex) {
+      setState(() {
+        _selectedIndex = newIndex;
+        // 遷移したらそのタブのバッジを消す
+        if (type == 'chat') _hasUnreadChat = false;
+        if (type == 'schedule') _hasUnreadSchedule = false;
+      });
+    }
+  }
+
+  // バッジ付きアイコンを作成するヘルパー
+  Widget _buildBadgedIcon(IconData icon, bool showBadge) {
+    return Badge(
+      isLabelVisible: showBadge,
+      smallSize: 10,
+      child: Icon(icon),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     debugPrint("🔵 AdminShell build called");
     final isWebLayout = MediaQuery.of(context).size.width >= 600;
+    
     return Scaffold(
       body: Row(
         children: [
           if (isWebLayout) NavigationRail(
             selectedIndex: _selectedIndex,
-            onDestinationSelected: (i) => setState(() => _selectedIndex = i),
+            onDestinationSelected: (i) {
+              setState(() {
+                _selectedIndex = i;
+                if (i == 0) _hasUnreadSchedule = false;
+                if (i == 2) _hasUnreadChat = false;
+              });
+            },
             labelType: NavigationRailLabelType.all,
             indicatorColor: AppColors.primary.withOpacity(0.2),
             selectedIconTheme: const IconThemeData(color: AppColors.primary),
             selectedLabelTextStyle: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold),
             leading: Padding(padding: const EdgeInsets.all(12), child: Image.asset('assets/logo_beesmileymark.png', width: 50, height: 50)),
-            destinations: const [
-              NavigationRailDestination(icon: Icon(Icons.calendar_month), label: Text('予定')),
-              NavigationRailDestination(icon: Icon(Icons.edit_note), label: Text('記録')),
-              NavigationRailDestination(icon: Icon(Icons.chat), label: Text('チャット')),
-              NavigationRailDestination(icon: Icon(Icons.notifications), label: Text('お知らせ')),
-              NavigationRailDestination(icon: Icon(Icons.event), label: Text('イベント')),
-              NavigationRailDestination(icon: Icon(Icons.manage_accounts), label: Text('管理')),
+            destinations: [
+              NavigationRailDestination(
+                icon: _buildBadgedIcon(Icons.calendar_month, _hasUnreadSchedule),
+                label: const Text('予定'),
+              ),
+              const NavigationRailDestination(icon: Icon(Icons.edit_note), label: Text('記録')),
+              NavigationRailDestination(
+                icon: _buildBadgedIcon(Icons.chat, _hasUnreadChat),
+                label: const Text('チャット'),
+              ),
+              const NavigationRailDestination(icon: Icon(Icons.notifications), label: Text('お知らせ')),
+              const NavigationRailDestination(icon: Icon(Icons.event), label: Text('イベント')),
+              const NavigationRailDestination(icon: Icon(Icons.manage_accounts), label: Text('管理')),
             ],
           ),
           if (isWebLayout) const VerticalDivider(thickness: 1, width: 1),
@@ -259,16 +352,28 @@ class _AdminShellState extends State<AdminShell> {
       ),
       bottomNavigationBar: isWebLayout ? null : BottomNavigationBar(
         currentIndex: _selectedIndex,
-        onTap: (i) => setState(() => _selectedIndex = i),
+        onTap: (i) {
+          setState(() {
+            _selectedIndex = i;
+            if (i == 0) _hasUnreadSchedule = false;
+            if (i == 2) _hasUnreadChat = false;
+          });
+        },
         type: BottomNavigationBarType.fixed,
         selectedItemColor: AppColors.primary,
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.calendar_month), label: '予定'),
-          BottomNavigationBarItem(icon: Icon(Icons.edit_note), label: '記録'),
-          BottomNavigationBarItem(icon: Icon(Icons.chat), label: 'チャット'),
-          BottomNavigationBarItem(icon: Icon(Icons.notifications), label: 'お知らせ'),
-          BottomNavigationBarItem(icon: Icon(Icons.event), label: 'イベント'),
-          BottomNavigationBarItem(icon: Icon(Icons.manage_accounts), label: '管理'),
+        items: [
+          BottomNavigationBarItem(
+            icon: _buildBadgedIcon(Icons.calendar_month, _hasUnreadSchedule),
+            label: '予定',
+          ),
+          const BottomNavigationBarItem(icon: Icon(Icons.edit_note), label: '記録'),
+          BottomNavigationBarItem(
+            icon: _buildBadgedIcon(Icons.chat, _hasUnreadChat),
+            label: 'チャット',
+          ),
+          const BottomNavigationBarItem(icon: Icon(Icons.notifications), label: 'お知らせ'),
+          const BottomNavigationBarItem(icon: Icon(Icons.event), label: 'イベント'),
+          const BottomNavigationBarItem(icon: Icon(Icons.manage_accounts), label: '管理'),
         ],
       ),
     );
