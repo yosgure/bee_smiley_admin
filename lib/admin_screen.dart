@@ -632,7 +632,7 @@ class _AdminScreenState extends State<AdminScreen> {
                 ),
               ),
               const Divider(height: 1, indent: 60),
-              // 通知設定
+              // 通知設定（1つだけ）
               ListTile(
                 leading: Container(
                   padding: const EdgeInsets.all(6),
@@ -651,29 +651,6 @@ class _AdminScreenState extends State<AdminScreen> {
                   Navigator.push(context, MaterialPageRoute(
                     builder: (_) => const NotificationSettingsScreen(),
                   ));
-                },
-              ),
-              const Divider(height: 1, indent: 60),
-              // 通知設定
-              ListTile(
-                leading: Container(
-                  padding: const EdgeInsets.all(6),
-                  decoration: BoxDecoration(
-                    color: Colors.blue.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Icon(Icons.notifications_outlined, color: Colors.blue, size: 24),
-                ),
-                title: const Text(
-                  '通知設定',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                ),
-                trailing: const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey),
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (context) => const NotificationSettingsScreen()),
-                  );
                 },
               ),
               const Divider(height: 1, indent: 60),

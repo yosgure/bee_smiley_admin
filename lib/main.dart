@@ -18,6 +18,7 @@ import 'event_screen.dart';
 import 'admin_screen.dart';
 import 'login_screen.dart';
 import 'force_change_password_screen.dart';
+import 'plus_schedule_screen.dart';
 
 // 保護者用画面のインポート
 import 'parent_main.dart';
@@ -216,24 +217,232 @@ class AdminShell extends StatefulWidget {
   State<AdminShell> createState() => _AdminShellState();
 }
 
+// スタッフの担当パターン
+enum StaffType {
+  both,      // ビースマイリー + プラス両方
+  beesmiley, // ビースマイリーのみ
+  plusOnly,  // プラスのみ
+  loading,   // 読み込み中
+}
+
 class _AdminShellState extends State<AdminShell> {
   int _selectedIndex = 0;
 
   // 通知バッジ用の状態変数
   bool _hasUnreadSchedule = false; // 予定
   bool _hasUnreadChat = false;     // チャット
-
-  final List<Widget> _screens = const [
-    CalendarScreen(), AssessmentScreen(), ChatListScreen(),
-    NotificationScreen(), EventScreen(), AdminScreen(),
-  ];
+  
+  // スタッフの担当パターン
+  StaffType _staffType = StaffType.loading;
 
   @override
   void initState() {
     super.initState();
     debugPrint("🔵 AdminShell initState called");
+    _loadStaffClassrooms();
     _setupNotificationListener(); // バッジ表示用
     _setupNavigationListener();   // 画面遷移用
+  }
+  
+  // スタッフの担当教室を読み込み
+  Future<void> _loadStaffClassrooms() async {
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) {
+        setState(() => _staffType = StaffType.both);
+        return;
+      }
+      
+      final staffSnap = await FirebaseFirestore.instance
+          .collection('staffs')
+          .where('uid', isEqualTo: user.uid)
+          .limit(1)
+          .get();
+      
+      if (staffSnap.docs.isEmpty) {
+        setState(() => _staffType = StaffType.both);
+        return;
+      }
+      
+      final classrooms = List<String>.from(staffSnap.docs.first.data()['classrooms'] ?? []);
+      
+      // 担当パターンを判定
+      final hasPlus = classrooms.any((c) => c.contains('プラス'));
+      final hasBeesmiley = classrooms.any((c) => !c.contains('プラス') && c.contains('ビースマイリー'));
+      
+      setState(() {
+        if (hasPlus && hasBeesmiley) {
+          _staffType = StaffType.both;
+        } else if (hasPlus) {
+          _staffType = StaffType.plusOnly;
+        } else {
+          _staffType = StaffType.beesmiley;
+        }
+      });
+      
+      debugPrint("📋 Staff type: $_staffType (classrooms: $classrooms)");
+    } catch (e) {
+      debugPrint("Error loading staff classrooms: $e");
+      setState(() => _staffType = StaffType.both);
+    }
+  }
+  
+  // 担当パターンに応じた画面リストを取得
+  List<Widget> get _screens {
+    switch (_staffType) {
+      case StaffType.plusOnly:
+        // プラスのみ: 予定、プラス、チャット、お知らせ、管理
+        return const [
+          CalendarScreen(),      // 0: 予定
+          PlusScheduleScreen(),  // 1: プラス
+          ChatListScreen(),      // 2: チャット
+          NotificationScreen(),  // 3: お知らせ
+          AdminScreen(),         // 4: 管理
+        ];
+      case StaffType.beesmiley:
+        // ビースマイリーのみ: プラス以外
+        return const [
+          CalendarScreen(),      // 0: 予定
+          AssessmentScreen(),    // 1: 記録
+          ChatListScreen(),      // 2: チャット
+          NotificationScreen(),  // 3: お知らせ
+          EventScreen(),         // 4: イベント
+          AdminScreen(),         // 5: 管理
+        ];
+      case StaffType.both:
+      case StaffType.loading:
+      default:
+        // 両方またはローディング中: 全メニュー
+        return const [
+          CalendarScreen(),      // 0: 予定
+          PlusScheduleScreen(),  // 1: プラス
+          AssessmentScreen(),    // 2: 記録
+          ChatListScreen(),      // 3: チャット
+          NotificationScreen(),  // 4: お知らせ
+          EventScreen(),         // 5: イベント
+          AdminScreen(),         // 6: 管理
+        ];
+    }
+  }
+  
+  // 担当パターンに応じたNavigationRailのdestinationsを取得
+  List<NavigationRailDestination> get _railDestinations {
+    switch (_staffType) {
+      case StaffType.plusOnly:
+        return [
+          NavigationRailDestination(
+            icon: _buildBadgedIcon(Icons.calendar_month, _hasUnreadSchedule),
+            label: const Text('予定'),
+          ),
+          const NavigationRailDestination(icon: Icon(Icons.grid_view), label: Text('プラス')),
+          NavigationRailDestination(
+            icon: _buildBadgedIcon(Icons.chat, _hasUnreadChat),
+            label: const Text('チャット'),
+          ),
+          const NavigationRailDestination(icon: Icon(Icons.notifications), label: Text('お知らせ')),
+          const NavigationRailDestination(icon: Icon(Icons.manage_accounts), label: Text('管理')),
+        ];
+      case StaffType.beesmiley:
+        return [
+          NavigationRailDestination(
+            icon: _buildBadgedIcon(Icons.calendar_month, _hasUnreadSchedule),
+            label: const Text('予定'),
+          ),
+          const NavigationRailDestination(icon: Icon(Icons.edit_note), label: Text('記録')),
+          NavigationRailDestination(
+            icon: _buildBadgedIcon(Icons.chat, _hasUnreadChat),
+            label: const Text('チャット'),
+          ),
+          const NavigationRailDestination(icon: Icon(Icons.notifications), label: Text('お知らせ')),
+          const NavigationRailDestination(icon: Icon(Icons.event), label: Text('イベント')),
+          const NavigationRailDestination(icon: Icon(Icons.manage_accounts), label: Text('管理')),
+        ];
+      case StaffType.both:
+      case StaffType.loading:
+      default:
+        return [
+          NavigationRailDestination(
+            icon: _buildBadgedIcon(Icons.calendar_month, _hasUnreadSchedule),
+            label: const Text('予定'),
+          ),
+          const NavigationRailDestination(icon: Icon(Icons.grid_view), label: Text('プラス')),
+          const NavigationRailDestination(icon: Icon(Icons.edit_note), label: Text('記録')),
+          NavigationRailDestination(
+            icon: _buildBadgedIcon(Icons.chat, _hasUnreadChat),
+            label: const Text('チャット'),
+          ),
+          const NavigationRailDestination(icon: Icon(Icons.notifications), label: Text('お知らせ')),
+          const NavigationRailDestination(icon: Icon(Icons.event), label: Text('イベント')),
+          const NavigationRailDestination(icon: Icon(Icons.manage_accounts), label: Text('管理')),
+        ];
+    }
+  }
+  
+  // 担当パターンに応じたBottomNavigationBarのitemsを取得
+  List<BottomNavigationBarItem> get _bottomNavItems {
+    switch (_staffType) {
+      case StaffType.plusOnly:
+        return [
+          BottomNavigationBarItem(
+            icon: _buildBadgedIcon(Icons.calendar_month, _hasUnreadSchedule),
+            label: '予定',
+          ),
+          const BottomNavigationBarItem(icon: Icon(Icons.grid_view), label: 'プラス'),
+          BottomNavigationBarItem(
+            icon: _buildBadgedIcon(Icons.chat, _hasUnreadChat),
+            label: 'チャット',
+          ),
+          const BottomNavigationBarItem(icon: Icon(Icons.notifications), label: 'お知らせ'),
+          const BottomNavigationBarItem(icon: Icon(Icons.manage_accounts), label: '管理'),
+        ];
+      case StaffType.beesmiley:
+        return [
+          BottomNavigationBarItem(
+            icon: _buildBadgedIcon(Icons.calendar_month, _hasUnreadSchedule),
+            label: '予定',
+          ),
+          const BottomNavigationBarItem(icon: Icon(Icons.edit_note), label: '記録'),
+          BottomNavigationBarItem(
+            icon: _buildBadgedIcon(Icons.chat, _hasUnreadChat),
+            label: 'チャット',
+          ),
+          const BottomNavigationBarItem(icon: Icon(Icons.notifications), label: 'お知らせ'),
+          const BottomNavigationBarItem(icon: Icon(Icons.event), label: 'イベント'),
+          const BottomNavigationBarItem(icon: Icon(Icons.manage_accounts), label: '管理'),
+        ];
+      case StaffType.both:
+      case StaffType.loading:
+      default:
+        return [
+          BottomNavigationBarItem(
+            icon: _buildBadgedIcon(Icons.calendar_month, _hasUnreadSchedule),
+            label: '予定',
+          ),
+          const BottomNavigationBarItem(icon: Icon(Icons.grid_view), label: 'プラス'),
+          const BottomNavigationBarItem(icon: Icon(Icons.edit_note), label: '記録'),
+          BottomNavigationBarItem(
+            icon: _buildBadgedIcon(Icons.chat, _hasUnreadChat),
+            label: 'チャット',
+          ),
+          const BottomNavigationBarItem(icon: Icon(Icons.notifications), label: 'お知らせ'),
+          const BottomNavigationBarItem(icon: Icon(Icons.event), label: 'イベント'),
+          const BottomNavigationBarItem(icon: Icon(Icons.manage_accounts), label: '管理'),
+        ];
+    }
+  }
+  
+  // チャットタブのインデックスを取得
+  int get _chatIndex {
+    switch (_staffType) {
+      case StaffType.plusOnly:
+        return 2;
+      case StaffType.beesmiley:
+        return 2;
+      case StaffType.both:
+      case StaffType.loading:
+      default:
+        return 3;
+    }
   }
 
   // バッジ表示用のリスナー
@@ -272,21 +481,62 @@ class _AdminShellState extends State<AdminShell> {
   void _navigateByType(String type) {
     int newIndex = _selectedIndex;
 
-    switch (type) {
-      case 'schedule':
-        newIndex = 0; // 予定タブ
+    switch (_staffType) {
+      case StaffType.plusOnly:
+        // プラスのみ: 予定(0), プラス(1), チャット(2), お知らせ(3), 管理(4)
+        switch (type) {
+          case 'schedule':
+            newIndex = 0;
+            break;
+          case 'chat':
+            newIndex = 2;
+            break;
+          case 'info':
+            newIndex = 3;
+            break;
+        }
         break;
-      case 'record':
-        newIndex = 1; // 記録タブ
+      case StaffType.beesmiley:
+        // ビースマイリーのみ: 予定(0), 記録(1), チャット(2), お知らせ(3), イベント(4), 管理(5)
+        switch (type) {
+          case 'schedule':
+            newIndex = 0;
+            break;
+          case 'record':
+            newIndex = 1;
+            break;
+          case 'chat':
+            newIndex = 2;
+            break;
+          case 'info':
+            newIndex = 3;
+            break;
+          case 'event':
+            newIndex = 4;
+            break;
+        }
         break;
-      case 'chat':
-        newIndex = 2; // チャットタブ
-        break;
-      case 'info':
-        newIndex = 3; // お知らせタブ
-        break;
-      case 'event':
-        newIndex = 4; // イベントタブ
+      case StaffType.both:
+      case StaffType.loading:
+      default:
+        // 両方: 予定(0), プラス(1), 記録(2), チャット(3), お知らせ(4), イベント(5), 管理(6)
+        switch (type) {
+          case 'schedule':
+            newIndex = 0;
+            break;
+          case 'record':
+            newIndex = 2;
+            break;
+          case 'chat':
+            newIndex = 3;
+            break;
+          case 'info':
+            newIndex = 4;
+            break;
+          case 'event':
+            newIndex = 5;
+            break;
+        }
         break;
     }
 
@@ -314,16 +564,26 @@ class _AdminShellState extends State<AdminShell> {
     debugPrint("🔵 AdminShell build called");
     final isWebLayout = MediaQuery.of(context).size.width >= 600;
     
+    // ローディング中は簡易表示
+    if (_staffType == StaffType.loading) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+    
+    final screens = _screens;
+    final safeIndex = _selectedIndex < screens.length ? _selectedIndex : 0;
+    
     return Scaffold(
       body: Row(
         children: [
           if (isWebLayout) NavigationRail(
-            selectedIndex: _selectedIndex,
+            selectedIndex: safeIndex,
             onDestinationSelected: (i) {
               setState(() {
                 _selectedIndex = i;
                 if (i == 0) _hasUnreadSchedule = false;
-                if (i == 2) _hasUnreadChat = false;
+                if (i == _chatIndex) _hasUnreadChat = false;
               });
             },
             labelType: NavigationRailLabelType.all,
@@ -331,50 +591,24 @@ class _AdminShellState extends State<AdminShell> {
             selectedIconTheme: const IconThemeData(color: AppColors.primary),
             selectedLabelTextStyle: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold),
             leading: Padding(padding: const EdgeInsets.all(12), child: Image.asset('assets/logo_beesmileymark.png', width: 50, height: 50)),
-            destinations: [
-              NavigationRailDestination(
-                icon: _buildBadgedIcon(Icons.calendar_month, _hasUnreadSchedule),
-                label: const Text('予定'),
-              ),
-              const NavigationRailDestination(icon: Icon(Icons.edit_note), label: Text('記録')),
-              NavigationRailDestination(
-                icon: _buildBadgedIcon(Icons.chat, _hasUnreadChat),
-                label: const Text('チャット'),
-              ),
-              const NavigationRailDestination(icon: Icon(Icons.notifications), label: Text('お知らせ')),
-              const NavigationRailDestination(icon: Icon(Icons.event), label: Text('イベント')),
-              const NavigationRailDestination(icon: Icon(Icons.manage_accounts), label: Text('管理')),
-            ],
+            destinations: _railDestinations,
           ),
           if (isWebLayout) const VerticalDivider(thickness: 1, width: 1),
-          Expanded(child: IndexedStack(index: _selectedIndex, children: _screens)),
+          Expanded(child: IndexedStack(index: safeIndex, children: screens)),
         ],
       ),
       bottomNavigationBar: isWebLayout ? null : BottomNavigationBar(
-        currentIndex: _selectedIndex,
+        currentIndex: safeIndex,
         onTap: (i) {
           setState(() {
             _selectedIndex = i;
             if (i == 0) _hasUnreadSchedule = false;
-            if (i == 2) _hasUnreadChat = false;
+            if (i == _chatIndex) _hasUnreadChat = false;
           });
         },
         type: BottomNavigationBarType.fixed,
         selectedItemColor: AppColors.primary,
-        items: [
-          BottomNavigationBarItem(
-            icon: _buildBadgedIcon(Icons.calendar_month, _hasUnreadSchedule),
-            label: '予定',
-          ),
-          const BottomNavigationBarItem(icon: Icon(Icons.edit_note), label: '記録'),
-          BottomNavigationBarItem(
-            icon: _buildBadgedIcon(Icons.chat, _hasUnreadChat),
-            label: 'チャット',
-          ),
-          const BottomNavigationBarItem(icon: Icon(Icons.notifications), label: 'お知らせ'),
-          const BottomNavigationBarItem(icon: Icon(Icons.event), label: 'イベント'),
-          const BottomNavigationBarItem(icon: Icon(Icons.manage_accounts), label: '管理'),
-        ],
+        items: _bottomNavItems,
       ),
     );
   }

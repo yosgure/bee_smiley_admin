@@ -1262,7 +1262,7 @@ class _PlusDashboardContentState extends State<PlusDashboardContent> {
         if (hasAnyNote)
           Positioned(
             top: 0,
-            right: -2,
+            right: 0,
             child: CustomPaint(
               size: const Size(6, 6),
               painter: _NoteTrianglePainter(color: Colors.black87),

@@ -1,281 +1,113 @@
-// Firebase Cloud Functions for Push Notifications (v2)
+import 'package:flame/game.dart';
+import 'package:flame/components.dart';
+import 'package:flame/events.dart'; // 最新版の入力機能
+import 'package:flame/input.dart';  // 念のための予備
+import 'package:flutter/material.dart';
 
-const { onDocumentCreated, onDocumentUpdated } = require("firebase-functions/v2/firestore");
-const { initializeApp } = require("firebase-admin/app");
-const { getFirestore } = require("firebase-admin/firestore");
-const { getMessaging } = require("firebase-admin/messaging");
+void main() {
+  runApp(GameWidget(game: CubeGame()));
+}
 
-initializeApp();
+class CubeGame extends FlameGame with PanDetector, TapDetector {
+  // --- 設定 ---
+  static const int columns = 5;
+  static const int rows = 12;
+  static const double cellSize = 60.0;
+  
+  late Vector2 gridOffset;
 
-const db = getFirestore();
-const messaging = getMessaging();
+  // プレイヤー情報
+  int playerCol = 2;
+  int playerRow = 11;
+  late RectangleComponent player;
 
-// ==========================================
-// チャットメッセージ送信時の通知
-// ==========================================
-exports.onChatMessageCreated = onDocumentCreated(
-  {
-    document: "chats/{chatId}/messages/{messageId}",
-    region: "asia-northeast1",
-  },
-  async (event) => {
-    const message = event.data.data();
-    const chatId = event.params.chatId;
+  // 床の管理
+  List < List < RectangleComponent >> floorTiles =[];
 
-    try {
-      const chatDoc = await db.collection("chats").doc(chatId).get();
-      if (!chatDoc.exists) return null;
+  @override
+  Color backgroundColor() => const Color(0xFF111111);
 
-      const chatData = chatDoc.data();
-      const senderId = message.senderId;
-      const senderName = message.senderName || "不明";
+  @override
+  Future < void> onLoad() async {
+    // 画面中央配置の計算
+    final gridWidth = columns * cellSize;
+    final gridHeight = rows * cellSize;
+    gridOffset = Vector2(
+      (size.x - gridWidth) / 2,
+      (size.y - gridHeight) / 2,
+    );
 
-      const participants = chatData.participants || [];
-      const recipientIds = participants.filter((id) => id !== senderId);
-
-      if (recipientIds.length === 0) return null;
-
-      const tokens = [];
-
-      for (const recipientId of recipientIds) {
-        const staffSnap = await db
-          .collection("staffs")
-          .where("uid", "==", recipientId)
-          .limit(1)
-          .get();
-
-        if (!staffSnap.empty) {
-          const staffData = staffSnap.docs[0].data();
-          if (staffData.notifyChat !== false && staffData.fcmTokens) {
-            tokens.push(...staffData.fcmTokens);
-          }
-          continue;
-        }
-
-        const familySnap = await db
-          .collection("families")
-          .where("uid", "==", recipientId)
-          .limit(1)
-          .get();
-
-        if (!familySnap.empty) {
-          const familyData = familySnap.docs[0].data();
-          if (familyData.notifyChat !== false && familyData.fcmTokens) {
-            tokens.push(...familyData.fcmTokens);
-          }
-        }
-      }
-
-      if (tokens.length === 0) return null;
-
-      const payload = {
-        notification: {
-          title: `${senderName}`,
-          body: message.type === "image" ? "画像を送信しました" : message.text,
-        },
-        data: {
-          type: "chat",
-          chatId: chatId,
-        },
-      };
-
-      const response = await messaging.sendEachForMulticast({
-        tokens: tokens,
-        ...payload,
-      });
-
-      console.log(`チャット通知送信: ${response.successCount}件成功`);
-      return null;
-    } catch (error) {
-      console.error("チャット通知エラー:", error);
-      return null;
-    }
-  }
-);
-
-// ==========================================
-// お知らせ作成時の通知
-// ==========================================
-exports.onNotificationCreated = onDocumentCreated(
-  {
-    document: "notifications/{notificationId}",
-    region: "asia-northeast1",
-  },
-  async (event) => {
-    const notification = event.data.data();
-
-    try {
-      const tokens = [];
-      const target = notification.target || "all";
-      const targetClassrooms = notification.targetClassrooms || [];
-
-      const familiesSnap = await db.collection("families").get();
-
-      for (const familyDoc of familiesSnap.docs) {
-        const familyData = familyDoc.data();
-
-        if (familyData.notifyAnnouncement === false) continue;
-
-        if (target === "specific" && targetClassrooms.length > 0) {
-          const children = familyData.children || [];
-          const isTarget = children.some((child) =>
-            targetClassrooms.includes(child.classroom)
-          );
-          if (!isTarget) continue;
-        }
-
-        if (familyData.fcmTokens) {
-          tokens.push(...familyData.fcmTokens);
-        }
-      }
-
-      if (tokens.length === 0) return null;
-
-      const payload = {
-        notification: {
-          title: notification.title || "お知らせ",
-          body: notification.body || "",
-        },
-        data: {
-          type: "announcement",
-          notificationId: event.params.notificationId,
-        },
-      };
-
-      const response = await messaging.sendEachForMulticast({
-        tokens: tokens,
-        ...payload,
-      });
-
-      console.log(`お知らせ通知送信: ${response.successCount}件成功`);
-      return null;
-    } catch (error) {
-      console.error("お知らせ通知エラー:", error);
-      return null;
-    }
-  }
-);
-
-// ==========================================
-// イベント作成時の通知
-// ==========================================
-exports.onEventCreated = onDocumentCreated(
-  {
-    document: "events/{eventId}",
-    region: "asia-northeast1",
-  },
-  async (event) => {
-    const eventData = event.data.data();
-
-    if (eventData.isPublished !== true) return null;
-
-    try {
-      const tokens = [];
-
-      const familiesSnap = await db.collection("families").get();
-
-      for (const familyDoc of familiesSnap.docs) {
-        const familyData = familyDoc.data();
-
-        if (familyData.notifyEvent === false) continue;
-
-        if (familyData.fcmTokens) {
-          tokens.push(...familyData.fcmTokens);
-        }
-      }
-
-      if (tokens.length === 0) return null;
-
-      const payload = {
-        notification: {
-          title: "新しいイベント",
-          body: eventData.title || "新しいイベントが登録されました",
-        },
-        data: {
-          type: "event",
-          eventId: event.params.eventId,
-        },
-      };
-
-      const response = await messaging.sendEachForMulticast({
-        tokens: tokens,
-        ...payload,
-      });
-
-      console.log(`イベント通知送信: ${response.successCount}件成功`);
-      return null;
-    } catch (error) {
-      console.error("イベント通知エラー:", error);
-      return null;
-    }
-  }
-);
-
-// ==========================================
-// アセスメント公開時の通知
-// ==========================================
-exports.onAssessmentPublished = onDocumentUpdated(
-  {
-    document: "assessments/{assessmentId}",
-    region: "asia-northeast1",
-  },
-  async (event) => {
-    const before = event.data.before.data();
-    const after = event.data.after.data();
-
-    if (before.isPublished === true || after.isPublished !== true) {
-      return null;
-    }
-
-    try {
-      const childId = after.childId;
-      if (!childId) return null;
-
-      const familiesSnap = await db.collection("families").get();
-      const tokens = [];
-
-      for (const familyDoc of familiesSnap.docs) {
-        const familyData = familyDoc.data();
-
-        if (familyData.notifyAssessment === false) continue;
-
-        const children = familyData.children || [];
-        const hasChild = children.some(
-          (child) =>
-            child.id === childId || child.firstName === after.childFirstName
+    // 1. 床を描画
+    for (int row = 0; row < rows; row++) {
+      List < RectangleComponent > rowTiles =[];
+      for (int col = 0; col < columns; col++) {
+        final tile = RectangleComponent(
+        position: _getGridPosition(col, row),
+        size: Vector2(cellSize - 2, cellSize - 2),
+        paint: Paint()
+          ..color = (row + col) % 2 == 0
+        ? const Color(0xFF333333) 
+                : const Color(0xFF222222),
         );
-
-        if (!hasChild) continue;
-
-        if (familyData.fcmTokens) {
-          tokens.push(...familyData.fcmTokens);
-        }
+        add(tile);
+        rowTiles.add(tile);
       }
+      floorTiles.add(rowTiles);
+    }
 
-      if (tokens.length === 0) return null;
+    // 2. プレイヤーを配置
+    playerCol = (columns / 2).floor();
+    playerRow = rows - 1;
 
-      const childName = after.childLastName + " " + after.childFirstName;
-      const payload = {
-        notification: {
-          title: "アセスメントが公開されました",
-          body: `${childName}さんのアセスメントが公開されました`,
-        },
-        data: {
-          type: "assessment",
-          assessmentId: event.params.assessmentId,
-        },
-      };
+    player = RectangleComponent(
+      position: _getGridPosition(playerCol, playerRow) + Vector2(5, 5),
+      size: Vector2(cellSize - 10, cellSize - 10),
+      paint: Paint()..color = Colors.blueAccent,
+    );
+    add(player);
+  }
 
-      const response = await messaging.sendEachForMulticast({
-        tokens: tokens,
-        ...payload,
-      });
+  // --- 操作（入力）の処理 ---
 
-      console.log(`アセスメント通知送信: ${response.successCount}件成功`);
-      return null;
-    } catch (error) {
-      console.error("アセスメント通知エラー:", error);
-      return null;
+  @override
+  void onPanEnd(DragEndInfo info) {
+    // スワイプ判定
+    final velocity = info.velocity;
+    if (velocity.x.abs() > velocity.y.abs()) {
+      if (velocity.x > 0) movePlayer(1, 0); // 右
+      else movePlayer(-1, 0); // 左
+    } else {
+      if (velocity.y > 0) movePlayer(0, 1); // 手前
+      else movePlayer(0, -1); // 奥
     }
   }
-);
+
+  @override
+  void onTap() {
+    // タップ判定（床の色変え）
+    final tile = floorTiles[playerRow][playerCol];
+    if (tile.paint.color == Colors.yellowAccent) {
+      tile.paint.color = (playerRow + playerCol) % 2 == 0
+        ? const Color(0xFF333333) 
+          : const Color(0xFF222222);
+    } else {
+      tile.paint.color = Colors.yellowAccent;
+    }
+  }
+
+  void movePlayer(int dx, int dy) {
+    int newCol = playerCol + dx;
+    int newRow = playerRow + dy;
+
+    // 画面外に出ないようにチェック
+    if (newCol >= 0 && newCol < columns && newRow >= 0 && newRow < rows) {
+      playerCol = newCol;
+      playerRow = newRow;
+      player.position = _getGridPosition(playerCol, playerRow) + Vector2(5, 5);
+    }
+  }
+
+  Vector2 _getGridPosition(int col, int row) {
+    return gridOffset + Vector2(col * cellSize, row * cellSize);
+  }
+}

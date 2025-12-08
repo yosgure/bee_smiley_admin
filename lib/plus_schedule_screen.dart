@@ -32,6 +32,8 @@ class _PlusScheduleContentState extends State<PlusScheduleContent> {
   
   // 週単位コピー用のシフトデータ
   Map<int, List<Map<String, dynamic>>>? _copiedWeekShifts;
+  // 週単位コピー用のレッスンデータ
+  List<Map<String, dynamic>>? _copiedWeekLessons;
   String _copiedWeekLabel = '';
 
   // コース（内容）の定義と色
@@ -75,6 +77,11 @@ class _PlusScheduleContentState extends State<PlusScheduleContent> {
   
   // ホバーポップアップ用のオーバーレイエントリ（グローバル管理）
   OverlayEntry? _currentOverlay;
+  
+  // サイドメニュー関連
+  bool _isSideMenuOpen = false;
+  DateTime _sideMenuMonth = DateTime.now();
+  Set<String> _selectedFilters = {'all'}; // 'all', 'mySchedule', 'event', または講師名
 
   @override
   void initState() {
@@ -668,6 +675,7 @@ class _PlusScheduleContentState extends State<PlusScheduleContent> {
               'id': doc.id,
               'name': data['name'] ?? '',
               'uid': data['uid'] ?? '',
+              'isPlus': true, // プラス担当フラグを追加
             };
           }).toList();
         });
@@ -732,17 +740,1105 @@ class _PlusScheduleContentState extends State<PlusScheduleContent> {
 
   @override
   Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    
+    // スマホ（600px未満）の場合は閲覧専用UIを表示
+    if (screenWidth < 600) {
+      return _buildMobileUI();
+    }
+    
+    // Web/タブレット版
     return Column(
       children: [
+        // トップバー（常に表示）
         _buildHeader(),
+        // サイドメニュー + メインコンテンツ
         Expanded(
-          child: _viewMode == 0
-              ? (_isLoadingLessons
-                  ? const Center(child: CircularProgressIndicator())
-                  : _buildScheduleTable())
-              : const PlusDashboardContent(),
+          child: Row(
+            children: [
+              // サイドメニュー（アニメーションで開閉）- スケジュールモードのみ
+              if (_viewMode == 0)
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  curve: Curves.easeOutCubic,
+                  width: _isSideMenuOpen ? 280 : 0,
+                  child: ClipRect(
+                    child: OverflowBox(
+                      alignment: Alignment.centerLeft,
+                      minWidth: 280,
+                      maxWidth: 280,
+                      child: _buildSideMenu(),
+                    ),
+                  ),
+                ),
+              // メインコンテンツ
+              Expanded(
+                child: _viewMode == 0
+                    ? (_isLoadingLessons
+                        ? const Center(child: CircularProgressIndicator())
+                        : _buildScheduleTable())
+                    : const PlusDashboardContent(),
+              ),
+            ],
+          ),
         ),
       ],
+    );
+  }
+  
+  // ========================================
+  // スマホ用閲覧専用UI
+  // ========================================
+  
+  // スマホ用の選択中の日付
+  DateTime? _mobileSelectedDate;
+  
+  // スマホ用サイドメニュー
+  bool _isMobileSideMenuOpen = false;
+  
+  DateTime get _currentMobileDate {
+    if (_mobileSelectedDate != null) {
+      return _mobileSelectedDate!;
+    }
+    // 初期値: 今日が日曜日なら翌月曜日、そうでなければ今日
+    final now = DateTime.now();
+    if (now.weekday == 7) {
+      return now.add(const Duration(days: 1)); // 翌月曜日
+    }
+    return now;
+  }
+  
+  Widget _buildMobileUI() {
+    // 選択中の日付の週が現在読み込み中の週と異なる場合、再読み込み
+    final currentDateWeekStart = _getMonday(_currentMobileDate);
+    if (currentDateWeekStart != _weekStart && !_isLoadingLessons) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          setState(() {
+            _weekStart = currentDateWeekStart;
+            _isLoadingLessons = true;
+          });
+          _loadShiftData();
+          _loadLessonsForWeek();
+        }
+      });
+    }
+    
+    return SafeArea(
+      child: Stack(
+        children: [
+          // メインコンテンツ
+          Column(
+            children: [
+              _buildMobileHeader(),
+              Expanded(
+                child: _isLoadingLessons
+                    ? const Center(child: CircularProgressIndicator())
+                    : GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onHorizontalDragEnd: (details) {
+                          if (details.primaryVelocity == null) return;
+                          // 左スワイプ → 翌日
+                          if (details.primaryVelocity! < -100) {
+                            _goToNextDay();
+                          }
+                          // 右スワイプ → 前日
+                          else if (details.primaryVelocity! > 100) {
+                            _goToPreviousDay();
+                          }
+                        },
+                        child: _buildMobileDayView(),
+                      ),
+              ),
+            ],
+          ),
+          // オーバーレイ（サイドメニュー表示時）
+          if (_isMobileSideMenuOpen)
+            GestureDetector(
+              onTap: () => setState(() => _isMobileSideMenuOpen = false),
+              child: Container(
+                color: Colors.black.withValues(alpha: 0.3),
+              ),
+            ),
+          // サイドメニュー
+          AnimatedPositioned(
+            duration: const Duration(milliseconds: 200),
+            curve: Curves.easeOutCubic,
+            left: _isMobileSideMenuOpen ? 0 : -280,
+            top: 0,
+            bottom: 0,
+            width: 280,
+            child: _buildMobileSideMenu(),
+          ),
+        ],
+      ),
+    );
+  }
+  
+  Widget _buildMobileSideMenu() {
+    final plusStaff = _staffList.where((s) => s['isPlus'] == true).toList();
+    final staffColors = [
+      Colors.blue,
+      Colors.teal,
+      Colors.purple,
+      Colors.orange,
+      Colors.pink,
+      Colors.indigo,
+      Colors.green,
+      Colors.red,
+      Colors.cyan,
+      Colors.amber,
+    ];
+    
+    return Material(
+      elevation: 16,
+      child: Container(
+        color: Colors.white,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // ヘッダー
+            Container(
+              height: 56,
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              decoration: BoxDecoration(
+                color: AppColors.primary.withValues(alpha: 0.1),
+              ),
+              child: const Row(
+                children: [
+                  Icon(Icons.filter_list, color: AppColors.primary),
+                  SizedBox(width: 12),
+                  Text(
+                    '講師フィルター',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.textMain,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            // フィルターリスト
+            Expanded(
+              child: ListView(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                children: [
+                  // 全て
+                  _buildMobileFilterItem('all', '全て', AppColors.primary, isSpecial: true),
+                  const Divider(height: 16),
+                  // スタッフリスト
+                  ...plusStaff.asMap().entries.map((entry) {
+                    final index = entry.key;
+                    final staff = entry.value;
+                    final name = staff['name'] as String? ?? '';
+                    final color = staffColors[index % staffColors.length];
+                    return _buildMobileFilterItem(name, name, color);
+                  }),
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+  
+  Widget _buildMobileFilterItem(String key, String label, Color color, {bool isSpecial = false}) {
+    final isSelected = _selectedFilters.contains(key) || 
+                      (_selectedFilters.contains('all') && key != 'all');
+    
+    return InkWell(
+      onTap: () {
+        setState(() {
+          if (key == 'all') {
+            _selectedFilters = {'all'};
+          } else {
+            _selectedFilters.remove('all');
+            if (_selectedFilters.contains(key)) {
+              _selectedFilters.remove(key);
+              if (_selectedFilters.isEmpty) {
+                _selectedFilters = {'all'};
+              }
+            } else {
+              _selectedFilters.add(key);
+            }
+            // 全て選択されたら「全て」に戻す
+            final plusStaff = _staffList.where((s) => s['isPlus'] == true).toList();
+            final allStaffNames = plusStaff.map((s) => s['name'] as String).toSet();
+            if (_selectedFilters.containsAll(allStaffNames)) {
+              _selectedFilters = {'all'};
+            }
+          }
+        });
+      },
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: Row(
+          children: [
+            Container(
+              width: 24,
+              height: 24,
+              decoration: BoxDecoration(
+                color: isSelected ? color : Colors.transparent,
+                border: Border.all(color: isSelected ? color : Colors.grey.shade400, width: 2),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: isSelected
+                  ? const Icon(Icons.check, size: 16, color: Colors.white)
+                  : null,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                label,
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: isSpecial ? FontWeight.w500 : FontWeight.normal,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+  
+  Widget _buildMobileHeader() {
+    final dateStr = DateFormat('M月d日 (E)', 'ja').format(_currentMobileDate);
+    
+    return Container(
+      height: 56,
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 2,
+            offset: const Offset(0, 1),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          // 左側: ハンバーガーメニュー
+          IconButton(
+            icon: const Icon(Icons.menu, color: AppColors.textMain),
+            tooltip: 'メニュー',
+            onPressed: () => setState(() => _isMobileSideMenuOpen = true),
+          ),
+          // 中央部分: 前日 + 日付 + 翌日
+          Expanded(
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                // 前日
+                IconButton(
+                  icon: const Icon(Icons.chevron_left, color: AppColors.textSub),
+                  onPressed: _goToPreviousDay,
+                ),
+                // 日付
+                GestureDetector(
+                  onTap: () => _showMobileDatePicker(),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    child: Text(
+                      dateStr,
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w500,
+                        color: AppColors.textMain,
+                      ),
+                    ),
+                  ),
+                ),
+                // 翌日
+                IconButton(
+                  icon: const Icon(Icons.chevron_right, color: AppColors.textSub),
+                  onPressed: _goToNextDay,
+                ),
+              ],
+            ),
+          ),
+          // 右側: 今日ボタン
+          TextButton(
+            onPressed: _goToToday,
+            child: const Text('今日'),
+          ),
+        ],
+      ),
+    );
+  }
+  
+  void _goToPreviousDay() {
+    setState(() {
+      _mobileSelectedDate = _currentMobileDate.subtract(const Duration(days: 1));
+      final newWeekStart = _getMonday(_currentMobileDate);
+      if (newWeekStart != _weekStart) {
+        _weekStart = newWeekStart;
+        _loadShiftData();
+        _loadLessonsForWeek();
+      }
+    });
+  }
+  
+  void _goToNextDay() {
+    setState(() {
+      _mobileSelectedDate = _currentMobileDate.add(const Duration(days: 1));
+      final newWeekStart = _getMonday(_currentMobileDate);
+      if (newWeekStart != _weekStart) {
+        _weekStart = newWeekStart;
+        _loadShiftData();
+        _loadLessonsForWeek();
+      }
+    });
+  }
+  
+  void _goToToday() {
+    setState(() {
+      _mobileSelectedDate = DateTime.now();
+      final newWeekStart = _getMonday(_currentMobileDate);
+      if (newWeekStart != _weekStart) {
+        _weekStart = newWeekStart;
+        _loadShiftData();
+        _loadLessonsForWeek();
+      }
+    });
+  }
+  
+  void _showMobileDatePicker() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _currentMobileDate,
+      firstDate: DateTime(2020),
+      lastDate: DateTime(2030),
+      locale: const Locale('ja'),
+    );
+    if (picked != null) {
+      setState(() {
+        _mobileSelectedDate = picked;
+        final newWeekStart = _getMonday(_currentMobileDate);
+        if (newWeekStart != _weekStart) {
+          _weekStart = newWeekStart;
+          _loadShiftData();
+          _loadLessonsForWeek();
+        }
+      });
+    }
+  }
+  
+  Widget _buildMobileDayView() {
+    // 選択中の日のdayIndexを計算
+    final dayIndex = _currentMobileDate.difference(_weekStart).inDays;
+    final isHoliday = _isHoliday(_currentMobileDate);
+    final isSunday = _currentMobileDate.weekday == 7;
+    
+    // 日曜日の場合
+    if (isSunday) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.weekend, size: 64, color: Colors.grey.shade400),
+            const SizedBox(height: 16),
+            Text(
+              '日曜日は休みです',
+              style: TextStyle(
+                fontSize: 18,
+                color: Colors.grey.shade600,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+    
+    // 休みの場合
+    if (isHoliday) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.event_busy, size: 64, color: Colors.grey.shade400),
+            const SizedBox(height: 16),
+            Text(
+              '休み',
+              style: TextStyle(
+                fontSize: 18,
+                color: Colors.grey.shade600,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+    
+    // dayIndexが範囲外の場合（週をまたいでいる）- データ読み込み待ち表示
+    if (dayIndex < 0 || dayIndex > 5) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.calendar_today, size: 64, color: Colors.grey.shade400),
+            const SizedBox(height: 16),
+            Text(
+              'データを読み込んでいます...',
+              style: TextStyle(
+                fontSize: 16,
+                color: Colors.grey.shade600,
+              ),
+            ),
+            const SizedBox(height: 16),
+            ElevatedButton(
+              onPressed: () {
+                setState(() {
+                  _weekStart = _getMonday(_currentMobileDate);
+                });
+                _loadShiftData();
+                _loadLessonsForWeek();
+              },
+              child: const Text('再読み込み'),
+            ),
+          ],
+        ),
+      );
+    }
+    
+    return ListView.builder(
+      padding: const EdgeInsets.all(16),
+      itemCount: _timeSlots.length,
+      itemBuilder: (context, slotIndex) {
+        return _buildMobileTimeSlot(dayIndex, slotIndex);
+      },
+    );
+  }
+  
+  Widget _buildMobileTimeSlot(int dayIndex, int slotIndex) {
+    final timeSlot = _timeSlots[slotIndex];
+    
+    // この時間帯のレッスンを取得
+    var lessons = _lessons.where((lesson) =>
+        lesson['dayIndex'] == dayIndex && lesson['slotIndex'] == slotIndex).toList();
+    
+    // フィルタリング適用
+    if (!_selectedFilters.contains('all')) {
+      if (_selectedFilters.isEmpty) {
+        lessons = [];
+      } else {
+        lessons = lessons.where((lesson) {
+          final teachers = lesson['teachers'] as List<dynamic>? ?? [];
+          if (teachers.contains('全員')) return true;
+          for (final teacher in teachers) {
+            if (_selectedFilters.contains(teacher)) return true;
+          }
+          return false;
+        }).toList();
+      }
+    }
+    
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // 時間帯ヘッダー
+        Container(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Text(
+                  timeSlot,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                    color: AppColors.primary,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                '${lessons.length}件',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.grey.shade600,
+                ),
+              ),
+            ],
+          ),
+        ),
+        // レッスンカード
+        if (lessons.isEmpty)
+          Padding(
+            padding: const EdgeInsets.only(left: 16, bottom: 16),
+            child: Text(
+              '予定なし',
+              style: TextStyle(
+                fontSize: 14,
+                color: Colors.grey.shade500,
+              ),
+            ),
+          )
+        else
+          ...lessons.map((lesson) => _buildMobileLessonCard(lesson)),
+        const SizedBox(height: 8),
+      ],
+    );
+  }
+  
+  Widget _buildMobileLessonCard(Map<String, dynamic> lesson) {
+    final isEvent = lesson['isEvent'] == true;
+    final studentName = lesson['studentName'] as String? ?? '';
+    final eventTitle = lesson['title'] as String? ?? '';
+    final displayName = isEvent ? eventTitle : studentName;
+    final teachers = lesson['teachers'] as List<dynamic>? ?? [];
+    final room = lesson['room'] as String? ?? '';
+    final course = lesson['course'] as String? ?? '通常';
+    final courseColor = _courseColors[course] ?? Colors.blue;
+    
+    return GestureDetector(
+      onTap: () => _showMobileLessonDetail(lesson),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 8),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Colors.grey.shade200),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.03),
+              blurRadius: 4,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            // コース色のバー
+            Container(
+              width: 4,
+              height: 40,
+              decoration: BoxDecoration(
+                color: courseColor,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(width: 12),
+            // 内容
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // 生徒名/イベント名
+                  Text(
+                    displayName,
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w500,
+                      color: isEvent ? Colors.deepOrange : (course == '感覚統合' ? Colors.teal : AppColors.textMain),
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  // 講師・部屋
+                  Row(
+                    children: [
+                      if (teachers.isNotEmpty) ...[
+                        Icon(Icons.person, size: 14, color: Colors.grey.shade500),
+                        const SizedBox(width: 4),
+                        Text(
+                          teachers.map((t) => t.toString().split(' ').first).join(', '),
+                          style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                        ),
+                        const SizedBox(width: 12),
+                      ],
+                      if (room.isNotEmpty) ...[
+                        Icon(Icons.room, size: 14, color: Colors.grey.shade500),
+                        const SizedBox(width: 4),
+                        Text(
+                          room,
+                          style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                        ),
+                      ],
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            // 矢印
+            Icon(Icons.chevron_right, color: Colors.grey.shade400),
+          ],
+        ),
+      ),
+    );
+  }
+  
+  void _showMobileLessonDetail(Map<String, dynamic> lesson) {
+    final isEvent = lesson['isEvent'] == true;
+    final studentName = lesson['studentName'] as String? ?? '';
+    final eventTitle = lesson['title'] as String? ?? '';
+    final displayName = isEvent ? eventTitle : studentName;
+    final teachers = lesson['teachers'] as List<dynamic>? ?? [];
+    final room = lesson['room'] as String? ?? '';
+    final course = lesson['course'] as String? ?? '通常';
+    final courseColor = _courseColors[course] ?? Colors.blue;
+    final note = lesson['note'] as String? ?? '';
+    
+    // 生徒の場合はメモを取得
+    Map<String, dynamic>? studentNote;
+    if (!isEvent && studentName.isNotEmpty) {
+      studentNote = _studentNotes[studentName];
+    }
+    
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return Container(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(context).size.height * 0.7,
+          ),
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // ハンドル
+              Container(
+                margin: const EdgeInsets.only(top: 12),
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade300,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              // ヘッダー
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 8,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: courseColor,
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            displayName,
+                            style: const TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          if (!isEvent)
+                            Text(
+                              course,
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: courseColor,
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close),
+                      onPressed: () => Navigator.pop(context),
+                    ),
+                  ],
+                ),
+              ),
+              const Divider(height: 1),
+              // 内容
+              Flexible(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // 講師
+                      if (teachers.isNotEmpty) ...[
+                        _buildMobileDetailRow(Icons.person, '講師', teachers.join(', ')),
+                        const SizedBox(height: 12),
+                      ],
+                      // 部屋
+                      if (room.isNotEmpty) ...[
+                        _buildMobileDetailRow(Icons.room, '部屋', room),
+                        const SizedBox(height: 12),
+                      ],
+                      // メモ
+                      if (note.isNotEmpty) ...[
+                        _buildMobileDetailRow(Icons.note, 'メモ', note),
+                        const SizedBox(height: 12),
+                      ],
+                      // 生徒情報
+                      if (!isEvent && studentNote != null) ...[
+                        const Divider(),
+                        const SizedBox(height: 12),
+                        const Text(
+                          '生徒情報',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        if ((studentNote['therapyPlan'] ?? '').toString().isNotEmpty)
+                          _buildMobileDetailRow(Icons.psychology, '療育プラン', studentNote['therapyPlan']),
+                        if ((studentNote['schoolVisit'] ?? '').toString().isNotEmpty) ...[
+                          const SizedBox(height: 12),
+                          _buildMobileDetailRow(Icons.school, '園訪問', studentNote['schoolVisit']),
+                        ],
+                        if ((studentNote['schoolConsultation'] ?? '').toString().isNotEmpty) ...[
+                          const SizedBox(height: 12),
+                          _buildMobileDetailRow(Icons.psychology_alt, '就学相談', studentNote['schoolConsultation']),
+                        ],
+                        if ((studentNote['moveRequest'] ?? '').toString().isNotEmpty) ...[
+                          const SizedBox(height: 12),
+                          _buildMobileDetailRow(Icons.swap_horiz, '移動希望', studentNote['moveRequest']),
+                        ],
+                      ],
+                      const SizedBox(height: 24),
+                      // 編集はPCで
+                      Center(
+                        child: Text(
+                          '編集はPC版で行ってください',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey.shade500,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+  
+  Widget _buildMobileDetailRow(IconData icon, String label, String value) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, size: 20, color: Colors.grey.shade600),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.grey.shade500,
+                ),
+              ),
+              Text(
+                value,
+                style: const TextStyle(fontSize: 14),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+  
+  // ========================================
+  // Web/タブレット用サイドメニュー
+  // ========================================
+  
+  // サイドメニュー
+  Widget _buildSideMenu() {
+    // ダッシュボードモードの場合はサイドメニュー不要（Web版ではNavigationRailがある）
+    if (_viewMode == 1) {
+      return const SizedBox.shrink();
+    }
+    
+    // スケジュールモードの場合は完全なメニュー
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border(
+          right: BorderSide(color: Colors.grey.shade300),
+        ),
+      ),
+      child: Column(
+        children: [
+          // 月カレンダー
+          _buildSideMenuCalendar(),
+          const Divider(height: 1),
+          // フィルターリスト
+          Expanded(
+            child: _buildSideMenuFilters(),
+          ),
+          const Divider(height: 1),
+          // 下部メニュー
+          _buildSideMenuBottom(),
+        ],
+      ),
+    );
+  }
+  
+  // サイドメニュー：月カレンダー
+  Widget _buildSideMenuCalendar() {
+    final year = _sideMenuMonth.year;
+    final month = _sideMenuMonth.month;
+    final firstDay = DateTime(year, month, 1);
+    final lastDay = DateTime(year, month + 1, 0);
+    final startWeekday = firstDay.weekday % 7; // 日曜=0
+    final daysInMonth = lastDay.day;
+    final today = DateTime.now();
+    
+    return Container(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        children: [
+          // 年月とナビゲーション
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                '$year年 $month月',
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              Row(
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.chevron_left, size: 20),
+                    onPressed: () {
+                      setState(() {
+                        _sideMenuMonth = DateTime(year, month - 1, 1);
+                      });
+                    },
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.chevron_right, size: 20),
+                    onPressed: () {
+                      setState(() {
+                        _sideMenuMonth = DateTime(year, month + 1, 1);
+                      });
+                    },
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          // 曜日ヘッダー
+          Row(
+            children: ['日', '月', '火', '水', '木', '金', '土'].map((day) {
+              final isSunday = day == '日';
+              final isSaturday = day == '土';
+              return Expanded(
+                child: Center(
+                  child: Text(
+                    day,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: isSunday ? Colors.red : (isSaturday ? Colors.blue : Colors.grey),
+                    ),
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+          const SizedBox(height: 4),
+          // 日付グリッド
+          ...List.generate(6, (weekIndex) {
+            return Row(
+              children: List.generate(7, (dayIndex) {
+                final dayNumber = weekIndex * 7 + dayIndex - startWeekday + 1;
+                if (dayNumber < 1 || dayNumber > daysInMonth) {
+                  return const Expanded(child: SizedBox(height: 32));
+                }
+                final date = DateTime(year, month, dayNumber);
+                final isToday = date.year == today.year && 
+                               date.month == today.month && 
+                               date.day == today.day;
+                final isSelected = date.year == _weekStart.year &&
+                                  date.month == _weekStart.month &&
+                                  date.day >= _weekStart.day &&
+                                  date.day <= _weekStart.day + 5;
+                final isSunday = dayIndex == 0;
+                final isSaturday = dayIndex == 6;
+                
+                return Expanded(
+                  child: GestureDetector(
+                    onTap: () {
+                      setState(() {
+                        _weekStart = _getMonday(date);
+                      });
+                      _loadShiftData();
+                      _loadLessonsForWeek();
+                    },
+                    child: Container(
+                      height: 32,
+                      decoration: BoxDecoration(
+                        color: isSelected ? AppColors.primary.withValues(alpha: 0.1) : null,
+                        shape: isToday ? BoxShape.circle : BoxShape.rectangle,
+                        border: isToday ? Border.all(color: AppColors.primary, width: 2) : null,
+                      ),
+                      child: Center(
+                        child: Text(
+                          '$dayNumber',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: isToday ? AppColors.primary : (isSunday ? Colors.red : (isSaturday ? Colors.blue : Colors.black87)),
+                            fontWeight: isToday ? FontWeight.bold : FontWeight.normal,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              }),
+            );
+          }),
+        ],
+      ),
+    );
+  }
+  
+  // サイドメニュー：フィルターリスト
+  Widget _buildSideMenuFilters() {
+    // プラス担当のスタッフを取得
+    final plusStaff = _staffList.where((s) => s['isPlus'] == true).toList();
+    
+    // スタッフごとの色を設定
+    final staffColors = [
+      Colors.blue,
+      Colors.teal,
+      Colors.purple,
+      Colors.orange,
+      Colors.pink,
+      Colors.indigo,
+      Colors.green,
+      Colors.red,
+      Colors.cyan,
+      Colors.amber,
+    ];
+    
+    return ListView(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      children: [
+        // 全て
+        _buildFilterItem('all', '全て', AppColors.primary, isSpecial: true),
+        const Divider(height: 16),
+        // スタッフリスト
+        ...plusStaff.asMap().entries.map((entry) {
+          final index = entry.key;
+          final staff = entry.value;
+          final name = staff['name'] as String? ?? '';
+          final color = staffColors[index % staffColors.length];
+          return _buildFilterItem(name, name, color);
+        }),
+      ],
+    );
+  }
+  
+  Widget _buildFilterItem(String key, String label, Color color, {bool isSpecial = false}) {
+    final isSelected = _selectedFilters.contains(key) || 
+                      (_selectedFilters.contains('all') && key != 'all');
+    
+    return InkWell(
+      onTap: () {
+        setState(() {
+          if (key == 'all') {
+            // 「全て」を選択したら全フィルターを選択状態に
+            _selectedFilters = {'all'};
+          } else {
+            // 個別フィルターを選択/解除
+            _selectedFilters.remove('all');
+            if (_selectedFilters.contains(key)) {
+              _selectedFilters.remove(key);
+            } else {
+              _selectedFilters.add(key);
+            }
+            // 全て選択されたら「全て」に戻す
+            final plusStaff = _staffList.where((s) => s['isPlus'] == true).toList();
+            final allStaffNames = plusStaff.map((s) => s['name'] as String).toSet();
+            if (_selectedFilters.containsAll(allStaffNames)) {
+              _selectedFilters = {'all'};
+            }
+          }
+        });
+      },
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        child: Row(
+          children: [
+            Container(
+              width: 24,
+              height: 24,
+              decoration: BoxDecoration(
+                color: isSelected ? color : Colors.transparent,
+                border: Border.all(color: isSelected ? color : Colors.grey.shade400, width: 2),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: isSelected
+                  ? const Icon(Icons.check, size: 16, color: Colors.white)
+                  : null,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                label,
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: isSpecial ? FontWeight.w500 : FontWeight.normal,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+  
+  // サイドメニュー：下部メニュー
+  Widget _buildSideMenuBottom() {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Column(
+        children: [
+          if (_viewMode == 0)
+            ListTile(
+              leading: const Icon(Icons.schedule, color: AppColors.textSub),
+              title: const Text('スケジュール管理'),
+              onTap: () {
+                _showShiftManagementDialog();
+              },
+            ),
+        ],
+      ),
     );
   }
 
@@ -755,14 +1851,27 @@ class _PlusScheduleContentState extends State<PlusScheduleContent> {
       ),
       child: Row(
         children: [
-          if (widget.onBack != null)
+          // ハンバーガーメニュー（モードによって動作が異なる）
+          if (_viewMode == 0)
+            // スケジュールモード：サイドメニューを開く
             IconButton(
-              icon: const Icon(Icons.arrow_back, color: AppColors.textMain),
-              onPressed: widget.onBack,
-              tooltip: 'カレンダーに戻る',
+              icon: const Icon(Icons.menu, color: AppColors.textMain),
+              tooltip: 'メニュー',
+              onPressed: () => setState(() => _isSideMenuOpen = !_isSideMenuOpen),
             ),
           // カレンダーモードの時だけ表示
           if (_viewMode == 0) ...[
+            const Icon(Icons.calendar_today, color: AppColors.primary),
+            const SizedBox(width: 8),
+            const Text(
+              'スケジュール',
+              style: TextStyle(
+                color: AppColors.textMain,
+                fontSize: 20,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            const SizedBox(width: 24),
             SizedBox(
               height: 36,
               child: OutlinedButton(
@@ -822,17 +1931,6 @@ class _PlusScheduleContentState extends State<PlusScheduleContent> {
               ],
             ),
           ),
-          const SizedBox(width: 16),
-          // シフト管理ボタン（カレンダーモードのみ）
-          if (_viewMode == 0)
-            TextButton.icon(
-              onPressed: () => _showShiftManagementDialog(),
-              icon: const Icon(Icons.schedule, size: 18),
-              label: const Text('シフト管理'),
-              style: TextButton.styleFrom(
-                foregroundColor: AppColors.primary,
-              ),
-            ),
         ],
       ),
     );
@@ -846,7 +1944,13 @@ class _PlusScheduleContentState extends State<PlusScheduleContent> {
         onTap: () {
           if (_viewMode != mode) {
             _hideCurrentOverlay();
-            setState(() => _viewMode = mode);
+            setState(() {
+              _viewMode = mode;
+              // ダッシュボードモードに切り替え時はサイドメニューを閉じる
+              if (mode == 1) {
+                _isSideMenuOpen = false;
+              }
+            });
             // カレンダーモードに切り替えた時はタスクを再読み込み
             if (mode == 0) {
               _loadAllTasks();
@@ -1151,8 +2255,35 @@ class _PlusScheduleContentState extends State<PlusScheduleContent> {
   Widget _buildCell(int dayIndex, int slotIndex, double cellWidth, double cellHeight) {
     final date = _weekStart.add(Duration(days: dayIndex));
     final isHoliday = _isHoliday(date);
-    final lessons = _lessons.where((lesson) =>
+    
+    // レッスンを取得してフィルタリング
+    var lessons = _lessons.where((lesson) =>
         lesson['dayIndex'] == dayIndex && lesson['slotIndex'] == slotIndex).toList();
+    
+    // フィルタリング適用
+    if (!_selectedFilters.contains('all')) {
+      // フィルターが空の場合は何も表示しない
+      if (_selectedFilters.isEmpty) {
+        lessons = [];
+      } else {
+        lessons = lessons.where((lesson) {
+          final teachers = lesson['teachers'] as List<dynamic>? ?? [];
+          
+          // 講師に「全員」が含まれている場合は常に表示
+          if (teachers.contains('全員')) {
+            return true;
+          }
+          
+          // 講師でフィルタリング
+          for (final teacher in teachers) {
+            if (_selectedFilters.contains(teacher)) {
+              return true;
+            }
+          }
+          return false;
+        }).toList();
+      }
+    }
 
     // セル全体のDragTarget（別セルからの移動用）
     return DragTarget<Map<String, dynamic>>(
@@ -2171,6 +3302,8 @@ class _PlusScheduleContentState extends State<PlusScheduleContent> {
       DateTime(_weekStart.year, _weekStart.month - 1, 1)
     );
     final weekLabel = '${DateFormat('M/d', 'ja').format(_weekStart)}〜${DateFormat('M/d', 'ja').format(_weekStart.add(const Duration(days: 5)))}';
+    final previousWeekStart = _weekStart.subtract(const Duration(days: 7));
+    final previousWeekLabel = '${DateFormat('M/d', 'ja').format(previousWeekStart)}〜${DateFormat('M/d', 'ja').format(previousWeekStart.add(const Duration(days: 5)))}';
 
     showDialog(
       context: context,
@@ -2183,7 +3316,7 @@ class _PlusScheduleContentState extends State<PlusScheduleContent> {
               children: [
                 Icon(Icons.settings, color: AppColors.primary),
                 SizedBox(width: 8),
-                Text('シフト管理', style: TextStyle(fontSize: 18)),
+                Text('スケジュール管理', style: TextStyle(fontSize: 18)),
               ],
             ),
             content: SizedBox(
@@ -2218,51 +3351,27 @@ class _PlusScheduleContentState extends State<PlusScheduleContent> {
                           style: const TextStyle(fontSize: 14),
                         ),
                         const SizedBox(height: 12),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: OutlinedButton.icon(
-                                onPressed: () {
-                                  _copyCurrentWeekShifts();
-                                  setDialogState(() {});
-                                  ScaffoldMessenger.of(dialogContext).showSnackBar(
-                                    SnackBar(content: Text('$weekLabel のシフトをコピーしました')),
-                                  );
-                                },
-                                icon: const Icon(Icons.content_copy, size: 18),
-                                label: const Text('コピー'),
-                                style: OutlinedButton.styleFrom(
-                                  padding: const EdgeInsets.symmetric(vertical: 10),
-                                ),
-                              ),
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton.icon(
+                            onPressed: () async {
+                              Navigator.pop(dialogContext);
+                              await _copyFromPreviousWeek();
+                            },
+                            icon: const Icon(Icons.content_copy, size: 18),
+                            label: Text('$previousWeekLabelのスケジュールをコピー'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.primary,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 12),
                             ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: ElevatedButton.icon(
-                                onPressed: _copiedWeekShifts == null
-                                    ? null
-                                    : () async {
-                                        Navigator.pop(dialogContext);
-                                        await _pasteWeekShifts();
-                                      },
-                                icon: const Icon(Icons.content_paste, size: 18),
-                                label: const Text('貼り付け'),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: AppColors.primary,
-                                  foregroundColor: Colors.white,
-                                  padding: const EdgeInsets.symmetric(vertical: 10),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        if (_copiedWeekShifts != null) ...[
-                          const SizedBox(height: 8),
-                          Text(
-                            'クリップボード: $_copiedWeekLabel',
-                            style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
                           ),
-                        ],
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          '※先週のシフトとレッスンを今週にコピーします',
+                          style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                        ),
                       ],
                     ),
                   ),
@@ -2330,7 +3439,144 @@ class _PlusScheduleContentState extends State<PlusScheduleContent> {
     );
   }
 
-  // 現在の週のシフトをコピー
+  // 先週のスケジュールを今週にコピー
+  Future<void> _copyFromPreviousWeek() async {
+    final previousWeekStart = _weekStart.subtract(const Duration(days: 7));
+    final previousMonthKey = DateFormat('yyyy-MM').format(previousWeekStart);
+    final currentMonthKey = DateFormat('yyyy-MM').format(_weekStart);
+    
+    try {
+      // 1. 先週のシフトを取得
+      final previousShiftDoc = await FirebaseFirestore.instance
+          .collection('plus_shifts')
+          .doc(previousMonthKey)
+          .get();
+      
+      final previousShiftData = previousShiftDoc.exists 
+          ? Map<String, dynamic>.from(previousShiftDoc.data()?['days'] ?? {})
+          : <String, dynamic>{};
+      
+      // 2. 先週のレッスンを取得（dateフィールドで週をフィルタリング）
+      final previousWeekStartDate = DateTime(previousWeekStart.year, previousWeekStart.month, previousWeekStart.day);
+      final previousWeekEndDate = previousWeekStartDate.add(const Duration(days: 5, hours: 23, minutes: 59, seconds: 59));
+      
+      final previousLessonsSnapshot = await FirebaseFirestore.instance
+          .collection('plus_lessons')
+          .where('date', isGreaterThanOrEqualTo: Timestamp.fromDate(previousWeekStartDate))
+          .where('date', isLessThanOrEqualTo: Timestamp.fromDate(previousWeekEndDate))
+          .get();
+      
+      debugPrint('先週のレッスン数: ${previousLessonsSnapshot.docs.length}');
+      
+      // 3. 先週のシフトを今週にコピー
+      final shiftUpdates = <String, List<Map<String, dynamic>>>{};
+      for (int dayIndex = 0; dayIndex < 6; dayIndex++) {
+        final previousDate = previousWeekStart.add(Duration(days: dayIndex));
+        final currentDate = _weekStart.add(Duration(days: dayIndex));
+        final previousDayKey = previousDate.day.toString();
+        final currentDayKey = currentDate.day.toString();
+        
+        if (previousShiftData.containsKey(previousDayKey)) {
+          final shifts = previousShiftData[previousDayKey];
+          if (shifts is List) {
+            shiftUpdates[currentDayKey] = shifts.map((s) => Map<String, dynamic>.from(s)).toList();
+          }
+        }
+      }
+      
+      // シフトをFirestoreに保存
+      if (shiftUpdates.isNotEmpty) {
+        final shiftDocRef = FirebaseFirestore.instance
+            .collection('plus_shifts')
+            .doc(currentMonthKey);
+        
+        final shiftDoc = await shiftDocRef.get();
+        
+        if (shiftDoc.exists) {
+          final existingDays = Map<String, dynamic>.from(shiftDoc.data()?['days'] ?? {});
+          shiftUpdates.forEach((key, value) {
+            existingDays[key] = value;
+          });
+          
+          await shiftDocRef.update({
+            'days': existingDays,
+            'updatedAt': FieldValue.serverTimestamp(),
+          });
+        } else {
+          await shiftDocRef.set({
+            'classroom': 'ビースマイリープラス湘南藤沢',
+            'days': shiftUpdates,
+            'updatedAt': FieldValue.serverTimestamp(),
+          });
+        }
+        
+        // ローカルデータを更新
+        setState(() {
+          shiftUpdates.forEach((key, value) {
+            _shiftData[key] = value;
+          });
+        });
+      }
+      
+      // 4. 今週の既存レッスンを削除
+      final currentWeekStartDate = DateTime(_weekStart.year, _weekStart.month, _weekStart.day);
+      final currentWeekEndDate = currentWeekStartDate.add(const Duration(days: 5, hours: 23, minutes: 59, seconds: 59));
+      
+      final existingLessonsSnapshot = await FirebaseFirestore.instance
+          .collection('plus_lessons')
+          .where('date', isGreaterThanOrEqualTo: Timestamp.fromDate(currentWeekStartDate))
+          .where('date', isLessThanOrEqualTo: Timestamp.fromDate(currentWeekEndDate))
+          .get();
+      
+      // バッチで既存レッスンを削除
+      final deleteBatch = FirebaseFirestore.instance.batch();
+      for (final doc in existingLessonsSnapshot.docs) {
+        deleteBatch.delete(doc.reference);
+      }
+      await deleteBatch.commit();
+      
+      // 5. 先週のレッスンを今週にコピー（日付を+7日）
+      if (previousLessonsSnapshot.docs.isNotEmpty) {
+        final addBatch = FirebaseFirestore.instance.batch();
+        
+        for (final doc in previousLessonsSnapshot.docs) {
+          final data = doc.data();
+          final previousDate = (data['date'] as Timestamp).toDate();
+          final newDate = previousDate.add(const Duration(days: 7));
+          
+          final newRef = FirebaseFirestore.instance.collection('plus_lessons').doc();
+          addBatch.set(newRef, {
+            ...data,
+            'date': Timestamp.fromDate(newDate),
+            'createdAt': FieldValue.serverTimestamp(),
+            'updatedAt': FieldValue.serverTimestamp(),
+          });
+        }
+        
+        await addBatch.commit();
+        debugPrint('今週にコピーしたレッスン数: ${previousLessonsSnapshot.docs.length}');
+      }
+      
+      // レッスンデータを再読み込み
+      await _loadLessonsForWeek();
+      await _loadShiftData();
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('先週のスケジュールをコピーしました')),
+        );
+      }
+    } catch (e) {
+      debugPrint('Error copying from previous week: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('エラー: $e')),
+        );
+      }
+    }
+  }
+
+  // 現在の週のシフトとレッスンをコピー
   void _copyCurrentWeekShifts() {
     final copiedShifts = <int, List<Map<String, dynamic>>>{};
     
@@ -2344,70 +3590,111 @@ class _PlusScheduleContentState extends State<PlusScheduleContent> {
       }
     }
     
+    // レッスンもコピー（docIdを除外）
+    final copiedLessons = _lessons.map((lesson) {
+      final copy = Map<String, dynamic>.from(lesson);
+      copy.remove('docId'); // 新規作成時に新しいIDが付与されるように
+      return copy;
+    }).toList();
+    
     setState(() {
       _copiedWeekShifts = copiedShifts;
+      _copiedWeekLessons = copiedLessons;
       _copiedWeekLabel = '${DateFormat('M/d', 'ja').format(_weekStart)}〜${DateFormat('M/d', 'ja').format(_weekStart.add(const Duration(days: 5)))}';
     });
   }
 
-  // コピーしたシフトを現在の週に貼り付け
+  // コピーしたシフトとレッスンを現在の週に貼り付け
   Future<void> _pasteWeekShifts() async {
-    if (_copiedWeekShifts == null) return;
+    if (_copiedWeekShifts == null && _copiedWeekLessons == null) return;
     
     try {
       final monthKey = DateFormat('yyyy-MM').format(_weekStart);
-      final updates = <String, List<Map<String, dynamic>>>{};
+      final weekKey = DateFormat('yyyy-MM-dd').format(_weekStart);
       
-      for (int dayIndex = 0; dayIndex < 6; dayIndex++) {
-        final date = _weekStart.add(Duration(days: dayIndex));
-        final dayKey = date.day.toString();
+      // シフトの貼り付け
+      if (_copiedWeekShifts != null) {
+        final updates = <String, List<Map<String, dynamic>>>{};
         
-        if (_copiedWeekShifts!.containsKey(dayIndex)) {
-          updates[dayKey] = _copiedWeekShifts![dayIndex]!;
+        for (int dayIndex = 0; dayIndex < 6; dayIndex++) {
+          final date = _weekStart.add(Duration(days: dayIndex));
+          final dayKey = date.day.toString();
+          
+          if (_copiedWeekShifts!.containsKey(dayIndex)) {
+            updates[dayKey] = _copiedWeekShifts![dayIndex]!;
+          }
         }
-      }
-      
-      // Firestoreに保存
-      final docRef = FirebaseFirestore.instance
-          .collection('plus_shifts')
-          .doc(monthKey);
-      
-      final doc = await docRef.get();
-      
-      if (doc.exists) {
-        // 既存のデータに追加/更新
-        final existingDays = Map<String, dynamic>.from(doc.data()?['days'] ?? {});
-        updates.forEach((key, value) {
-          existingDays[key] = value;
-        });
         
-        await docRef.update({
-          'days': existingDays,
-          'updatedAt': FieldValue.serverTimestamp(),
-        });
-      } else {
-        // 新規作成
-        await docRef.set({
-          'classroom': 'ビースマイリープラス湘南藤沢',
-          'days': updates,
-          'updatedAt': FieldValue.serverTimestamp(),
+        // Firestoreに保存
+        final docRef = FirebaseFirestore.instance
+            .collection('plus_shifts')
+            .doc(monthKey);
+        
+        final doc = await docRef.get();
+        
+        if (doc.exists) {
+          final existingDays = Map<String, dynamic>.from(doc.data()?['days'] ?? {});
+          updates.forEach((key, value) {
+            existingDays[key] = value;
+          });
+          
+          await docRef.update({
+            'days': existingDays,
+            'updatedAt': FieldValue.serverTimestamp(),
+          });
+        } else {
+          await docRef.set({
+            'classroom': 'ビースマイリープラス湘南藤沢',
+            'days': updates,
+            'updatedAt': FieldValue.serverTimestamp(),
+          });
+        }
+        
+        // ローカルデータを更新
+        setState(() {
+          updates.forEach((key, value) {
+            _shiftData[key] = value;
+          });
         });
       }
       
-      // ローカルデータを更新
-      setState(() {
-        updates.forEach((key, value) {
-          _shiftData[key] = value;
-        });
-      });
+      // レッスンの貼り付け
+      if (_copiedWeekLessons != null && _copiedWeekLessons!.isNotEmpty) {
+        final batch = FirebaseFirestore.instance.batch();
+        final lessonsRef = FirebaseFirestore.instance
+            .collection('plus_lessons')
+            .doc(weekKey)
+            .collection('items');
+        
+        // 既存のレッスンを削除
+        final existingLessons = await lessonsRef.get();
+        for (final doc in existingLessons.docs) {
+          batch.delete(doc.reference);
+        }
+        
+        // 新しいレッスンを追加
+        for (final lesson in _copiedWeekLessons!) {
+          final newRef = lessonsRef.doc();
+          batch.set(newRef, {
+            ...lesson,
+            'createdAt': FieldValue.serverTimestamp(),
+            'updatedAt': FieldValue.serverTimestamp(),
+          });
+        }
+        
+        await batch.commit();
+        
+        // ローカルデータを更新
+        await _loadLessonsForWeek();
+      }
       
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('シフトを貼り付けました')),
+          const SnackBar(content: Text('スケジュールを貼り付けました')),
         );
       }
     } catch (e) {
-      debugPrint('Error pasting shifts: $e');
+      debugPrint('Error pasting: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('エラー: $e')),
@@ -2459,7 +3746,7 @@ class _PlusScheduleContentState extends State<PlusScheduleContent> {
       
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('前月のシフトをコピーしました')),
+          const SnackBar(content: Text('前月のスケジュールをコピーしました')),
         );
       }
     } catch (e) {

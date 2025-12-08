@@ -681,30 +681,6 @@ class _CalendarScreenState extends State<CalendarScreen> {
                     color, 
                   );
                 }),
-              
-              // プラス予定ボタン
-              const SizedBox(height: 16),
-              const Divider(),
-              const SizedBox(height: 8),
-              InkWell(
-                onTap: () => setState(() => _showPlusSchedule = true),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
-                  decoration: BoxDecoration(
-                    color: Colors.green.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.green.withOpacity(0.3)),
-                  ),
-                  child: const Row(
-                    children: [
-                      Icon(Icons.grid_view, color: Colors.green, size: 20),
-                      SizedBox(width: 8),
-                      Expanded(child: Text('プラス予定', style: TextStyle(fontSize: 13, color: Colors.green, fontWeight: FontWeight.w500))),
-                      Icon(Icons.arrow_forward_ios, color: Colors.green, size: 14),
-                    ],
-                  ),
-                ),
-              ),
             ],
           ),
         ),
@@ -741,29 +717,6 @@ class _CalendarScreenState extends State<CalendarScreen> {
               
               const SizedBox(height: 16),
               const Divider(),
-              const SizedBox(height: 8),
-              InkWell(
-                onTap: () {
-                  Navigator.pop(context);
-                  Navigator.push(context, MaterialPageRoute(builder: (_) => const PlusScheduleScreen()));
-                },
-                child: Container(
-                  padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
-                  decoration: BoxDecoration(
-                    color: Colors.green.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.green.withOpacity(0.3)),
-                  ),
-                  child: const Row(
-                    children: [
-                      Icon(Icons.grid_view, color: Colors.green, size: 20),
-                      SizedBox(width: 8),
-                      Expanded(child: Text('プラス予定', style: TextStyle(fontSize: 13, color: Colors.green, fontWeight: FontWeight.w500))),
-                      Icon(Icons.arrow_forward_ios, color: Colors.green, size: 14),
-                    ],
-                  ),
-                ),
-              ),
             ],
           ),
         ),
