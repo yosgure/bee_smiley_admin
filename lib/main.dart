@@ -73,7 +73,7 @@ class AuthCheckWrapper extends StatefulWidget {
   State<AuthCheckWrapper> createState() => _AuthCheckWrapperState();
 }
 
-class _AuthCheckWrapperState extends State<AuthCheckWrapper> {
+class _AuthCheckWrapperState extends State<AuthCheckWrapper> with WidgetsBindingObserver {
   UserStatus? _status;
   bool _loading = true;
   StreamSubscription<User?>? _authSubscription;
@@ -81,13 +81,24 @@ class _AuthCheckWrapperState extends State<AuthCheckWrapper> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    NotificationService().clearBadge();  // 起動直後にバッジクリア
     _setupAuthListener();
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _authSubscription?.cancel();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      // アプリがフォアグラウンドに戻った時にバッジをクリア
+      NotificationService().clearBadge();
+    }
   }
 
   void _setupAuthListener() {

@@ -1,11 +1,12 @@
 import 'dart:io';
-import 'dart:async'; // 追加
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:flutter_app_badger/flutter_app_badger.dart';
 
 // バックグラウンドメッセージハンドラ（トップレベル関数である必要がある）
 @pragma('vm:entry-point')
@@ -21,13 +22,16 @@ class NotificationService {
   final FirebaseMessaging _messaging = FirebaseMessaging.instance;
   final FlutterLocalNotificationsPlugin _localNotifications = FlutterLocalNotificationsPlugin();
   
+  // Web用のVAPIDキー
+  static const String _vapidKey = 'BG_L0_96sx40dyG0txpV6OBlXwWt0ufKdRnpSWOkGaZlJbsnTS5X81fSqLqYHQ3Pp83HLpJZhYdqf-iPAr9JFSc';
+  
   bool _initialized = false;
 
-  // ▼ 追加: 画面遷移の命令を送るための「放送局」
+  // 画面遷移の命令を送るための「放送局」
   final _navigationController = StreamController<String>.broadcast();
   Stream<String> get navigationStream => _navigationController.stream;
 
-  // ▼ 追加: アプリ起動時に「どの画面を開くか」を一時保存する変数
+  // アプリ起動時に「どの画面を開くか」を一時保存する変数
   String? initialRoute;
 
   /// 通知サービスの初期化
@@ -36,9 +40,18 @@ class NotificationService {
     
     // 権限リクエスト
     await _requestPermission();
+
+    // iOSフォアグラウンド通知表示設定
+    await _messaging.setForegroundNotificationPresentationOptions(
+      alert: true,
+      badge: true,
+      sound: true,
+    );
     
-    // ローカル通知の初期化（フォアグラウンド表示用）
-    await _initLocalNotifications();
+    // ローカル通知の初期化（フォアグラウンド表示用）- モバイルのみ
+    if (!kIsWeb) {
+      await _initLocalNotifications();
+    }
     
     // フォアグラウンドメッセージのリスナー設定
     FirebaseMessaging.onMessage.listen(_handleForegroundMessage);
@@ -51,6 +64,9 @@ class NotificationService {
     if (initialMessage != null) {
       _handleNotificationTap(initialMessage);
     }
+    
+    // アプリ起動時にバッジをクリア
+    await clearBadge();
     
     _initialized = true;
     debugPrint('✅ NotificationService 初期化完了');
@@ -90,6 +106,8 @@ class NotificationService {
         if (response.payload != null) {
            _navigationController.add(response.payload!);
         }
+        // 通知タップ時にバッジをクリア
+        clearBadge();
       },
     );
 
@@ -115,7 +133,13 @@ class NotificationService {
     final notification = message.notification;
     if (notification == null) return;
     
-    // ローカル通知として表示
+    // Webの場合はブラウザが自動で表示するのでローカル通知は不要
+    if (kIsWeb) {
+      debugPrint('🌐 Web: ブラウザ通知として表示されます');
+      return;
+    }
+    
+    // モバイルの場合はローカル通知として表示
     await _localNotifications.show(
       notification.hashCode,
       notification.title,
@@ -135,7 +159,7 @@ class NotificationService {
           presentSound: true,
         ),
       ),
-      payload: message.data['type'], // タップ時に使うデータを渡す
+      payload: message.data['type'],
     );
   }
 
@@ -143,12 +167,43 @@ class NotificationService {
   void _handleNotificationTap(RemoteMessage message) {
     debugPrint('👆 通知タップ: ${message.data}');
     
+    // バッジをクリア
+    clearBadge();
+    
     final type = message.data['type'];
     if (type != null) {
-      // 1. アプリ起動直後（init未完了）用に変数をセット
       initialRoute = type;
-      // 2. 既に起動している画面に向けて放送する
       _navigationController.add(type);
+    }
+  }
+
+  /// バッジをクリア
+  Future<void> clearBadge() async {
+    try {
+      if (!kIsWeb) {
+        final isSupported = await FlutterAppBadger.isAppBadgeSupported();
+        if (isSupported) {
+          await FlutterAppBadger.removeBadge();
+          debugPrint('✅ バッジをクリアしました');
+        }
+      }
+    } catch (e) {
+      debugPrint('⚠️ バッジクリアエラー: $e');
+    }
+  }
+
+  /// バッジを設定
+  Future<void> setBadge(int count) async {
+    try {
+      if (!kIsWeb) {
+        final isSupported = await FlutterAppBadger.isAppBadgeSupported();
+        if (isSupported) {
+          await FlutterAppBadger.updateBadgeCount(count);
+          debugPrint('✅ バッジを$countに設定しました');
+        }
+      }
+    } catch (e) {
+      debugPrint('⚠️ バッジ設定エラー: $e');
     }
   }
 
@@ -161,16 +216,20 @@ class NotificationService {
       String? token;
       
       if (kIsWeb) {
-        token = await _messaging.getToken();
+        // WebではVAPIDキーが必要
+        token = await _messaging.getToken(vapidKey: _vapidKey);
+        debugPrint('🌐 Web FCMトークン取得');
       } else {
-        String? apnsToken = await _messaging.getAPNSToken();
-        if (apnsToken == null) {
-          await Future.delayed(const Duration(seconds: 3));
-          apnsToken = await _messaging.getAPNSToken();
-        }
-        if (apnsToken == null) {
-          debugPrint('⚠️ APNsトークンを取得できませんでした');
-          return;
+        if (Platform.isIOS) {
+          String? apnsToken = await _messaging.getAPNSToken();
+          if (apnsToken == null) {
+            await Future.delayed(const Duration(seconds: 3));
+            apnsToken = await _messaging.getAPNSToken();
+          }
+          if (apnsToken == null) {
+            debugPrint('⚠️ APNsトークンを取得できませんでした');
+            return;
+          }
         }
         token = await _messaging.getToken();
       }
@@ -236,7 +295,12 @@ class NotificationService {
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) return;
       
-      final token = await _messaging.getToken();
+      String? token;
+      if (kIsWeb) {
+        token = await _messaging.getToken(vapidKey: _vapidKey);
+      } else {
+        token = await _messaging.getToken();
+      }
       if (token == null) return;
       
       final firestore = FirebaseFirestore.instance;
@@ -264,6 +328,9 @@ class NotificationService {
           'fcmTokens': FieldValue.arrayRemove([token]),
         });
       }
+      
+      // バッジもクリア
+      await clearBadge();
       
       debugPrint('✅ FCMトークンを削除しました');
     } catch (e) {
