@@ -368,7 +368,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
                       subject: data['subject'] ?? '(件名なし)',
                       notes: 'EVENT',
                       color: eventColor,
-                      recurrenceRule: data['recurrenceRule'],
+                      recurrenceRule: (data['recurrenceRule'] != null && data['recurrenceRule'].toString().isNotEmpty) ? data['recurrenceRule'] : null,
                     ));
                   }
                 }
@@ -651,7 +651,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
               ),
               onTap: (details) {
                 if (details.date != null) {
-                  _controller.displayDate = details.date!;
+                  _controller.displayDate = DateTime(details.date!.year, details.date!.month, details.date!.day, 8, 0);
                 }
               },
             ),
@@ -852,7 +852,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
         setState(() {
           _calendarView = CalendarView.day;
           _controller.view = CalendarView.day;
-          _controller.displayDate = details.date!;
+          _controller.displayDate = DateTime(details.date!.year, details.date!.month, details.date!.day, 8, 0);
         });
       } else {
         _showAddEventDialog(initialDate: details.date);
@@ -1271,17 +1271,11 @@ class _CalendarScreenState extends State<CalendarScreen> {
                   ),
                   IconButton(
                     icon: const Icon(Icons.edit, size: 20, color: Colors.grey),
-                    onPressed: () async {
-                      Navigator.pop(context);
-                      await showDialog(
-                        context: context,
-                        builder: (context) => AddEventDialog(appointment: doc),
-                      );
-                    },
+                    onPressed: () => _confirmEdit(doc),
                   ),
                   IconButton(
                     icon: const Icon(Icons.delete_outline, size: 20, color: Colors.grey),
-                    onPressed: () => _confirmDelete(doc.id),
+                    onPressed: () => _confirmDelete(doc),
                   ),
                   IconButton(
                     icon: const Icon(Icons.close, size: 20, color: Colors.grey),
@@ -1387,21 +1381,137 @@ class _CalendarScreenState extends State<CalendarScreen> {
     );
   }
   
-  void _confirmDelete(String docId) {
+
+  void _confirmDelete(DocumentSnapshot doc) {
+    final data = doc.data() as Map<String, dynamic>;
+    final recurrenceRule = data['recurrenceRule'];
+    final recurrenceGroupId = data['recurrenceGroupId'];
+    final startTime = (data['startTime'] as Timestamp).toDate();
+    
+    final isRecurring = (recurrenceRule != null && recurrenceRule.toString().isNotEmpty) || 
+                        (recurrenceGroupId != null && recurrenceGroupId.toString().isNotEmpty);
+    
+    if (isRecurring) {
+      _showRecurringDeleteDialog(doc, data, startTime);
+    } else {
+      _showSimpleDeleteDialog(doc.id);
+    }
+  }
+
+  void _showSimpleDeleteDialog(String docId) {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Text('予定を削除'),
         content: const Text('本当にこの予定を削除しますか？'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('キャンセル')),
           TextButton(
-            onPressed: () async { Navigator.pop(ctx); Navigator.pop(context); await _eventsRef.doc(docId).delete(); },
+            onPressed: () async {
+              Navigator.pop(ctx);
+              Navigator.pop(context);
+              await _eventsRef.doc(docId).delete();
+            },
             child: const Text('削除', style: TextStyle(color: AppColors.error)),
           ),
         ],
       ),
     );
+  }
+
+  void _showRecurringDeleteDialog(DocumentSnapshot doc, Map<String, dynamic> data, DateTime startTime) {
+    final recurrenceGroupId = data['recurrenceGroupId'];
+    String selectedOption = 'this';
+    
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Text('定期的な予定の削除'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              RadioListTile<String>(
+                title: const Text('この予定'),
+                value: 'this',
+                groupValue: selectedOption,
+                onChanged: (v) => setDialogState(() => selectedOption = v!),
+                activeColor: AppColors.primary,
+                contentPadding: EdgeInsets.zero,
+              ),
+              RadioListTile<String>(
+                title: const Text('これ以降のすべての予定'),
+                value: 'future',
+                groupValue: selectedOption,
+                onChanged: (v) => setDialogState(() => selectedOption = v!),
+                activeColor: AppColors.primary,
+                contentPadding: EdgeInsets.zero,
+              ),
+              RadioListTile<String>(
+                title: const Text('すべての予定'),
+                value: 'all',
+                groupValue: selectedOption,
+                onChanged: (v) => setDialogState(() => selectedOption = v!),
+                activeColor: AppColors.primary,
+                contentPadding: EdgeInsets.zero,
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('キャンセル')),
+            ElevatedButton(
+              onPressed: () async {
+                Navigator.pop(ctx);
+                Navigator.pop(context);
+                await _executeRecurringDelete(doc, data, startTime, selectedOption, recurrenceGroupId);
+              },
+              style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
+              child: const Text('OK', style: TextStyle(color: Colors.white)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _executeRecurringDelete(DocumentSnapshot doc, Map<String, dynamic> data, DateTime startTime, String option, String? recurrenceGroupId) async {
+    switch (option) {
+      case 'this':
+        await doc.reference.delete();
+        break;
+      case 'future':
+        if (recurrenceGroupId != null) {
+          final query = await _eventsRef.where('recurrenceGroupId', isEqualTo: recurrenceGroupId).get();
+          final batch = FirebaseFirestore.instance.batch();
+          for (var eventDoc in query.docs) {
+            final eventData = eventDoc.data() as Map<String, dynamic>;
+            final eventStart = (eventData['startTime'] as Timestamp).toDate();
+            if (!eventStart.isBefore(startTime)) batch.delete(eventDoc.reference);
+          }
+          await batch.commit();
+        } else {
+          final recurrenceRule = data['recurrenceRule'] as String?;
+          if (recurrenceRule != null) {
+            final untilDate = startTime.subtract(const Duration(days: 1));
+            final untilStr = '${untilDate.year}${untilDate.month.toString().padLeft(2, '0')}${untilDate.day.toString().padLeft(2, '0')}T235959Z';
+            String newRule = recurrenceRule.contains('UNTIL=') ? recurrenceRule.replaceAll(RegExp(r'UNTIL=[^;]+'), 'UNTIL=$untilStr') : '$recurrenceRule;UNTIL=$untilStr';
+            await doc.reference.update({'recurrenceRule': newRule});
+          }
+        }
+        break;
+      case 'all':
+        if (recurrenceGroupId != null) {
+          final query = await _eventsRef.where('recurrenceGroupId', isEqualTo: recurrenceGroupId).get();
+          final batch = FirebaseFirestore.instance.batch();
+          for (var eventDoc in query.docs) batch.delete(eventDoc.reference);
+          await batch.commit();
+        } else {
+          await doc.reference.delete();
+        }
+        break;
+    }
   }
 
   Widget _buildDetailRow(IconData icon, String text) {
@@ -1412,6 +1522,87 @@ class _CalendarScreenState extends State<CalendarScreen> {
         const SizedBox(width: 20),
         Expanded(child: Text(text, style: const TextStyle(fontSize: 14, color: AppColors.textMain))),
       ],
+    );
+  }
+
+  void _confirmEdit(DocumentSnapshot doc) {
+    final data = doc.data() as Map<String, dynamic>;
+    final startTime = (data['startTime'] as Timestamp).toDate();
+    final recurrenceGroupId = data['recurrenceGroupId'];
+    final recurrenceRule = data['recurrenceRule'];
+    
+    final isRecurring = (recurrenceRule != null && recurrenceRule.toString().isNotEmpty) ||
+                        (recurrenceGroupId != null && recurrenceGroupId.toString().isNotEmpty);
+    
+    if (isRecurring) {
+      _showRecurringEditDialog(doc, data, startTime);
+    } else {
+      Navigator.pop(context);
+      showDialog(
+        context: context,
+        builder: (context) => AddEventDialog(appointment: doc),
+      );
+    }
+  }
+
+  void _showRecurringEditDialog(DocumentSnapshot doc, Map<String, dynamic> data, DateTime startTime) {
+    String selectedOption = 'this';
+    
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Text('定期的な予定の編集'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              RadioListTile<String>(
+                title: const Text('この予定'),
+                value: 'this',
+                groupValue: selectedOption,
+                onChanged: (v) => setDialogState(() => selectedOption = v!),
+                activeColor: AppColors.primary,
+                contentPadding: EdgeInsets.zero,
+              ),
+              RadioListTile<String>(
+                title: const Text('これ以降のすべての予定'),
+                value: 'future',
+                groupValue: selectedOption,
+                onChanged: (v) => setDialogState(() => selectedOption = v!),
+                activeColor: AppColors.primary,
+                contentPadding: EdgeInsets.zero,
+              ),
+              RadioListTile<String>(
+                title: const Text('すべての予定'),
+                value: 'all',
+                groupValue: selectedOption,
+                onChanged: (v) => setDialogState(() => selectedOption = v!),
+                activeColor: AppColors.primary,
+                contentPadding: EdgeInsets.zero,
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('キャンセル')),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(ctx);
+                Navigator.pop(context);
+                showDialog(
+                  context: context,
+                  builder: (context) => AddEventDialog(
+                    appointment: doc,
+                    editScope: selectedOption,
+                  ),
+                );
+              },
+              style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
+              child: const Text('OK', style: TextStyle(color: Colors.white)),
+            ),
+          ],
+        ),
+      ),
     );
   }
 

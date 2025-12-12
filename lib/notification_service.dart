@@ -126,42 +126,16 @@ class NotificationService {
     }
   }
 
-  /// フォアグラウンドメッセージの処理
-  Future<void> _handleForegroundMessage(RemoteMessage message) async {
+Future<void> _handleForegroundMessage(RemoteMessage message) async {
     debugPrint('📩 フォアグラウンドメッセージ: ${message.notification?.title}');
     
-    final notification = message.notification;
-    if (notification == null) return;
-    
-    // Webの場合はブラウザが自動で表示するのでローカル通知は不要
-    if (kIsWeb) {
-      debugPrint('🌐 Web: ブラウザ通知として表示されます');
-      return;
-    }
-    
-    // モバイルの場合はローカル通知として表示
-    await _localNotifications.show(
-      notification.hashCode,
-      notification.title,
-      notification.body,
-      NotificationDetails(
-        android: AndroidNotificationDetails(
-          'high_importance_channel',
-          'High Importance Notifications',
-          channelDescription: 'This channel is used for important notifications.',
-          importance: Importance.high,
-          priority: Priority.high,
-          icon: '@mipmap/ic_launcher',
-        ),
-        iOS: const DarwinNotificationDetails(
-          presentAlert: true,
-          presentBadge: true,
-          presentSound: true,
-        ),
-      ),
-      payload: message.data['type'],
-    );
+    // iOSはsetForegroundNotificationPresentationOptionsで自動表示される
+    // Androidもシステム通知で表示される
+    // ローカル通知を重複して表示しないようにreturn
+    return;
   }
+    
+
 
   /// 通知タップ時の処理
   void _handleNotificationTap(RemoteMessage message) {

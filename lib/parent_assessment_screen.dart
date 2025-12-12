@@ -95,117 +95,125 @@ class _ParentAssessmentScreenState extends State<ParentAssessmentScreen> with Si
     );
   }
 
-  Widget _buildHeader({bool showBack = false}) {
-    final hasMultipleChildren = widget.allChildren.length > 1;
+Widget _buildHeader({bool showBack = false}) {
+  final hasMultipleChildren = widget.allChildren.length > 1;
 
-    return Container(
-      height: 40,
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
-      ),
-      child: Row(
-        children: [
-          if (showBack) ...[
-            IconButton(
-              icon: const Icon(Icons.arrow_back_ios, size: 20),
-              onPressed: () => setState(() {
-                _selectedAssessmentId = null;
-                _selectedType = null;
-              }),
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(),
-            ),
-            const SizedBox(width: 8),
-          ],
-          Expanded(
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                // 顔写真
-                CircleAvatar(
-                  radius: 18,
-                  backgroundColor: AppColors.primary.withOpacity(0.1),
-                  backgroundImage: widget.childPhotoUrl != null && widget.childPhotoUrl!.isNotEmpty
-                      ? NetworkImage(widget.childPhotoUrl!)
-                      : null,
-                  child: widget.childPhotoUrl == null || widget.childPhotoUrl!.isEmpty
-                      ? const Icon(Icons.child_care, size: 20, color: AppColors.primary)
-                      : null,
-                ),
-                const SizedBox(width: 10),
-                
-                // 子どもの名前
-                if (hasMultipleChildren && !showBack)
-                  PopupMenuButton<int>(
-                    onSelected: (index) {
-                      widget.onChildChanged?.call(index);
-                    },
-                    offset: const Offset(0, 40),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          '${widget.childName}のアセスメント',
-                          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.normal),
-                        ),
-                        const SizedBox(width: 4),
-                        const Icon(Icons.arrow_drop_down, color: Colors.grey),
-                      ],
-                    ),
-                    itemBuilder: (context) {
-                      return widget.allChildren.asMap().entries.map((entry) {
-                        final index = entry.key;
-                        final child = entry.value;
-                        final firstName = child['firstName'] ?? '';
-                        final photoUrl = child['photoUrl'];
-                        final isSelected = index == widget.selectedChildIndex;
-
-                        return PopupMenuItem<int>(
-                          value: index,
-                          child: Row(
-                            children: [
-                              CircleAvatar(
-                                radius: 14,
-                                backgroundColor: AppColors.primary.withOpacity(0.1),
-                                backgroundImage: photoUrl != null && photoUrl.isNotEmpty
-                                    ? NetworkImage(photoUrl)
-                                    : null,
-                                child: photoUrl == null || photoUrl.isEmpty
-                                    ? const Icon(Icons.child_care, size: 14, color: AppColors.primary)
-                                    : null,
-                              ),
-                              const SizedBox(width: 10),
-                              Text(
-                                firstName,
-                                style: TextStyle(
-                                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                                ),
-                              ),
-                              if (isSelected) ...[
-                                const Spacer(),
-                                const Icon(Icons.check, color: AppColors.primary, size: 18),
-                              ],
-                            ],
-                          ),
-                        );
-                      }).toList();
-                    },
-                  )
-                else
-                  Text(
-                    _selectedType == 'weekly' ? '週次アセスメント' : '月次サマリ',
-                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.normal),
-                  ),
-              ],
-            ),
+  return Container(
+    height: 40,
+    padding: const EdgeInsets.symmetric(horizontal: 16),
+    decoration: BoxDecoration(
+      color: Colors.white,
+      border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
+    ),
+    child: Row(
+      children: [
+        if (showBack) ...[
+          IconButton(
+            icon: const Icon(Icons.arrow_back_ios, size: 20),
+            onPressed: () => setState(() {
+              _selectedAssessmentId = null;
+              _selectedType = null;
+            }),
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(),
           ),
-          if (showBack) const SizedBox(width: 48), // バランス用
+          const SizedBox(width: 8),
         ],
-      ),
-    );
-  }
+        Expanded(
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              // 顔写真
+              CircleAvatar(
+                radius: 18,
+                backgroundColor: AppColors.primary.withOpacity(0.1),
+                backgroundImage: widget.childPhotoUrl != null && widget.childPhotoUrl!.isNotEmpty
+                    ? NetworkImage(widget.childPhotoUrl!)
+                    : null,
+                child: widget.childPhotoUrl == null || widget.childPhotoUrl!.isEmpty
+                    ? const Icon(Icons.child_care, size: 20, color: AppColors.primary)
+                    : null,
+              ),
+              const SizedBox(width: 10),
+              
+              // 子どもの名前
+              if (showBack)
+                // 詳細画面: 週次アセスメント or 月次サマリ
+                Text(
+                  _selectedType == 'weekly' ? '週次アセスメント' : '月次サマリ',
+                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.normal),
+                )
+              else if (hasMultipleChildren)
+                // 一覧画面（複数の子ども）: ドロップダウン
+                PopupMenuButton<int>(
+                  onSelected: (index) {
+                    widget.onChildChanged?.call(index);
+                  },
+                  offset: const Offset(0, 40),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        '${widget.childName}のアセスメント',
+                        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.normal),
+                      ),
+                      const SizedBox(width: 4),
+                      const Icon(Icons.arrow_drop_down, color: Colors.grey),
+                    ],
+                  ),
+                  itemBuilder: (context) {
+                    return widget.allChildren.asMap().entries.map((entry) {
+                      final index = entry.key;
+                      final child = entry.value;
+                      final firstName = child['firstName'] ?? '';
+                      final photoUrl = child['photoUrl'];
+                      final isSelected = index == widget.selectedChildIndex;
+
+                      return PopupMenuItem<int>(
+                        value: index,
+                        child: Row(
+                          children: [
+                            CircleAvatar(
+                              radius: 14,
+                              backgroundColor: AppColors.primary.withOpacity(0.1),
+                              backgroundImage: photoUrl != null && photoUrl.isNotEmpty
+                                  ? NetworkImage(photoUrl)
+                                  : null,
+                              child: photoUrl == null || photoUrl.isEmpty
+                                  ? const Icon(Icons.child_care, size: 14, color: AppColors.primary)
+                                  : null,
+                            ),
+                            const SizedBox(width: 10),
+                            Text(
+                              firstName,
+                              style: TextStyle(
+                                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                              ),
+                            ),
+                            if (isSelected) ...[
+                              const Spacer(),
+                              const Icon(Icons.check, color: AppColors.primary, size: 18),
+                            ],
+                          ],
+                        ),
+                      );
+                    }).toList();
+                  },
+                )
+              else
+                // 一覧画面（子ども1人）: シンプルなテキスト
+                Text(
+                  '${widget.childName}のアセスメント',
+                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.normal),
+                ),
+            ],
+          ),
+        ),
+        if (showBack) const SizedBox(width: 48),
+      ],
+    ),
+  );
+}
 
   /// 日付一覧
   Widget _buildDateList({required String type}) {

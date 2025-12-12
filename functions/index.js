@@ -34,12 +34,38 @@ exports.onChatMessageCreated = onDocumentCreated(
 
       const chatData = chatDoc.data();
       const senderId = message.senderId;
-      const senderName = message.senderName || "不明";
+
+      // 送信者の名前を取得
+      let senderName = "不明";
+      const names = chatData.names || {};
+      if (names[senderId]) {
+        senderName = names[senderId];
+      }
 
       const participants = chatData.members || [];
       const recipientIds = participants.filter((id) => id !== senderId);
 
       if (recipientIds.length === 0) return null;
+
+      // 送信者のトークンを取得（除外用）
+      let senderTokens = [];
+      const senderStaffSnap = await db
+        .collection("staffs")
+        .where("uid", "==", senderId)
+        .limit(1)
+        .get();
+      if (!senderStaffSnap.empty) {
+        senderTokens = senderStaffSnap.docs[0].data().fcmTokens || [];
+      } else {
+        const senderFamilySnap = await db
+          .collection("families")
+          .where("uid", "==", senderId)
+          .limit(1)
+          .get();
+        if (!senderFamilySnap.empty) {
+          senderTokens = senderFamilySnap.docs[0].data().fcmTokens || [];
+        }
+      }
 
       const tokens = [];
 
@@ -53,7 +79,11 @@ exports.onChatMessageCreated = onDocumentCreated(
         if (!staffSnap.empty) {
           const staffData = staffSnap.docs[0].data();
           if (staffData.notifyChat !== false && staffData.fcmTokens) {
-            tokens.push(...staffData.fcmTokens);
+            // 送信者のトークンを除外
+            const filteredTokens = staffData.fcmTokens.filter(
+              (token) => !senderTokens.includes(token)
+            );
+            tokens.push(...filteredTokens);
           }
           continue;
         }
@@ -67,15 +97,22 @@ exports.onChatMessageCreated = onDocumentCreated(
         if (!familySnap.empty) {
           const familyData = familySnap.docs[0].data();
           if (familyData.notifyChat !== false && familyData.fcmTokens) {
-            tokens.push(...familyData.fcmTokens);
+            // 送信者のトークンを除外
+            const filteredTokens = familyData.fcmTokens.filter(
+              (token) => !senderTokens.includes(token)
+            );
+            tokens.push(...filteredTokens);
           }
         }
       }
 
       if (tokens.length === 0) return null;
 
+      // 重複トークンを除去
+      const uniqueTokens = [...new Set(tokens)];
+
       const response = await messaging.sendEachForMulticast({
-        tokens: tokens,
+        tokens: uniqueTokens,
         notification: {
           title: `${senderName}`,
           body: message.type === "image" ? "画像を送信しました" : message.text,
@@ -96,6 +133,14 @@ exports.onChatMessageCreated = onDocumentCreated(
           notification: {
             sound: "default",
             channelId: "high_importance_channel",
+          },
+        },
+        webpush: {
+          notification: {
+            icon: "/icons/Icon-192.png",
+          },
+          fcmOptions: {
+            link: "https://bee-smiley-admin.web.app",
           },
         },
       });

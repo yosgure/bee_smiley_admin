@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
@@ -259,6 +260,15 @@ class _ChatListScreenState extends State<ChatListScreen> {
         if (!snapshot.hasData || snapshot.data!.docs.isEmpty) return const Center(child: Text('チャット履歴はありません'));
 
         final docs = snapshot.data!.docs;
+        
+        // PC版で未選択の場合、最新のチャットを自動選択
+        if (isWide && _selectedRoomId == null && docs.isNotEmpty) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) {
+              setState(() => _selectedRoomId = docs.first.id);
+            }
+          });
+        }
         return ListView.builder(
           padding: EdgeInsets.zero,
           itemCount: docs.length,
@@ -302,9 +312,7 @@ class _RoomListTile extends StatelessWidget {
 
   const _RoomListTile({required this.roomDoc, required this.myUid, required this.isSelected, required this.onTap});
 
-  // 保護者情報を取得（子供の写真も含む）
   Future<Map<String, dynamic>> _fetchPeerInfo(String peerId) async {
-    // スタッフを確認
     var snap = await FirebaseFirestore.instance.collection('staffs').where('uid', isEqualTo: peerId).limit(1).get();
     if (snap.docs.isNotEmpty) {
       final d = snap.docs.first.data();
@@ -315,7 +323,6 @@ class _RoomListTile extends StatelessWidget {
       };
     }
     
-    // 保護者を確認
     snap = await FirebaseFirestore.instance.collection('families').where('uid', isEqualTo: peerId).limit(1).get();
     if (snap.docs.isNotEmpty) {
       final d = snap.docs.first.data();
@@ -323,7 +330,6 @@ class _RoomListTile extends StatelessWidget {
       final firstName = d['firstName'] ?? '';
       final fullName = '$lastName $firstName'.trim();
       
-      // 子供の写真を取得（最初の子供）
       String? childPhotoUrl;
       final children = List<Map<String, dynamic>>.from(d['children'] ?? []);
       if (children.isNotEmpty) {
@@ -332,7 +338,7 @@ class _RoomListTile extends StatelessWidget {
       
       return {
         'name': fullName.isNotEmpty ? fullName : '保護者',
-        'photoUrl': childPhotoUrl, // 子供の写真を使用
+        'photoUrl': childPhotoUrl,
         'isStaff': false,
       };
     }
@@ -344,6 +350,52 @@ class _RoomListTile extends StatelessWidget {
     final today = DateTime(now.year, now.month, now.day);
     final aDate = DateTime(date.year, date.month, date.day);
     return aDate == today ? DateFormat('HH:mm').format(date) : DateFormat('MM/dd').format(date);
+  }
+
+  Widget _buildTrailing(String roomId, String timeStr) {
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('chat_rooms')
+          .doc(roomId)
+          .collection('messages')
+          .where('senderId', isNotEqualTo: myUid)
+          .snapshots(),
+      builder: (context, msgSnapshot) {
+        int unreadCount = 0;
+        if (msgSnapshot.hasData) {
+          for (var doc in msgSnapshot.data!.docs) {
+            final data = doc.data() as Map<String, dynamic>;
+            final readBy = List<String>.from(data['readBy'] ?? []);
+            if (!readBy.contains(myUid)) {
+              unreadCount++;
+            }
+          }
+        }
+        return Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            Text(timeStr, style: const TextStyle(fontSize: 11, color: Colors.grey)),
+if (unreadCount > 0)
+  Container(
+    margin: const EdgeInsets.only(top: 4),
+    width: 20,
+    height: 20,
+    decoration: const BoxDecoration(
+      color: Colors.red,
+      shape: BoxShape.circle,
+    ),
+child: Center(
+      child: Text(
+        unreadCount > 99 ? '99+' : '$unreadCount',
+        style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+      ),
+    ),
+  ),
+],
+        );
+      },
+    );
   }
 
   @override
@@ -375,7 +427,7 @@ class _RoomListTile extends StatelessWidget {
         ),
         title: Text(groupName, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontWeight: isSelected ? FontWeight.bold : FontWeight.normal, color: isSelected ? AppColors.primary : AppColors.textMain)),
         subtitle: Text(room['lastMessage'] ?? '', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12, color: Colors.grey)),
-        trailing: Text(timeStr, style: const TextStyle(fontSize: 11, color: Colors.grey)),
+        trailing: _buildTrailing(roomId, timeStr),
         onTap: () => onTap(roomId, groupName, true, memberNames),
       );
     }
@@ -404,7 +456,7 @@ class _RoomListTile extends StatelessWidget {
           ),
           title: Text(name, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontWeight: isSelected ? FontWeight.bold : FontWeight.normal, color: isSelected ? AppColors.primary : AppColors.textMain)),
           subtitle: Text(room['lastMessage'] ?? '', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12, color: Colors.grey)),
-          trailing: Text(timeStr, style: const TextStyle(fontSize: 11, color: Colors.grey)),
+          trailing: _buildTrailing(roomId, timeStr),
           onTap: () => onTap(roomId, name, false, memberNames),
         );
       },
@@ -473,7 +525,6 @@ class _NewChatDialogState extends State<NewChatDialog> with SingleTickerProvider
         if (d['uid'] == widget.myUid) continue;
         final name = '${d['lastName'] ?? ''} ${d['firstName'] ?? ''}'.trim();
         final kana = '${d['lastNameKana'] ?? ''} ${d['firstNameKana'] ?? ''}'.trim();
-        // 子供の情報を取得
         final children = List<Map<String, dynamic>>.from(d['children'] ?? []);
         String? classroom;
         String? childPhotoUrl;
@@ -485,7 +536,7 @@ class _NewChatDialogState extends State<NewChatDialog> with SingleTickerProvider
           'uid': d['uid'] ?? doc.id,
           'name': name.isEmpty ? '名称未設定' : name,
           'kana': kana.isEmpty ? name : kana,
-          'photoUrl': childPhotoUrl, // 子供の写真
+          'photoUrl': childPhotoUrl,
           'classroom': classroom,
         });
       }
@@ -590,7 +641,7 @@ class _NewChatDialogState extends State<NewChatDialog> with SingleTickerProvider
                 onTap: () {
                   if (isStaffTab && _isGroupMode) _toggleSelection(uid);
                   else if (isStaffTab) _startSingleChat(uid, user['name']);
-                  else _startFamilyChat(user); // 保護者の場合は教室メンバー全員のチャット
+                  else _startFamilyChat(user);
                 },
               );
             }),
@@ -616,7 +667,6 @@ class _NewChatDialogState extends State<NewChatDialog> with SingleTickerProvider
     }
   }
 
-  // スタッフ同士の1対1チャット
   void _startSingleChat(String targetUid, String targetName) async {
     final memberIds = [widget.myUid, targetUid]..sort();
     final roomId = memberIds.join('_');
@@ -625,13 +675,11 @@ class _NewChatDialogState extends State<NewChatDialog> with SingleTickerProvider
     if (mounted) { Navigator.pop(context); widget.onStartChat(roomId, targetName, false, namesMap); }
   }
 
-  // 保護者とのチャット（保護者 + 同じ教室のスタッフ全員）
   void _startFamilyChat(Map<String, dynamic> familyData) async {
     final familyUid = familyData['uid'];
     final familyName = familyData['name'];
     final classroom = familyData['classroom'];
 
-    // 同じ教室のスタッフを取得
     List<String> classroomStaffUids = [widget.myUid];
     Map<String, String> namesMap = {
       widget.myUid: widget.myName.isEmpty ? '担当者' : widget.myName,
@@ -647,15 +695,11 @@ class _NewChatDialogState extends State<NewChatDialog> with SingleTickerProvider
       }
     }
 
-    // メンバーリスト作成（保護者 + スタッフ全員）
     final List<String> memberIds = [familyUid, ...classroomStaffUids]..sort();
-    
-    // ルームIDは保護者のUIDベースで一意に
     final roomId = 'family_$familyUid';
 
     String? groupName;
     if (classroomStaffUids.length > 1) {
-      // グループチャットの場合
       groupName = familyName;
     }
 
@@ -705,7 +749,6 @@ class _NewChatDialogState extends State<NewChatDialog> with SingleTickerProvider
         'lastMessageTime': FieldValue.serverTimestamp(), 'createdAt': FieldValue.serverTimestamp(),
       });
     } else {
-      // 既存のルームがある場合はメンバーと名前を更新
       await roomRef.update({
         'members': members,
         'names': names,
@@ -953,17 +996,57 @@ class _ChatDetailViewState extends State<ChatDetailView> {
             IconButton(icon: const Icon(Icons.image, color: Colors.grey), onPressed: _isUploading ? null : _pickAndUploadImage),
             const SizedBox(width: 8),
             Expanded(
-              child: TextField(
-                controller: _textController,
-                focusNode: _focusNode,
-                maxLines: null, minLines: 1,
-                keyboardType: TextInputType.multiline,
-                decoration: InputDecoration(hintText: 'メッセージを入力', filled: true, fillColor: Colors.grey.shade100, border: OutlineInputBorder(borderRadius: BorderRadius.circular(24), borderSide: BorderSide.none), contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10)),
+              child: Focus(
+                onKeyEvent: (node, event) {
+                  // IME変換中（日本語入力で下線が出ている状態）はスキップ
+                  if (_textController.value.composing.isValid) {
+                    return KeyEventResult.ignored;
+                  }
+                  // Enter押下時（Shift押してない場合）に送信
+                  if (event is KeyDownEvent &&
+                      event.logicalKey == LogicalKeyboardKey.enter &&
+                      !HardwareKeyboard.instance.isShiftPressed) {
+                    _sendMessage();
+                    return KeyEventResult.handled;
+                  }
+                  return KeyEventResult.ignored;
+                },
+                child: TextField(
+                  controller: _textController,
+                  focusNode: _focusNode,
+                  maxLines: null,
+                  minLines: 1,
+                  keyboardType: TextInputType.multiline,
+                  decoration: InputDecoration(
+                    hintText: 'メッセージを入力',
+                    filled: true,
+                    fillColor: Colors.grey.shade100,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(24),
+                      borderSide: BorderSide.none,
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  ),
+                ),
               ),
             ),
             const SizedBox(width: 8),
-            FloatingActionButton(heroTag: null, onPressed: _sendMessage, mini: true, backgroundColor: AppColors.primary, child: const Icon(Icons.send, color: Colors.white, size: 18)),
-          ],
+Padding(
+              padding: const EdgeInsets.only(bottom: 2),
+              child: GestureDetector(
+                onTap: _sendMessage,
+                child: Container(
+                  width: 40,
+                  height: 40,
+                  decoration: const BoxDecoration(
+                    color: AppColors.primary,
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.send, color: Colors.white, size: 20),
+                ),
+              ),
+            ),
+          ],  // ← Row の children を閉じる
         ),
       ),
     );
@@ -989,7 +1072,7 @@ class _ChatDetailViewState extends State<ChatDetailView> {
     }
 
     Widget content;
-    final bool isImageOnly = type == 'image' && text.isEmpty; // 画像のみ（テキストなし）
+    final bool isImageOnly = type == 'image' && text.isEmpty;
     
     if (type == 'image') {
       content = Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -1039,7 +1122,7 @@ class _ChatDetailViewState extends State<ChatDetailView> {
                   ],
                   Flexible(
                     child: isImageOnly
-                      ? content  // 画像のみの場合は背景なし
+                      ? content
                       : Container(
                           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12), 
                           decoration: BoxDecoration(

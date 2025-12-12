@@ -1,14 +1,15 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_messaging/firebase_messaging.dart'; // 追加
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'parent_chat_screen.dart';
 import 'parent_assessment_screen.dart';
 import 'parent_notification_screen.dart';
 import 'parent_event_screen.dart';
 import 'parent_settings_screen.dart';
 import 'app_theme.dart';
-import 'notification_service.dart'; // 追加
+import 'notification_service.dart';
 
 class ParentMainScreen extends StatefulWidget {
   const ParentMainScreen({super.key});
@@ -18,14 +19,13 @@ class ParentMainScreen extends StatefulWidget {
 }
 
 class _ParentMainScreenState extends State<ParentMainScreen> {
-  // 初期値を0（記録/アセスメント）に設定
   int _selectedIndex = 0;
   
   // バッジ用フラグ
-  bool _hasUnreadRecord = false; // 記録
-  bool _hasUnreadChat = false;   // チャット
-  bool _hasUnreadInfo = false;   // お知らせ
-  bool _hasUnreadEvent = false;  // イベント
+  bool _hasUnreadRecord = false;
+  bool _hasUnreadChat = false;
+  bool _hasUnreadInfo = false;
+  bool _hasUnreadEvent = false;
 
   // 家族情報
   Map<String, dynamic>? _familyData;
@@ -33,15 +33,57 @@ class _ParentMainScreenState extends State<ParentMainScreen> {
   int _selectedChildIndex = 0;
   bool _isLoading = true;
 
+  // チャット未読監視用
+  StreamSubscription<QuerySnapshot>? _chatRoomSubscription;
+  StreamSubscription<QuerySnapshot>? _messageSubscription;
+
   @override
   void initState() {
     super.initState();
     _fetchFamilyData();
-    _setupNotificationListener(); // バッジ用
-    _setupNavigationListener();   // 遷移用
+    _setupNotificationListener();
+    _setupNavigationListener();
+    _setupChatUnreadListener();
   }
 
-  // バッジ表示用リスナー
+  @override
+  void dispose() {
+    _chatRoomSubscription?.cancel();
+    _messageSubscription?.cancel();
+    super.dispose();
+  }
+
+  // チャット未読監視（Firestoreベース）
+  void _setupChatUnreadListener() {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    final familyRoomId = 'family_${user.uid}';
+    
+    _messageSubscription = FirebaseFirestore.instance
+        .collection('chat_rooms')
+        .doc(familyRoomId)
+        .collection('messages')
+        .where('senderId', isNotEqualTo: user.uid)
+        .snapshots()
+        .listen((msgSnapshot) {
+      bool hasUnread = false;
+      for (var doc in msgSnapshot.docs) {
+        final data = doc.data();
+        final readBy = List<String>.from(data['readBy'] ?? []);
+        if (!readBy.contains(user.uid)) {
+          hasUnread = true;
+          break;
+        }
+      }
+      
+      if (mounted) {
+        setState(() => _hasUnreadChat = hasUnread);
+      }
+    });
+  }
+
+  // バッジ表示用リスナー（チャット以外）
   void _setupNotificationListener() {
     FirebaseMessaging.onMessage.listen((RemoteMessage message) {
       final type = message.data['type'];
@@ -52,11 +94,9 @@ class _ParentMainScreenState extends State<ParentMainScreen> {
           case 'assessment':
             _hasUnreadRecord = true;
             break;
-          case 'chat':
-            _hasUnreadChat = true;
-            break;
           case 'info':
           case 'notification':
+          case 'announcement':
             _hasUnreadInfo = true;
             break;
           case 'event':
@@ -71,47 +111,43 @@ class _ParentMainScreenState extends State<ParentMainScreen> {
   void _setupNavigationListener() {
     final service = NotificationService();
 
-    // 1. アプリ起動時のチェック
     if (service.initialRoute != null) {
       _navigateByType(service.initialRoute!);
       service.initialRoute = null;
     }
 
-    // 2. 起動中の監視
     service.navigationStream.listen((type) {
       if (!mounted) return;
       _navigateByType(type);
     });
   }
 
-  // タブ切り替えロジック
   void _navigateByType(String type) {
     int newIndex = _selectedIndex;
 
     switch (type) {
       case 'record':
       case 'assessment':
-        newIndex = 0; // 記録
+        newIndex = 0;
         break;
       case 'chat':
-        newIndex = 1; // チャット
+        newIndex = 1;
         break;
       case 'info':
       case 'notification':
-        newIndex = 2; // お知らせ
+      case 'announcement':
+        newIndex = 2;
         break;
       case 'event':
-        newIndex = 3; // イベント
+        newIndex = 3;
         break;
     }
 
     if (newIndex != _selectedIndex) {
       setState(() {
         _selectedIndex = newIndex;
-        // 遷移したらバッジを消す
-        if (type == 'chat') _hasUnreadChat = false;
-        if (type == 'record') _hasUnreadRecord = false;
-        if (type == 'info') _hasUnreadInfo = false;
+        if (type == 'record' || type == 'assessment') _hasUnreadRecord = false;
+        if (type == 'info' || type == 'notification' || type == 'announcement') _hasUnreadInfo = false;
         if (type == 'event') _hasUnreadEvent = false;
       });
     }
@@ -137,6 +173,8 @@ class _ParentMainScreenState extends State<ParentMainScreen> {
           _children = children;
           _isLoading = false;
         });
+      } else {
+        setState(() => _isLoading = false);
       }
     } catch (e) {
       debugPrint('Error fetching family data: $e');
@@ -144,13 +182,11 @@ class _ParentMainScreenState extends State<ParentMainScreen> {
     }
   }
 
-  // 現在選択中の子どもの情報
   Map<String, dynamic>? get _currentChild {
     if (_children.isEmpty) return null;
     return _children[_selectedChildIndex];
   }
 
-  // 子どものID（親のuid_子どもの名前）
   String? get _currentChildId {
     if (_currentChild == null || _familyData == null) return null;
     final uid = _familyData!['uid'];
@@ -158,16 +194,23 @@ class _ParentMainScreenState extends State<ParentMainScreen> {
     return '${uid}_$firstName';
   }
 
-  // 子どもの表示名（名前のみ）
   String get _currentChildFirstName {
     if (_currentChild == null) return '';
     return _currentChild!['firstName'] ?? '';
   }
 
-  // 子どもの顔写真URL
   String? get _currentChildPhotoUrl {
     if (_currentChild == null) return null;
     return _currentChild!['photoUrl'];
+  }
+
+  // バッジ付きアイコンを作成するヘルパー（スタッフ用と同じ）
+  Widget _buildBadgedIcon(IconData icon, bool showBadge) {
+    return Badge(
+      isLabelVisible: showBadge,
+      smallSize: 10,
+      child: Icon(icon),
+    );
   }
 
   @override
@@ -178,9 +221,7 @@ class _ParentMainScreenState extends State<ParentMainScreen> {
       );
     }
 
-    // 順序: 記録、チャット、お知らせ、イベント、設定
     final List<Widget> screens = [
-      // 0: アセスメント
       ParentAssessmentScreen(
         childId: _currentChildId,
         childName: _currentChildFirstName,
@@ -191,16 +232,12 @@ class _ParentMainScreenState extends State<ParentMainScreen> {
           setState(() => _selectedChildIndex = index);
         },
       ),
-      // 1: チャット
       ParentChatScreen(familyData: _familyData),
-      // 2: お知らせ
       const ParentNotificationScreen(),
-      // 3: イベント
       ParentEventScreen(
         childId: _currentChildId,
         classroom: _currentChild?['classroom'],
       ),
-      // 4: 設定
       ParentSettingsScreen(
         familyData: _familyData,
         children: _children,
@@ -228,9 +265,7 @@ class _ParentMainScreenState extends State<ParentMainScreen> {
           onTap: (index) {
             setState(() {
               _selectedIndex = index;
-              // タップしたらバッジを消す
               if (index == 0) _hasUnreadRecord = false;
-              if (index == 1) _hasUnreadChat = false;
               if (index == 2) _hasUnreadInfo = false;
               if (index == 3) _hasUnreadEvent = false;
             });
@@ -239,31 +274,25 @@ class _ParentMainScreenState extends State<ParentMainScreen> {
           unselectedItemColor: Colors.grey,
           selectedFontSize: 12,
           unselectedFontSize: 12,
-          // 順序: 記録、チャット、お知らせ、イベント、設定
           items: [
             BottomNavigationBarItem(
-              icon: Badge(isLabelVisible: _hasUnreadRecord, child: const Icon(Icons.assignment_outlined)),
-              activeIcon: Badge(isLabelVisible: _hasUnreadRecord, child: const Icon(Icons.assignment)),
+              icon: _buildBadgedIcon(Icons.edit_note, _hasUnreadRecord),
               label: '記録',
             ),
             BottomNavigationBarItem(
-              icon: Badge(isLabelVisible: _hasUnreadChat, child: const Icon(Icons.chat_bubble_outline)),
-              activeIcon: Badge(isLabelVisible: _hasUnreadChat, child: const Icon(Icons.chat_bubble)),
+              icon: _buildBadgedIcon(Icons.chat, _hasUnreadChat),
               label: 'チャット',
             ),
             BottomNavigationBarItem(
-              icon: Badge(isLabelVisible: _hasUnreadInfo, child: const Icon(Icons.notifications_outlined)),
-              activeIcon: Badge(isLabelVisible: _hasUnreadInfo, child: const Icon(Icons.notifications)),
+              icon: _buildBadgedIcon(Icons.notifications, _hasUnreadInfo),
               label: 'お知らせ',
             ),
             BottomNavigationBarItem(
-              icon: Badge(isLabelVisible: _hasUnreadEvent, child: const Icon(Icons.event_outlined)),
-              activeIcon: Badge(isLabelVisible: _hasUnreadEvent, child: const Icon(Icons.event)),
+              icon: _buildBadgedIcon(Icons.event, _hasUnreadEvent),
               label: 'イベント',
             ),
             const BottomNavigationBarItem(
-              icon: Icon(Icons.settings_outlined),
-              activeIcon: Icon(Icons.settings),
+              icon: Icon(Icons.settings),
               label: '設定',
             ),
           ],

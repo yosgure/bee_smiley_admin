@@ -27,11 +27,12 @@ class _ParentChatScreenState extends State<ParentChatScreen> {
   final currentUser = FirebaseAuth.instance.currentUser;
   String _myDisplayName = '';
   
-  // チャットルーム情報
   String? _roomId;
-  String _teacherName = '先生';
+  String _roomName = '先生';
   bool _isLoading = true;
   bool _noRoom = false;
+  bool _isGroup = false;
+  Map<String, dynamic> _memberNames = {};
 
   @override
   void initState() {
@@ -51,29 +52,43 @@ class _ParentChatScreenState extends State<ParentChatScreen> {
 
   Future<void> _findOrCreateChatRoom() async {
     if (currentUser == null) {
-      setState(() {
-        _isLoading = false;
-      });
+      setState(() => _isLoading = false);
       return;
     }
 
     try {
-      final roomQuery = await FirebaseFirestore.instance
+      // 保護者専用のルームIDを使用
+      final familyRoomId = 'family_${currentUser!.uid}';
+      
+      // 既存のルームを確認
+      final roomDoc = await FirebaseFirestore.instance
           .collection('chat_rooms')
-          .where('members', arrayContains: currentUser!.uid)
-          .limit(1)
+          .doc(familyRoomId)
           .get();
 
-      if (roomQuery.docs.isNotEmpty) {
-        final roomDoc = roomQuery.docs.first;
-        final room = roomDoc.data();
+      if (roomDoc.exists) {
+        final room = roomDoc.data()!;
+        final names = Map<String, dynamic>.from(room['names'] ?? {});
+        final members = List<String>.from(room['members'] ?? []);
+        
+        // ルーム名を設定（自分以外のメンバー名）
+        String roomName = room['groupName'] ?? '';
+        if (roomName.isEmpty) {
+          final otherNames = names.entries
+              .where((e) => e.key != currentUser!.uid)
+              .map((e) => e.value)
+              .toList();
+          roomName = otherNames.isNotEmpty ? otherNames.join(', ') : '先生';
+        }
         
         setState(() {
-          _roomId = roomDoc.id;
+          _roomId = familyRoomId;
+          _roomName = roomName;
+          _isGroup = members.length > 2;
+          _memberNames = names;
           _noRoom = false;
+          _isLoading = false;
         });
-        
-        await _loadTeacherName(room);
       } else {
         setState(() {
           _isLoading = false;
@@ -95,33 +110,45 @@ class _ParentChatScreenState extends State<ParentChatScreen> {
     setState(() => _isLoading = true);
 
     try {
+      // 子供の教室を取得
       final children = List<Map<String, dynamic>>.from(widget.familyData!['children'] ?? []);
-      String? classroom;
-      if (children.isNotEmpty) {
-        classroom = children.first['classroom'];
-      }
-
-      String? teacherUid;
-      String teacherName = '先生';
-      
-      if (classroom != null) {
-        final staffQuery = await FirebaseFirestore.instance
-            .collection('staffs')
-            .where('classroom', isEqualTo: classroom)
-            .limit(1)
-            .get();
-        
-        if (staffQuery.docs.isNotEmpty) {
-          final staffData = staffQuery.docs.first.data();
-          teacherUid = staffData['uid'];
-          final lastName = staffData['lastName'] ?? '';
-          final firstName = staffData['firstName'] ?? '';
-          teacherName = '$lastName $firstName'.trim();
-          if (teacherName.isEmpty) teacherName = '先生';
+      Set<String> classrooms = {};
+      for (var child in children) {
+        if (child['classroom'] != null && child['classroom'].toString().isNotEmpty) {
+          classrooms.add(child['classroom']);
         }
       }
 
-      if (teacherUid == null) {
+      // 該当教室を担当する全スタッフを取得
+      List<String> staffUids = [];
+      Map<String, String> staffNames = {};
+
+      if (classrooms.isNotEmpty) {
+        final staffQuery = await FirebaseFirestore.instance
+            .collection('staffs')
+            .get();
+
+        for (var doc in staffQuery.docs) {
+          final staffData = doc.data();
+          final staffClassrooms = List<String>.from(staffData['classrooms'] ?? []);
+          final staffUid = staffData['uid'] as String?;
+          
+          if (staffUid == null) continue;
+          
+          // スタッフが担当する教室と子供の教室が一致するか確認
+          final hasMatchingClassroom = staffClassrooms.any((sc) => classrooms.contains(sc));
+          
+          if (hasMatchingClassroom) {
+            staffUids.add(staffUid);
+            final name = staffData['name'] ?? 
+                '${staffData['lastName'] ?? ''} ${staffData['firstName'] ?? ''}'.trim();
+            staffNames[staffUid] = name.isNotEmpty ? name : '先生';
+          }
+        }
+      }
+
+      // スタッフが見つからない場合、全スタッフから1人を選択
+      if (staffUids.isEmpty) {
         final anyStaffQuery = await FirebaseFirestore.instance
             .collection('staffs')
             .limit(1)
@@ -129,15 +156,17 @@ class _ParentChatScreenState extends State<ParentChatScreen> {
         
         if (anyStaffQuery.docs.isNotEmpty) {
           final staffData = anyStaffQuery.docs.first.data();
-          teacherUid = staffData['uid'];
-          final lastName = staffData['lastName'] ?? '';
-          final firstName = staffData['firstName'] ?? '';
-          teacherName = '$lastName $firstName'.trim();
-          if (teacherName.isEmpty) teacherName = '先生';
+          final staffUid = staffData['uid'] as String?;
+          if (staffUid != null) {
+            staffUids.add(staffUid);
+            final name = staffData['name'] ?? 
+                '${staffData['lastName'] ?? ''} ${staffData['firstName'] ?? ''}'.trim();
+            staffNames[staffUid] = name.isNotEmpty ? name : '先生';
+          }
         }
       }
 
-      if (teacherUid == null) {
+      if (staffUids.isEmpty) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('先生が登録されていません')),
@@ -147,20 +176,39 @@ class _ParentChatScreenState extends State<ParentChatScreen> {
         return;
       }
 
-      final roomRef = await FirebaseFirestore.instance.collection('chat_rooms').add({
-        'members': [currentUser!.uid, teacherUid],
-        'names': {
-          currentUser!.uid: _myDisplayName,
-          teacherUid: teacherName,
-        },
+      // ルーム作成
+      final familyRoomId = 'family_${currentUser!.uid}';
+      final List<String> members = [currentUser!.uid, ...staffUids];
+      final Map<String, String> names = {
+        currentUser!.uid: _myDisplayName,
+        ...staffNames,
+      };
+
+      // グループ名（複数スタッフの場合は保護者名をグループ名に）
+      String? groupName;
+      if (staffUids.length > 1) {
+        groupName = _myDisplayName;
+      }
+
+      final roomRef = FirebaseFirestore.instance.collection('chat_rooms').doc(familyRoomId);
+      await roomRef.set({
+        'roomId': familyRoomId,
+        'members': members,
+        'names': names,
+        'groupName': groupName,
         'lastMessage': 'チャットを開始しました',
         'lastMessageTime': FieldValue.serverTimestamp(),
         'createdAt': FieldValue.serverTimestamp(),
       });
 
+      // ルーム名を設定
+      String roomName = groupName ?? staffNames.values.firstOrNull ?? '先生';
+
       setState(() {
-        _roomId = roomRef.id;
-        _teacherName = teacherName;
+        _roomId = familyRoomId;
+        _roomName = roomName;
+        _isGroup = staffUids.length > 1;
+        _memberNames = names;
         _noRoom = false;
         _isLoading = false;
       });
@@ -176,60 +224,13 @@ class _ParentChatScreenState extends State<ParentChatScreen> {
     }
   }
 
-  Future<void> _loadTeacherName(Map<String, dynamic> room) async {
-    final members = List<String>.from(room['members'] ?? []);
-    final names = Map<String, dynamic>.from(room['names'] ?? {});
-    
-    for (final entry in names.entries) {
-      if (entry.key != currentUser!.uid) {
-        setState(() {
-          _teacherName = entry.value.toString();
-          _isLoading = false;
-        });
-        return;
-      }
-    }
-    
-    for (final memberId in members) {
-      if (memberId != currentUser!.uid) {
-        try {
-          final staffQuery = await FirebaseFirestore.instance
-              .collection('staffs')
-              .where('uid', isEqualTo: memberId)
-              .limit(1)
-              .get();
-          
-          if (staffQuery.docs.isNotEmpty) {
-            final staffData = staffQuery.docs.first.data();
-            final lastName = staffData['lastName'] ?? '';
-            final firstName = staffData['firstName'] ?? '';
-            final name = '$lastName $firstName'.trim();
-            if (name.isNotEmpty) {
-              setState(() {
-                _teacherName = name;
-                _isLoading = false;
-              });
-              return;
-            }
-          }
-        } catch (e) {
-          debugPrint('Error fetching staff name: $e');
-        }
-      }
-    }
-    
-    setState(() => _isLoading = false);
-  }
-
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
       return Column(
         children: [
           _buildHeader('チャット'),
-          const Expanded(
-            child: ChatListSkeleton(),
-          ),
+          const Expanded(child: ChatListSkeleton()),
         ],
       );
     }
@@ -276,7 +277,14 @@ class _ParentChatScreenState extends State<ParentChatScreen> {
       child: Column(
         children: [
           _buildHeader('チャット'),
-          Expanded(child: _ChatMessageList(roomId: _roomId!, myName: _myDisplayName)),
+          Expanded(
+            child: _ChatMessageList(
+              roomId: _roomId!,
+              myUid: currentUser!.uid,
+              isGroup: _isGroup,
+              memberNames: _memberNames,
+            ),
+          ),
           _ChatInputArea(roomId: _roomId!, myName: _myDisplayName),
         ],
       ),
@@ -306,9 +314,16 @@ class _ParentChatScreenState extends State<ParentChatScreen> {
 // ==========================================
 class _ChatMessageList extends StatefulWidget {
   final String roomId;
-  final String myName;
+  final String myUid;
+  final bool isGroup;
+  final Map<String, dynamic> memberNames;
 
-  const _ChatMessageList({required this.roomId, required this.myName});
+  const _ChatMessageList({
+    required this.roomId,
+    required this.myUid,
+    required this.isGroup,
+    required this.memberNames,
+  });
 
   @override
   State<_ChatMessageList> createState() => _ChatMessageListState();
@@ -316,9 +331,7 @@ class _ChatMessageList extends StatefulWidget {
 
 class _ChatMessageListState extends State<_ChatMessageList> {
   final ScrollController _scrollController = ScrollController();
-  final currentUser = FirebaseAuth.instance.currentUser;
   bool _isFirstLoad = true;
-  String? _selectedMessageId;
 
   @override
   void dispose() {
@@ -328,67 +341,61 @@ class _ChatMessageListState extends State<_ChatMessageList> {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: () {
-        FocusScope.of(context).unfocus();
-        setState(() => _selectedMessageId = null);
-      },
-      child: Container(
-        color: const Color(0xFFF2F2F7),
-        child: StreamBuilder<QuerySnapshot>(
-          stream: FirebaseFirestore.instance
-              .collection('chat_rooms')
-              .doc(widget.roomId)
-              .collection('messages')
-              .orderBy('createdAt', descending: false)
-              .snapshots(),
-          builder: (context, snapshot) {
-            if (snapshot.hasError) {
-              return Center(child: Text('エラー: ${snapshot.error}'));
-            }
-            
-            if (!snapshot.hasData) {
-              return const ChatListSkeleton();
-            }
+    return Container(
+      color: const Color(0xFFF2F2F7),
+      child: StreamBuilder<QuerySnapshot>(
+        stream: FirebaseFirestore.instance
+            .collection('chat_rooms')
+            .doc(widget.roomId)
+            .collection('messages')
+            .orderBy('createdAt', descending: false)
+            .snapshots(),
+        builder: (context, snapshot) {
+          if (snapshot.hasError) {
+            return Center(child: Text('エラー: ${snapshot.error}'));
+          }
+          
+          if (!snapshot.hasData) {
+            return const ChatListSkeleton();
+          }
 
-            final messages = snapshot.data!.docs;
+          final messages = snapshot.data!.docs;
 
-            if (messages.isEmpty) {
-              return const Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.chat_bubble_outline, size: 48, color: Colors.grey),
-                    SizedBox(height: 16),
-                    Text('メッセージを送信してみましょう', style: TextStyle(color: Colors.grey)),
-                  ],
-                ),
-              );
-            }
-
-            _markAsRead(messages);
-
-            if (_isFirstLoad) {
-              WidgetsBinding.instance.addPostFrameCallback((_) {
-                if (_scrollController.hasClients) {
-                  _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
-                }
-                _isFirstLoad = false;
-              });
-            }
-
-            return ListView.builder(
-              controller: _scrollController,
-              padding: const EdgeInsets.all(16),
-              itemCount: messages.length,
-              itemBuilder: (context, index) {
-                final msg = messages[index].data() as Map<String, dynamic>;
-                final msgId = messages[index].id;
-                return _buildMessageBubble(msg, msgId);
-              },
+          if (messages.isEmpty) {
+            return const Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.chat_bubble_outline, size: 48, color: Colors.grey),
+                  SizedBox(height: 16),
+                  Text('メッセージを送信してみましょう', style: TextStyle(color: Colors.grey)),
+                ],
+              ),
             );
-          },
-        ),
+          }
+
+          _markAsRead(messages);
+
+          if (_isFirstLoad) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (_scrollController.hasClients) {
+                _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
+              }
+              _isFirstLoad = false;
+            });
+          }
+
+          return ListView.builder(
+            controller: _scrollController,
+            padding: const EdgeInsets.all(16),
+            itemCount: messages.length,
+            itemBuilder: (context, index) {
+              final msg = messages[index].data() as Map<String, dynamic>;
+              final msgId = messages[index].id;
+              return _buildMessageBubble(msg, msgId);
+            },
+          );
+        },
       ),
     );
   }
@@ -397,22 +404,21 @@ class _ChatMessageListState extends State<_ChatMessageList> {
     for (final doc in messages) {
       final data = doc.data() as Map<String, dynamic>;
       final readBy = List<String>.from(data['readBy'] ?? []);
-      if (!readBy.contains(currentUser!.uid)) {
+      if (!readBy.contains(widget.myUid)) {
         await doc.reference.update({
-          'readBy': FieldValue.arrayUnion([currentUser!.uid]),
+          'readBy': FieldValue.arrayUnion([widget.myUid]),
         });
       }
     }
   }
 
   Widget _buildMessageBubble(Map<String, dynamic> msg, String msgId) {
-    final bool isMe = msg['senderId'] == currentUser!.uid;
+    final bool isMe = msg['senderId'] == widget.myUid;
     final String text = msg['text'] ?? '';
     final String type = msg['type'] ?? 'text';
     final readBy = List<String>.from(msg['readBy'] ?? []);
-    final isRead = isMe && readBy.any((uid) => uid != currentUser!.uid);
+    final isRead = isMe && readBy.any((uid) => uid != widget.myUid);
     final stamps = Map<String, dynamic>.from(msg['stamps'] ?? {});
-    final isSelected = _selectedMessageId == msgId;
 
     String timeStr = '';
     if (msg['createdAt'] != null) {
@@ -420,20 +426,36 @@ class _ChatMessageListState extends State<_ChatMessageList> {
       timeStr = DateFormat('HH:mm').format(ts.toDate());
     }
 
+    // グループチャットの場合、送信者名を表示
+    String senderName = '';
+    if (widget.isGroup && !isMe) {
+      senderName = widget.memberNames[msg['senderId']]?.toString() ?? '不明';
+    }
+
     Widget content;
+    final bool isImageOnly = type == 'image' && text.isEmpty;
+
     if (type == 'image') {
-      content = GestureDetector(
-        onTap: () => _showImagePreview(msg['url']),
-        onLongPress: () => _showActionSheet(msgId, isMe, type, text),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(12),
-          child: Image.network(
-            msg['url'],
-            width: 200,
-            fit: BoxFit.cover,
-            errorBuilder: (c, e, s) => const Icon(Icons.broken_image),
+      content = Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          GestureDetector(
+            onTap: () => _showImagePreview(msg['url']),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: Image.network(
+                msg['url'],
+                width: 200,
+                fit: BoxFit.cover,
+                errorBuilder: (c, e, s) => const Icon(Icons.broken_image),
+              ),
+            ),
           ),
-        ),
+          if (text.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text(text, style: const TextStyle(fontSize: 15)),
+          ],
+        ],
       );
     } else if (type == 'file') {
       content = InkWell(
@@ -468,66 +490,6 @@ class _ChatMessageListState extends State<_ChatMessageList> {
       content = Text(text, style: const TextStyle(fontSize: 15));
     }
 
-    if (type == 'image') {
-      return Align(
-        alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
-        child: Container(
-          margin: const EdgeInsets.only(bottom: 8),
-          constraints: const BoxConstraints(maxWidth: 280),
-          child: Stack(
-            clipBehavior: Clip.none,
-            children: [
-              Column(
-                crossAxisAlignment: isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      if (isMe) ...[
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          children: [
-                            if (isRead) const Text('既読', style: TextStyle(fontSize: 10, color: Colors.grey)),
-                            Text(timeStr, style: const TextStyle(fontSize: 10, color: Colors.grey)),
-                          ],
-                        ),
-                        const SizedBox(width: 8),
-                      ],
-                      Flexible(child: content),
-                      if (!isMe) ...[
-                        const SizedBox(width: 8),
-                        Text(timeStr, style: const TextStyle(fontSize: 10, color: Colors.grey)),
-                      ],
-                    ],
-                  ),
-                  if (text.isNotEmpty) ...[
-                    const SizedBox(height: 4),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                      decoration: BoxDecoration(
-                        color: isMe ? AppColors.primary.withOpacity(0.2) : Colors.white,
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      child: Text(text, style: const TextStyle(fontSize: 15)),
-                    ),
-                  ],
-                  if (stamps.isNotEmpty)
-                    Padding(
-                      padding: EdgeInsets.only(top: 4, left: isMe ? 0 : 8, right: isMe ? 8 : 0),
-                      child: Wrap(
-                        spacing: 4,
-                        children: stamps.entries.map((e) => _buildStampChip(msgId, e.key, e.value, isMe)).toList(),
-                      ),
-                    ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-
     return GestureDetector(
       onLongPress: () => _showActionSheet(msgId, isMe, type, text),
       child: Align(
@@ -535,52 +497,54 @@ class _ChatMessageListState extends State<_ChatMessageList> {
         child: Container(
           margin: const EdgeInsets.only(bottom: 8),
           constraints: const BoxConstraints(maxWidth: 280),
-          child: Stack(
-            clipBehavior: Clip.none,
+          child: Column(
+            crossAxisAlignment: isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
             children: [
-              Column(
-                crossAxisAlignment: isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+              if (senderName.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(left: 8, bottom: 2),
+                  child: Text(senderName, style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                ),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      if (isMe) ...[
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          children: [
-                            if (isRead) const Text('既読', style: TextStyle(fontSize: 10, color: Colors.grey)),
-                            Text(timeStr, style: const TextStyle(fontSize: 10, color: Colors.grey)),
-                          ],
-                        ),
-                        const SizedBox(width: 8),
-                      ],
-                      Flexible(
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                          decoration: BoxDecoration(
-                            color: isMe ? AppColors.primary.withOpacity(0.2) : Colors.white,
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                          child: content,
-                        ),
-                      ),
-                      if (!isMe) ...[
-                        const SizedBox(width: 8),
+                  if (isMe) ...[
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        if (isRead) const Text('既読', style: TextStyle(fontSize: 10, color: Colors.grey)),
                         Text(timeStr, style: const TextStyle(fontSize: 10, color: Colors.grey)),
                       ],
-                    ],
-                  ),
-                  if (stamps.isNotEmpty)
-                    Padding(
-                      padding: EdgeInsets.only(top: 4, left: isMe ? 0 : 8, right: isMe ? 8 : 0),
-                      child: Wrap(
-                        spacing: 4,
-                        children: stamps.entries.map((e) => _buildStampChip(msgId, e.key, e.value, isMe)).toList(),
-                      ),
                     ),
+                    const SizedBox(width: 8),
+                  ],
+                  Flexible(
+                    child: isImageOnly
+                        ? content
+                        : Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                            decoration: BoxDecoration(
+                              color: isMe ? AppColors.primary.withOpacity(0.2) : Colors.white,
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                            child: content,
+                          ),
+                  ),
+                  if (!isMe) ...[
+                    const SizedBox(width: 8),
+                    Text(timeStr, style: const TextStyle(fontSize: 10, color: Colors.grey)),
+                  ],
                 ],
               ),
+              if (stamps.isNotEmpty)
+                Padding(
+                  padding: EdgeInsets.only(top: 4, left: isMe ? 0 : 8, right: isMe ? 8 : 0),
+                  child: Wrap(
+                    spacing: 4,
+                    children: stamps.entries.map((e) => _buildStampChip(msgId, e.key, e.value, isMe)).toList(),
+                  ),
+                ),
             ],
           ),
         ),
@@ -588,36 +552,25 @@ class _ChatMessageListState extends State<_ChatMessageList> {
     );
   }
 
-  Widget _buildActionMenu(String msgId, bool isMe, String type, String text) {
-    return Material(
-      elevation: 8,
-      borderRadius: BorderRadius.circular(24),
-      color: Colors.white,
+  Widget _buildStampChip(String msgId, String emoji, dynamic count, bool isMe) {
+    final int c = count is int ? count : (count is List ? count.length : 1);
+    return GestureDetector(
+      onTap: () => _toggleStamp(msgId, emoji),
       child: Container(
-        height: 44,
-        padding: const EdgeInsets.symmetric(horizontal: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+        decoration: BoxDecoration(
+          color: isMe ? AppColors.primary.withOpacity(0.1) : Colors.grey.shade100,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.grey.shade300),
+        ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            _buildMenuButton(
-              icon: Icons.emoji_emotions_outlined,
-              onTap: () => _showEmojiPicker(msgId),
-            ),
-            if (isMe && type == 'text')
-              _buildMenuButton(
-                icon: Icons.edit,
-                onTap: () => _showEditDialog(msgId, text),
-              ),
-            if (isMe)
-              _buildMenuButton(
-                icon: Icons.delete,
-                color: Colors.red,
-                onTap: () => _deleteMessage(msgId),
-              ),
-            _buildMenuButton(
-              icon: Icons.close,
-              onTap: () => setState(() => _selectedMessageId = null),
-            ),
+            Text(emoji, style: const TextStyle(fontSize: 12)),
+            if (c > 1) ...[
+              const SizedBox(width: 2),
+              Text('$c', style: const TextStyle(fontSize: 10, color: Colors.grey)),
+            ],
           ],
         ),
       ),
@@ -675,46 +628,6 @@ class _ChatMessageListState extends State<_ChatMessageList> {
     );
   }
 
-  Widget _buildMenuButton({
-    required IconData icon,
-    required VoidCallback onTap,
-    Color color = Colors.grey,
-  }) {
-    return IconButton(
-      onPressed: onTap,
-      icon: Icon(icon, size: 22, color: color),
-      padding: EdgeInsets.zero,
-      constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
-      splashRadius: 20,
-    );
-  }
-
-
-  Widget _buildStampChip(String msgId, String emoji, dynamic count, bool isMe) {
-    final int c = count is int ? count : 1;
-    return GestureDetector(
-      onTap: () => _toggleStamp(msgId, emoji),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-        decoration: BoxDecoration(
-          color: isMe ? AppColors.primary.withOpacity(0.1) : Colors.grey.shade100,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.grey.shade300),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(emoji, style: const TextStyle(fontSize: 12)),
-            if (c > 1) ...[
-              const SizedBox(width: 2),
-              Text('$c', style: const TextStyle(fontSize: 10, color: Colors.grey)),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-
   void _showEmojiPicker(String msgId) {
     final emojis = ['👍', '❤️', '😄', '🎉', '🙏', '🆗', '😂', '😢', '✨', '🤔'];
     showDialog(
@@ -730,7 +643,6 @@ class _ChatMessageListState extends State<_ChatMessageList> {
             onTap: () {
               _toggleStamp(msgId, e);
               Navigator.of(dialogContext).pop();
-              setState(() => _selectedMessageId = null);
             },
             child: Container(
               padding: const EdgeInsets.all(8),
@@ -765,11 +677,24 @@ class _ChatMessageListState extends State<_ChatMessageList> {
         if (!snapshot.exists) return;
         final data = snapshot.data() as Map<String, dynamic>;
         final stamps = Map<String, dynamic>.from(data['stamps'] ?? {});
-        if (stamps.containsKey(emoji)) {
-          stamps[emoji] = (stamps[emoji] as int) + 1;
-        } else {
-          stamps[emoji] = 1;
+        
+        List<String> userList = [];
+        if (stamps[emoji] is List) {
+          userList = List<String>.from(stamps[emoji]);
         }
+        
+        if (userList.contains(widget.myUid)) {
+          userList.remove(widget.myUid);
+          if (userList.isEmpty) {
+            stamps.remove(emoji);
+          } else {
+            stamps[emoji] = userList;
+          }
+        } else {
+          userList.add(widget.myUid);
+          stamps[emoji] = userList;
+        }
+        
         transaction.update(msgRef, {'stamps': stamps});
       });
     } catch (e) {
@@ -811,7 +736,6 @@ class _ChatMessageListState extends State<_ChatMessageList> {
                 debugPrint('編集エラー: $e');
               }
               Navigator.of(dialogContext).pop();
-              setState(() => _selectedMessageId = null);
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.primary,
@@ -849,7 +773,6 @@ class _ChatMessageListState extends State<_ChatMessageList> {
                 debugPrint('削除エラー: $e');
               }
               Navigator.of(dialogContext).pop();
-              setState(() => _selectedMessageId = null);
             },
             child: const Text('削除', style: TextStyle(color: Colors.red)),
           ),
@@ -1032,7 +955,6 @@ class _ChatInputAreaState extends State<_ChatInputArea> {
             Row(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                // 画像ボタン
                 Padding(
                   padding: const EdgeInsets.only(bottom: 6),
                   child: GestureDetector(
@@ -1045,7 +967,6 @@ class _ChatInputAreaState extends State<_ChatInputArea> {
                   ),
                 ),
                 const SizedBox(width: 8),
-                // テキスト入力欄（カプセル型）
                 Expanded(
                   child: Container(
                     decoration: BoxDecoration(
@@ -1070,7 +991,6 @@ class _ChatInputAreaState extends State<_ChatInputArea> {
                   ),
                 ),
                 const SizedBox(width: 8),
-                // 送信ボタン
                 Padding(
                   padding: const EdgeInsets.only(bottom: 2),
                   child: GestureDetector(
