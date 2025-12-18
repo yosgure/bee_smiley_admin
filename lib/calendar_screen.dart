@@ -34,18 +34,20 @@ class _CalendarScreenState extends State<CalendarScreen> {
   bool _isLocaleInitialized = false;
   bool _isLoadingStaffInfo = true;
 
-  // ★追加: プラス予定表示フラグ
   bool _showPlusSchedule = false;
 
   // フィルタ
   bool _showMySchedule = true;
   bool _showMyTasks = true;
+  bool _showBirthdays = true;
   final Map<String, bool> _classroomFilters = {};
 
   final CollectionReference _eventsRef =
       FirebaseFirestore.instance.collection('calendar_events');
   final CollectionReference _tasksRef =
       FirebaseFirestore.instance.collection('tasks');
+  final CollectionReference _familiesRef =
+      FirebaseFirestore.instance.collection('families');
 
   static const String _pendingTasksId = 'PENDING_TASKS_SUMMARY';
   static const String _taskNoteMarker = 'TASK';
@@ -196,7 +198,6 @@ class _CalendarScreenState extends State<CalendarScreen> {
 
     final bool showSidebar = MediaQuery.of(context).size.width >= 800;
 
-    // ★変更: プラス予定表示時は専用のWidgetを返す
     if (_showPlusSchedule) {
       return Scaffold(
         key: _scaffoldKey,
@@ -337,260 +338,329 @@ class _CalendarScreenState extends State<CalendarScreen> {
           return StreamBuilder<QuerySnapshot>(
             stream: _tasksRef.where('userId', isEqualTo: _myUid).snapshots(),
             builder: (context, taskSnapshot) {
-              
-              List<Appointment> appointments = [];
-              
-              if (eventSnapshot.hasData) {
-                for (var doc in eventSnapshot.data!.docs) {
-                  final data = doc.data() as Map<String, dynamic>;
-                  final String? eventClassroom = data['classroom']; 
-                  final List<dynamic> staffIds = data['staffIds'] ?? []; 
-
-                  bool isVisible = false;
-                  if (_showMySchedule && staffIds.contains(_myUid)) isVisible = true;
-                  if (!isVisible && eventClassroom != null) {
-                    if (_classroomFilters.containsKey(eventClassroom) && _classroomFilters[eventClassroom] == true) {
-                      isVisible = true;
-                    }
-                  }
-                  if (data['classroom'] == null && data['staffIds'] == null) isVisible = true;
-
-                  if (isVisible) {
-                    Color eventColor = Color(data['color'] ?? AppColors.primary.value);
-                    if (eventClassroom != null && _classroomColors.containsKey(eventClassroom)) {
-                      eventColor = _classroomColors[eventClassroom]!;
-                    }
-
-                    appointments.add(Appointment(
-                      id: doc, 
-                      startTime: (data['startTime'] as Timestamp).toDate(),
-                      endTime: (data['endTime'] as Timestamp).toDate(),
-                      subject: data['subject'] ?? '(件名なし)',
-                      notes: 'EVENT',
-                      color: eventColor,
-                      recurrenceRule: (data['recurrenceRule'] != null && data['recurrenceRule'].toString().isNotEmpty) ? data['recurrenceRule'] : null,
-                    ));
-                  }
-                }
-              }
-
-              if (taskSnapshot.hasData) {
-                int pendingCount = 0;
-                final now = DateTime.now();
-                final today = DateTime(now.year, now.month, now.day);
-
-                for (var doc in taskSnapshot.data!.docs) {
-                  final data = doc.data() as Map<String, dynamic>;
-                  final dateTs = data['date'] as Timestamp;
-                  final date = dateTs.toDate();
-                  final taskDate = DateTime(date.year, date.month, date.day); 
+              return StreamBuilder<QuerySnapshot>(
+                stream: _familiesRef.snapshots(),
+                builder: (context, familySnapshot) {
+                  List<Appointment> appointments = [];
                   
-                  final isCompleted = data['isCompleted'] ?? false;
-                  final title = data['title'] ?? '(無題のタスク)';
+                  // イベント処理
+                  if (eventSnapshot.hasData) {
+                    for (var doc in eventSnapshot.data!.docs) {
+                      final data = doc.data() as Map<String, dynamic>;
+                      final String? eventClassroom = data['classroom']; 
+                      final List<dynamic> staffIds = data['staffIds'] ?? []; 
 
-                  if (!isCompleted && taskDate.isBefore(today)) {
-                    pendingCount++;
-                  } else {
-                    if (!isCompleted && _showMyTasks) {
+                      bool isVisible = false;
+                      if (_showMySchedule && staffIds.contains(_myUid)) isVisible = true;
+                      if (!isVisible && eventClassroom != null) {
+                        if (_classroomFilters.containsKey(eventClassroom) && _classroomFilters[eventClassroom] == true) {
+                          isVisible = true;
+                        }
+                      }
+                      if (data['classroom'] == null && data['staffIds'] == null) isVisible = true;
+
+                      if (isVisible) {
+                        Color eventColor = Color(data['color'] ?? AppColors.primary.value);
+                        if (eventClassroom != null && _classroomColors.containsKey(eventClassroom)) {
+                          eventColor = _classroomColors[eventClassroom]!;
+                        }
+
+                        appointments.add(Appointment(
+                          id: doc, 
+                          startTime: (data['startTime'] as Timestamp).toDate(),
+                          endTime: (data['endTime'] as Timestamp).toDate(),
+                          subject: data['subject'] ?? '(件名なし)',
+                          notes: 'EVENT',
+                          color: eventColor,
+                          recurrenceRule: (data['recurrenceRule'] != null && data['recurrenceRule'].toString().isNotEmpty) ? data['recurrenceRule'] : null,
+                        ));
+                      }
+                    }
+                  }
+
+                  // タスク処理
+                  if (taskSnapshot.hasData) {
+                    int pendingCount = 0;
+                    final now = DateTime.now();
+                    final today = DateTime(now.year, now.month, now.day);
+
+                    for (var doc in taskSnapshot.data!.docs) {
+                      final data = doc.data() as Map<String, dynamic>;
+                      final dateTs = data['date'] as Timestamp;
+                      final date = dateTs.toDate();
+                      final taskDate = DateTime(date.year, date.month, date.day); 
+                      
+                      final isCompleted = data['isCompleted'] ?? false;
+                      final title = data['title'] ?? '(無題のタスク)';
+
+                      if (!isCompleted && taskDate.isBefore(today)) {
+                        pendingCount++;
+                      } else {
+                        if (!isCompleted && _showMyTasks) {
+                          appointments.add(Appointment(
+                            id: doc,
+                            startTime: date,
+                            endTime: date,
+                            isAllDay: true, 
+                            subject: '◯ $title',
+                            notes: _taskNoteMarker, 
+                            color: AppColors.secondary,
+                            recurrenceRule: null,
+                          ));
+                        }
+                      }
+                    }
+
+                    if (pendingCount > 0 && _showMyTasks) {
                       appointments.add(Appointment(
-                        id: doc,
-                        startTime: date,
-                        endTime: date,
-                        isAllDay: true, 
-                        subject: '◯ $title',
-                        notes: _taskNoteMarker, 
-                        color: AppColors.secondary,
-                        recurrenceRule: null,
+                        id: _pendingTasksId, 
+                        startTime: today,
+                        endTime: today,
+                        isAllDay: true,
+                        subject: '⚠️ ${pendingCount}件の保留中のタスク',
+                        notes: 'PENDING_TASKS',
+                        color: Colors.transparent, 
                       ));
                     }
                   }
-                }
 
-                if (pendingCount > 0 && _showMyTasks) {
-                  appointments.add(Appointment(
-                    id: _pendingTasksId, 
-                    startTime: today,
-                    endTime: today,
-                    isAllDay: true,
-                    subject: '⚠️ ${pendingCount}件の保留中のタスク',
-                    notes: 'PENDING_TASKS',
-                    color: Colors.transparent, 
-                  ));
-                }
-              }
+                  // 誕生日処理
+                  if (familySnapshot.hasData && _showBirthdays) {
+                    final now = DateTime.now();
+                    for (var doc in familySnapshot.data!.docs) {
+                      final data = doc.data() as Map<String, dynamic>;
+                      final children = List<Map<String, dynamic>>.from(data['children'] ?? []);
+                      final parentLastName = data['lastName'] ?? '';
+                      
+                      for (var child in children) {
+                        final classroom = child['classroom'] as String?;
+                        if (classroom == null || !_myClassrooms.contains(classroom)) continue;
+                        
+                        final birthDateStr = child['birthDate'] as String?;
+                        if (birthDateStr == null || birthDateStr.isEmpty) continue;
+                        
+                        final parts = birthDateStr.split('/');
+                        if (parts.length != 3) continue;
+                        
+                        final birthMonth = int.tryParse(parts[1]) ?? 0;
+                        final birthDay = int.tryParse(parts[2]) ?? 0;
+                        if (birthMonth == 0 || birthDay == 0) continue;
+                        
+                        final thisYearBirthday = DateTime(now.year, birthMonth, birthDay);
+                        final childName = child['firstName'] ?? '';
+                        final displayName = '$parentLastName $childName';
+                        
+                        appointments.add(Appointment(
+                          id: 'birthday_${doc.id}_$childName',
+                          startTime: thisYearBirthday,
+                          endTime: thisYearBirthday,
+                          isAllDay: true,
+                          subject: '🎂 $displayName',
+                          notes: 'BIRTHDAY',
+                          color: Colors.pink.shade300,
+                        ));
+                      }
+                    }
+                  }
 
-              return Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (showSidebar)
-                    Container(
-                      width: 280,
-                      padding: const EdgeInsets.only(top: 16, left: 12, right: 12),
-                      decoration: const BoxDecoration(
-                        color: AppColors.surface,
-                      ),
-                      child: _buildSidebarContent(),
-                    ),
-                  
-                  Expanded(
-                    child: Stack(
-                      children: [
-                        SfCalendarTheme(
-                          data: SfCalendarThemeData(
-                            selectionBorderColor: Colors.transparent,
-                            todayHighlightColor: AppColors.primary,
-                            cellBorderColor: Colors.grey.shade400,
+                  return Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (showSidebar)
+                        Container(
+                          width: 280,
+                          padding: const EdgeInsets.only(top: 16, left: 12, right: 12),
+                          decoration: const BoxDecoration(
+                            color: AppColors.surface,
                           ),
-                          child: SfCalendar(
-                            view: _calendarView,
-                            controller: _controller,
-                            firstDayOfWeek: 1,
-                            dataSource: _DataSource(appointments),
-                            onTap: calendarTapped, 
-                            onViewChanged: _onViewChanged,
-                            backgroundColor: AppColors.surface,
-                            cellBorderColor: Colors.grey.shade400,
-                            headerHeight: 0,
-                            viewHeaderHeight: 70,
-                            allowViewNavigation: false,
-                            selectionDecoration: BoxDecoration(
-                              color: Colors.transparent,
-                              border: Border.all(color: Colors.transparent, width: 0),
-                            ),
-                            viewHeaderStyle: const ViewHeaderStyle(
-                              dayTextStyle: TextStyle(fontSize: 11, color: AppColors.textSub, fontWeight: FontWeight.bold),
-                              dateTextStyle: TextStyle(fontSize: 20, color: AppColors.textMain, fontWeight: FontWeight.w400),
-                            ),
-                            monthViewSettings: const MonthViewSettings(
-                              appointmentDisplayMode: MonthAppointmentDisplayMode.appointment,
-                              appointmentDisplayCount: 4,
-                              showAgenda: false,
-                              monthCellStyle: MonthCellStyle(
-                                textStyle: TextStyle(fontSize: 12, color: AppColors.textMain),
-                                trailingDatesTextStyle: TextStyle(fontSize: 12, color: AppColors.textSub),
-                                leadingDatesTextStyle: TextStyle(fontSize: 12, color: AppColors.textSub),
-                                todayBackgroundColor: Colors.transparent, 
-                                todayTextStyle: TextStyle(fontSize: 12, color: AppColors.primary, fontWeight: FontWeight.bold),
+                          child: _buildSidebarContent(),
+                        ),
+                      
+                      Expanded(
+                        child: Stack(
+                          children: [
+                            SfCalendarTheme(
+                              data: SfCalendarThemeData(
+                                selectionBorderColor: Colors.transparent,
+                                todayHighlightColor: AppColors.primary,
+                                cellBorderColor: Colors.grey.shade400,
+                              ),
+                              child: SfCalendar(
+                                view: _calendarView,
+                                controller: _controller,
+                                firstDayOfWeek: 1,
+                                dataSource: _DataSource(appointments),
+                                onTap: calendarTapped, 
+                                onViewChanged: _onViewChanged,
+                                backgroundColor: AppColors.surface,
+                                cellBorderColor: Colors.grey.shade400,
+                                headerHeight: 0,
+                                viewHeaderHeight: 70,
+                                allowViewNavigation: false,
+                                selectionDecoration: BoxDecoration(
+                                  color: Colors.transparent,
+                                  border: Border.all(color: Colors.transparent, width: 0),
+                                ),
+                                viewHeaderStyle: const ViewHeaderStyle(
+                                  dayTextStyle: TextStyle(fontSize: 11, color: AppColors.textSub, fontWeight: FontWeight.bold),
+                                  dateTextStyle: TextStyle(fontSize: 20, color: AppColors.textMain, fontWeight: FontWeight.w400),
+                                ),
+                                monthViewSettings: const MonthViewSettings(
+                                  appointmentDisplayMode: MonthAppointmentDisplayMode.appointment,
+                                  appointmentDisplayCount: 4,
+                                  showAgenda: false,
+                                  monthCellStyle: MonthCellStyle(
+                                    textStyle: TextStyle(fontSize: 12, color: AppColors.textMain),
+                                    trailingDatesTextStyle: TextStyle(fontSize: 12, color: AppColors.textSub),
+                                    leadingDatesTextStyle: TextStyle(fontSize: 12, color: AppColors.textSub),
+                                    todayBackgroundColor: Colors.transparent, 
+                                    todayTextStyle: TextStyle(fontSize: 12, color: AppColors.primary, fontWeight: FontWeight.bold),
+                                  ),
+                                ),
+                                appointmentBuilder: (context, calendarAppointmentDetails) {
+                                  final Appointment appointment = calendarAppointmentDetails.appointments.first;
+                                  
+                                  final bool isPending = appointment.id == _pendingTasksId;
+                                  final bool isTask = appointment.notes == _taskNoteMarker;
+                                  final bool isBirthday = appointment.notes == 'BIRTHDAY';
+
+                                  // 保留中タスク
+                                  if (isPending) {
+                                    return Container(
+                                      margin: const EdgeInsets.symmetric(vertical: 1),
+                                      decoration: BoxDecoration(
+                                        color: AppColors.surface,
+                                        borderRadius: BorderRadius.circular(4),
+                                        border: Border.all(color: AppColors.error.withOpacity(0.5)),
+                                      ),
+                                      padding: const EdgeInsets.symmetric(horizontal: 2),
+                                      alignment: Alignment.centerLeft,
+                                      child: Row(
+                                        mainAxisAlignment: MainAxisAlignment.start,
+                                        crossAxisAlignment: CrossAxisAlignment.center,
+                                        children: [
+                                          const Icon(Icons.check_circle_outline, size: 10, color: AppColors.error),
+                                          const SizedBox(width: 2),
+                                          Expanded(
+                                            child: Text(
+                                              appointment.subject.replaceAll('⚠️ ', ''), 
+                                              style: const TextStyle(
+                                                color: AppColors.error, 
+                                                fontSize: 10,
+                                                height: 1.0, 
+                                              ),
+                                              maxLines: 1,
+                                              overflow: TextOverflow.clip,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    );
+                                  }
+
+                                  // タスク
+                                  if (isTask) {
+                                    return Container(
+                                      margin: const EdgeInsets.symmetric(vertical: 1),
+                                      decoration: BoxDecoration(
+                                        color: AppColors.secondary, 
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      padding: const EdgeInsets.symmetric(horizontal: 2),
+                                      alignment: Alignment.centerLeft,
+                                      child: Row(
+                                        mainAxisAlignment: MainAxisAlignment.start,
+                                        crossAxisAlignment: CrossAxisAlignment.center,
+                                        children: [
+                                          const Icon(Icons.check_circle_outline, size: 10, color: Colors.white), 
+                                          const SizedBox(width: 2),
+                                          Expanded(
+                                            child: Text(
+                                              appointment.subject.replaceAll('◯ ', ''),
+                                              style: const TextStyle(
+                                                color: Colors.white,
+                                                fontSize: 10, 
+                                                decoration: TextDecoration.none,
+                                                height: 1.0,
+                                              ),
+                                              maxLines: 1,
+                                              overflow: TextOverflow.clip,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    );
+                                  }
+                                  
+                                  // 誕生日
+                                  if (isBirthday) {
+                                    return Container(
+                                      margin: const EdgeInsets.symmetric(vertical: 1),
+                                      decoration: BoxDecoration(
+                                        color: Colors.pink.shade300,
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      padding: const EdgeInsets.symmetric(horizontal: 2),
+                                      alignment: Alignment.centerLeft,
+                                      child: Text(
+                                        appointment.subject,
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 10,
+                                          height: 1.0,
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.clip,
+                                      ),
+                                    );
+                                  }
+                                  
+                                  // 通常イベント
+                                  final isMonthView = _calendarView == CalendarView.month;
+                                  return Container(
+                                    margin: const EdgeInsets.symmetric(vertical: 1),
+                                    decoration: BoxDecoration(
+                                      color: appointment.color,
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    alignment: isMonthView ? Alignment.centerLeft : Alignment.topLeft,
+                                    padding: isMonthView 
+                                      ? const EdgeInsets.symmetric(horizontal: 2)
+                                      : const EdgeInsets.only(left: 4, top: 2, right: 2),
+                                    child: Text(
+                                      appointment.subject,
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 10,
+                                        height: 1.0,
+                                      ),
+                                      maxLines: isMonthView ? 1 : 3,
+                                      overflow: TextOverflow.clip,
+                                    ),
+                                  );
+                                },
+                                timeSlotViewSettings: const TimeSlotViewSettings(
+                                  timeIntervalHeight: 60,
+                                  timeFormat: 'H:mm',
+                                  timeTextStyle: TextStyle(color: AppColors.textSub, fontSize: 11),
+                                  dateFormat: 'd',
+                                  dayFormat: 'EEE',
+                                ),
                               ),
                             ),
-                            appointmentBuilder: (context, calendarAppointmentDetails) {
-                              final Appointment appointment = calendarAppointmentDetails.appointments.first;
-                              
-                              final bool isPending = appointment.id == _pendingTasksId;
-                              final bool isTask = appointment.notes == _taskNoteMarker;
-                              
-                              final isSmallScreen = MediaQuery.of(context).size.width < 800;
-
-                              if (isPending) {
-                                return Container(
-                                  margin: const EdgeInsets.symmetric(vertical: 1),
-                                  decoration: BoxDecoration(
-                                    color: AppColors.surface,
-                                    borderRadius: BorderRadius.circular(4),
-                                    border: Border.all(color: AppColors.error.withOpacity(0.5)),
-                                  ),
-                                  padding: const EdgeInsets.symmetric(horizontal: 2),
-                                  alignment: Alignment.centerLeft,
-                                  child: Row(
-                                    mainAxisAlignment: MainAxisAlignment.start,
-                                    crossAxisAlignment: CrossAxisAlignment.center,
-                                    children: [
-                                      const Icon(Icons.check_circle_outline, size: 10, color: AppColors.error),
-                                      const SizedBox(width: 2),
-                                      Expanded(
-                                        child: Text(
-                                          appointment.subject.replaceAll('⚠️ ', ''), 
-                                          style: const TextStyle(
-                                            color: AppColors.error, 
-                                            fontSize: 10,
-                                            height: 1.0, 
-                                          ),
-                                          maxLines: 1,
-                                          overflow: TextOverflow.clip,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                );
-                              }
-
-                              if (isTask) {
-                                final isMonthView = _calendarView == CalendarView.month;
-                                return Container(
-                                  margin: const EdgeInsets.symmetric(vertical: 1),
-                                  decoration: BoxDecoration(
-                                    color: AppColors.secondary, 
-                                    borderRadius: BorderRadius.circular(4),
-                                  ),
-                                  padding: const EdgeInsets.symmetric(horizontal: 2),
-                                  alignment: Alignment.centerLeft,
-                                  child: Row(
-                                    mainAxisAlignment: MainAxisAlignment.start,
-                                    crossAxisAlignment: CrossAxisAlignment.center,
-                                    children: [
-                                      const Icon(Icons.check_circle_outline, size: 10, color: Colors.white), 
-                                      const SizedBox(width: 2),
-                                      Expanded(
-                                        child: Text(
-                                          appointment.subject.replaceAll('◯ ', ''),
-                                          style: const TextStyle(
-                                            color: Colors.white,
-                                            fontSize: 10, 
-                                            decoration: TextDecoration.none,
-                                            height: 1.0,
-                                          ),
-                                          maxLines: 1,
-                                          overflow: TextOverflow.clip,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                );
-                              }
-                              
-                              final isMonthView = _calendarView == CalendarView.month;
-                              return Container(
-                                margin: const EdgeInsets.symmetric(vertical: 1),
-                                decoration: BoxDecoration(
-                                  color: appointment.color,
-                                  borderRadius: BorderRadius.circular(4),
-                                ),
-                                alignment: isMonthView ? Alignment.centerLeft : Alignment.topLeft,
-                                padding: isMonthView 
-                                  ? const EdgeInsets.symmetric(horizontal: 2)
-                                  : const EdgeInsets.only(left: 4, top: 2, right: 2),
-                                child: Text(
-                                  appointment.subject,
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 10,
-                                    height: 1.0,
-                                  ),
-                                  maxLines: isMonthView ? 1 : 3,
-                                  overflow: TextOverflow.clip,
-                                ),
-                              );
-                            },
-                            timeSlotViewSettings: const TimeSlotViewSettings(
-                              timeIntervalHeight: 60,
-                              timeFormat: 'H:mm',
-                              timeTextStyle: TextStyle(color: AppColors.textSub, fontSize: 11),
-                              dateFormat: 'd',
-                              dayFormat: 'EEE',
-                            ),
-                          ),
+                          ],
                         ),
-                      ],
-                    ),
-                  ),
-                ],
+                      ),
+                    ],
+                  );
+                },
               );
-            }
+            },
           );
         },
       ),
-      
-      floatingActionButton: FloatingActionButton(heroTag: null, 
+      floatingActionButton: FloatingActionButton(
+        heroTag: null, 
         onPressed: () => _showAddEventDialog(),
         backgroundColor: AppColors.surface,
         elevation: 4,
@@ -664,7 +734,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
             children: [
               _buildFilterCheckbox('マイカレンダー', _showMySchedule, (val) => setState(() => _showMySchedule = val), AppColors.primary),
               _buildFilterCheckbox('マイタスク', _showMyTasks, (val) => setState(() => _showMyTasks = val), AppColors.secondary),
-              
+              _buildFilterCheckbox('誕生日', _showBirthdays, (val) => setState(() => _showBirthdays = val), Colors.pink.shade300),
               const SizedBox(height: 8),
               if (_myClassrooms.isEmpty)
                 const Padding(
@@ -697,7 +767,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
             children: [
               _buildFilterCheckbox('マイカレンダー', _showMySchedule, (val) => setState(() => _showMySchedule = val), AppColors.primary),
               _buildFilterCheckbox('マイタスク', _showMyTasks, (val) => setState(() => _showMyTasks = val), AppColors.secondary),
-              
+              _buildFilterCheckbox('誕生日', _showBirthdays, (val) => setState(() => _showBirthdays = val), Colors.pink.shade300),
               const SizedBox(height: 8),
               if (_myClassrooms.isEmpty)
                 const Padding(
@@ -894,6 +964,8 @@ class _CalendarScreenState extends State<CalendarScreen> {
           if (target.id is DocumentSnapshot) {
             _showTaskDetail(target.id as DocumentSnapshot);
           }
+        } else if (target.notes == 'BIRTHDAY') {
+          // 誕生日クリック時は何もしない（または詳細表示を追加可能）
         } else {
           if (target.id is DocumentSnapshot) {
             _showRichAppointmentDetail(target.id as DocumentSnapshot);
@@ -1538,10 +1610,49 @@ class _CalendarScreenState extends State<CalendarScreen> {
       _showRecurringEditDialog(doc, data, startTime);
     } else {
       Navigator.pop(context);
-      showDialog(
-        context: context,
-        builder: (context) => AddEventDialog(appointment: doc),
-      );
+      final bool showSidebar = MediaQuery.of(context).size.width >= 800;
+      if (showSidebar) {
+        showDialog(
+          context: context,
+          barrierDismissible: true,
+          builder: (context) => Dialog(
+            backgroundColor: Colors.white,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            insetPadding: const EdgeInsets.symmetric(horizontal: 40, vertical: 24),
+            child: SizedBox(
+              width: 500,
+              height: MediaQuery.of(context).size.height * 0.85,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(16),
+                child: AddEventDialog(appointment: doc),
+              ),
+            ),
+          ),
+        );
+      } else {
+        showModalBottomSheet(
+          context: context,
+          isScrollControlled: true,
+          backgroundColor: Colors.transparent,
+          builder: (context) => Container(
+            height: MediaQuery.of(context).size.height * 0.9,
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.only(
+                topLeft: Radius.circular(20),
+                topRight: Radius.circular(20),
+              ),
+            ),
+            child: ClipRRect(
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(20),
+                topRight: Radius.circular(20),
+              ),
+              child: AddEventDialog(appointment: doc),
+            ),
+          ),
+        );
+      }
     }
   }
 
@@ -1589,13 +1700,55 @@ class _CalendarScreenState extends State<CalendarScreen> {
               onPressed: () {
                 Navigator.pop(ctx);
                 Navigator.pop(context);
-                showDialog(
-                  context: context,
-                  builder: (context) => AddEventDialog(
-                    appointment: doc,
-                    editScope: selectedOption,
-                  ),
-                );
+                final bool showSidebar = MediaQuery.of(context).size.width >= 800;
+                if (showSidebar) {
+                  showDialog(
+                    context: context,
+                    barrierDismissible: true,
+                    builder: (context) => Dialog(
+                      backgroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                      insetPadding: const EdgeInsets.symmetric(horizontal: 40, vertical: 24),
+                      child: SizedBox(
+                        width: 500,
+                        height: MediaQuery.of(context).size.height * 0.85,
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(16),
+                          child: AddEventDialog(
+                            appointment: doc,
+                            editScope: selectedOption,
+                          ),
+                        ),
+                      ),
+                    ),
+                  );
+                } else {
+                  showModalBottomSheet(
+                    context: context,
+                    isScrollControlled: true,
+                    backgroundColor: Colors.transparent,
+                    builder: (context) => Container(
+                      height: MediaQuery.of(context).size.height * 0.9,
+                      decoration: const BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.only(
+                          topLeft: Radius.circular(20),
+                          topRight: Radius.circular(20),
+                        ),
+                      ),
+                      child: ClipRRect(
+                        borderRadius: const BorderRadius.only(
+                          topLeft: Radius.circular(20),
+                          topRight: Radius.circular(20),
+                        ),
+                        child: AddEventDialog(
+                          appointment: doc,
+                          editScope: selectedOption,
+                        ),
+                      ),
+                    ),
+                  );
+                }
               },
               style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
               child: const Text('OK', style: TextStyle(color: Colors.white)),

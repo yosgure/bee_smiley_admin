@@ -5,6 +5,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:image/image.dart' as img;
+
+// 各画面のインポート
 import 'student_manage_screen.dart';
 import 'tool_master_screen.dart';
 import 'generic_master_screen.dart';
@@ -19,7 +21,13 @@ import 'csv_export_screen.dart';
 import 'notification_settings_screen.dart';
 
 class AdminScreen extends StatefulWidget {
-  const AdminScreen({super.key});
+  // Web版で画面を差し替えるためのコールバック
+  final void Function(Widget screen)? onOpenWebScreen;
+
+  const AdminScreen({
+    super.key,
+    this.onOpenWebScreen,
+  });
 
   @override
   State<AdminScreen> createState() => _AdminScreenState();
@@ -66,6 +74,24 @@ class _AdminScreenState extends State<AdminScreen> {
     }
   }
 
+  // 画面遷移ロジック（ここが修正の要です）
+  void _navigateTo(BuildContext context, Widget screen) {
+    // 画面幅600以上(Web) かつ コールバックが渡されている場合
+    final isWide = MediaQuery.of(context).size.width >= 600;
+    
+    if (isWide && widget.onOpenWebScreen != null) {
+      // Web: 右側エリアを差し替え（サイドメニューは残る）
+      widget.onOpenWebScreen!(screen);
+    } else {
+      // Mobile: 通常の全画面遷移（Navigator.push）
+      // ※スマホのUIは一切変わりません
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (context) => screen),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -79,7 +105,6 @@ class _AdminScreenState extends State<AdminScreen> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          // 1. ヒトの管理
           _buildSettingsSection(
             context,
             'ヒトの管理',
@@ -100,10 +125,7 @@ class _AdminScreenState extends State<AdminScreen> {
               ),
             ],
           ),
-
           const SizedBox(height: 24),
-
-          // 2. 保育・教育の管理
           _buildSettingsSection(
             context,
             '保育・教育の管理',
@@ -131,10 +153,7 @@ class _AdminScreenState extends State<AdminScreen> {
               ),
             ],
           ),
-
           const SizedBox(height: 24),
-
-          // 3. 施設の管理
           _buildSettingsSection(
             context,
             '施設の管理',
@@ -148,24 +167,16 @@ class _AdminScreenState extends State<AdminScreen> {
               ),
             ],
           ),
-
           const SizedBox(height: 24),
-
-          // 4. CSV管理
           _buildCsvSection(context),
-
           const SizedBox(height: 24),
-
-          // 5. アカウント
           _buildAccountSection(context),
-
           const SizedBox(height: 40),
         ],
       ),
     );
   }
 
-  // CSV管理セクション
   Widget _buildCsvSection(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -195,7 +206,6 @@ class _AdminScreenState extends State<AdminScreen> {
           ),
           child: Column(
             children: [
-              // インポート（登録）
               ListTile(
                 leading: Container(
                   padding: const EdgeInsets.all(6),
@@ -217,7 +227,6 @@ class _AdminScreenState extends State<AdminScreen> {
                 onTap: () => _showCsvImportMenu(context),
               ),
               const Divider(height: 1, indent: 60),
-              // エクスポート（出力）
               ListTile(
                 leading: Container(
                   padding: const EdgeInsets.all(6),
@@ -245,12 +254,10 @@ class _AdminScreenState extends State<AdminScreen> {
     );
   }
 
-  // CSVインポートメニュー
   void _showCsvImportMenu(BuildContext context) {
     final isWide = MediaQuery.of(context).size.width >= 600;
-    
+
     if (isWide) {
-      // PC版: ダイアログ
       showDialog(
         context: context,
         builder: (ctx) => AlertDialog(
@@ -267,9 +274,7 @@ class _AdminScreenState extends State<AdminScreen> {
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                   onTap: () {
                     Navigator.pop(ctx);
-                    Navigator.push(context, MaterialPageRoute(
-                      builder: (_) => const StaffCsvImportScreen(),
-                    ));
+                    _navigateTo(context, const StaffCsvImportScreen());
                   },
                 ),
                 ListTile(
@@ -279,9 +284,7 @@ class _AdminScreenState extends State<AdminScreen> {
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                   onTap: () {
                     Navigator.pop(ctx);
-                    Navigator.push(context, MaterialPageRoute(
-                      builder: (_) => const FamilyCsvImportScreen(),
-                    ));
+                    _navigateTo(context, const FamilyCsvImportScreen());
                   },
                 ),
                 ListTile(
@@ -291,9 +294,7 @@ class _AdminScreenState extends State<AdminScreen> {
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                   onTap: () {
                     Navigator.pop(ctx);
-                    Navigator.push(context, MaterialPageRoute(
-                      builder: (_) => const ToolCsvImportScreen(),
-                    ));
+                    _navigateTo(context, const ToolCsvImportScreen());
                   },
                 ),
               ],
@@ -308,7 +309,6 @@ class _AdminScreenState extends State<AdminScreen> {
         ),
       );
     } else {
-      // スマホ版: ボトムシート
       showModalBottomSheet(
         context: context,
         backgroundColor: Colors.white,
@@ -341,9 +341,7 @@ class _AdminScreenState extends State<AdminScreen> {
                   subtitle: const Text('先生・職員を一括登録'),
                   onTap: () {
                     Navigator.pop(ctx);
-                    Navigator.push(context, MaterialPageRoute(
-                      builder: (_) => const StaffCsvImportScreen(),
-                    ));
+                    _navigateTo(context, const StaffCsvImportScreen());
                   },
                 ),
                 ListTile(
@@ -352,9 +350,7 @@ class _AdminScreenState extends State<AdminScreen> {
                   subtitle: const Text('保護者と児童を一括登録'),
                   onTap: () {
                     Navigator.pop(ctx);
-                    Navigator.push(context, MaterialPageRoute(
-                      builder: (_) => const FamilyCsvImportScreen(),
-                    ));
+                    _navigateTo(context, const FamilyCsvImportScreen());
                   },
                 ),
                 ListTile(
@@ -363,9 +359,7 @@ class _AdminScreenState extends State<AdminScreen> {
                   subtitle: const Text('教具マスタを一括登録'),
                   onTap: () {
                     Navigator.pop(ctx);
-                    Navigator.push(context, MaterialPageRoute(
-                      builder: (_) => const ToolCsvImportScreen(),
-                    ));
+                    _navigateTo(context, const ToolCsvImportScreen());
                   },
                 ),
                 const SizedBox(height: 8),
@@ -377,12 +371,10 @@ class _AdminScreenState extends State<AdminScreen> {
     }
   }
 
-  // CSVエクスポートメニュー
   void _showCsvExportMenu(BuildContext context) {
     final isWide = MediaQuery.of(context).size.width >= 600;
-    
+
     if (isWide) {
-      // PC版: ダイアログ
       showDialog(
         context: context,
         builder: (ctx) => AlertDialog(
@@ -399,9 +391,7 @@ class _AdminScreenState extends State<AdminScreen> {
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                   onTap: () {
                     Navigator.pop(ctx);
-                    Navigator.push(context, MaterialPageRoute(
-                      builder: (_) => const StaffCsvExportScreen(),
-                    ));
+                    _navigateTo(context, const StaffCsvExportScreen());
                   },
                 ),
                 ListTile(
@@ -411,9 +401,7 @@ class _AdminScreenState extends State<AdminScreen> {
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                   onTap: () {
                     Navigator.pop(ctx);
-                    Navigator.push(context, MaterialPageRoute(
-                      builder: (_) => const FamilyCsvExportScreen(),
-                    ));
+                    _navigateTo(context, const FamilyCsvExportScreen());
                   },
                 ),
                 ListTile(
@@ -423,9 +411,7 @@ class _AdminScreenState extends State<AdminScreen> {
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                   onTap: () {
                     Navigator.pop(ctx);
-                    Navigator.push(context, MaterialPageRoute(
-                      builder: (_) => const ToolCsvExportScreen(),
-                    ));
+                    _navigateTo(context, const ToolCsvExportScreen());
                   },
                 ),
               ],
@@ -440,7 +426,6 @@ class _AdminScreenState extends State<AdminScreen> {
         ),
       );
     } else {
-      // スマホ版: ボトムシート
       showModalBottomSheet(
         context: context,
         backgroundColor: Colors.white,
@@ -473,9 +458,7 @@ class _AdminScreenState extends State<AdminScreen> {
                   subtitle: const Text('スタッフ一覧をCSV出力'),
                   onTap: () {
                     Navigator.pop(ctx);
-                    Navigator.push(context, MaterialPageRoute(
-                      builder: (_) => const StaffCsvExportScreen(),
-                    ));
+                    _navigateTo(context, const StaffCsvExportScreen());
                   },
                 ),
                 ListTile(
@@ -484,9 +467,7 @@ class _AdminScreenState extends State<AdminScreen> {
                   subtitle: const Text('保護者・児童一覧をCSV出力'),
                   onTap: () {
                     Navigator.pop(ctx);
-                    Navigator.push(context, MaterialPageRoute(
-                      builder: (_) => const FamilyCsvExportScreen(),
-                    ));
+                    _navigateTo(context, const FamilyCsvExportScreen());
                   },
                 ),
                 ListTile(
@@ -495,9 +476,7 @@ class _AdminScreenState extends State<AdminScreen> {
                   subtitle: const Text('教具マスタをCSV出力'),
                   onTap: () {
                     Navigator.pop(ctx);
-                    Navigator.push(context, MaterialPageRoute(
-                      builder: (_) => const ToolCsvExportScreen(),
-                    ));
+                    _navigateTo(context, const ToolCsvExportScreen());
                   },
                 ),
                 const SizedBox(height: 8),
@@ -542,7 +521,6 @@ class _AdminScreenState extends State<AdminScreen> {
           ),
           child: Column(
             children: [
-              // プロフィール写真 + 氏名
               ListTile(
                 leading: GestureDetector(
                   onTap: _isUploadingPhoto ? null : _pickAndUploadPhoto,
@@ -612,7 +590,6 @@ class _AdminScreenState extends State<AdminScreen> {
                     : null,
               ),
               const Divider(height: 1, indent: 60),
-              // ID
               ListTile(
                 leading: Container(
                   padding: const EdgeInsets.all(6),
@@ -632,7 +609,6 @@ class _AdminScreenState extends State<AdminScreen> {
                 ),
               ),
               const Divider(height: 1, indent: 60),
-              // 通知設定（1つだけ）
               ListTile(
                 leading: Container(
                   padding: const EdgeInsets.all(6),
@@ -648,13 +624,10 @@ class _AdminScreenState extends State<AdminScreen> {
                 ),
                 trailing: const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey),
                 onTap: () {
-                  Navigator.push(context, MaterialPageRoute(
-                    builder: (_) => const NotificationSettingsScreen(),
-                  ));
+                  _navigateTo(context, const NotificationSettingsScreen());
                 },
               ),
               const Divider(height: 1, indent: 60),
-              // パスワード変更
               ListTile(
                 leading: Container(
                   padding: const EdgeInsets.all(6),
@@ -672,7 +645,6 @@ class _AdminScreenState extends State<AdminScreen> {
                 onTap: () => _showChangePasswordDialog(context),
               ),
               const Divider(height: 1, indent: 60),
-              // ログアウト
               ListTile(
                 leading: Container(
                   padding: const EdgeInsets.all(6),
@@ -684,11 +656,7 @@ class _AdminScreenState extends State<AdminScreen> {
                 ),
                 title: const Text(
                   'ログアウト',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.red,
-                  ),
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.red),
                 ),
                 onTap: () => _logout(context),
               ),
@@ -712,15 +680,12 @@ class _AdminScreenState extends State<AdminScreen> {
 
       if (snap.docs.isNotEmpty) {
         final data = snap.docs.first.data();
-        
-        // 名前を取得（nameフィールドまたはlastName+firstName）
         String name = data['name'] ?? '';
         if (name.isEmpty) {
           final lastName = data['lastName'] ?? '';
           final firstName = data['firstName'] ?? '';
           name = '$lastName $firstName'.trim();
         }
-        
         return {
           ...data,
           'docId': snap.docs.first.id,
@@ -733,66 +698,45 @@ class _AdminScreenState extends State<AdminScreen> {
     return null;
   }
 
-  // プロフィール写真用の圧縮（小さめ：長辺300px、目標100KB）
   Future<Uint8List> _compressProfileImage(Uint8List bytes) async {
     final original = img.decodeImage(bytes);
     if (original == null) return bytes;
-
-    const int targetSize = 100 * 1024; // 100KB
-    const int maxDimension = 300; // 長辺300px
-    
-    // リサイズ
+    const int targetSize = 100 * 1024;
+    const int maxDimension = 300;
     img.Image resized;
     if (original.width > original.height) {
-      resized = original.width > maxDimension 
-          ? img.copyResize(original, width: maxDimension)
-          : original;
+      resized = original.width > maxDimension ? img.copyResize(original, width: maxDimension) : original;
     } else {
-      resized = original.height > maxDimension 
-          ? img.copyResize(original, height: maxDimension)
-          : original;
+      resized = original.height > maxDimension ? img.copyResize(original, height: maxDimension) : original;
     }
-
-    // 品質を下げながら圧縮
     for (int quality = 85; quality >= 40; quality -= 10) {
       final compressed = img.encodeJpg(resized, quality: quality);
       if (compressed.length <= targetSize) {
         return Uint8List.fromList(compressed);
       }
     }
-
     return Uint8List.fromList(img.encodeJpg(resized, quality: 40));
   }
 
   Future<void> _pickAndUploadPhoto() async {
     final docId = _staffData?['docId'];
     if (docId == null) return;
-
     final picker = ImagePicker();
     final picked = await picker.pickImage(source: ImageSource.gallery);
     if (picked == null) return;
-
     setState(() => _isUploadingPhoto = true);
-
     try {
       final bytes = await picked.readAsBytes();
       final compressed = await _compressProfileImage(bytes);
-      
       final user = FirebaseAuth.instance.currentUser;
       final fileName = '${user!.uid}_${DateTime.now().millisecondsSinceEpoch}.jpg';
       final ref = FirebaseStorage.instance.ref().child('staff_photos/$fileName');
-      
       await ref.putData(compressed, SettableMetadata(contentType: 'image/jpeg'));
       final photoUrl = await ref.getDownloadURL();
-
-      // Firestoreを更新
       await FirebaseFirestore.instance.collection('staffs').doc(docId).update({
         'photoUrl': photoUrl,
       });
-
-      // 状態を更新
       await _loadStaffInfo();
-
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('プロフィール写真を更新しました'), backgroundColor: Colors.green),
@@ -812,7 +756,6 @@ class _AdminScreenState extends State<AdminScreen> {
   Future<void> _deletePhoto() async {
     final docId = _staffData?['docId'];
     if (docId == null) return;
-
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -827,18 +770,13 @@ class _AdminScreenState extends State<AdminScreen> {
         ],
       ),
     );
-
     if (confirmed != true) return;
-
     setState(() => _isUploadingPhoto = true);
-
     try {
       await FirebaseFirestore.instance.collection('staffs').doc(docId).update({
         'photoUrl': FieldValue.delete(),
       });
-
       await _loadStaffInfo();
-
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('写真を削除しました')),
@@ -916,35 +854,27 @@ class _AdminScreenState extends State<AdminScreen> {
                         );
                         return;
                       }
-
                       if (newPassword != confirmPassword) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(content: Text('新しいパスワードが一致しません')),
                         );
                         return;
                       }
-
                       if (newPassword.length < 6) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(content: Text('パスワードは6文字以上で入力してください')),
                         );
                         return;
                       }
-
                       setState(() => isLoading = true);
-
                       try {
                         final user = FirebaseAuth.instance.currentUser!;
                         final credential = EmailAuthProvider.credential(
                           email: user.email!,
                           password: currentPassword,
                         );
-
-                        // 再認証
                         await user.reauthenticateWithCredential(credential);
-                        // パスワード更新
                         await user.updatePassword(newPassword);
-
                         Navigator.pop(ctx);
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
@@ -982,8 +912,7 @@ class _AdminScreenState extends State<AdminScreen> {
     );
   }
 
-  Widget _buildSettingsSection(
-      BuildContext context, String header, List<_MenuData> items) {
+  Widget _buildSettingsSection(BuildContext context, String header, List<_MenuData> items) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1029,27 +958,22 @@ class _AdminScreenState extends State<AdminScreen> {
                     ),
                     title: Text(
                       item.title,
-                      style: const TextStyle(
-                          fontSize: 16, fontWeight: FontWeight.bold),
+                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                     ),
                     subtitle: Text(
                       item.description,
                       style: const TextStyle(fontSize: 12, color: Colors.grey),
                     ),
-                    trailing: const Icon(Icons.arrow_forward_ios,
-                        size: 16, color: Colors.grey),
+                    trailing: const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey),
                     onTap: () {
-                      if (item.destination != null) {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                              builder: (context) => item.destination!),
-                        );
-                      } else {
+                      if (item.destination == null) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(content: Text('この画面はまだ実装されていません')),
                         );
+                        return;
                       }
+                      // 診断コードなしの正式版遷移
+                      _navigateTo(context, item.destination!);
                     },
                   ),
                   if (!isLast) const Divider(height: 1, indent: 60),

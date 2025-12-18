@@ -2059,7 +2059,7 @@ class _PlusScheduleContentState extends State<PlusScheduleContent> {
                       fontWeight: FontWeight.bold,
                     ),
                   ),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 2),
                   MouseRegion(
                     cursor: SystemMouseCursors.click,
                     child: GestureDetector(
@@ -2076,7 +2076,7 @@ class _PlusScheduleContentState extends State<PlusScheduleContent> {
                           '${date.day}',
                           style: TextStyle(
                             color: isToday ? Colors.white : (isSaturday ? Colors.blue : AppColors.textMain),
-                            fontSize: 24,
+                            fontSize: 22,
                             fontWeight: FontWeight.w400,
                           ),
                         ),
@@ -2096,7 +2096,7 @@ class _PlusScheduleContentState extends State<PlusScheduleContent> {
                                   color: isToday ? AppColors.primary : Colors.grey.shade400,
                                   width: 1,
                                 ),
-                                borderRadius: BorderRadius.circular(10),
+                                borderRadius: BorderRadius.circular(8),
                               ),
                               child: Text(
                                 '$taskCount件のタスク',
@@ -3821,12 +3821,7 @@ class _PlusScheduleContentState extends State<PlusScheduleContent> {
           }
           
           // 保存可能かチェック
-          final bool canSave;
-          if (inputMode == 'student') {
-            canSave = title.isNotEmpty && selectedTeachers.isNotEmpty;
-          } else {
-            canSave = title.isNotEmpty;
-          }
+final bool canSave = title.isNotEmpty;
           
           return Dialog(
             backgroundColor: Colors.white,
@@ -4436,13 +4431,11 @@ class _PlusScheduleContentState extends State<PlusScheduleContent> {
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                         ),
                         child: Text(
-                          title.isEmpty
-                              ? (inputMode == 'student' ? '生徒を選択してください' : 'タイトルを入力してください')
-                              : (inputMode == 'student' && selectedTeachers.isEmpty)
-                                  ? '講師を選択してください'
-                                  : '$titleを追加',
-                          style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
-                        ),
+  title.isEmpty
+      ? (inputMode == 'student' ? '生徒を選択してください' : 'タイトルを入力してください')
+      : '$titleを追加',
+  style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+),
                       ),
                     ),
                   ),

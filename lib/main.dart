@@ -209,6 +209,9 @@ class _AdminShellState extends State<AdminShell> {
   bool _hasUnreadChat = false;
   StaffType _staffType = StaffType.loading;
   
+  // ★追加: Web版で右側に表示する管理詳細画面を保持する変数
+  Widget? _adminDetailScreen;
+  
   StreamSubscription<QuerySnapshot>? _chatRoomsSubscription;
   final Map<String, StreamSubscription<QuerySnapshot>> _messageSubscriptions = {};
 
@@ -333,6 +336,22 @@ class _AdminShellState extends State<AdminShell> {
   }
   
   Widget _getScreen(int index) {
+    // ★追加: 管理画面の構築ロジックを一元化
+    Widget buildAdminScreen() {
+      // 詳細画面が指定されている場合（Web版でサブ画面を開いている場合）
+      if (_adminDetailScreen != null) {
+        return _adminDetailScreen!;
+      }
+      // 通常の管理メニュー画面（コールバックを渡す）
+      return AdminScreen(
+        onOpenWebScreen: (screen) {
+          setState(() {
+            _adminDetailScreen = screen;
+          });
+        },
+      );
+    }
+
     switch (_staffType) {
       case StaffType.plusOnly:
         switch (index) {
@@ -340,7 +359,7 @@ class _AdminShellState extends State<AdminShell> {
           case 1: return const PlusScheduleScreen();
           case 2: return const ChatListScreen();
           case 3: return const NotificationScreen();
-          case 4: return const AdminScreen();
+          case 4: return buildAdminScreen(); // 変更
           default: return const CalendarScreen();
         }
       case StaffType.beesmiley:
@@ -350,7 +369,7 @@ class _AdminShellState extends State<AdminShell> {
           case 2: return const ChatListScreen();
           case 3: return const NotificationScreen();
           case 4: return const EventScreen();
-          case 5: return const AdminScreen();
+          case 5: return buildAdminScreen(); // 変更
           default: return const CalendarScreen();
         }
       case StaffType.both:
@@ -363,7 +382,7 @@ class _AdminShellState extends State<AdminShell> {
           case 3: return const ChatListScreen();
           case 4: return const NotificationScreen();
           case 5: return const EventScreen();
-          case 6: return const AdminScreen();
+          case 6: return buildAdminScreen(); // 変更
           default: return const CalendarScreen();
         }
     }
@@ -507,6 +526,8 @@ class _AdminShellState extends State<AdminShell> {
     if (newIndex != _selectedIndex) {
       setState(() {
         _selectedIndex = newIndex;
+        // 画面遷移時は詳細画面を閉じる
+        _adminDetailScreen = null;
         if (type == 'schedule') _hasUnreadSchedule = false;
       });
     }
@@ -533,23 +554,37 @@ class _AdminShellState extends State<AdminShell> {
     return Scaffold(
       body: Row(
         children: [
-          if (isWebLayout) NavigationRail(
-            selectedIndex: safeIndex,
-            onDestinationSelected: (i) {
-              setState(() {
-                _selectedIndex = i;
-                if (i == 0) _hasUnreadSchedule = false;
-              });
-            },
-            labelType: NavigationRailLabelType.all,
-            indicatorColor: AppColors.primary.withOpacity(0.2),
-            selectedIconTheme: const IconThemeData(color: AppColors.primary),
-            selectedLabelTextStyle: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold),
-            leading: Padding(padding: const EdgeInsets.all(12), child: Image.asset('assets/logo_beesmileymark.png', width: 50, height: 50)),
-            destinations: _railDestinations,
-          ),
+if (isWebLayout) NavigationRail(
+  selectedIndex: safeIndex,
+  onDestinationSelected: (i) {
+    setState(() {
+      _selectedIndex = i;
+      _adminDetailScreen = null;
+      if (i == 0) _hasUnreadSchedule = false;
+    });
+  },
+  labelType: NavigationRailLabelType.all,
+  indicatorColor: AppColors.primary.withOpacity(0.2),
+  selectedIconTheme: const IconThemeData(color: AppColors.primary),
+  selectedLabelTextStyle: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold),
+  unselectedIconTheme: IconThemeData(color: Colors.grey.shade600),
+  unselectedLabelTextStyle: TextStyle(color: Colors.grey.shade600),
+  leading: Padding(padding: const EdgeInsets.all(12), child: Image.asset('assets/logo_beesmileymark.png', width: 50, height: 50)),
+  destinations: _railDestinations,
+),
           if (isWebLayout) const VerticalDivider(thickness: 1, width: 1),
-          Expanded(child: _getScreen(safeIndex)),
+          Expanded(
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 300), // 0.3秒でフワッと切り替え
+              switchInCurve: Curves.easeOut,
+              switchOutCurve: Curves.easeIn,
+              // 画面が変わったことを検知させるためにKeyを設定
+              child: KeyedSubtree(
+                key: ValueKey('$_selectedIndex${_adminDetailScreen?.runtimeType}'),
+                child: _getScreen(safeIndex),
+              ),
+            ),
+          ),
         ],
       ),
       bottomNavigationBar: isWebLayout ? null : BottomNavigationBar(
@@ -557,6 +592,8 @@ class _AdminShellState extends State<AdminShell> {
         onTap: (i) {
           setState(() {
             _selectedIndex = i;
+            // ★追加: タブを切り替えたら管理画面の詳細（CSV画面など）をリセットする
+            _adminDetailScreen = null;
             if (i == 0) _hasUnreadSchedule = false;
           });
         },

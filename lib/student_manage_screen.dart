@@ -20,6 +20,12 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
 
   List<String> _classroomList = [];
 
+  // ExpansionTileControllerのマップ
+  final Map<String, ExpansionTileController> _controllers = {};
+  
+  // 現在展開中のドキュメントID
+  String? _currentExpandedId;
+
   final List<String> _allCourses = [
     'プリスクール',
     'キッズコース',
@@ -57,6 +63,53 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
     }
   }
 
+  // 五十音の行を判定するヘルパーメソッド
+  String _getKanaRow(String? text) {
+    if (text == null || text.isEmpty) return '他';
+    final char = text.substring(0, 1);
+
+    if (RegExp(r'^[あいうえおアイウエオ]').hasMatch(char)) return 'あ';
+    if (RegExp(r'^[かきくけこがぎぐげごカキクケコガギグゲゴ]').hasMatch(char)) return 'か';
+    if (RegExp(r'^[さしすせそざじずぜぞサシスセソザジズゼゾ]').hasMatch(char)) return 'さ';
+    if (RegExp(r'^[たちつてとだぢづでどタチツテトダヂヅデド]').hasMatch(char)) return 'た';
+    if (RegExp(r'^[なにぬねのナニヌネノ]').hasMatch(char)) return 'な';
+    if (RegExp(r'^[はひふへほばびぶべぼぱぴぷぺぽハヒフヘホバビブベボパピプペポ]').hasMatch(char)) return 'は';
+    if (RegExp(r'^[まみむめもマミムメモ]').hasMatch(char)) return 'ま';
+    if (RegExp(r'^[やゆよヤユヨ]').hasMatch(char)) return 'や';
+    if (RegExp(r'^[らりるれろラリルレロ]').hasMatch(char)) return 'ら';
+    if (RegExp(r'^[わをんワヲン]').hasMatch(char)) return 'わ';
+    
+    return '他';
+  }
+
+  // セクションヘッダーウィジェット
+  Widget _buildSectionHeader(String headerText) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(0, 16, 0, 8),
+      child: Row(
+        children: [
+          Container(
+            width: 4,
+            height: 18,
+            decoration: BoxDecoration(
+              color: Colors.blue,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            '$headerText行',
+            style: const TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: Colors.black87,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -76,37 +129,84 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
             return const Center(child: Text('エラーが発生しました'));
           }
 
-          final familyDocs = snapshot.data!.docs;
+          final docs = List<QueryDocumentSnapshot>.from(snapshot.data!.docs);
 
-          if (familyDocs.isEmpty) {
+          if (docs.isEmpty) {
             return const Center(
               child: Text('データがありません。\n右下のマークで追加してください。', style: TextStyle(color: Colors.grey)),
             );
           }
 
-          return ListView.builder(
-            padding: const EdgeInsets.all(16),
-            itemCount: familyDocs.length,
-            itemBuilder: (context, index) {
-              final familyDoc = familyDocs[index];
-              final data = familyDoc.data() as Map<String, dynamic>;
-              final children = List<Map<String, dynamic>>.from(data['children'] ?? []);
+          // ふりがな順に並び替え（姓のふりがな）
+          docs.sort((a, b) {
+            final dataA = a.data() as Map<String, dynamic>;
+            final dataB = b.data() as Map<String, dynamic>;
+            final kanaA = (dataA['lastNameKana'] ?? '').toString();
+            final kanaB = (dataB['lastNameKana'] ?? '').toString();
+            return kanaA.compareTo(kanaB);
+          });
 
-              final parentFullName = '${data['lastName'] ?? ''} ${data['firstName'] ?? ''}';
-              final parentKanaName = '${data['lastNameKana'] ?? ''} ${data['firstNameKana'] ?? ''}';
-              
-              String fullAddress = data['address'] ?? '';
-              if (data['postalCode'] != null && data['postalCode'].toString().isNotEmpty) {
-                fullAddress = '〒${data['postalCode']} $fullAddress';
-              }
+          // リスト表示用のウィジェットリストを作成
+          List<Widget> listWidgets = [];
+          String currentHeader = '';
 
-              final hasAccount = data['uid'] != null && data['uid'].toString().isNotEmpty;
-              final isInitialPassword = data['isInitialPassword'] == true;
+          for (var familyDoc in docs) {
+            final data = familyDoc.data() as Map<String, dynamic>;
+            final lastNameKana = data['lastNameKana'] ?? '';
+            final header = _getKanaRow(lastNameKana);
 
-              return Card(
+            // 行が変わったらヘッダーを挿入
+            if (header != currentHeader) {
+              currentHeader = header;
+              listWidgets.add(_buildSectionHeader(header));
+            }
+
+            final children = List<Map<String, dynamic>>.from(data['children'] ?? []);
+            final parentFullName = '${data['lastName'] ?? ''} ${data['firstName'] ?? ''}';
+            final parentKanaName = '${data['lastNameKana'] ?? ''} ${data['firstNameKana'] ?? ''}';
+            
+            String fullAddress = data['address'] ?? '';
+            if (data['postalCode'] != null && data['postalCode'].toString().isNotEmpty) {
+              fullAddress = '〒${data['postalCode']} $fullAddress';
+            }
+
+            final hasAccount = data['uid'] != null && data['uid'].toString().isNotEmpty;
+            final isInitialPassword = data['isInitialPassword'] == true;
+
+            // コントローラーを取得または作成
+            final controller = _controllers.putIfAbsent(
+              familyDoc.id, 
+              () => ExpansionTileController(),
+            );
+
+            listWidgets.add(
+              Card(
                 margin: const EdgeInsets.only(bottom: 12),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 child: ExpansionTile(
+                  controller: controller,
+                  key: PageStorageKey(familyDoc.id),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  collapsedShape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  // アコーディオンの排他制御
+                  onExpansionChanged: (isOpen) {
+                    if (isOpen) {
+                      // 他に開いているタイルがあれば閉じる
+                      if (_currentExpandedId != null && _currentExpandedId != familyDoc.id) {
+                        final prevController = _controllers[_currentExpandedId];
+                        if (prevController != null) {
+                          try {
+                            prevController.collapse();
+                          } catch (_) {}
+                        }
+                      }
+                      _currentExpandedId = familyDoc.id;
+                    } else {
+                      if (_currentExpandedId == familyDoc.id) {
+                        _currentExpandedId = null;
+                      }
+                    }
+                  },
                   leading: CircleAvatar(
                     backgroundColor: Colors.blue.shade100,
                     child: const Icon(Icons.family_restroom, color: Colors.blue),
@@ -211,8 +311,13 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
                     ),
                   ],
                 ),
-              );
-            },
+              ),
+            );
+          }
+
+          return ListView(
+            padding: const EdgeInsets.all(16),
+            children: listWidgets,
           );
         },
       ),
@@ -474,7 +579,7 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
                             ),
                           ),
                         
-                        _buildSectionTitle('保護者情報'),
+                        _buildDialogSectionTitle('保護者情報'),
                         _buildTextField(loginIdCtrl, 'ログインID', icon: Icons.vpn_key, enabled: !isEditing),
                         const SizedBox(height: 8),
                         Row(
@@ -516,7 +621,7 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
                         
                         const SizedBox(height: 24),
                         
-                        _buildSectionTitle('緊急連絡先'),
+                        _buildDialogSectionTitle('緊急連絡先'),
                         Row(
                           children: [
                             Expanded(child: _buildTextField(emNameCtrl, '氏名')),
@@ -532,7 +637,7 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            _buildSectionTitle('児童情報'),
+                            _buildDialogSectionTitle('児童情報'),
                             TextButton.icon(
                               icon: const Icon(Icons.add),
                               label: const Text('兄弟を追加'),
@@ -782,7 +887,7 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
     );
   }
 
-  Widget _buildSectionTitle(String title) {
+  Widget _buildDialogSectionTitle(String title) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: Row(

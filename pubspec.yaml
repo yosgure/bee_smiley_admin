@@ -32,7 +32,7 @@ dependencies:
   cloud_firestore: ^6.1.0
   firebase_storage: ^13.0.4
   cloud_functions: ^6.0.4
-  firebase_messaging: ^16.0.4  # プッシュ通知
+  firebase_messaging: ^16.0.4
 
   # Image & URL
   image_picker: ^1.2.1
@@ -48,7 +48,7 @@ dependencies:
   path_provider: ^2.1.2
   gal: ^2.3.2
 
-  # Local Notifications (フォアグラウンド通知表示用)
+  # Local Notifications
   flutter_local_notifications: ^18.0.1
   flutter_app_badger: ^1.5.0
 
@@ -59,6 +59,15 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+
+  fonts:
+    - family: NotoSansJP
+      fonts:
+        - asset: assets/fonts/NotoSansJP-Regular.ttf
+        - asset: assets/fonts/NotoSansJP-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/NotoSansJP-Bold.ttf
+          weight: 700
 
   assets:
     - assets/

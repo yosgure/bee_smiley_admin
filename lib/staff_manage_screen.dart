@@ -23,6 +23,12 @@ class _StaffManageScreenState extends State<StaffManageScreen> {
 
   List<String> _classroomList = [];
   
+  // ExpansionTileControllerのマップ
+  final Map<String, ExpansionTileController> _controllers = {};
+  
+  // 現在展開中のドキュメントID
+  String? _currentExpandedId;
+
   static const String _defaultPassword = 'bee2025';
   static const String _fixedDomain = '@bee-smiley.com';
 
@@ -60,6 +66,53 @@ class _StaffManageScreenState extends State<StaffManageScreen> {
     return phone;
   }
 
+  // 五十音の行を判定するヘルパーメソッド
+  String _getKanaRow(String? text) {
+    if (text == null || text.isEmpty) return '他';
+    final char = text.substring(0, 1);
+
+    if (RegExp(r'^[あいうえおアイウエオ]').hasMatch(char)) return 'あ';
+    if (RegExp(r'^[かきくけこがぎぐげごカキクケコガギグゲゴ]').hasMatch(char)) return 'か';
+    if (RegExp(r'^[さしすせそざじずぜぞサシスセソザジズゼゾ]').hasMatch(char)) return 'さ';
+    if (RegExp(r'^[たちつてとだぢづでどタチツテトダヂヅデド]').hasMatch(char)) return 'た';
+    if (RegExp(r'^[なにぬねのナニヌネノ]').hasMatch(char)) return 'な';
+    if (RegExp(r'^[はひふへほばびぶべぼぱぴぷぺぽハヒフヘホバビブベボパピプペポ]').hasMatch(char)) return 'は';
+    if (RegExp(r'^[まみむめもマミムメモ]').hasMatch(char)) return 'ま';
+    if (RegExp(r'^[やゆよヤユヨ]').hasMatch(char)) return 'や';
+    if (RegExp(r'^[らりるれろラリルレロ]').hasMatch(char)) return 'ら';
+    if (RegExp(r'^[わをんワヲン]').hasMatch(char)) return 'わ';
+    
+    return '他';
+  }
+
+  // セクションヘッダーウィジェット
+  Widget _buildSectionHeader(String headerText) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 24, 16, 8),
+      child: Row(
+        children: [
+          Container(
+            width: 4,
+            height: 18,
+            decoration: BoxDecoration(
+              color: Colors.blue,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            '$headerText行',
+            style: const TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: Colors.black87,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -79,7 +132,7 @@ class _StaffManageScreenState extends State<StaffManageScreen> {
             return const Center(child: Text('エラーが発生しました'));
           }
 
-          final docs = snapshot.data!.docs;
+          final docs = List<QueryDocumentSnapshot>.from(snapshot.data!.docs);
 
           if (docs.isEmpty) {
             return const Center(
@@ -87,20 +140,67 @@ class _StaffManageScreenState extends State<StaffManageScreen> {
             );
           }
 
-          return ListView.builder(
-            padding: const EdgeInsets.all(16),
-            itemCount: docs.length,
-            itemBuilder: (context, index) {
-              final doc = docs[index];
-              final data = doc.data() as Map<String, dynamic>;
-              
-              final List<String> classrooms = List<String>.from(data['classrooms'] ?? []);
-              final String? photoUrl = data['photoUrl'];
+          // ふりがな順に並び替え
+          docs.sort((a, b) {
+            final dataA = a.data() as Map<String, dynamic>;
+            final dataB = b.data() as Map<String, dynamic>;
+            final kanaA = (dataA['furigana'] ?? '').toString();
+            final kanaB = (dataB['furigana'] ?? '').toString();
+            return kanaA.compareTo(kanaB);
+          });
 
-              return Card(
-                margin: const EdgeInsets.only(bottom: 12),
+          // リスト表示用のウィジェットリストを作成
+          List<Widget> listWidgets = [];
+          String currentHeader = '';
+
+          for (var doc in docs) {
+            final data = doc.data() as Map<String, dynamic>;
+            final furigana = data['furigana'] ?? '';
+            final header = _getKanaRow(furigana);
+
+            // 行が変わったらヘッダーを挿入
+            if (header != currentHeader) {
+              currentHeader = header;
+              listWidgets.add(_buildSectionHeader(header));
+            }
+
+            final List<String> classrooms = List<String>.from(data['classrooms'] ?? []);
+            final String? photoUrl = data['photoUrl'];
+            
+            // コントローラーを取得または作成
+            final controller = _controllers.putIfAbsent(
+              doc.id, 
+              () => ExpansionTileController(),
+            );
+
+            listWidgets.add(
+              Card(
+                margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 child: ExpansionTile(
+                  controller: controller,
+                  key: PageStorageKey(doc.id),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  collapsedShape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  // アコーディオンの排他制御
+                  onExpansionChanged: (isOpen) {
+                    if (isOpen) {
+                      // 他に開いているタイルがあれば閉じる
+                      if (_currentExpandedId != null && _currentExpandedId != doc.id) {
+                        final prevController = _controllers[_currentExpandedId];
+                        if (prevController != null) {
+                          try {
+                            prevController.collapse();
+                          } catch (_) {}
+                        }
+                      }
+                      _currentExpandedId = doc.id;
+                    } else {
+                      if (_currentExpandedId == doc.id) {
+                        _currentExpandedId = null;
+                      }
+                    }
+                  },
                   leading: CircleAvatar(
                     backgroundColor: Colors.blue.shade100,
                     backgroundImage: (photoUrl != null && photoUrl.isNotEmpty)
@@ -108,7 +208,9 @@ class _StaffManageScreenState extends State<StaffManageScreen> {
                         : null,
                     child: (photoUrl == null || photoUrl.isEmpty)
                         ? Text(
-                            (data['name'] as String).isNotEmpty ? data['name'].substring(0, 1) : '?',
+                            (data['name'] as String?)?.isNotEmpty == true 
+                                ? data['name'].substring(0, 1) 
+                                : '?',
                             style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.bold),
                           )
                         : null,
@@ -170,12 +272,18 @@ class _StaffManageScreenState extends State<StaffManageScreen> {
                     ),
                   ],
                 ),
-              );
-            },
+              ),
+            );
+          }
+
+          return ListView(
+            padding: const EdgeInsets.only(bottom: 80),
+            children: listWidgets,
           );
         },
       ),
-      floatingActionButton: FloatingActionButton(heroTag: null, 
+      floatingActionButton: FloatingActionButton(
+        heroTag: null, 
         onPressed: () => _showEditDialog(),
         backgroundColor: Colors.white,
         elevation: 4,
@@ -339,11 +447,11 @@ class _StaffManageScreenState extends State<StaffManageScreen> {
                         const SizedBox(height: 16),
 
                         if (!isEditing)
-                          const Padding(
-                            padding: EdgeInsets.only(bottom: 16.0),
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 16.0),
                             child: Text(
                               '※新規登録時の初期パスワードは「$_defaultPassword」になります。',
-                              style: TextStyle(color: Colors.red, fontSize: 12),
+                              style: const TextStyle(color: Colors.red, fontSize: 12),
                             ),
                           ),
                         _buildTextField(loginIdCtrl, 'ログインID', icon: Icons.vpn_key, enabled: !isEditing),
@@ -433,11 +541,9 @@ class _StaffManageScreenState extends State<StaffManageScreen> {
                     setStateDialog(() => isUploading = true);
                     
                     try {
-                      // ★修正: 強力なタイムアウト付き実行
                       await Future.any([
                         Future(() async {
                           if (isEditing) {
-                            // 編集モード
                             String? uploadedUrl = currentPhotoUrl;
                             if (newImageBytes != null) {
                               final uid = data['uid'] ?? doc!.id;
@@ -453,7 +559,6 @@ class _StaffManageScreenState extends State<StaffManageScreen> {
                               'photoUrl': uploadedUrl,
                             }).timeout(const Duration(seconds: 5));
                           } else {
-                            // 新規登録 (復活ロジック付き)
                             await _registerNewStaff(
                               loginId: loginIdCtrl.text,
                               name: nameCtrl.text,
@@ -472,7 +577,7 @@ class _StaffManageScreenState extends State<StaffManageScreen> {
                       if (context.mounted) Navigator.pop(context);
                     } catch (e) {
                       if (context.mounted) {
-                        Navigator.pop(context); // エラー時も必ず閉じる
+                        Navigator.pop(context);
                         
                         String msg = 'エラーが発生しました: $e';
                         if (e.toString().contains('パスワードが変更されています')) {
@@ -517,7 +622,6 @@ class _StaffManageScreenState extends State<StaffManageScreen> {
     }
   }
 
-  // データ保存処理（共通）
   Future<void> _saveStaffDataToFirestore({
     required String uid,
     required String loginId,
@@ -534,7 +638,6 @@ class _StaffManageScreenState extends State<StaffManageScreen> {
       photoUrl = await _uploadStaffPhoto(imageBytes, uid);
     }
 
-    // ★修正: 書き込み処理にタイムアウトを設定（ここが止まる原因）
     await _staffsRef.add({
       'uid': uid,
       'loginId': loginId,
@@ -550,7 +653,6 @@ class _StaffManageScreenState extends State<StaffManageScreen> {
     }).timeout(const Duration(seconds: 5));
   }
 
-  // 新規登録処理（アカウント復活機能付き）
   Future<void> _registerNewStaff({
     required String loginId,
     required String name,
@@ -573,7 +675,6 @@ class _StaffManageScreenState extends State<StaffManageScreen> {
       final authEmail = '$loginId$_fixedDomain';
 
       try {
-        // 1. 新規作成
         UserCredential userCredential = await tempAuth.createUserWithEmailAndPassword(
           email: authEmail,
           password: _defaultPassword,
@@ -592,16 +693,13 @@ class _StaffManageScreenState extends State<StaffManageScreen> {
         );
 
       } on FirebaseAuthException catch (e) {
-        // 2. 既に存在する場合の復活処理
         if (e.code == 'email-already-in-use') {
           try {
-            // 初期パスワードでログイン試行
             UserCredential userCredential = await tempAuth.signInWithEmailAndPassword(
               email: authEmail,
               password: _defaultPassword,
             ).timeout(const Duration(seconds: 10));
             
-            // 成功したら復活
             await _saveStaffDataToFirestore(
               uid: userCredential.user!.uid,
               loginId: loginId,
@@ -625,7 +723,6 @@ class _StaffManageScreenState extends State<StaffManageScreen> {
     } catch (e) {
       rethrow;
     } finally {
-      // awaitなしで削除 (フリーズ防止)
       tempApp.delete(); 
     }
   }

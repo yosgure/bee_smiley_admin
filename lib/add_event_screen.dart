@@ -277,144 +277,253 @@ class _AddEventDialogState extends State<AddEventDialog> {
   }
 
   Future<void> _saveEvent() async {
-    final colorValue = _categories.firstWhere((c) => c['label'] == _selectedCategory)['color'] as int;
-    
-    // 「第1・2・3週(月次)」の場合は特別処理（新規作成時のみ）
-    if (!_isEditing && _recurrenceType == '第1・2・3週(月次)') {
+  final colorValue = _categories.firstWhere((c) => c['label'] == _selectedCategory)['color'] as int;
+  
+  DateTime startToSave = _startDate;
+  DateTime endToSave = _endDate;
+  if (_isAllDay) {
+    startToSave = DateTime(_startDate.year, _startDate.month, _startDate.day, 0, 0);
+    endToSave = DateTime(_endDate.year, _endDate.month, _endDate.day, 23, 59);
+  }
+
+  // 基本のイベントデータ
+  final eventData = {
+    'subject': _subjectController.text,
+    'startTime': Timestamp.fromDate(startToSave),
+    'endTime': Timestamp.fromDate(endToSave),
+    'isAllDay': _isAllDay,
+    'color': colorValue,
+    'notes': _notesController.text,
+    'category': _selectedCategory,
+    'classroom': _locationValue,
+    'studentIds': _selectedStudentIds.toList(),
+    'staffIds': _selectedStaffIds.toList(),
+    'studentNames': _selectedStudentIds.map((id) => _studentNamesMap[id] ?? '').where((s) => s.isNotEmpty).toList(),
+    'staffNames': _selectedStaffIds.map((id) => _staffNamesMap[id] ?? '').where((s) => s.isNotEmpty).toList(),
+    'studentTransferDates': _studentTransferDates.map((k, v) => MapEntry(k, Timestamp.fromDate(v))),
+    'absentStudentIds': _absentStudentIds.toList(),
+    'updatedAt': FieldValue.serverTimestamp(),
+  };
+
+  // ========== 新規作成 ==========
+  if (!_isEditing) {
+    if (_recurrenceType == '第1・2・3週(月次)') {
       await _saveWeeklyMonthlyEvents(colorValue);
-      return;
-    }
-    
-    final rrule = _buildRecurrenceRule(_recurrenceType);
-
-    DateTime startToSave = _startDate;
-    DateTime endToSave = _endDate;
-    if (_isAllDay) {
-      startToSave = DateTime(_startDate.year, _startDate.month, _startDate.day, 0, 0);
-      endToSave = DateTime(_endDate.year, _endDate.month, _endDate.day, 23, 59);
-    }
-
-    final eventData = {
-      'subject': _subjectController.text,
-      'startTime': Timestamp.fromDate(startToSave),
-      'endTime': Timestamp.fromDate(endToSave),
-      'isAllDay': _isAllDay,
-      'color': colorValue,
-      'notes': _notesController.text,
-      'category': _selectedCategory,
-      'classroom': _locationValue,
-      'recurrenceRule': rrule,
-      'studentIds': _selectedStudentIds.toList(),
-      'staffIds': _selectedStaffIds.toList(),
-      'studentNames': _selectedStudentIds.map((id) => _studentNamesMap[id] ?? '').where((s) => s.isNotEmpty).toList(),
-      'staffNames': _selectedStaffIds.map((id) => _staffNamesMap[id] ?? '').where((s) => s.isNotEmpty).toList(),
-      'studentTransferDates': _studentTransferDates.map((k, v) => MapEntry(k, Timestamp.fromDate(v))),
-      'absentStudentIds': _absentStudentIds.toList(),
-      'updatedAt': FieldValue.serverTimestamp(),
-    };
-    
-    if (_isEditing && widget.appointment != null) {
-      final data = widget.appointment!.data() as Map<String, dynamic>;
-      final recurrenceGroupId = data['recurrenceGroupId'] as String?;
-      final originalStartTime = (data['startTime'] as Timestamp).toDate();
-      
-      // editScopeに応じて処理を分岐
-      switch (widget.editScope) {
-        case 'future':
-          // これ以降のすべての予定を更新
-          if (recurrenceGroupId != null) {
-            await _updateFutureEvents(recurrenceGroupId, originalStartTime, eventData);
-          } else {
-            await widget.appointment!.reference.update(eventData);
-          }
-          break;
-        case 'all':
-          // すべての予定を更新
-          if (recurrenceGroupId != null) {
-            await _updateAllEvents(recurrenceGroupId, eventData);
-          } else {
-            await widget.appointment!.reference.update(eventData);
-          }
-          break;
-        default:
-          // 'this' または null: この予定のみ更新
-          // recurrenceGroupIdから切り離す
-          eventData['recurrenceGroupId'] = null;
-          eventData['recurrenceType'] = null;
-          await widget.appointment!.reference.update(eventData);
-      }
     } else {
+      final rrule = _buildRecurrenceRule(_recurrenceType);
+      eventData['recurrenceRule'] = rrule;
+      eventData['recurrenceType'] = _recurrenceType;
+      eventData['recurrenceGroupId'] = null;
       eventData['createdAt'] = FieldValue.serverTimestamp();
       eventData['exceptionDates'] = [];
       await FirebaseFirestore.instance.collection('calendar_events').add(eventData);
     }
+    return;
   }
 
-  /// これ以降のすべての予定を更新
-  Future<void> _updateFutureEvents(String recurrenceGroupId, DateTime fromDate, Map<String, dynamic> eventData) async {
-    final collection = FirebaseFirestore.instance.collection('calendar_events');
-    final query = await collection.where('recurrenceGroupId', isEqualTo: recurrenceGroupId).get();
-    
+  // ========== 編集 ==========
+  final originalData = widget.appointment!.data() as Map<String, dynamic>;
+  final originalRecurrenceType = originalData['recurrenceType'] as String? ?? _parseRecurrenceRule(originalData['recurrenceRule']);
+  final originalRecurrenceGroupId = originalData['recurrenceGroupId'] as String?;
+  final originalStartTime = (originalData['startTime'] as Timestamp).toDate();
+  
+  // 繰り返しタイプが変更されたかチェック
+  final recurrenceTypeChanged = _recurrenceType != originalRecurrenceType;
+  
+  // 「第1・2・3週(月次)」に変更された場合：元を削除して新規作成
+  if (recurrenceTypeChanged && _recurrenceType == '第1・2・3週(月次)') {
+    if (originalRecurrenceGroupId != null) {
+      await _deleteRecurrenceGroup(originalRecurrenceGroupId);
+    } else {
+      await widget.appointment!.reference.delete();
+    }
+    await _saveWeeklyMonthlyEvents(colorValue);
+    return;
+  }
+  
+  // 「第1・2・3週(月次)」から他に変更された場合：グループを削除して単独イベント作成
+  if (recurrenceTypeChanged && originalRecurrenceType == '第1・2・3週(月次)') {
+    if (originalRecurrenceGroupId != null) {
+      await _deleteRecurrenceGroup(originalRecurrenceGroupId);
+    } else {
+      await widget.appointment!.reference.delete();
+    }
+    final rrule = _buildRecurrenceRule(_recurrenceType);
+    eventData['recurrenceRule'] = rrule;
+    eventData['recurrenceType'] = _recurrenceType;
+    eventData['recurrenceGroupId'] = null;
+    eventData['createdAt'] = FieldValue.serverTimestamp();
+    eventData['exceptionDates'] = [];
+    await FirebaseFirestore.instance.collection('calendar_events').add(eventData);
+    return;
+  }
+
+  // 通常の繰り返しルール
+  final rrule = _buildRecurrenceRule(_recurrenceType);
+  eventData['recurrenceRule'] = rrule;
+  eventData['recurrenceType'] = _recurrenceType;
+
+  // editScopeに応じて処理を分岐
+  switch (widget.editScope) {
+    case 'future':
+      if (originalRecurrenceGroupId != null) {
+        await _updateFutureEvents(originalRecurrenceGroupId, originalStartTime, eventData, recurrenceTypeChanged);
+      } else {
+        eventData['recurrenceGroupId'] = null;
+        await widget.appointment!.reference.update(eventData);
+      }
+      break;
+      
+    case 'all':
+      if (originalRecurrenceGroupId != null) {
+        await _updateAllEvents(originalRecurrenceGroupId, eventData, recurrenceTypeChanged);
+      } else {
+        eventData['recurrenceGroupId'] = null;
+        await widget.appointment!.reference.update(eventData);
+      }
+      break;
+      
+    default:
+      if (widget.editScope == 'this' && originalRecurrenceGroupId != null) {
+        eventData['recurrenceGroupId'] = null;
+        eventData['recurrenceType'] = null;
+        eventData['recurrenceRule'] = null;
+      } else {
+        eventData['recurrenceGroupId'] = null;
+      }
+      await widget.appointment!.reference.update(eventData);
+  }
+}
+
+ Future<void> _updateFutureEvents(
+  String recurrenceGroupId, 
+  DateTime fromDate, 
+  Map<String, dynamic> eventData,
+  bool recurrenceTypeChanged,
+) async {
+  final collection = FirebaseFirestore.instance.collection('calendar_events');
+  final query = await collection.where('recurrenceGroupId', isEqualTo: recurrenceGroupId).get();
+  
+  if (recurrenceTypeChanged) {
     final batch = FirebaseFirestore.instance.batch();
     for (var doc in query.docs) {
       final docData = doc.data();
       final docStartTime = (docData['startTime'] as Timestamp).toDate();
-      
-      // fromDate以降のイベントのみ更新
       if (!docStartTime.isBefore(fromDate)) {
-        // 日付は維持し、時間と他の情報を更新
-        final newStartTime = DateTime(
-          docStartTime.year, docStartTime.month, docStartTime.day,
-          _startDate.hour, _startDate.minute,
-        );
-        final newEndTime = DateTime(
-          docStartTime.year, docStartTime.month, docStartTime.day,
-          _endDate.hour, _endDate.minute,
-        );
-        
-        final updateData = Map<String, dynamic>.from(eventData);
-        updateData['startTime'] = Timestamp.fromDate(newStartTime);
-        updateData['endTime'] = Timestamp.fromDate(newEndTime);
-        updateData['recurrenceGroupId'] = recurrenceGroupId;
-        updateData['recurrenceType'] = docData['recurrenceType'];
-        
-        batch.update(doc.reference, updateData);
+        batch.delete(doc.reference);
       }
     }
     await batch.commit();
-  }
-
-  /// すべての予定を更新
-  Future<void> _updateAllEvents(String recurrenceGroupId, Map<String, dynamic> eventData) async {
-    final collection = FirebaseFirestore.instance.collection('calendar_events');
-    final query = await collection.where('recurrenceGroupId', isEqualTo: recurrenceGroupId).get();
     
-    final batch = FirebaseFirestore.instance.batch();
-    for (var doc in query.docs) {
-      final docData = doc.data();
-      final docStartTime = (docData['startTime'] as Timestamp).toDate();
-      
-      // 日付は維持し、時間と他の情報を更新
-      final newStartTime = DateTime(
+    eventData['recurrenceGroupId'] = null;
+    eventData['createdAt'] = FieldValue.serverTimestamp();
+    eventData['exceptionDates'] = [];
+    await collection.add(eventData);
+    return;
+  }
+  
+  final originalStartDate = DateTime(fromDate.year, fromDate.month, fromDate.day);
+  final newStartDate = DateTime(_startDate.year, _startDate.month, _startDate.day);
+  final dateDiff = newStartDate.difference(originalStartDate);
+  
+  final batch = FirebaseFirestore.instance.batch();
+  for (var doc in query.docs) {
+    final docData = doc.data();
+    final docStartTime = (docData['startTime'] as Timestamp).toDate();
+    
+    if (!docStartTime.isBefore(fromDate)) {
+      final newDocStartTime = DateTime(
         docStartTime.year, docStartTime.month, docStartTime.day,
         _startDate.hour, _startDate.minute,
-      );
-      final newEndTime = DateTime(
+      ).add(dateDiff);
+      final newDocEndTime = DateTime(
         docStartTime.year, docStartTime.month, docStartTime.day,
         _endDate.hour, _endDate.minute,
-      );
+      ).add(dateDiff);
       
       final updateData = Map<String, dynamic>.from(eventData);
-      updateData['startTime'] = Timestamp.fromDate(newStartTime);
-      updateData['endTime'] = Timestamp.fromDate(newEndTime);
+      updateData['startTime'] = Timestamp.fromDate(newDocStartTime);
+      updateData['endTime'] = Timestamp.fromDate(newDocEndTime);
       updateData['recurrenceGroupId'] = recurrenceGroupId;
-      updateData['recurrenceType'] = docData['recurrenceType'];
       
       batch.update(doc.reference, updateData);
     }
-    await batch.commit();
   }
+  await batch.commit();
+}
 
+  Future<void> _updateAllEvents(
+  String recurrenceGroupId, 
+  Map<String, dynamic> eventData,
+  bool recurrenceTypeChanged,
+) async {
+  final collection = FirebaseFirestore.instance.collection('calendar_events');
+  final query = await collection.where('recurrenceGroupId', isEqualTo: recurrenceGroupId).get();
+  
+  if (recurrenceTypeChanged) {
+    final batch = FirebaseFirestore.instance.batch();
+    for (var doc in query.docs) {
+      batch.delete(doc.reference);
+    }
+    await batch.commit();
+    
+    eventData['recurrenceGroupId'] = null;
+    eventData['createdAt'] = FieldValue.serverTimestamp();
+    eventData['exceptionDates'] = [];
+    await collection.add(eventData);
+    return;
+  }
+  
+  final sortedDocs = query.docs.toList()
+    ..sort((a, b) {
+      final aTime = (a.data()['startTime'] as Timestamp).toDate();
+      final bTime = (b.data()['startTime'] as Timestamp).toDate();
+      return aTime.compareTo(bTime);
+    });
+  
+  if (sortedDocs.isEmpty) return;
+  
+  final firstDocData = sortedDocs.first.data();
+  final firstStartTime = (firstDocData['startTime'] as Timestamp).toDate();
+  final originalStartDate = DateTime(firstStartTime.year, firstStartTime.month, firstStartTime.day);
+  final newStartDate = DateTime(_startDate.year, _startDate.month, _startDate.day);
+  final dateDiff = newStartDate.difference(originalStartDate);
+  
+  final batch = FirebaseFirestore.instance.batch();
+  for (var doc in query.docs) {
+    final docData = doc.data();
+    final docStartTime = (docData['startTime'] as Timestamp).toDate();
+    
+    final newDocStartTime = DateTime(
+      docStartTime.year, docStartTime.month, docStartTime.day,
+      _startDate.hour, _startDate.minute,
+    ).add(dateDiff);
+    final newDocEndTime = DateTime(
+      docStartTime.year, docStartTime.month, docStartTime.day,
+      _endDate.hour, _endDate.minute,
+    ).add(dateDiff);
+    
+    final updateData = Map<String, dynamic>.from(eventData);
+    updateData['startTime'] = Timestamp.fromDate(newDocStartTime);
+    updateData['endTime'] = Timestamp.fromDate(newDocEndTime);
+    updateData['recurrenceGroupId'] = recurrenceGroupId;
+    
+    batch.update(doc.reference, updateData);
+  }
+  await batch.commit();
+}
+
+/// 繰り返しグループを削除
+Future<void> _deleteRecurrenceGroup(String recurrenceGroupId) async {
+  final collection = FirebaseFirestore.instance.collection('calendar_events');
+  final query = await collection.where('recurrenceGroupId', isEqualTo: recurrenceGroupId).get();
+  
+  final batch = FirebaseFirestore.instance.batch();
+  for (var doc in query.docs) {
+    batch.delete(doc.reference);
+  }
+  await batch.commit();
+}
   /// 第1・2・3週(月次)のイベントを3年分生成
   Future<void> _saveWeeklyMonthlyEvents(int colorValue) async {
     final batch = FirebaseFirestore.instance.batch();
@@ -672,44 +781,50 @@ class _AddEventDialogState extends State<AddEventDialog> {
                   ),
                 ],
               ),
-              InkWell(
-                onTap: () => _pickDateTime(isStart: true),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
+             Padding(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    InkWell(
+                      onTap: () => _pickDate(isStart: true),
+                      child: Text(
                         DateFormat('M月d日 (E)', 'ja').format(_startDate),
                         style: const TextStyle(fontSize: 16, color: AppColors.textMain),
                       ),
-                      if (!_isAllDay)
-                        Text(
+                    ),
+                    if (!_isAllDay)
+                      InkWell(
+                        onTap: () => _pickTime(isStart: true),
+                        child: Text(
                           DateFormat('H:mm').format(_startDate),
                           style: const TextStyle(fontSize: 16, color: AppColors.textMain),
                         ),
-                    ],
-                  ),
+                      ),
+                  ],
                 ),
               ),
-              InkWell(
-                onTap: () => _pickDateTime(isStart: false),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    InkWell(
+                      onTap: () => _pickDate(isStart: false),
+                      child: Text(
                         DateFormat('M月d日 (E)', 'ja').format(_endDate),
                         style: const TextStyle(fontSize: 16, color: AppColors.textMain),
                       ),
-                      if (!_isAllDay)
-                        Text(
+                    ),
+                    if (!_isAllDay)
+                      InkWell(
+                        onTap: () => _pickTime(isStart: false),
+                        child: Text(
                           DateFormat('H:mm').format(_endDate),
                           style: const TextStyle(fontSize: 16, color: AppColors.textMain),
                         ),
-                    ],
-                  ),
+                      ),
+                  ],
                 ),
               ),
               InkWell(
@@ -1046,7 +1161,7 @@ class _AddEventDialogState extends State<AddEventDialog> {
     );
   }
 
-  Future<void> _pickDateTime({required bool isStart}) async {
+ Future<void> _pickDate({required bool isStart}) async {
     final initialDate = isStart ? _startDate : _endDate;
     final date = await showDatePicker(
       context: context,
@@ -1057,36 +1172,39 @@ class _AddEventDialogState extends State<AddEventDialog> {
     );
     
     if (date != null && mounted) {
-      if (_isAllDay) {
-        setState(() {
-          if (isStart) {
-            _startDate = DateTime(date.year, date.month, date.day);
-            if (_endDate.isBefore(_startDate)) _endDate = _startDate;
-          } else {
-            _endDate = DateTime(date.year, date.month, date.day);
+      setState(() {
+        if (isStart) {
+          _startDate = DateTime(date.year, date.month, date.day, _startDate.hour, _startDate.minute);
+          if (_endDate.isBefore(_startDate)) {
+            _endDate = _startDate.add(const Duration(hours: 1));
           }
-        });
-      } else {
-        final time = await showTimePicker(
-          context: context,
-          initialTime: TimeOfDay.fromDateTime(initialDate),
-        );
-        if (time != null) {
-          setState(() {
-            if (isStart) {
-              _startDate = DateTime(date.year, date.month, date.day, time.hour, time.minute);
-              if (_endDate.isBefore(_startDate)) {
-                _endDate = _startDate.add(const Duration(hours: 1));
-              }
-            } else {
-              _endDate = DateTime(date.year, date.month, date.day, time.hour, time.minute);
-            }
-          });
+        } else {
+          _endDate = DateTime(date.year, date.month, date.day, _endDate.hour, _endDate.minute);
         }
-      }
+      });
     }
   }
 
+  Future<void> _pickTime({required bool isStart}) async {
+    final initialDate = isStart ? _startDate : _endDate;
+    final time = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.fromDateTime(initialDate),
+    );
+    
+    if (time != null && mounted) {
+      setState(() {
+        if (isStart) {
+          _startDate = DateTime(_startDate.year, _startDate.month, _startDate.day, time.hour, time.minute);
+          if (_endDate.isBefore(_startDate)) {
+            _endDate = _startDate.add(const Duration(hours: 1));
+          }
+        } else {
+          _endDate = DateTime(_endDate.year, _endDate.month, _endDate.day, time.hour, time.minute);
+        }
+      });
+    }
+  }
   void _showRecurrenceDialog() {
     showDialog(
       context: context,
@@ -1336,6 +1454,7 @@ class _AddEventDialogState extends State<AddEventDialog> {
               child: _PersonSelectSheet(
                 title: '担当者を選択',
                 type: 'staff',
+                filterKey: _isManualLocation ? null : _selectedClassroom,
                 initialSelectedIds: _selectedStaffIds,
                 onConfirmed: (items) {
                   setState(() {
@@ -1357,6 +1476,7 @@ class _AddEventDialogState extends State<AddEventDialog> {
         builder: (ctx) => _PersonSelectSheet(
           title: '担当者を選択',
           type: 'staff',
+          filterKey: _isManualLocation ? null : _selectedClassroom,
           initialSelectedIds: _selectedStaffIds,
           onConfirmed: (items) {
             setState(() {
@@ -1369,7 +1489,8 @@ class _AddEventDialogState extends State<AddEventDialog> {
       );
     }
   }
-}
+  }
+
 
 // ========================================
 // 人物選択シート
@@ -1477,10 +1598,17 @@ class _PersonSelectSheetState extends State<_PersonSelectSheet> {
             }
           }
         }
-      } else {
+     } else {
         final snapshot = await FirebaseFirestore.instance.collection('staffs').get();
         for (var doc in snapshot.docs) {
           final data = doc.data();
+          
+          // 教室フィルター（filterKeyが指定されている場合）
+          if (widget.filterKey != null) {
+            final classrooms = List<String>.from(data['classrooms'] ?? []);
+            if (!classrooms.contains(widget.filterKey)) continue;
+          }
+          
           String name = data['name'] ?? '${data['lastName'] ?? ''} ${data['firstName'] ?? ''}';
           final uid = data['uid'] ?? doc.id;
           final kana = data['furigana'] ?? data['lastNameKana'] ?? name;

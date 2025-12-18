@@ -795,13 +795,10 @@ class _PlusDashboardContentState extends State<PlusDashboardContent> {
                 // 生徒選択
                 InkWell(
                   onTap: () {
-                    _showStudentSelectionDialogForNote(
-                      selectedStudent,
-                      (student) {
-                        setDialogState(() => selectedStudent = student);
-                      },
-                    );
-                  },
+  _showStudentSelectionDialog((student) {
+    setDialogState(() => selectedStudent = student['name']);
+  });
+},
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                     decoration: BoxDecoration(
@@ -887,43 +884,7 @@ class _PlusDashboardContentState extends State<PlusDashboardContent> {
     );
   }
 
-  // 生徒選択ダイアログ（メモ用）
-  void _showStudentSelectionDialogForNote(String? currentStudent, Function(String) onSelect) {
-    showDialog(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        backgroundColor: Colors.white,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        title: const Text('生徒を選択', style: TextStyle(fontSize: 16)),
-        content: SizedBox(
-          width: 300,
-          height: 400,
-          child: ListView.builder(
-            itemCount: _allStudents.length,
-            itemBuilder: (context, index) {
-              final student = _allStudents[index];
-              final name = student['name'] as String;
-              final isSelected = currentStudent == name;
-              
-              return ListTile(
-                title: Text(
-                  name,
-                  style: TextStyle(
-                    fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                    color: isSelected ? AppColors.primary : AppColors.textMain,
-                  ),
-                ),
-                onTap: () {
-                  Navigator.pop(dialogContext);
-                  onSelect(name);
-                },
-              );
-            },
-          ),
-        ),
-      ),
-    );
-  }
+
 
   // メモ編集ダイアログ
   void _showEditNoteDialog(String studentName, String noteKey, String currentContent) {
@@ -1711,10 +1672,9 @@ class _PlusDashboardContentState extends State<PlusDashboardContent> {
                   // 生徒選択（生徒モードのみ）
                   if (inputMode == 'student') ...[
                     InkWell(
-                      onTap: () => _showStudentSelectionDialogForTask(
-                        selectedStudent,
-                        (student) => setDialogState(() => selectedStudent = student),
-                      ),
+                      onTap: () => _showStudentSelectionDialog(
+  (student) => setDialogState(() => selectedStudent = student),
+),
                       child: Container(
                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                         decoration: BoxDecoration(
@@ -2036,134 +1996,7 @@ class _PlusDashboardContentState extends State<PlusDashboardContent> {
     );
   }
 
-  // タスク用の生徒選択ダイアログ
-  void _showStudentSelectionDialogForTask(
-    Map<String, dynamic>? currentStudent,
-    Function(Map<String, dynamic>?) onConfirm,
-  ) {
-    Map<String, dynamic>? tempSelection = currentStudent;
-    String searchText = '';
-
-    showDialog(
-      context: context,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (dialogContext, setDialogState) {
-          // 検索フィルタリング
-          final filteredStudents = searchText.isEmpty
-              ? _allStudents
-              : _allStudents.where((s) {
-                  final name = (s['name'] as String).toLowerCase();
-                  return name.contains(searchText.toLowerCase());
-                }).toList();
-
-          // あいうえお順でグループ分け
-          final groupedStudents = <String, List<Map<String, dynamic>>>{};
-          for (var student in filteredStudents) {
-            final kana = student['lastNameKana'] as String? ?? '';
-            final group = _getKanaGroup(kana);
-            groupedStudents.putIfAbsent(group, () => []);
-            groupedStudents[group]!.add(student);
-          }
-          final sortedGroups = groupedStudents.keys.toList()..sort();
-
-          return AlertDialog(
-            backgroundColor: Colors.white,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            title: const Text('生徒を選択', style: TextStyle(fontSize: 18)),
-            content: SizedBox(
-              width: 350,
-              height: 400,
-              child: Column(
-                children: [
-                  TextField(
-                    decoration: InputDecoration(
-                      hintText: '名前で検索...',
-                      prefixIcon: const Icon(Icons.search, size: 20),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                      isDense: true,
-                    ),
-                    onChanged: (value) => setDialogState(() => searchText = value),
-                  ),
-                  const SizedBox(height: 12),
-                  Expanded(
-                    child: filteredStudents.isEmpty
-                        ? const Center(child: Text('生徒が見つかりません'))
-                        : ListView.builder(
-                            itemCount: sortedGroups.length,
-                            itemBuilder: (context, groupIndex) {
-                              final group = sortedGroups[groupIndex];
-                              final studentsInGroup = groupedStudents[group]!;
-                              return Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Container(
-                                    width: double.infinity,
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 12,
-                                      vertical: 6,
-                                    ),
-                                    color: Colors.grey.shade100,
-                                    child: Text(
-                                      group,
-                                      style: TextStyle(
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.bold,
-                                        color: Colors.grey.shade700,
-                                      ),
-                                    ),
-                                  ),
-                                  ...studentsInGroup.map((student) {
-                                    final isSelected =
-                                        tempSelection?['name'] == student['name'];
-                                    return ListTile(
-                                      dense: true,
-                                      title: Text(student['name']),
-                                      leading: Icon(
-                                        isSelected
-                                            ? Icons.radio_button_checked
-                                            : Icons.radio_button_unchecked,
-                                        color: isSelected
-                                            ? AppColors.primary
-                                            : AppColors.textSub,
-                                        size: 20,
-                                      ),
-                                      onTap: () =>
-                                          setDialogState(() => tempSelection = student),
-                                    );
-                                  }),
-                                ],
-                              );
-                            },
-                          ),
-                  ),
-                ],
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(dialogContext),
-                child: const Text('キャンセル'),
-              ),
-              ElevatedButton(
-                onPressed: () {
-                  Navigator.pop(dialogContext);
-                  onConfirm(tempSelection);
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primary,
-                  foregroundColor: Colors.white,
-                ),
-                child: const Text('確定'),
-              ),
-            ],
-          );
-        },
-      ),
-    );
-  }
+ 
 
   String _getKanaGroup(String kana) {
     if (kana.isEmpty) return 'その他';
@@ -2383,10 +2216,9 @@ class _PlusDashboardContentState extends State<PlusDashboardContent> {
                           if (inputMode == 'student') ...[
                             // 生徒選択
                             InkWell(
-                              onTap: () => _showStudentSelectionDialogForSchedule(
-                                selectedStudent,
-                                (student) => setDialogState(() => selectedStudent = student),
-                              ),
+                              onTap: () => _showStudentSelectionDialog(
+  (student) => setDialogState(() => selectedStudent = student),
+),
                               child: Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                                 decoration: BoxDecoration(
@@ -2782,116 +2614,113 @@ class _PlusDashboardContentState extends State<PlusDashboardContent> {
     );
   }
 
-  // スケジュール用の生徒選択ダイアログ
-  void _showStudentSelectionDialogForSchedule(
-    Map<String, dynamic>? currentStudent,
-    Function(Map<String, dynamic>?) onConfirm,
-  ) {
-    String searchText = '';
+// ===== 共通の生徒選択ダイアログ =====
+void _showStudentSelectionDialog(Function(Map<String, dynamic>) onSelect) {
+  String searchText = '';
 
-    showDialog(
-      context: context,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (dialogContext, setDialogState) {
-          final filteredStudents = searchText.isEmpty
-              ? _allStudents
-              : _allStudents.where((s) {
-                  final name = (s['name'] as String).toLowerCase();
-                  return name.contains(searchText.toLowerCase());
-                }).toList();
+  showDialog(
+    context: context,
+    builder: (dialogContext) => StatefulBuilder(
+      builder: (dialogContext, setDialogState) {
+        final filteredStudents = searchText.isEmpty
+            ? _allStudents
+            : _allStudents.where((s) {
+                final name = (s['name'] as String).toLowerCase();
+                return name.contains(searchText.toLowerCase());
+              }).toList();
 
-          final groupedStudents = <String, List<Map<String, dynamic>>>{};
-          for (var student in filteredStudents) {
-            final kana = student['lastNameKana'] as String? ?? '';
-            final group = _getKanaGroup(kana);
-            groupedStudents.putIfAbsent(group, () => []);
-            groupedStudents[group]!.add(student);
-          }
-          final sortedGroups = groupedStudents.keys.toList()..sort();
+        final groupedStudents = <String, List<Map<String, dynamic>>>{};
+        for (var student in filteredStudents) {
+          final kana = student['lastNameKana'] as String? ?? '';
+          final group = _getKanaGroup(kana);
+          groupedStudents.putIfAbsent(group, () => []);
+          groupedStudents[group]!.add(student);
+        }
+        final sortedGroups = groupedStudents.keys.toList()..sort();
 
-          return AlertDialog(
-            backgroundColor: Colors.white,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            title: const Text('生徒を選択', style: TextStyle(fontSize: 18)),
-            content: SizedBox(
-              width: 350,
-              height: 400,
-              child: Column(
-                children: [
-                  TextField(
-                    decoration: InputDecoration(
-                      hintText: '名前で検索...',
-                      prefixIcon: const Icon(Icons.search, size: 20, color: Colors.grey),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        borderSide: BorderSide(color: Colors.grey.shade300),
-                      ),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                      isDense: true,
+        return AlertDialog(
+          backgroundColor: Colors.white,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          title: const Text('生徒を選択', style: TextStyle(fontSize: 18)),
+          content: SizedBox(
+            width: 350,
+            height: 400,
+            child: Column(
+              children: [
+                // 検索バー
+                TextField(
+                  decoration: InputDecoration(
+                    hintText: '名前で検索...',
+                    prefixIcon: const Icon(Icons.search, size: 20, color: Colors.grey),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: BorderSide(color: Colors.grey.shade300),
                     ),
-                    onChanged: (value) => setDialogState(() => searchText = value),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    isDense: true,
                   ),
-                  const SizedBox(height: 12),
-                  Expanded(
-                    child: filteredStudents.isEmpty
-                        ? const Center(child: Text('生徒が見つかりません', style: TextStyle(color: Colors.grey)))
-                        : ListView.builder(
-                            itemCount: sortedGroups.length,
-                            itemBuilder: (listContext, groupIndex) {
-                              final group = sortedGroups[groupIndex];
-                              final studentsInGroup = groupedStudents[group]!;
-                              return Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Container(
-                                    width: double.infinity,
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 12,
-                                      vertical: 6,
-                                    ),
-                                    color: Colors.grey.shade100,
-                                    child: Text(
-                                      group,
-                                      style: TextStyle(
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.bold,
-                                        color: Colors.grey.shade700,
-                                      ),
+                  onChanged: (value) => setDialogState(() => searchText = value),
+                ),
+                const SizedBox(height: 12),
+                // 生徒リスト
+                Expanded(
+                  child: filteredStudents.isEmpty
+                      ? const Center(child: Text('生徒が見つかりません', style: TextStyle(color: Colors.grey)))
+                      : ListView.builder(
+                          itemCount: sortedGroups.length,
+                          itemBuilder: (listContext, groupIndex) {
+                            final group = sortedGroups[groupIndex];
+                            final studentsInGroup = groupedStudents[group]!;
+                            return Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                // あ行、か行などの見出し
+                                Container(
+                                  width: double.infinity,
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 6,
+                                  ),
+                                  color: Colors.grey.shade100,
+                                  child: Text(
+                                    group,
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.grey.shade700,
                                     ),
                                   ),
-                                  ...studentsInGroup.map((student) {
-                                    final isSelected = currentStudent?['name'] == student['name'];
-                                    return ListTile(
-                                      dense: true,
-                                      title: Text(student['name'], style: TextStyle(
-                                        fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                                        color: isSelected ? AppColors.primary : null,
-                                      )),
-                                      onTap: () {
-                                        Navigator.pop(dialogContext);
-                                        onConfirm(student);
-                                      },
-                                    );
-                                  }),
-                                ],
-                              );
-                            },
-                          ),
-                  ),
-                ],
-              ),
+                                ),
+                                // 生徒リスト（タップで即選択）
+                                ...studentsInGroup.map((student) {
+                                  return ListTile(
+                                    dense: true,
+                                    title: Text(student['name']),
+                                    onTap: () {
+                                      Navigator.pop(dialogContext);
+                                      onSelect(student);
+                                    },
+                                  );
+                                }),
+                              ],
+                            );
+                          },
+                        ),
+                ),
+              ],
             ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(dialogContext),
-                child: const Text('キャンセル'),
-              ),
-            ],
-          );
-        },
-      ),
-    );
-  }
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('キャンセル'),
+            ),
+          ],
+        );
+      },
+    ),
+  );
+}
 
   // コース選択ダイアログ（追加用）
   void _showCourseSelectionDialogForAdd(String currentCourse, Function(String) onSelect) {

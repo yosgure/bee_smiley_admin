@@ -31,6 +31,7 @@ class AppStyles {
 ThemeData getAppTheme() {
   return ThemeData(
     useMaterial3: true,
+    fontFamily: 'NotoSansJP',
     colorScheme: ColorScheme.fromSeed(
       seedColor: AppColors.primary,
       primary: AppColors.primary,
@@ -49,7 +50,7 @@ ThemeData getAppTheme() {
       centerTitle: false,
       foregroundColor: AppColors.textMain,
       iconTheme: IconThemeData(color: AppColors.textMain),
-      titleTextStyle: TextStyle(fontSize: 18, fontWeight: FontWeight.normal, color: AppColors.textMain),
+      titleTextStyle: TextStyle(fontSize: 18, fontWeight: FontWeight.normal, color: AppColors.textMain,fontFamily: 'Noto Sans JP', ),
     ),
     
     elevatedButtonTheme: ElevatedButtonThemeData(
