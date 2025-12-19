@@ -8,7 +8,8 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:url_launcher/url_launcher.dart'; // ★追加: URLを開くためのパッケージ
 
 class ToolMasterScreen extends StatefulWidget {
-  const ToolMasterScreen({super.key});
+  final VoidCallback? onBack;
+  const ToolMasterScreen({super.key, this.onBack});
 
   @override
   State<ToolMasterScreen> createState() => _ToolMasterScreenState();
@@ -40,9 +41,20 @@ class _ToolMasterScreenState extends State<ToolMasterScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('教具マスタ'),
-        backgroundColor: Colors.white,
-        elevation: 0,
-      ),
+  centerTitle: true,
+  backgroundColor: Colors.white,
+  elevation: 0,
+  leading: IconButton(
+    icon: const Icon(Icons.arrow_back, color: Colors.black87),
+    onPressed: () {
+      if (widget.onBack != null) {
+        widget.onBack!();
+      } else {
+        Navigator.pop(context);
+      }
+    },
+  ),
+),
       backgroundColor: const Color(0xFFF2F2F7),
       body: StreamBuilder<QuerySnapshot>(
         stream: _toolsRef.snapshots(),

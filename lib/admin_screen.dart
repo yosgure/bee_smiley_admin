@@ -5,6 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:image/image.dart' as img;
+import 'attendance_screen.dart';
 
 // 各画面のインポート
 import 'student_manage_screen.dart';
@@ -23,10 +24,12 @@ import 'notification_settings_screen.dart';
 class AdminScreen extends StatefulWidget {
   // Web版で画面を差し替えるためのコールバック
   final void Function(Widget screen)? onOpenWebScreen;
+  final VoidCallback? onCloseWebScreen;
 
   const AdminScreen({
     super.key,
     this.onOpenWebScreen,
+     this.onCloseWebScreen,
   });
 
   @override
@@ -74,22 +77,56 @@ class _AdminScreenState extends State<AdminScreen> {
     }
   }
 
-  // 画面遷移ロジック（ここが修正の要です）
-  void _navigateTo(BuildContext context, Widget screen) {
-    // 画面幅600以上(Web) かつ コールバックが渡されている場合
-    final isWide = MediaQuery.of(context).size.width >= 600;
+void _navigateTo(BuildContext context, Widget screen) {
+  final isWide = MediaQuery.of(context).size.width >= 600;
+  
+  if (isWide && widget.onOpenWebScreen != null) {
+    // Web版: onBackを注入した画面を渡す
+    Widget screenWithBack;
     
-    if (isWide && widget.onOpenWebScreen != null) {
-      // Web: 右側エリアを差し替え（サイドメニューは残る）
-      widget.onOpenWebScreen!(screen);
+    if (screen is StaffManageScreen) {
+      screenWithBack = StaffManageScreen(onBack: widget.onCloseWebScreen);
+    } else if (screen is StudentManageScreen) {
+      screenWithBack = StudentManageScreen(onBack: widget.onCloseWebScreen);
+    } else if (screen is ToolMasterScreen) {
+      screenWithBack = ToolMasterScreen(onBack: widget.onCloseWebScreen);
+    } else if (screen is NonCognitiveSkillMasterScreen) {
+      screenWithBack = NonCognitiveSkillMasterScreen(onBack: widget.onCloseWebScreen);
+    } else if (screen is SensitivePeriodMasterScreen) {
+      screenWithBack = SensitivePeriodMasterScreen(onBack: widget.onCloseWebScreen);
+    } else if (screen is ClassroomMasterScreen) {
+      screenWithBack = ClassroomMasterScreen(onBack: widget.onCloseWebScreen);
+    } else if (screen is NotificationSettingsScreen) {
+      screenWithBack = NotificationSettingsScreen(onBack: widget.onCloseWebScreen);
+    } else if (screen is StaffCsvImportScreen) {
+      screenWithBack = StaffCsvImportScreen(onBack: widget.onCloseWebScreen);
+    } else if (screen is FamilyCsvImportScreen) {
+      screenWithBack = FamilyCsvImportScreen(onBack: widget.onCloseWebScreen);
+    } else if (screen is ToolCsvImportScreen) {
+      screenWithBack = ToolCsvImportScreen(onBack: widget.onCloseWebScreen);
+    } else if (screen is StaffCsvExportScreen) {
+      screenWithBack = StaffCsvExportScreen(onBack: widget.onCloseWebScreen);
+    } else if (screen is FamilyCsvExportScreen) {
+      screenWithBack = FamilyCsvExportScreen(onBack: widget.onCloseWebScreen);
+    } else if (screen is ToolCsvExportScreen) {
+      screenWithBack = ToolCsvExportScreen(onBack: widget.onCloseWebScreen);
     } else {
-      // Mobile: 通常の全画面遷移（Navigator.push）
-      // ※スマホのUIは一切変わりません
-      Navigator.push(
-        context,
-        MaterialPageRoute(builder: (context) => screen),
-      );
+      screenWithBack = screen;
     }
+    
+    widget.onOpenWebScreen!(screenWithBack);
+  } else {
+    // Mobile: 通常遷移
+    Navigator.push(context, MaterialPageRoute(builder: (_) => screen));
+  }
+}
+
+  // 入退室管理用 - 常に全画面遷移
+  void _navigateFullScreen(BuildContext context, Widget screen) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => screen),
+    );
   }
 
   @override
@@ -155,18 +192,54 @@ class _AdminScreenState extends State<AdminScreen> {
           ),
           const SizedBox(height: 24),
           _buildSettingsSection(
-            context,
-            '施設の管理',
-            [
-              _MenuData(
-                title: '教室設定',
-                icon: Icons.store,
-                color: Colors.brown,
-                description: '予定で使う部屋・場所',
-                destination: const ClassroomMasterScreen(),
-              ),
-            ],
-          ),
+  context,
+  '施設の管理',
+  [
+    _MenuData(
+      title: '教室設定',
+      icon: Icons.store,
+      color: Colors.brown,
+      description: '予定で使う部屋・場所',
+      destination: const ClassroomMasterScreen(),
+    ),
+  ],
+),
+const SizedBox(height: 8),
+Container(
+  decoration: BoxDecoration(
+    color: Colors.white,
+    borderRadius: BorderRadius.circular(10),
+    boxShadow: [
+      BoxShadow(
+        color: Colors.black.withOpacity(0.05),
+        blurRadius: 2,
+        offset: const Offset(0, 1),
+      ),
+    ],
+  ),
+  child: ListTile(
+    leading: Container(
+      padding: const EdgeInsets.all(6),
+      decoration: BoxDecoration(
+        color: Colors.green.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: const Icon(Icons.how_to_reg, color: Colors.green, size: 24),
+    ),
+    title: const Text(
+      '入退室管理',
+      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+    ),
+    subtitle: const Text(
+      'タブレット用の入退室画面',
+      style: TextStyle(fontSize: 12, color: Colors.grey),
+    ),
+    trailing: const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey),
+    onTap: () {
+      _navigateFullScreen(context, const AttendanceClassroomSelectScreen());
+    },
+  ),
+),
           const SizedBox(height: 24),
           _buildCsvSection(context),
           const SizedBox(height: 24),
@@ -972,7 +1045,6 @@ class _AdminScreenState extends State<AdminScreen> {
                         );
                         return;
                       }
-                      // 診断コードなしの正式版遷移
                       _navigateTo(context, item.destination!);
                     },
                   ),

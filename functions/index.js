@@ -1195,3 +1195,77 @@ exports.deleteStaffAccount = onCall({ region: 'asia-northeast1' }, async (reques
     throw new HttpsError('internal', error.message);
   }
 });
+
+// 入退室通知を送信
+exports.sendAttendanceNotification = onDocumentCreated(
+  {
+    document: "attendance_notifications/{docId}",
+    region: "asia-northeast1",
+  },
+  async (event) => {
+    const data = event.data.data();
+    
+    if (!data || data.processed) return null;
+    
+    const fcmTokens = data.fcmTokens || [];
+    const title = data.title;
+    const body = data.body;
+    const type = data.type;
+    
+    if (fcmTokens.length === 0) {
+      console.log('No FCM tokens found');
+      return null;
+    }
+    
+    try {
+      const response = await messaging.sendEachForMulticast({
+        tokens: fcmTokens,
+        notification: {
+          title: title,
+          body: body,
+        },
+        data: {
+          type: 'attendance',
+          action: type,
+          studentName: data.studentName || '',
+          lessonName: data.lessonName || '',
+          classroom: data.classroom || '',
+          click_action: 'FLUTTER_NOTIFICATION_CLICK',
+        },
+        apns: {
+          payload: {
+            aps: {
+              badge: 1,
+              sound: "default",
+            },
+          },
+        },
+        android: {
+          notification: {
+            sound: "default",
+            channelId: "high_importance_channel",
+          },
+        },
+      });
+      
+      console.log(`入退室通知送信: ${response.successCount}件成功`);
+      
+      await event.data.ref.update({ 
+        processed: true,
+        processedAt: FieldValue.serverTimestamp(),
+        successCount: response.successCount,
+        failureCount: response.failureCount,
+      });
+      
+      return null;
+    } catch (error) {
+      console.error('入退室通知エラー:', error);
+      await event.data.ref.update({ 
+        processed: true,
+        processedAt: FieldValue.serverTimestamp(),
+        error: String(error),
+      });
+      return null;
+    }
+  }
+);

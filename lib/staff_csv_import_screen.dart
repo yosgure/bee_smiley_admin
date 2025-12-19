@@ -7,7 +7,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 class StaffCsvImportScreen extends StatefulWidget {
-  const StaffCsvImportScreen({super.key});
+  final VoidCallback? onBack;
+  const StaffCsvImportScreen({super.key, this.onBack});
 
   @override
   State<StaffCsvImportScreen> createState() => _StaffCsvImportScreenState();
@@ -143,7 +144,23 @@ class _StaffCsvImportScreenState extends State<StaffCsvImportScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('スタッフCSV一括登録')),
+appBar: AppBar(
+  title: const Text('スタッフCSV一括登録'),
+  centerTitle: true,
+  backgroundColor: Colors.white,
+  elevation: 0,
+  leading: IconButton(
+    icon: const Icon(Icons.arrow_back, color: Colors.black87),
+    onPressed: () {
+      if (widget.onBack != null) {
+        widget.onBack!();
+      } else {
+        Navigator.pop(context);
+      }
+    },
+  ),
+),
+
       body: Padding(
         padding: const EdgeInsets.all(24.0),
         child: Column(

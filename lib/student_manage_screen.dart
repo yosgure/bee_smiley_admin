@@ -3,8 +3,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 
 class StudentManageScreen extends StatefulWidget {
-  const StudentManageScreen({super.key});
-
+  final VoidCallback? onBack;
+  const StudentManageScreen({super.key, this.onBack});
   @override
   State<StudentManageScreen> createState() => _StudentManageScreenState();
 }
@@ -113,11 +113,22 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('保護者・児童管理'),
-        backgroundColor: Colors.white,
-        elevation: 0,
-      ),
+appBar: AppBar(
+  title: const Text('保護者・児童管理'),
+  centerTitle: true,
+  backgroundColor: Colors.white,
+  elevation: 0,
+  leading: IconButton(
+    icon: const Icon(Icons.arrow_back, color: Colors.black87),
+    onPressed: () {
+      if (widget.onBack != null) {
+        widget.onBack!();
+      } else {
+        Navigator.pop(context);
+      }
+    },
+  ),
+),
       backgroundColor: const Color(0xFFF2F2F7),
       body: StreamBuilder<QuerySnapshot>(
         stream: _familiesRef.snapshots(),

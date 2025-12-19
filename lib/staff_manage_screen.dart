@@ -9,7 +9,8 @@ import 'package:image_picker/image_picker.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 
 class StaffManageScreen extends StatefulWidget {
-  const StaffManageScreen({super.key});
+  final VoidCallback? onBack; 
+    const StaffManageScreen({super.key, this.onBack});
 
   @override
   State<StaffManageScreen> createState() => _StaffManageScreenState();
@@ -116,11 +117,22 @@ class _StaffManageScreenState extends State<StaffManageScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('スタッフ管理'),
-        backgroundColor: Colors.white,
-        elevation: 0,
-      ),
+appBar: AppBar(
+  title: const Text('スタッフ管理'),
+  centerTitle: true,
+  backgroundColor: Colors.white,
+  elevation: 0,
+  leading: IconButton(
+    icon: const Icon(Icons.arrow_back, color: Colors.black87),
+    onPressed: () {
+      if (widget.onBack != null) {
+        widget.onBack!();
+      } else {
+        Navigator.pop(context);
+      }
+    },
+  ),
+),
       backgroundColor: const Color(0xFFF2F2F7),
       body: StreamBuilder<QuerySnapshot>(
         stream: _staffsRef.snapshots(),

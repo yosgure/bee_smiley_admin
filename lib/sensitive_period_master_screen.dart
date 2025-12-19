@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart'; // Firestore
 
 class SensitivePeriodMasterScreen extends StatefulWidget {
-  const SensitivePeriodMasterScreen({super.key});
+  final VoidCallback? onBack;
+  const SensitivePeriodMasterScreen({super.key, this.onBack});
 
   @override
   State<SensitivePeriodMasterScreen> createState() => _SensitivePeriodMasterScreenState();
@@ -18,9 +19,21 @@ class _SensitivePeriodMasterScreenState extends State<SensitivePeriodMasterScree
     return Scaffold(
       appBar: AppBar(
         title: const Text('敏感期リスト'),
-        backgroundColor: Colors.white,
-        elevation: 0,
-      ),
+centerTitle: true,
+  backgroundColor: Colors.white,
+  elevation: 0,
+  leading: IconButton(
+    icon: const Icon(Icons.arrow_back, color: Colors.black87),
+    onPressed: () {
+      if (widget.onBack != null) {
+        widget.onBack!();
+      } else {
+        Navigator.pop(context);
+      }
+    },
+  ),
+),
+
       backgroundColor: const Color(0xFFF2F2F7),
       
       // リアルタイムデータ取得

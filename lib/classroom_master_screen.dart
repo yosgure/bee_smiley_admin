@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart'; // Firestore用パッケージ
 
 class ClassroomMasterScreen extends StatefulWidget {
-  const ClassroomMasterScreen({super.key});
+  final VoidCallback? onBack;
+  const ClassroomMasterScreen({super.key, this.onBack});
 
   @override
   State<ClassroomMasterScreen> createState() => _ClassroomMasterScreenState();
@@ -27,9 +28,21 @@ class _ClassroomMasterScreenState extends State<ClassroomMasterScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('教室設定'),
-        backgroundColor: Colors.white,
-        elevation: 0,
-      ),
+centerTitle: true,
+  backgroundColor: Colors.white,
+  elevation: 0,
+  leading: IconButton(
+    icon: const Icon(Icons.arrow_back, color: Colors.black87),
+    onPressed: () {
+      if (widget.onBack != null) {
+        widget.onBack!();
+      } else {
+        Navigator.pop(context);
+      }
+    },
+  ),
+),
+
       backgroundColor: const Color(0xFFF2F2F7),
       
       // ★ここが重要：Firestoreのデータをリアルタイムに表示する仕組み

@@ -343,13 +343,14 @@ class _AdminShellState extends State<AdminShell> {
         return _adminDetailScreen!;
       }
       // 通常の管理メニュー画面（コールバックを渡す）
-      return AdminScreen(
-        onOpenWebScreen: (screen) {
-          setState(() {
-            _adminDetailScreen = screen;
-          });
-        },
-      );
+return AdminScreen(
+  onOpenWebScreen: (screen) {
+    setState(() => _adminDetailScreen = screen);
+  },
+  onCloseWebScreen: () {
+    setState(() => _adminDetailScreen = null);
+  },
+);
     }
 
     switch (_staffType) {

@@ -7,7 +7,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 class FamilyCsvImportScreen extends StatefulWidget {
-  const FamilyCsvImportScreen({super.key});
+  final VoidCallback? onBack;
+  const FamilyCsvImportScreen({super.key, this.onBack});
 
   @override
   State<FamilyCsvImportScreen> createState() => _FamilyCsvImportScreenState();
@@ -460,11 +461,23 @@ class _FamilyCsvImportScreenState extends State<FamilyCsvImportScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('保護者CSV一括登録・更新'),
-        backgroundColor: Colors.white,
-        elevation: 0,
-      ),
+appBar: AppBar(
+  title: const Text('保護者CSV一括登録・更新'),
+  centerTitle: true,
+  backgroundColor: Colors.white,
+  elevation: 0,
+  leading: IconButton(
+    icon: const Icon(Icons.arrow_back, color: Colors.black87),
+    onPressed: () {
+      if (widget.onBack != null) {
+        widget.onBack!();
+      } else {
+        Navigator.pop(context);
+      }
+    },
+  ),
+),
+
       backgroundColor: const Color(0xFFF2F2F7),
       body: Padding(
         padding: const EdgeInsets.all(24.0),

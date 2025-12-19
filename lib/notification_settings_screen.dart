@@ -3,7 +3,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'notification_service.dart';
 
 class NotificationSettingsScreen extends StatefulWidget {
-  const NotificationSettingsScreen({super.key});
+  final VoidCallback? onBack;
+  const NotificationSettingsScreen({super.key, this.onBack});
 
   @override
   State<NotificationSettingsScreen> createState() => _NotificationSettingsScreenState();
@@ -91,7 +92,21 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
     return Scaffold(
       appBar: AppBar(
         title: const Text('通知設定'),
-      ),
+     centerTitle: true,
+  backgroundColor: Colors.white,
+  elevation: 0,
+  leading: IconButton(
+    icon: const Icon(Icons.arrow_back, color: Colors.black87),
+    onPressed: () {
+      if (widget.onBack != null) {
+        widget.onBack!();
+      } else {
+        Navigator.pop(context);
+      }
+    },
+  ),
+),
+
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : ListView(

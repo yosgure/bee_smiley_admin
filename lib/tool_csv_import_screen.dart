@@ -5,7 +5,8 @@ import 'package:csv/csv.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 class ToolCsvImportScreen extends StatefulWidget {
-  const ToolCsvImportScreen({super.key});
+  final VoidCallback? onBack;
+  const ToolCsvImportScreen({super.key, this.onBack});
 
   @override
   State<ToolCsvImportScreen> createState() => _ToolCsvImportScreenState();
@@ -81,9 +82,24 @@ class _ToolCsvImportScreenState extends State<ToolCsvImportScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('教具CSV一括登録')),
-      body: Padding(
+return Scaffold(
+  appBar: AppBar(
+    title: const Text('教具CSV一括登録'),
+    centerTitle: true,
+    backgroundColor: Colors.white,
+    elevation: 0,
+    leading: IconButton(
+      icon: const Icon(Icons.arrow_back, color: Colors.black87),
+      onPressed: () {
+        if (widget.onBack != null) {
+          widget.onBack!();
+        } else {
+          Navigator.pop(context);
+        }
+      },
+    ),
+  ),
+  body: Padding(
         padding: const EdgeInsets.all(24.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,

@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart'; // Firestore
 
 class NonCognitiveSkillMasterScreen extends StatefulWidget {
-  const NonCognitiveSkillMasterScreen({super.key});
+  final VoidCallback? onBack;
+  const NonCognitiveSkillMasterScreen({super.key, this.onBack});
 
   @override
   State<NonCognitiveSkillMasterScreen> createState() => _NonCognitiveSkillMasterScreenState();
@@ -18,9 +19,21 @@ class _NonCognitiveSkillMasterScreenState extends State<NonCognitiveSkillMasterS
     return Scaffold(
       appBar: AppBar(
         title: const Text('非認知能力マスタ'),
-        backgroundColor: Colors.white,
-        elevation: 0,
-      ),
+centerTitle: true,
+  backgroundColor: Colors.white,
+  elevation: 0,
+  leading: IconButton(
+    icon: const Icon(Icons.arrow_back, color: Colors.black87),
+    onPressed: () {
+      if (widget.onBack != null) {
+        widget.onBack!();
+      } else {
+        Navigator.pop(context);
+      }
+    },
+  ),
+),
+
       backgroundColor: const Color(0xFFF2F2F7),
       
       // リアルタイムデータ取得

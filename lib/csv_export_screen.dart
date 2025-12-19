@@ -52,7 +52,8 @@ class CsvExporter {
 // スタッフCSVエクスポート
 // ==========================================
 class StaffCsvExportScreen extends StatefulWidget {
-  const StaffCsvExportScreen({super.key});
+  final VoidCallback? onBack;
+  const StaffCsvExportScreen({super.key, this.onBack});
 
   @override
   State<StaffCsvExportScreen> createState() => _StaffCsvExportScreenState();
@@ -143,11 +144,22 @@ class _StaffCsvExportScreenState extends State<StaffCsvExportScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('スタッフCSVエクスポート'),
-        backgroundColor: Colors.white,
-        elevation: 0,
-      ),
+appBar: AppBar(
+  title: const Text('スタッフCSVエクスポート'),
+  centerTitle: true,
+  backgroundColor: Colors.white,
+  elevation: 0,
+  leading: IconButton(
+    icon: const Icon(Icons.arrow_back, color: Colors.black87),
+    onPressed: () {
+      if (widget.onBack != null) {
+        widget.onBack!();
+      } else {
+        Navigator.pop(context);
+      }
+    },
+  ),
+),
       backgroundColor: const Color(0xFFF2F2F7),
       body: Center(
         child: ConstrainedBox(
@@ -225,8 +237,8 @@ class _StaffCsvExportScreenState extends State<StaffCsvExportScreen> {
 // 保護者・児童CSVエクスポート
 // ==========================================
 class FamilyCsvExportScreen extends StatefulWidget {
-  const FamilyCsvExportScreen({super.key});
-
+  final VoidCallback? onBack;
+  const FamilyCsvExportScreen({super.key, this.onBack});
   @override
   State<FamilyCsvExportScreen> createState() => _FamilyCsvExportScreenState();
 }
@@ -404,11 +416,22 @@ class _FamilyCsvExportScreenState extends State<FamilyCsvExportScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('保護者・児童CSVエクスポート'),
-        backgroundColor: Colors.white,
-        elevation: 0,
-      ),
+appBar: AppBar(
+  title: const Text('保護者・児童CSVエクスポート'),
+  centerTitle: true,
+  backgroundColor: Colors.white,
+  elevation: 0,
+  leading: IconButton(
+    icon: const Icon(Icons.arrow_back, color: Colors.black87),
+    onPressed: () {
+      if (widget.onBack != null) {
+        widget.onBack!();
+      } else {
+        Navigator.pop(context);
+      }
+    },
+  ),
+),
       backgroundColor: const Color(0xFFF2F2F7),
       body: Center(
         child: ConstrainedBox(
@@ -486,7 +509,8 @@ class _FamilyCsvExportScreenState extends State<FamilyCsvExportScreen> {
 // 教具CSVエクスポート
 // ==========================================
 class ToolCsvExportScreen extends StatefulWidget {
-  const ToolCsvExportScreen({super.key});
+  final VoidCallback? onBack;
+  const ToolCsvExportScreen({super.key, this.onBack});
 
   @override
   State<ToolCsvExportScreen> createState() => _ToolCsvExportScreenState();
@@ -567,11 +591,22 @@ class _ToolCsvExportScreenState extends State<ToolCsvExportScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('教具CSVエクスポート'),
-        backgroundColor: Colors.white,
-        elevation: 0,
-      ),
+appBar: AppBar(
+  title: const Text('教具CSVエクスポート'),
+  centerTitle: true,
+  backgroundColor: Colors.white,
+  elevation: 0,
+  leading: IconButton(
+    icon: const Icon(Icons.arrow_back, color: Colors.black87),
+    onPressed: () {
+      if (widget.onBack != null) {
+        widget.onBack!();
+      } else {
+        Navigator.pop(context);
+      }
+    },
+  ),
+),
       backgroundColor: const Color(0xFFF2F2F7),
       body: Center(
         child: ConstrainedBox(
