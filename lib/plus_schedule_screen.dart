@@ -95,13 +95,18 @@ class _PlusScheduleContentState extends State<PlusScheduleContent> with Automati
   Set<String> _selectedFilters = {'all'}; // 'all', 'mySchedule', 'event', または講師名
 
 @override
-  void initState() {
-    super.initState();
-    _weekStart = _getMonday(DateTime.now());
-    _monthViewDate = DateTime(DateTime.now().year, DateTime.now().month, 1);
-    _loadSavedState();
-    _loadInitialData();
-  }
+void initState() {
+  super.initState();
+  _weekStart = _getMonday(DateTime.now());
+  _monthViewDate = DateTime(DateTime.now().year, DateTime.now().month, 1);
+  _initializeData();
+}
+
+// 新しいメソッド（initStateの直後に追加）
+Future<void> _initializeData() async {
+  await _loadSavedState();  // まず保存された状態を読み込む
+  await _loadInitialData(); // その後でデータを読み込む
+}
   
 // 保存された状態を読み込む
 Future<void> _loadSavedState() async {
@@ -123,13 +128,12 @@ Future<void> _loadSavedState() async {
           if (date != null) _monthViewDate = DateTime(date.year, date.month, 1);
         }
       });
-      if (_viewMode == 2) _loadLessonsForMonth();
+      // _loadLessonsForMonth() は削除（_loadInitialDataで読み込む）
     }
   } catch (e) {
     debugPrint('Error loading saved state: $e');
   }
 }
-
 Future<void> _saveViewMode(int mode) async {
   try {
     final prefs = await SharedPreferences.getInstance();
@@ -169,14 +173,20 @@ Future<void> _saveMonthViewDate(DateTime date) async {
   }
 
   Future<void> _loadInitialData() async {
-    await Future.wait([
-      _loadStaffList(),
-      _loadShiftData(),
-      _loadLessonsForWeek(),
-      _loadStudentsFromFirestore(),
-      _loadAllTasks(),
-    ]);
+  await Future.wait([
+    _loadStaffList(),
+    _loadShiftData(),
+    _loadStudentsFromFirestore(),
+    _loadAllTasks(),
+  ]);
+  
+  // viewModeに応じてレッスンを読み込む
+  if (_viewMode == 2) {
+    await _loadLessonsForMonth();
+  } else {
+    await _loadLessonsForWeek();
   }
+}
   
   // 全タスクを読み込み
   Future<void> _loadAllTasks() async {
@@ -5271,17 +5281,22 @@ await _loadLessonsForWeek(showLoading: false);
                         const SizedBox(width: 12),
                         Expanded(
                           child: MouseRegion(
-                            cursor: SystemMouseCursors.click,
-                            child: GestureDetector(
-                              onTap: () async {
-                                final link = lesson['link'] as String? ?? '';
-                                if (link.isNotEmpty) {
-                                  final uri = Uri.tryParse(link);
-                                  if (uri != null && await canLaunchUrl(uri)) {
-                                    await launchUrl(uri, mode: LaunchMode.externalApplication);
-                                  }
-                                }
-                              },
+  cursor: SystemMouseCursors.click,
+  child: GestureDetector(
+    onTap: () async {
+      // _allStudentsから最新のprofileUrlを取得
+      final student = _allStudents.firstWhere(
+        (s) => s['name'] == studentName,
+        orElse: () => <String, dynamic>{},
+      );
+      final link = student['profileUrl'] as String? ?? lesson['link'] as String? ?? '';
+      if (link.isNotEmpty) {
+        final uri = Uri.tryParse(link);
+        if (uri != null && await canLaunchUrl(uri)) {
+          await launchUrl(uri, mode: LaunchMode.externalApplication);
+        }
+      }
+    },
                               child: Text(
                                 studentName,
                                 style: const TextStyle(

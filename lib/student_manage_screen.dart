@@ -20,6 +20,10 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
 
   List<String> _classroomList = [];
 
+  // 検索用
+  String _searchQuery = '';
+  final TextEditingController _searchController = TextEditingController();
+
   // ExpansionTileControllerのマップ
   final Map<String, ExpansionTileController> _controllers = {};
   
@@ -41,6 +45,12 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
   void initState() {
     super.initState();
     _fetchClassrooms();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
   }
 
   Future<void> _fetchClassrooms() async {
@@ -113,226 +123,320 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-appBar: AppBar(
-  title: const Text('保護者・児童管理'),
-  centerTitle: true,
-  backgroundColor: Colors.white,
-  elevation: 0,
-  leading: IconButton(
-    icon: const Icon(Icons.arrow_back, color: Colors.black87),
-    onPressed: () {
-      if (widget.onBack != null) {
-        widget.onBack!();
-      } else {
-        Navigator.pop(context);
-      }
-    },
-  ),
-),
+      appBar: AppBar(
+        title: const Text('保護者・児童管理'),
+        centerTitle: true,
+        backgroundColor: Colors.white,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: Colors.black87),
+          onPressed: () {
+            if (widget.onBack != null) {
+              widget.onBack!();
+            } else {
+              Navigator.pop(context);
+            }
+          },
+        ),
+      ),
       backgroundColor: const Color(0xFFF2F2F7),
-      body: StreamBuilder<QuerySnapshot>(
-        stream: _familiesRef.snapshots(),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          if (snapshot.hasError) {
-            return const Center(child: Text('エラーが発生しました'));
-          }
+      body: Column(
+        children: [
+          // 検索窓
+          Container(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+            color: Colors.white,
+            child: TextField(
+              controller: _searchController,
+              decoration: InputDecoration(
+                hintText: '名前で検索...',
+                prefixIcon: const Icon(Icons.search, color: Colors.grey),
+                suffixIcon: _searchQuery.isNotEmpty
+                    ? IconButton(
+                        icon: const Icon(Icons.clear, color: Colors.grey),
+                        onPressed: () {
+                          setState(() {
+                            _searchController.clear();
+                            _searchQuery = '';
+                          });
+                        },
+                      )
+                    : null,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: BorderSide(color: Colors.grey.shade300),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: BorderSide(color: Colors.grey.shade300),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: const BorderSide(color: Colors.blue),
+                ),
+                filled: true,
+                fillColor: Colors.grey.shade50,
+                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                isDense: true,
+              ),
+              onChanged: (value) {
+                setState(() {
+                  _searchQuery = value.toLowerCase();
+                });
+              },
+            ),
+          ),
+          // リスト部分
+          Expanded(
+            child: StreamBuilder<QuerySnapshot>(
+              stream: _familiesRef.snapshots(),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                if (snapshot.hasError) {
+                  return const Center(child: Text('エラーが発生しました'));
+                }
 
-          final docs = List<QueryDocumentSnapshot>.from(snapshot.data!.docs);
+                final docs = List<QueryDocumentSnapshot>.from(snapshot.data!.docs);
 
-          if (docs.isEmpty) {
-            return const Center(
-              child: Text('データがありません。\n右下のマークで追加してください。', style: TextStyle(color: Colors.grey)),
-            );
-          }
+                if (docs.isEmpty) {
+                  return const Center(
+                    child: Text('データがありません。\n右下のマークで追加してください。', style: TextStyle(color: Colors.grey)),
+                  );
+                }
 
-          // ふりがな順に並び替え（姓のふりがな）
-          docs.sort((a, b) {
-            final dataA = a.data() as Map<String, dynamic>;
-            final dataB = b.data() as Map<String, dynamic>;
-            final kanaA = (dataA['lastNameKana'] ?? '').toString();
-            final kanaB = (dataB['lastNameKana'] ?? '').toString();
-            return kanaA.compareTo(kanaB);
-          });
+                // ふりがな順に並び替え（姓のふりがな）
+                docs.sort((a, b) {
+                  final dataA = a.data() as Map<String, dynamic>;
+                  final dataB = b.data() as Map<String, dynamic>;
+                  final kanaA = (dataA['lastNameKana'] ?? '').toString();
+                  final kanaB = (dataB['lastNameKana'] ?? '').toString();
+                  return kanaA.compareTo(kanaB);
+                });
 
-          // リスト表示用のウィジェットリストを作成
-          List<Widget> listWidgets = [];
-          String currentHeader = '';
+                // 検索フィルタリング
+                final filteredDocs = _searchQuery.isEmpty
+                    ? docs
+                    : docs.where((doc) {
+                        final data = doc.data() as Map<String, dynamic>;
+                        final lastName = (data['lastName'] ?? '').toString().toLowerCase();
+                        final firstName = (data['firstName'] ?? '').toString().toLowerCase();
+                        final lastNameKana = (data['lastNameKana'] ?? '').toString().toLowerCase();
+                        final firstNameKana = (data['firstNameKana'] ?? '').toString().toLowerCase();
+                        final fullName = '$lastName$firstName';
+                        final fullNameKana = '$lastNameKana$firstNameKana';
+                        
+                        // 児童名も検索対象
+                        final children = List<Map<String, dynamic>>.from(data['children'] ?? []);
+                        final childMatch = children.any((child) {
+                          final childName = (child['firstName'] ?? '').toString().toLowerCase();
+                          final childKana = (child['firstNameKana'] ?? '').toString().toLowerCase();
+                          return childName.contains(_searchQuery) || childKana.contains(_searchQuery);
+                        });
+                        
+                        return fullName.contains(_searchQuery) ||
+                               fullNameKana.contains(_searchQuery) ||
+                               childMatch;
+                      }).toList();
 
-          for (var familyDoc in docs) {
-            final data = familyDoc.data() as Map<String, dynamic>;
-            final lastNameKana = data['lastNameKana'] ?? '';
-            final header = _getKanaRow(lastNameKana);
+                // リスト表示用のウィジェットリストを作成
+                List<Widget> listWidgets = [];
+                String currentHeader = '';
 
-            // 行が変わったらヘッダーを挿入
-            if (header != currentHeader) {
-              currentHeader = header;
-              listWidgets.add(_buildSectionHeader(header));
-            }
-
-            final children = List<Map<String, dynamic>>.from(data['children'] ?? []);
-            final parentFullName = '${data['lastName'] ?? ''} ${data['firstName'] ?? ''}';
-            final parentKanaName = '${data['lastNameKana'] ?? ''} ${data['firstNameKana'] ?? ''}';
-            
-            String fullAddress = data['address'] ?? '';
-            if (data['postalCode'] != null && data['postalCode'].toString().isNotEmpty) {
-              fullAddress = '〒${data['postalCode']} $fullAddress';
-            }
-
-            final hasAccount = data['uid'] != null && data['uid'].toString().isNotEmpty;
-            final isInitialPassword = data['isInitialPassword'] == true;
-
-            // コントローラーを取得または作成
-            final controller = _controllers.putIfAbsent(
-              familyDoc.id, 
-              () => ExpansionTileController(),
-            );
-
-            listWidgets.add(
-              Card(
-                margin: const EdgeInsets.only(bottom: 12),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                child: ExpansionTile(
-                  controller: controller,
-                  key: PageStorageKey(familyDoc.id),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  collapsedShape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  // アコーディオンの排他制御
-                  onExpansionChanged: (isOpen) {
-                    if (isOpen) {
-                      // 他に開いているタイルがあれば閉じる
-                      if (_currentExpandedId != null && _currentExpandedId != familyDoc.id) {
-                        final prevController = _controllers[_currentExpandedId];
-                        if (prevController != null) {
-                          try {
-                            prevController.collapse();
-                          } catch (_) {}
-                        }
-                      }
-                      _currentExpandedId = familyDoc.id;
-                    } else {
-                      if (_currentExpandedId == familyDoc.id) {
-                        _currentExpandedId = null;
-                      }
-                    }
-                  },
-                  leading: CircleAvatar(
-                    backgroundColor: Colors.blue.shade100,
-                    child: const Icon(Icons.family_restroom, color: Colors.blue),
-                  ),
-                  title: Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          parentFullName.trim().isEmpty ? '名称未設定' : parentFullName,
-                          style: const TextStyle(fontWeight: FontWeight.bold),
+                // 検索結果0件の場合
+                if (filteredDocs.isEmpty && _searchQuery.isNotEmpty) {
+                  return Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.search_off, size: 64, color: Colors.grey.shade400),
+                        const SizedBox(height: 16),
+                        Text(
+                          '「$_searchQuery」に一致する結果がありません',
+                          style: TextStyle(color: Colors.grey.shade600),
                         ),
-                      ),
-                      if (hasAccount)
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: isInitialPassword ? Colors.orange.shade100 : Colors.green.shade100,
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Text(
-                            isInitialPassword ? '初期PW' : 'アクティブ',
-                            style: TextStyle(
-                              fontSize: 10,
-                              color: isInitialPassword ? Colors.orange.shade800 : Colors.green.shade800,
+                      ],
+                    ),
+                  );
+                }
+
+                for (var familyDoc in filteredDocs) {
+                  final data = familyDoc.data() as Map<String, dynamic>;
+                  final lastNameKana = data['lastNameKana'] ?? '';
+                  final header = _getKanaRow(lastNameKana);
+
+                  // 行が変わったらヘッダーを挿入
+                  if (header != currentHeader) {
+                    currentHeader = header;
+                    listWidgets.add(_buildSectionHeader(header));
+                  }
+
+                  final children = List<Map<String, dynamic>>.from(data['children'] ?? []);
+                  final parentFullName = '${data['lastName'] ?? ''} ${data['firstName'] ?? ''}';
+                  final parentKanaName = '${data['lastNameKana'] ?? ''} ${data['firstNameKana'] ?? ''}';
+                  
+                  String fullAddress = data['address'] ?? '';
+                  if (data['postalCode'] != null && data['postalCode'].toString().isNotEmpty) {
+                    fullAddress = '〒${data['postalCode']} $fullAddress';
+                  }
+
+                  final hasAccount = data['uid'] != null && data['uid'].toString().isNotEmpty;
+                  final isInitialPassword = data['isInitialPassword'] == true;
+
+                  // コントローラーを取得または作成
+                  final controller = _controllers.putIfAbsent(
+                    familyDoc.id, 
+                    () => ExpansionTileController(),
+                  );
+
+                  listWidgets.add(
+                    Card(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      child: ExpansionTile(
+                        controller: controller,
+                        key: PageStorageKey(familyDoc.id),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        collapsedShape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        // アコーディオンの排他制御
+                        onExpansionChanged: (isOpen) {
+                          if (isOpen) {
+                            // 他に開いているタイルがあれば閉じる
+                            if (_currentExpandedId != null && _currentExpandedId != familyDoc.id) {
+                              final prevController = _controllers[_currentExpandedId];
+                              if (prevController != null) {
+                                try {
+                                  prevController.collapse();
+                                } catch (_) {}
+                              }
+                            }
+                            _currentExpandedId = familyDoc.id;
+                          } else {
+                            if (_currentExpandedId == familyDoc.id) {
+                              _currentExpandedId = null;
+                            }
+                          }
+                        },
+                        leading: CircleAvatar(
+                          backgroundColor: Colors.blue.shade100,
+                          child: const Icon(Icons.family_restroom, color: Colors.blue),
+                        ),
+                        title: Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                parentFullName.trim().isEmpty ? '名称未設定' : parentFullName,
+                                style: const TextStyle(fontWeight: FontWeight.bold),
+                              ),
                             ),
-                          ),
-                        )
-                      else
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: Colors.grey.shade200,
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Text(
-                            '未登録',
-                            style: TextStyle(fontSize: 10, color: Colors.grey.shade600),
-                          ),
-                        ),
-                    ],
-                  ),
-                  subtitle: Text('児童数: ${children.length}名 / ID: ${data['loginId'] ?? "未設定"}'),
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Divider(),
-                          const Text('【保護者情報】', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)),
-                          _buildInfoRow('ふりがな', parentKanaName),
-                          _buildInfoRow('続柄', data['relation'] ?? ''),
-                          _buildInfoRow('電話番号', data['phone'] ?? ''),
-                          _buildInfoRow('メール', data['email'] ?? ''),
-                          _buildInfoRow('住所', fullAddress),
-                          const SizedBox(height: 8),
-                          const Text('【緊急連絡先】', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)),
-                          _buildInfoRow('氏名', data['emergencyName'] ?? ''),
-                          _buildInfoRow('続柄', data['emergencyRelation'] ?? ''),
-                          _buildInfoRow('電話', data['emergencyPhone'] ?? ''),
-                          
-                          const SizedBox(height: 12),
-                          const Text('【児童詳細】', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)),
-                          if (children.isEmpty) const Text('登録なし', style: TextStyle(color: Colors.grey)),
-                          ...children.map((child) => _buildChildCard(child)),
-
-                          const SizedBox(height: 16),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.end,
-                            children: [
-                              if (hasAccount)
-                                TextButton.icon(
-                                  icon: const Icon(Icons.lock_reset, color: Colors.orange),
-                                  label: const Text('PW初期化', style: TextStyle(color: Colors.orange)),
-                                  onPressed: () => _resetPassword(
-                                    familyDoc.id, 
-                                    data['uid'], 
-                                    parentFullName,
+                            if (hasAccount)
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: isInitialPassword ? Colors.orange.shade100 : Colors.green.shade100,
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Text(
+                                  isInitialPassword ? '初期PW' : 'アクティブ',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    color: isInitialPassword ? Colors.orange.shade800 : Colors.green.shade800,
                                   ),
                                 ),
-                              TextButton.icon(
-                                icon: const Icon(Icons.delete, color: Colors.red),
-                                label: const Text('削除', style: TextStyle(color: Colors.red)),
-                                onPressed: () => _deleteFamily(
-                                  familyDoc.id, 
-                                  data['uid'], 
-                                  parentFullName,
+                              )
+                            else
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: Colors.grey.shade200,
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Text(
+                                  '未登録',
+                                  style: TextStyle(fontSize: 10, color: Colors.grey.shade600),
                                 ),
                               ),
-                              const SizedBox(width: 8),
-                              ElevatedButton.icon(
-                                icon: const Icon(Icons.edit),
-                                label: const Text('編集'),
-                                style: ElevatedButton.styleFrom(
-                                    backgroundColor: Colors.blue, foregroundColor: Colors.white),
-                                onPressed: () => _showEditDialog(familyDoc: familyDoc),
-                              ),
-                            ],
+                          ],
+                        ),
+                        subtitle: Text('児童数: ${children.length}名 / ID: ${data['loginId'] ?? "未設定"}'),
+                        children: [
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Divider(),
+                                const Text('【保護者情報】', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)),
+                                _buildInfoRow('ふりがな', parentKanaName),
+                                _buildInfoRow('続柄', data['relation'] ?? ''),
+                                _buildInfoRow('電話番号', data['phone'] ?? ''),
+                                _buildInfoRow('メール', data['email'] ?? ''),
+                                _buildInfoRow('住所', fullAddress),
+                                const SizedBox(height: 8),
+                                const Text('【緊急連絡先】', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)),
+                                _buildInfoRow('氏名', data['emergencyName'] ?? ''),
+                                _buildInfoRow('続柄', data['emergencyRelation'] ?? ''),
+                                _buildInfoRow('電話', data['emergencyPhone'] ?? ''),
+                                
+                                const SizedBox(height: 12),
+                                const Text('【児童詳細】', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)),
+                                if (children.isEmpty) const Text('登録なし', style: TextStyle(color: Colors.grey)),
+                                ...children.map((child) => _buildChildCard(child)),
+
+                                const SizedBox(height: 16),
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.end,
+                                  children: [
+                                    if (hasAccount)
+                                      TextButton.icon(
+                                        icon: const Icon(Icons.lock_reset, color: Colors.orange),
+                                        label: const Text('PW初期化', style: TextStyle(color: Colors.orange)),
+                                        onPressed: () => _resetPassword(
+                                          familyDoc.id, 
+                                          data['uid'], 
+                                          parentFullName,
+                                        ),
+                                      ),
+                                    TextButton.icon(
+                                      icon: const Icon(Icons.delete, color: Colors.red),
+                                      label: const Text('削除', style: TextStyle(color: Colors.red)),
+                                      onPressed: () => _deleteFamily(
+                                        familyDoc.id, 
+                                        data['uid'], 
+                                        parentFullName,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    ElevatedButton.icon(
+                                      icon: const Icon(Icons.edit),
+                                      label: const Text('編集'),
+                                      style: ElevatedButton.styleFrom(
+                                          backgroundColor: Colors.blue, foregroundColor: Colors.white),
+                                      onPressed: () => _showEditDialog(familyDoc: familyDoc),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
                           ),
                         ],
                       ),
                     ),
-                  ],
-                ),
-              ),
-            );
-          }
+                  );
+                }
 
-          return ListView(
-            padding: const EdgeInsets.all(16),
-            children: listWidgets,
-          );
-        },
+                return ListView(
+                  padding: const EdgeInsets.all(16),
+                  children: listWidgets,
+                );
+              },
+            ),
+          ),
+        ],
       ),
-      floatingActionButton: FloatingActionButton(heroTag: null, 
+      floatingActionButton: FloatingActionButton(
+        heroTag: null, 
         onPressed: () => _showEditDialog(),
         backgroundColor: Colors.white,
         elevation: 4,
@@ -391,13 +495,13 @@ appBar: AppBar(
           Text('誕生日: ${child['birthDate']}', style: const TextStyle(fontSize: 12)),
           Text('所属: $classInfo', style: const TextStyle(fontSize: 12)),
           if ((child['allergy'] ?? '').isNotEmpty)
-          Text('特記事項: ${child['allergy']}', style: const TextStyle(fontSize: 12, color: Colors.red)),
-        if ((child['profileUrl'] ?? '').isNotEmpty)
-          Text('URL: ${child['profileUrl']}', style: const TextStyle(fontSize: 12, color: Colors.blue)),
-      ],
-    ),
-  );
-}
+            Text('特記事項: ${child['allergy']}', style: const TextStyle(fontSize: 12, color: Colors.red)),
+          if ((child['profileUrl'] ?? '').isNotEmpty)
+            Text('URL: ${child['profileUrl']}', style: const TextStyle(fontSize: 12, color: Colors.blue)),
+        ],
+      ),
+    );
+  }
 
   /// Cloud Functions経由でパスワードを初期化
   Future<void> _resetPassword(String docId, String? targetUid, String name) async {
