@@ -267,27 +267,51 @@ class _PlusDashboardContentState extends State<PlusDashboardContent> {
   }
 
   // タスクを追加
-  Future<void> _addTask(String title, String comment, bool isCustom, {String? studentName, DateTime? dueDate}) async {
-    try {
-      await FirebaseFirestore.instance.collection('plus_tasks').add({
-        'title': title,
-        'comment': comment,
-        'studentName': isCustom ? null : studentName,
-        'dueDate': dueDate != null ? Timestamp.fromDate(dueDate) : null,
-        'isCustom': isCustom,
-        'completed': false,
-        'createdAt': FieldValue.serverTimestamp(),
-      });
-      
-      // リロードして期限順に並べ直す
-      await _loadTasksFromFirestore();
-      if (mounted) {
-        setState(() {});
-      }
-    } catch (e) {
-      debugPrint('Error adding task: $e');
+  Future<Map<String, dynamic>?> _addTask(String title, String comment, bool isCustom, {String? studentName, DateTime? dueDate}) async {
+  try {
+    final docRef = await FirebaseFirestore.instance.collection('plus_tasks').add({
+      'title': title,
+      'comment': comment,
+      'studentName': isCustom ? null : studentName,
+      'dueDate': dueDate != null ? Timestamp.fromDate(dueDate) : null,
+      'isCustom': isCustom,
+      'completed': false,
+      'createdAt': FieldValue.serverTimestamp(),
+    });
+    
+    // 新しいタスクオブジェクトを作成
+    final newTask = {
+      'id': docRef.id,
+      'title': title,
+      'comment': comment,
+      'studentName': isCustom ? null : studentName,
+      'dueDate': dueDate != null ? Timestamp.fromDate(dueDate) : null,
+      'isCustom': isCustom,
+      'completed': false,
+    };
+    
+    // ローカルリストに追加
+    _tasks.add(newTask);
+    _tasks.sort((a, b) {
+      final dateA = a['dueDate'] as Timestamp?;
+      final dateB = b['dueDate'] as Timestamp?;
+      if (dateA == null && dateB == null) return 0;
+      if (dateA == null) return 1;
+      if (dateB == null) return -1;
+      return dateA.toDate().compareTo(dateB.toDate());
+    });
+    
+    if (mounted) {
+      setState(() {});
     }
+    
+    return newTask;
+  } catch (e) {
+    debugPrint('Error adding task: $e');
+    return null;
   }
+}
+    
 
   // タスクを更新（完了時は削除）
   Future<void> _updateTask(String id, {String? title, String? comment, bool? completed, DateTime? dueDate}) async {
@@ -1175,12 +1199,16 @@ class _PlusDashboardContentState extends State<PlusDashboardContent> {
     final schoolConsultation = studentNote['schoolConsultation'] as String? ?? '';
     final moveRequest = studentNote['moveRequest'] as String? ?? '';
     
-    // メモがあるかどうか
-    final hasAnyNote = scheduleNote.isNotEmpty || 
-        therapyPlan.isNotEmpty || 
-        schoolVisit.isNotEmpty || 
-        schoolConsultation.isNotEmpty ||
-        moveRequest.isNotEmpty;
+    // タスクがあるかどうか
+final hasTask = _tasks.any((t) => t['studentName'] == name && t['completed'] != true);
+
+// メモまたはタスクがあるかどうか
+final hasAnyNote = scheduleNote.isNotEmpty || 
+    therapyPlan.isNotEmpty || 
+    schoolVisit.isNotEmpty || 
+    schoolConsultation.isNotEmpty ||
+    moveRequest.isNotEmpty ||
+    hasTask;
     
     // 文字色（通常の場合は黒）
     final textColor = course == '通常' ? Colors.black87 : color;
@@ -1282,6 +1310,18 @@ class _PlusDashboardContentState extends State<PlusDashboardContent> {
         widgets.add(Text(moveRequest, style: const TextStyle(fontSize: 12)));
         widgets.add(const SizedBox(height: 8));
       }
+      // タスク情報
+final studentTasks = _tasks.where((t) => t['studentName'] == name && t['completed'] != true).toList();
+if (studentTasks.isNotEmpty) {
+  widgets.add(const Text('【タスク】', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)));
+  for (var task in studentTasks) {
+    final title = task['title'] as String? ?? '';
+    final dueDate = task['dueDate'] as Timestamp?;
+    final dueDateStr = dueDate != null ? ' (${DateFormat('M/d').format(dueDate.toDate())})' : '';
+    widgets.add(Text('・$title$dueDateStr', style: const TextStyle(fontSize: 12)));
+  }
+  widgets.add(const SizedBox(height: 8));
+}
       if (scheduleNote.isNotEmpty) {
         widgets.add(const Text('【メモ】', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)));
         widgets.add(Text(scheduleNote, style: const TextStyle(fontSize: 12)));
@@ -1808,21 +1848,21 @@ class _PlusDashboardContentState extends State<PlusDashboardContent> {
                 child: const Text('キャンセル'),
               ),
               ElevatedButton(
-                onPressed: canSave
-                    ? () {
-                        Navigator.pop(dialogContext);
-                        final studentNameValue = inputMode == 'student' 
-                            ? (selectedStudent?['name'] as String?) 
-                            : null;
-                        _addTask(
-                          titleController.text, 
-                          inputMode == 'student' ? commentController.text : '', 
-                          inputMode == 'custom',
-                          studentName: studentNameValue,
-                          dueDate: selectedDueDate,
-                        );
-                      }
-                    : null,
+  onPressed: canSave
+      ? () async {
+          final studentNameValue = inputMode == 'student' 
+              ? (selectedStudent?['name'] as String?) 
+              : null;
+          await _addTask(
+            titleController.text, 
+            inputMode == 'student' ? commentController.text : '', 
+            inputMode == 'custom',
+            studentName: studentNameValue,
+            dueDate: selectedDueDate,
+          );
+          Navigator.pop(dialogContext);
+        }
+      : null,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.primary,
                   foregroundColor: Colors.white,
@@ -2380,39 +2420,44 @@ class _PlusDashboardContentState extends State<PlusDashboardContent> {
                                 ),
                                 const SizedBox(width: 8),
                                 // 期限選択
-                                InkWell(
-                                  onTap: () async {
-                                    final picked = await showDatePicker(
-                                      context: dialogContext,
-                                      initialDate: newTaskDueDate ?? DateTime.now(),
-                                      firstDate: DateTime.now().subtract(const Duration(days: 365)),
-                                      lastDate: DateTime.now().add(const Duration(days: 365)),
-                                    );
-                                    if (picked != null) {
-                                      setDialogState(() => newTaskDueDate = picked);
-                                    }
-                                  },
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                                    decoration: BoxDecoration(
-                                      border: Border.all(color: Colors.grey.shade300),
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Icon(Icons.calendar_today, size: 16, color: newTaskDueDate != null ? AppColors.primary : AppColors.textSub),
-                                        if (newTaskDueDate != null) ...[
-                                          const SizedBox(width: 4),
-                                          Text(
-                                            DateFormat('M/d').format(newTaskDueDate!),
-                                            style: const TextStyle(fontSize: 12),
-                                          ),
-                                        ],
-                                      ],
-                                    ),
-                                  ),
-                                ),
+InkWell(
+  onTap: () async {
+    final picked = await showDatePicker(
+      context: dialogContext,
+      initialDate: newTaskDueDate ?? DateTime.now(),
+      firstDate: DateTime.now().subtract(const Duration(days: 365)),
+      lastDate: DateTime.now().add(const Duration(days: 365)),
+    );
+    if (picked != null) {
+      setDialogState(() => newTaskDueDate = picked);
+    }
+  },
+  child: Container(
+    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+    decoration: BoxDecoration(
+      border: Border.all(color: Colors.grey.shade300),
+      borderRadius: BorderRadius.circular(8),
+    ),
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(Icons.calendar_today, size: 16, color: newTaskDueDate != null ? AppColors.primary : AppColors.textSub),
+        if (newTaskDueDate != null) ...[
+          const SizedBox(width: 4),
+          Text(
+            DateFormat('M/d').format(newTaskDueDate!),
+            style: const TextStyle(fontSize: 12),
+          ),
+          const SizedBox(width: 4),
+          GestureDetector(
+            onTap: () => setDialogState(() => newTaskDueDate = null),
+            child: const Icon(Icons.close, size: 14, color: AppColors.textSub),
+          ),
+        ],
+      ],
+    ),
+  ),
+),
                               ],
                             ),
                             const SizedBox(height: 8),
@@ -2421,16 +2466,17 @@ class _PlusDashboardContentState extends State<PlusDashboardContent> {
                               alignment: Alignment.centerLeft,
                               child: GestureDetector(
                                 onTap: () async {
-                                  final taskText = newTaskController.text.trim();
-                                  if (taskText.isEmpty) return;
-                                  await _addTask(taskText, '', false, studentName: title, dueDate: newTaskDueDate);
-                                  newTaskController.clear();
-                                  await _loadTasksFromFirestore();
-                                  setDialogState(() {
-                                    newTaskDueDate = null;
-                                    studentTasks = _tasks.where((t) => t['studentName'] == title && t['completed'] != true).toList();
-                                  });
-                                },
+  final taskText = newTaskController.text.trim();
+  if (taskText.isEmpty) return;
+  final newTask = await _addTask(taskText, '', false, studentName: title, dueDate: newTaskDueDate);
+  newTaskController.clear();
+  setDialogState(() {
+    newTaskDueDate = null;
+    if (newTask != null) {
+      studentTasks = [...studentTasks, newTask];
+    }
+  });
+},
                                 child: Container(
                                   width: 24,
                                   height: 24,
@@ -2554,19 +2600,25 @@ class _PlusDashboardContentState extends State<PlusDashboardContent> {
                     child: SizedBox(
                       width: double.infinity,
                       child: ElevatedButton(
-                        onPressed: canSave
-                            ? () async {
-                                if (inputMode == 'student') {
-                                  setState(() {
-                                    _regularSchedule[day]?[timeSlot]?.add({
-                                      'name': selectedStudent!['name'],
-                                      'course': selectedCourse,
-                                      'note': '',
-                                    });
-                                  });
-                                  
-                                  // 生徒メモも保存
-                                  await _saveStudentNotesFromEdit(
+  onPressed: canSave
+      ? () async {
+          if (inputMode == 'student') {
+            // 入力中のタスクがあれば保存
+            final taskText = newTaskController.text.trim();
+            if (taskText.isNotEmpty) {
+              await _addTask(taskText, '', false, studentName: selectedStudent!['name'], dueDate: newTaskDueDate);
+            }
+            
+            setState(() {
+              _regularSchedule[day]?[timeSlot]?.add({
+                'name': selectedStudent!['name'],
+                'course': selectedCourse,
+                'note': '',
+              });
+            });
+            
+            // 生徒メモも保存
+            await _saveStudentNotesFromEdit(
                                     selectedStudent!['name'],
                                     therapyController.text,
                                     schoolVisitController.text,
@@ -2986,39 +3038,44 @@ void _showStudentSelectionDialog(Function(Map<String, dynamic>) onSelect) {
                               ),
                               const SizedBox(width: 8),
                               // 期限選択
-                              InkWell(
-                                onTap: () async {
-                                  final picked = await showDatePicker(
-                                    context: dialogContext,
-                                    initialDate: newTaskDueDate ?? DateTime.now(),
-                                    firstDate: DateTime.now().subtract(const Duration(days: 365)),
-                                    lastDate: DateTime.now().add(const Duration(days: 365)),
-                                  );
-                                  if (picked != null) {
-                                    setDialogState(() => newTaskDueDate = picked);
-                                  }
-                                },
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                                  decoration: BoxDecoration(
-                                    border: Border.all(color: Colors.grey.shade300),
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(Icons.calendar_today, size: 16, color: newTaskDueDate != null ? AppColors.primary : AppColors.textSub),
-                                      if (newTaskDueDate != null) ...[
-                                        const SizedBox(width: 4),
-                                        Text(
-                                          DateFormat('M/d').format(newTaskDueDate!),
-                                          style: const TextStyle(fontSize: 12),
-                                        ),
-                                      ],
-                                    ],
-                                  ),
-                                ),
-                              ),
+InkWell(
+  onTap: () async {
+    final picked = await showDatePicker(
+      context: dialogContext,
+      initialDate: newTaskDueDate ?? DateTime.now(),
+      firstDate: DateTime.now().subtract(const Duration(days: 365)),
+      lastDate: DateTime.now().add(const Duration(days: 365)),
+    );
+    if (picked != null) {
+      setDialogState(() => newTaskDueDate = picked);
+    }
+  },
+  child: Container(
+    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+    decoration: BoxDecoration(
+      border: Border.all(color: Colors.grey.shade300),
+      borderRadius: BorderRadius.circular(8),
+    ),
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(Icons.calendar_today, size: 16, color: newTaskDueDate != null ? AppColors.primary : AppColors.textSub),
+        if (newTaskDueDate != null) ...[
+          const SizedBox(width: 4),
+          Text(
+            DateFormat('M/d').format(newTaskDueDate!),
+            style: const TextStyle(fontSize: 12),
+          ),
+          const SizedBox(width: 4),
+          GestureDetector(
+            onTap: () => setDialogState(() => newTaskDueDate = null),
+            child: const Icon(Icons.close, size: 14, color: AppColors.textSub),
+          ),
+        ],
+      ],
+    ),
+  ),
+),
                             ],
                           ),
                           const SizedBox(height: 8),
@@ -3027,17 +3084,17 @@ void _showStudentSelectionDialog(Function(Map<String, dynamic>) onSelect) {
                             alignment: Alignment.centerLeft,
                             child: GestureDetector(
                               onTap: () async {
-                                final taskText = newTaskController.text.trim();
-                                if (taskText.isEmpty) return;
-                                await _addTask(taskText, '', false, studentName: studentName, dueDate: newTaskDueDate);
-                                newTaskController.clear();
-                                // タスクリストを再読み込み
-                                await _loadTasksFromFirestore();
-                                setDialogState(() {
-                                  newTaskDueDate = null;
-                                  studentTasks = _tasks.where((t) => t['studentName'] == studentName && t['completed'] != true).toList();
-                                });
-                              },
+  final taskText = newTaskController.text.trim();
+  if (taskText.isEmpty) return;
+  final newTask = await _addTask(taskText, '', false, studentName: studentName, dueDate: newTaskDueDate);
+  newTaskController.clear();
+  setDialogState(() {
+    newTaskDueDate = null;
+    if (newTask != null) {
+      studentTasks = [...studentTasks, newTask];
+    }
+  });
+},
                               child: Container(
                                 width: 24,
                                 height: 24,
@@ -3166,30 +3223,36 @@ void _showStudentSelectionDialog(Function(Map<String, dynamic>) onSelect) {
                         ),
                         const SizedBox(width: 8),
                         ElevatedButton(
-                          onPressed: () async {
-                            // レギュラースケジュール保存
-                            setState(() {
-                              _regularSchedule[day]?[timeSlot]?[index] = {
-                                'name': studentName,
-                                'course': selectedCourse,
-                                'note': '',
-                              };
-                            });
-                            await _saveScheduleToFirestore();
-                            
-                            // 生徒メモ保存
-                            await _saveStudentNotesFromEdit(
-                              studentName,
-                              therapyController.text,
-                              schoolVisitController.text,
-                              consultationController.text,
-                              moveRequestController.text,
-                            );
-                            
-                            if (dialogContext.mounted) {
-                              Navigator.pop(dialogContext);
-                            }
-                          },
+  onPressed: () async {
+    // 入力中のタスクがあれば保存
+    final taskText = newTaskController.text.trim();
+    if (taskText.isNotEmpty) {
+      await _addTask(taskText, '', false, studentName: studentName, dueDate: newTaskDueDate);
+    }
+    
+    // レギュラースケジュール保存
+    setState(() {
+      _regularSchedule[day]?[timeSlot]?[index] = {
+        'name': studentName,
+        'course': selectedCourse,
+        'note': '',
+      };
+    });
+    await _saveScheduleToFirestore();
+    
+    // 生徒メモ保存
+    await _saveStudentNotesFromEdit(
+      studentName,
+      therapyController.text,
+      schoolVisitController.text,
+      consultationController.text,
+      moveRequestController.text,
+    );
+    
+    if (dialogContext.mounted) {
+      Navigator.pop(dialogContext);
+    }
+  },
                           style: ElevatedButton.styleFrom(
                             backgroundColor: AppColors.primary,
                             foregroundColor: Colors.white,

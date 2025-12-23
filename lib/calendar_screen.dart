@@ -9,6 +9,7 @@ import 'add_event_screen.dart';
 import 'student_detail_screen.dart';
 import 'plus_schedule_screen.dart';
 import 'app_theme.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class CalendarScreen extends StatefulWidget {
   const CalendarScreen({super.key});
@@ -53,24 +54,57 @@ class _CalendarScreenState extends State<CalendarScreen> {
   static const String _taskNoteMarker = 'TASK';
 
   @override
-  void initState() {
-    super.initState();
-    final now = DateTime.now();
-    _controller.displayDate = DateTime(now.year, now.month, now.day, 8, 0);
-    _initData();
+void initState() {
+  super.initState();
+  _loadSavedDisplayDate();
+  _initData();
 
-    Future.delayed(const Duration(seconds: 5), () {
-      if (mounted && (_isLoadingStaffInfo || !_isLocaleInitialized)) {
+  Future.delayed(const Duration(seconds: 5), () {
+    if (mounted && (_isLoadingStaffInfo || !_isLocaleInitialized)) {
+      setState(() {
+        _isLocaleInitialized = true;
+        _isLoadingStaffInfo = false;
+        if (_headerText.isEmpty) {
+           _headerText = DateFormat('M月', 'ja').format(DateTime.now());
+        }
+      });
+    }
+  });
+}  // ← initState はここで閉じる！
+
+// 保存された表示月を読み込む（initState の外に置く）
+Future<void> _loadSavedDisplayDate() async {
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    final savedDate = prefs.getString('calendarDisplayDate');
+    if (savedDate != null && mounted) {
+      final date = DateTime.tryParse(savedDate);
+      if (date != null) {
         setState(() {
-          _isLocaleInitialized = true;
-          _isLoadingStaffInfo = false;
-          if (_headerText.isEmpty) {
-             _headerText = DateFormat('M月', 'ja').format(DateTime.now());
-          }
+          _controller.displayDate = DateTime(date.year, date.month, date.day, 8, 0);
+          _miniCalendarController.displayDate = date;
+          _updateHeaderText(date);
         });
+        return;
       }
-    });
+    }
+  } catch (e) {
+    debugPrint('Error loading saved display date: $e');
   }
+  final now = DateTime.now();
+  _controller.displayDate = DateTime(now.year, now.month, now.day, 8, 0);
+}
+
+// 表示月を保存（initState の外に置く）
+Future<void> _saveDisplayDate(DateTime date) async {
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('calendarDisplayDate', date.toIso8601String());
+  } catch (e) {
+    debugPrint('Error saving display date: $e');
+  }
+}
+
 
   Future<void> _initData() async {
     try {
@@ -157,26 +191,28 @@ class _CalendarScreenState extends State<CalendarScreen> {
   }
 
   void _onViewChanged(ViewChangedDetails details) {
-    final visibleDates = details.visibleDates;
-    if (visibleDates.isNotEmpty) {
-      final centerDate = visibleDates[visibleDates.length ~/ 2];
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
-          _updateHeaderText(centerDate);
-          if (_miniCalendarController.displayDate?.month != centerDate.month) {
-            _miniCalendarController.displayDate = centerDate;
-          }
+  final visibleDates = details.visibleDates;
+  if (visibleDates.isNotEmpty) {
+    final centerDate = visibleDates[visibleDates.length ~/ 2];
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        _updateHeaderText(centerDate);
+        if (_miniCalendarController.displayDate?.month != centerDate.month) {
+          _miniCalendarController.displayDate = centerDate;
         }
-      });
-    }
+        _saveDisplayDate(centerDate); // 追加: 表示月を保存
+      }
+    });
   }
+}
 
   void _goToToday() {
-    final now = DateTime.now();
-    _controller.displayDate = now;
-    _miniCalendarController.displayDate = now;
-    _updateHeaderText(now);
-  }
+  final now = DateTime.now();
+  _controller.displayDate = now;
+  _miniCalendarController.displayDate = now;
+  _updateHeaderText(now);
+  _saveDisplayDate(now); // 追加
+}
 
   @override
   Widget build(BuildContext context) {

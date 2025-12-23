@@ -5,6 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'firebase_options.dart';
 import 'app_theme.dart';
 import 'notification_service.dart';
@@ -209,7 +210,7 @@ class _AdminShellState extends State<AdminShell> {
   bool _hasUnreadChat = false;
   StaffType _staffType = StaffType.loading;
   
-  // ★追加: Web版で右側に表示する管理詳細画面を保持する変数
+  // Web版で右側に表示する管理詳細画面を保持する変数
   Widget? _adminDetailScreen;
   
   StreamSubscription<QuerySnapshot>? _chatRoomsSubscription;
@@ -218,6 +219,7 @@ class _AdminShellState extends State<AdminShell> {
   @override
   void initState() {
     super.initState();
+    _loadSavedIndex(); // 保存されたタブインデックスを読み込む
     _loadStaffClassrooms();
     _setupNotificationListener();
     _setupNavigationListener();
@@ -231,6 +233,32 @@ class _AdminShellState extends State<AdminShell> {
       sub.cancel();
     }
     super.dispose();
+  }
+
+  // 保存されたページインデックスを読み込む
+  Future<void> _loadSavedIndex() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final savedIndex = prefs.getInt('selectedTabIndex') ?? 0;
+      if (mounted) {
+        setState(() {
+          // _screenCountはまだ確定していないので、一旦保存して後で検証
+          _selectedIndex = savedIndex;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading saved index: $e');
+    }
+  }
+
+  // ページインデックスを保存
+  Future<void> _saveIndex(int index) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setInt('selectedTabIndex', index);
+    } catch (e) {
+      debugPrint('Error saving index: $e');
+    }
   }
   
   void _setupChatUnreadListener() {
@@ -247,50 +275,50 @@ class _AdminShellState extends State<AdminShell> {
   }
   
   void _updateUnreadStatus(List<DocumentSnapshot> roomDocs, String myUid) {
-  for (var sub in _messageSubscriptions.values) {
-    sub.cancel();
-  }
-  _messageSubscriptions.clear();
-  
-  if (roomDocs.isEmpty) {
-    if (mounted) setState(() => _hasUnreadChat = false);
-    return;
-  }
-  
-  final Map<String, bool> roomUnreadStatus = {};
-  
-  for (var roomDoc in roomDocs) {
-    final roomId = roomDoc.id;
-    roomUnreadStatus[roomId] = false;
+    for (var sub in _messageSubscriptions.values) {
+      sub.cancel();
+    }
+    _messageSubscriptions.clear();
     
-    final sub = FirebaseFirestore.instance
-        .collection('chat_rooms')
-        .doc(roomId)
-        .collection('messages')
-        .where('senderId', isNotEqualTo: myUid)
-        .snapshots()
-        .listen((msgSnapshot) {
-      bool hasUnread = false;
-      for (var doc in msgSnapshot.docs) {
-        final data = doc.data();
-        final readBy = List<String>.from(data['readBy'] ?? []);
-        if (!readBy.contains(myUid)) {
-          hasUnread = true;
-          break;
+    if (roomDocs.isEmpty) {
+      if (mounted) setState(() => _hasUnreadChat = false);
+      return;
+    }
+    
+    final Map<String, bool> roomUnreadStatus = {};
+    
+    for (var roomDoc in roomDocs) {
+      final roomId = roomDoc.id;
+      roomUnreadStatus[roomId] = false;
+      
+      final sub = FirebaseFirestore.instance
+          .collection('chat_rooms')
+          .doc(roomId)
+          .collection('messages')
+          .where('senderId', isNotEqualTo: myUid)
+          .snapshots()
+          .listen((msgSnapshot) {
+        bool hasUnread = false;
+        for (var doc in msgSnapshot.docs) {
+          final data = doc.data();
+          final readBy = List<String>.from(data['readBy'] ?? []);
+          if (!readBy.contains(myUid)) {
+            hasUnread = true;
+            break;
+          }
         }
-      }
+        
+        roomUnreadStatus[roomId] = hasUnread;
+        final totalHasUnread = roomUnreadStatus.values.any((v) => v);
+        
+        if (mounted) {
+          setState(() => _hasUnreadChat = totalHasUnread);
+        }
+      });
       
-      roomUnreadStatus[roomId] = hasUnread;
-      final totalHasUnread = roomUnreadStatus.values.any((v) => v);
-      
-      if (mounted) {
-        setState(() => _hasUnreadChat = totalHasUnread);
-      }
-    });
-    
-    _messageSubscriptions[roomId] = sub;
+      _messageSubscriptions[roomId] = sub;
+    }
   }
-}
   
   Future<void> _loadStaffClassrooms() async {
     try {
@@ -323,6 +351,11 @@ class _AdminShellState extends State<AdminShell> {
         } else {
           _staffType = StaffType.beesmiley;
         }
+        
+        // staffTypeが確定した後、保存されたインデックスが有効か検証
+        if (_selectedIndex >= _screenCount) {
+          _selectedIndex = 0;
+        }
       });
     } catch (e) {
       setState(() => _staffType = StaffType.both);
@@ -330,21 +363,21 @@ class _AdminShellState extends State<AdminShell> {
   }
   
   Widget _getScreen(int index) {
-    // ★追加: 管理画面の構築ロジックを一元化
+    // 管理画面の構築ロジックを一元化
     Widget buildAdminScreen() {
       // 詳細画面が指定されている場合（Web版でサブ画面を開いている場合）
       if (_adminDetailScreen != null) {
         return _adminDetailScreen!;
       }
       // 通常の管理メニュー画面（コールバックを渡す）
-return AdminScreen(
-  onOpenWebScreen: (screen) {
-    setState(() => _adminDetailScreen = screen);
-  },
-  onCloseWebScreen: () {
-    setState(() => _adminDetailScreen = null);
-  },
-);
+      return AdminScreen(
+        onOpenWebScreen: (screen) {
+          setState(() => _adminDetailScreen = screen);
+        },
+        onCloseWebScreen: () {
+          setState(() => _adminDetailScreen = null);
+        },
+      );
     }
 
     switch (_staffType) {
@@ -354,7 +387,7 @@ return AdminScreen(
           case 1: return const PlusScheduleScreen();
           case 2: return const ChatListScreen();
           case 3: return const NotificationScreen();
-          case 4: return buildAdminScreen(); // 変更
+          case 4: return buildAdminScreen();
           default: return const CalendarScreen();
         }
       case StaffType.beesmiley:
@@ -364,7 +397,7 @@ return AdminScreen(
           case 2: return const ChatListScreen();
           case 3: return const NotificationScreen();
           case 4: return const EventScreen();
-          case 5: return buildAdminScreen(); // 変更
+          case 5: return buildAdminScreen();
           default: return const CalendarScreen();
         }
       case StaffType.both:
@@ -377,7 +410,7 @@ return AdminScreen(
           case 3: return const ChatListScreen();
           case 4: return const NotificationScreen();
           case 5: return const EventScreen();
-          case 6: return buildAdminScreen(); // 変更
+          case 6: return buildAdminScreen();
           default: return const CalendarScreen();
         }
     }
@@ -525,6 +558,7 @@ return AdminScreen(
         _adminDetailScreen = null;
         if (type == 'schedule') _hasUnreadSchedule = false;
       });
+      _saveIndex(newIndex); // 保存
     }
   }
 
@@ -549,31 +583,31 @@ return AdminScreen(
     return Scaffold(
       body: Row(
         children: [
-if (isWebLayout) NavigationRail(
-  selectedIndex: safeIndex,
-  onDestinationSelected: (i) {
-    setState(() {
-      _selectedIndex = i;
-      _adminDetailScreen = null;
-      if (i == 0) _hasUnreadSchedule = false;
-    });
-  },
-  labelType: NavigationRailLabelType.all,
-  indicatorColor: AppColors.primary.withOpacity(0.2),
-  selectedIconTheme: const IconThemeData(color: AppColors.primary),
-  selectedLabelTextStyle: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold),
-  unselectedIconTheme: IconThemeData(color: Colors.grey.shade600),
-  unselectedLabelTextStyle: TextStyle(color: Colors.grey.shade600),
-  leading: Padding(padding: const EdgeInsets.all(12), child: Image.asset('assets/logo_beesmileymark.png', width: 50, height: 50)),
-  destinations: _railDestinations,
-),
+          if (isWebLayout) NavigationRail(
+            selectedIndex: safeIndex,
+            onDestinationSelected: (i) {
+              setState(() {
+                _selectedIndex = i;
+                _adminDetailScreen = null;
+                if (i == 0) _hasUnreadSchedule = false;
+              });
+              _saveIndex(i); // 保存
+            },
+            labelType: NavigationRailLabelType.all,
+            indicatorColor: AppColors.primary.withOpacity(0.2),
+            selectedIconTheme: const IconThemeData(color: AppColors.primary),
+            selectedLabelTextStyle: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold),
+            unselectedIconTheme: IconThemeData(color: Colors.grey.shade600),
+            unselectedLabelTextStyle: TextStyle(color: Colors.grey.shade600),
+            leading: Padding(padding: const EdgeInsets.all(12), child: Image.asset('assets/logo_beesmileymark.png', width: 50, height: 50)),
+            destinations: _railDestinations,
+          ),
           if (isWebLayout) const VerticalDivider(thickness: 1, width: 1),
           Expanded(
             child: AnimatedSwitcher(
-              duration: const Duration(milliseconds: 300), // 0.3秒でフワッと切り替え
+              duration: const Duration(milliseconds: 300),
               switchInCurve: Curves.easeOut,
               switchOutCurve: Curves.easeIn,
-              // 画面が変わったことを検知させるためにKeyを設定
               child: KeyedSubtree(
                 key: ValueKey('$_selectedIndex${_adminDetailScreen?.runtimeType}'),
                 child: _getScreen(safeIndex),
@@ -587,10 +621,10 @@ if (isWebLayout) NavigationRail(
         onTap: (i) {
           setState(() {
             _selectedIndex = i;
-            // ★追加: タブを切り替えたら管理画面の詳細（CSV画面など）をリセットする
             _adminDetailScreen = null;
             if (i == 0) _hasUnreadSchedule = false;
           });
+          _saveIndex(i); // 保存
         },
         type: BottomNavigationBarType.fixed,
         selectedItemColor: AppColors.primary,

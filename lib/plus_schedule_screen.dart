@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'app_theme.dart';
 import 'plus_dashboard_screen.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// プラス予定のコンテンツウィジェット（埋め込み用）
 class PlusScheduleContent extends StatefulWidget {
@@ -15,7 +16,10 @@ class PlusScheduleContent extends StatefulWidget {
   State<PlusScheduleContent> createState() => _PlusScheduleContentState();
 }
 
-class _PlusScheduleContentState extends State<PlusScheduleContent> {
+class _PlusScheduleContentState extends State<PlusScheduleContent> with AutomaticKeepAliveClientMixin {
+  // AutomaticKeepAliveClientMixinを追加して、タブ切り替え時に状態を保持
+  @override
+  bool get wantKeepAlive => true;
   late DateTime _weekStart;
   
 // 表示モード: 0=週カレンダー, 1=ダッシュボード, 2=月カレンダー
@@ -95,9 +99,64 @@ class _PlusScheduleContentState extends State<PlusScheduleContent> {
     super.initState();
     _weekStart = _getMonday(DateTime.now());
     _monthViewDate = DateTime(DateTime.now().year, DateTime.now().month, 1);
+    _loadSavedState();
     _loadInitialData();
   }
   
+// 保存された状態を読み込む
+Future<void> _loadSavedState() async {
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    final savedViewMode = prefs.getInt('plusScheduleViewMode');
+    final savedWeekStart = prefs.getString('plusScheduleWeekStart');
+    final savedMonthViewDate = prefs.getString('plusScheduleMonthViewDate');
+    
+    if (mounted) {
+      setState(() {
+        if (savedViewMode != null) _viewMode = savedViewMode;
+        if (savedWeekStart != null) {
+          final date = DateTime.tryParse(savedWeekStart);
+          if (date != null) _weekStart = _getMonday(date);
+        }
+        if (savedMonthViewDate != null) {
+          final date = DateTime.tryParse(savedMonthViewDate);
+          if (date != null) _monthViewDate = DateTime(date.year, date.month, 1);
+        }
+      });
+      if (_viewMode == 2) _loadLessonsForMonth();
+    }
+  } catch (e) {
+    debugPrint('Error loading saved state: $e');
+  }
+}
+
+Future<void> _saveViewMode(int mode) async {
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt('plusScheduleViewMode', mode);
+  } catch (e) {
+    debugPrint('Error saving view mode: $e');
+  }
+}
+
+Future<void> _saveWeekStart(DateTime date) async {
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('plusScheduleWeekStart', date.toIso8601String());
+  } catch (e) {
+    debugPrint('Error saving week start: $e');
+  }
+}
+
+Future<void> _saveMonthViewDate(DateTime date) async {
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('plusScheduleMonthViewDate', date.toIso8601String());
+  } catch (e) {
+    debugPrint('Error saving month view date: $e');
+  }
+}
+
   @override
   void dispose() {
     _hideCurrentOverlay();
@@ -543,12 +602,14 @@ class _PlusScheduleContentState extends State<PlusScheduleContent> {
   }
 
   // Firestoreから週のレッスンデータを読み込み
-  Future<void> _loadLessonsForWeek() async {
-    if (!mounted) return;
-    
+  Future<void> _loadLessonsForWeek({bool showLoading = true}) async {
+  if (!mounted) return;
+  
+  if (showLoading) {
     setState(() {
       _isLoadingLessons = true;
     });
+  }
     
     try {
       // 週の開始日（月曜日）と終了日（土曜日）を日付のみで計算
@@ -713,6 +774,7 @@ class _PlusScheduleContentState extends State<PlusScheduleContent> {
     setState(() {
       _monthViewDate = DateTime(_monthViewDate.year, _monthViewDate.month - 1, 1);
     });
+    _saveMonthViewDate(_monthViewDate);
     _loadLessonsForMonth();
   }
   
@@ -721,6 +783,7 @@ class _PlusScheduleContentState extends State<PlusScheduleContent> {
     setState(() {
       _monthViewDate = DateTime(_monthViewDate.year, _monthViewDate.month + 1, 1);
     });
+    _saveMonthViewDate(_monthViewDate);
     _loadLessonsForMonth();
   }
   
@@ -743,6 +806,7 @@ class _PlusScheduleContentState extends State<PlusScheduleContent> {
     setState(() {
       _weekStart = _weekStart.subtract(const Duration(days: 7));
     });
+    _saveWeekStart(_weekStart);
     _loadShiftData();
     _loadLessonsForWeek();
     _loadAllTasks(); // タスクも再読み込み
@@ -753,6 +817,7 @@ class _PlusScheduleContentState extends State<PlusScheduleContent> {
     setState(() {
       _weekStart = _weekStart.add(const Duration(days: 7));
     });
+    _saveWeekStart(_weekStart);
     _loadShiftData();
     _loadLessonsForWeek();
     _loadAllTasks(); // タスクも再読み込み
@@ -763,6 +828,7 @@ class _PlusScheduleContentState extends State<PlusScheduleContent> {
     setState(() {
       _weekStart = _getMonday(DateTime.now());
     });
+    _saveWeekStart(_weekStart); 
     _loadShiftData();
     _loadLessonsForWeek();
     _loadAllTasks(); // タスクも再読み込み
@@ -857,7 +923,9 @@ class _PlusScheduleContentState extends State<PlusScheduleContent> {
 
   @override
   Widget build(BuildContext context) {
-    final screenWidth = MediaQuery.of(context).size.width;
+  super.build(context); // ← この行を追加（AutomaticKeepAliveClientMixin必須）
+  
+  final screenWidth = MediaQuery.of(context).size.width;
     
     // スマホ（600px未満）の場合は閲覧専用UIを表示
     if (screenWidth < 600) {
@@ -1818,6 +1886,7 @@ class _PlusScheduleContentState extends State<PlusScheduleContent> {
                       setState(() {
                         _weekStart = _getMonday(date);
                       });
+                      _saveWeekStart(_weekStart);
                       _loadShiftData();
                       _loadLessonsForWeek();
                     },
@@ -2132,10 +2201,11 @@ class _PlusScheduleContentState extends State<PlusScheduleContent> {
               }
             });
             // カレンダーモードに切り替えた時はタスクを再読み込み
-           // カレンダーモードに切り替えた時はタスクを再読み込み
+           _saveViewMode(mode);
             if (mode == 0) {
-              _loadAllTasks();
-            }
+  _loadAllTasks();
+  _loadLessonsForWeek(showLoading: false); 
+}
             // 月カレンダーモードに切り替えた時は月データを読み込み
             if (mode == 2) {
               _loadLessonsForMonth();
@@ -2505,9 +2575,10 @@ class _PlusScheduleContentState extends State<PlusScheduleContent> {
                 }
               },
               child: Container(
-                width: cellWidth,
-                height: cellHeight,
-                decoration: BoxDecoration(
+  width: cellWidth,
+  height: cellHeight,
+  clipBehavior: Clip.hardEdge,
+  decoration: BoxDecoration(
                   color: isHoliday ? Colors.grey.shade200 : Colors.white,
                   border: Border(
                     top: slotIndex == 0 ? BorderSide(color: Colors.grey.shade300) : BorderSide.none,
@@ -2518,22 +2589,20 @@ class _PlusScheduleContentState extends State<PlusScheduleContent> {
                 padding: const EdgeInsets.all(6),
                 child: isHoliday && lessons.isEmpty
                     ? null
-                    : SingleChildScrollView(
-                        child: Builder(
-                          builder: (cellContext) {
-                            return Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: _buildLessonListWithDropIndicators(lessons, dayIndex, slotIndex, cellContext),
-                            );
-                          },
-                        ),
-                      ),
-              ),
-            );
+                    : Builder(
+                        builder: (cellContext) {
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: _buildLessonListWithDropIndicators(lessons, dayIndex, slotIndex, cellContext),
+                          );
+                        },
+                      ),// ClipRect
+              ),  // Container
+            );  // Builder
           },
-        );
+        );  // GestureDetector
       },
-    );
+    );  // DragTarget
   }
 
   // レッスンリストを行間ドロップインジケーター付きで構築
@@ -2927,11 +2996,22 @@ class _PlusScheduleContentState extends State<PlusScheduleContent> {
     }
     
     return MouseRegion(
-      key: key,
-      onEnter: (_) => showOverlay(),
-      onExit: (_) => _hideCurrentOverlay(),
-      child: _buildClickableLessonContent(lesson, key, cellContext: cellContext),
-    );
+  key: key,
+  onEnter: (_) => showOverlay(),
+  onExit: (_) => _hideCurrentOverlay(),
+  child: InkWell(
+    onTap: () {
+      _hideCurrentOverlay();
+      final renderBox = key.currentContext?.findRenderObject() as RenderBox?;
+      final cellOffset = renderBox?.localToGlobal(Offset.zero);
+      final cellWidth = renderBox?.size.width ?? 0;
+      _showEditLessonDialog(lesson, cellOffset: cellOffset, cellWidth: cellWidth);
+    },
+    hoverColor: Colors.grey.shade100,
+    borderRadius: BorderRadius.circular(4),
+    child: _buildClickableLessonContent(lesson, key, cellContext: cellContext),
+  ),
+);
   }
   
 // クリック可能なレッスン内容を構築（生徒名のみ詳細ダイアログ）
@@ -2964,44 +3044,32 @@ class _PlusScheduleContentState extends State<PlusScheduleContent> {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              // 生徒名部分（クリックで詳細ダイアログ）
-              Expanded(
-                child: MouseRegion(
-                  cursor: SystemMouseCursors.click,
-                  child: GestureDetector(
-                    onTap: () {
-                      _hideCurrentOverlay();
-                      final renderBox = key.currentContext?.findRenderObject() as RenderBox?;
-                      final cellOffset = renderBox?.localToGlobal(Offset.zero);
-                      final cellWidth = renderBox?.size.width ?? 0;
-                      _showEditLessonDialog(lesson, cellOffset: cellOffset, cellWidth: cellWidth);
-                    },
-                    child: Row(
-                      children: [
-                        Flexible(
-                          child: Text(
-                            lesson['studentName'],
-                            style: TextStyle(
-                              color: textColor,
-                              fontSize: 14,
-                              fontWeight: FontWeight.w500,
-                            ),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        if (courseInitial.isNotEmpty)
-                          Text(
-                            courseInitial,
-                            style: TextStyle(
-                              color: textColor,
-                              fontSize: 12,
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
+              // 生徒名部分（親のInkWellでクリック処理するので、ここではGestureDetectorを削除）
+Expanded(
+  child: Row(
+    children: [
+      Flexible(
+        child: Text(
+          lesson['studentName'],
+          style: TextStyle(
+            color: textColor,
+            fontSize: 14,
+            fontWeight: FontWeight.w500,
+          ),
+          overflow: TextOverflow.ellipsis,
+        ),
+      ),
+      if (courseInitial.isNotEmpty)
+        Text(
+          courseInitial,
+          style: TextStyle(
+            color: textColor,
+            fontSize: 12,
+          ),
+        ),
+    ],
+  ),
+),
               const SizedBox(width: 8),
               // 講師名部分（クリックで講師選択）
               MouseRegion(
@@ -4551,39 +4619,44 @@ final bool canSave = title.isNotEmpty;
                                 ),
                                 const SizedBox(width: 8),
                                 // 期限選択
-                                InkWell(
-                                  onTap: () async {
-                                    final picked = await showDatePicker(
-                                      context: dialogContext,
-                                      initialDate: newTaskDueDate ?? DateTime.now(),
-                                      firstDate: DateTime.now().subtract(const Duration(days: 365)),
-                                      lastDate: DateTime.now().add(const Duration(days: 365)),
-                                    );
-                                    if (picked != null) {
-                                      setDialogState(() => newTaskDueDate = picked);
-                                    }
-                                  },
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                                    decoration: BoxDecoration(
-                                      border: Border.all(color: Colors.grey.shade300),
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Icon(Icons.calendar_today, size: 16, color: newTaskDueDate != null ? AppColors.primary : AppColors.textSub),
-                                        if (newTaskDueDate != null) ...[
-                                          const SizedBox(width: 4),
-                                          Text(
-                                            DateFormat('M/d').format(newTaskDueDate!),
-                                            style: const TextStyle(fontSize: 12),
-                                          ),
-                                        ],
-                                      ],
-                                    ),
-                                  ),
-                                ),
+InkWell(
+  onTap: () async {
+    final picked = await showDatePicker(
+      context: dialogContext,
+      initialDate: newTaskDueDate ?? DateTime.now(),
+      firstDate: DateTime.now().subtract(const Duration(days: 365)),
+      lastDate: DateTime.now().add(const Duration(days: 365)),
+    );
+    if (picked != null) {
+      setDialogState(() => newTaskDueDate = picked);
+    }
+  },
+  child: Container(
+    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+    decoration: BoxDecoration(
+      border: Border.all(color: Colors.grey.shade300),
+      borderRadius: BorderRadius.circular(8),
+    ),
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(Icons.calendar_today, size: 16, color: newTaskDueDate != null ? AppColors.primary : AppColors.textSub),
+        if (newTaskDueDate != null) ...[
+          const SizedBox(width: 4),
+          Text(
+            DateFormat('M/d').format(newTaskDueDate!),
+            style: const TextStyle(fontSize: 12),
+          ),
+          const SizedBox(width: 4),
+          GestureDetector(
+            onTap: () => setDialogState(() => newTaskDueDate = null),
+            child: const Icon(Icons.close, size: 14, color: AppColors.textSub),
+          ),
+        ],
+      ],
+    ),
+  ),
+),
                               ],
                             ),
                             
@@ -4763,7 +4836,7 @@ final lessonData = {
                                   
                                   if (!dialogContext.mounted) return;
                                   Navigator.pop(dialogContext);
-                                  await _loadLessonsForWeek();
+await _loadLessonsForWeek(showLoading: false);
                                   if (mounted) {
                                     scaffoldMessenger.showSnackBar(
                                       const SnackBar(content: Text('追加しました')),
@@ -5438,39 +5511,44 @@ final lessonData = {
                                 ),
                                 const SizedBox(width: 8),
                                 // 期限選択
-                                InkWell(
-                                  onTap: () async {
-                                    final picked = await showDatePicker(
-                                      context: dialogContext,
-                                      initialDate: newTaskDueDate ?? DateTime.now(),
-                                      firstDate: DateTime.now().subtract(const Duration(days: 365)),
-                                      lastDate: DateTime.now().add(const Duration(days: 365)),
-                                    );
-                                    if (picked != null) {
-                                      setDialogState(() => newTaskDueDate = picked);
-                                    }
-                                  },
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                                    decoration: BoxDecoration(
-                                      border: Border.all(color: Colors.grey.shade300),
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Icon(Icons.calendar_today, size: 16, color: newTaskDueDate != null ? AppColors.primary : AppColors.textSub),
-                                        if (newTaskDueDate != null) ...[
-                                          const SizedBox(width: 4),
-                                          Text(
-                                            DateFormat('M/d').format(newTaskDueDate!),
-                                            style: const TextStyle(fontSize: 12),
-                                          ),
-                                        ],
-                                      ],
-                                    ),
-                                  ),
-                                ),
+InkWell(
+  onTap: () async {
+    final picked = await showDatePicker(
+      context: dialogContext,
+      initialDate: newTaskDueDate ?? DateTime.now(),
+      firstDate: DateTime.now().subtract(const Duration(days: 365)),
+      lastDate: DateTime.now().add(const Duration(days: 365)),
+    );
+    if (picked != null) {
+      setDialogState(() => newTaskDueDate = picked);
+    }
+  },
+  child: Container(
+    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+    decoration: BoxDecoration(
+      border: Border.all(color: Colors.grey.shade300),
+      borderRadius: BorderRadius.circular(8),
+    ),
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(Icons.calendar_today, size: 16, color: newTaskDueDate != null ? AppColors.primary : AppColors.textSub),
+        if (newTaskDueDate != null) ...[
+          const SizedBox(width: 4),
+          Text(
+            DateFormat('M/d').format(newTaskDueDate!),
+            style: const TextStyle(fontSize: 12),
+          ),
+          const SizedBox(width: 4),
+          GestureDetector(
+            onTap: () => setDialogState(() => newTaskDueDate = null),
+            child: const Icon(Icons.close, size: 14, color: AppColors.textSub),
+          ),
+        ],
+      ],
+    ),
+  ),
+),
                               ],
                             ),
                             
@@ -5653,7 +5731,7 @@ final lessonData = {
                               
                               if (!dialogContext.mounted) return;
                               Navigator.pop(dialogContext);
-                              await _loadLessonsForWeek();
+await _loadLessonsForWeek(showLoading: false);
                               
                               if (mounted) {
                                 scaffoldMessenger.showSnackBar(
@@ -6090,12 +6168,12 @@ final lessonData = {
               
               try {
                 await FirebaseFirestore.instance
-                    .collection('plus_lessons')
-                    .doc(lessonId)
-                    .delete();
-                
-                if (!mounted) return;
-                await _loadLessonsForWeek();
+    .collection('plus_lessons')
+    .doc(lessonId)
+    .delete();
+
+if (!mounted) return;
+await _loadLessonsForWeek(showLoading: false);
                 
                 if (mounted) {
                   scaffoldMessenger.showSnackBar(
