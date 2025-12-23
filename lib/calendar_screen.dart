@@ -424,9 +424,12 @@ class _CalendarScreenState extends State<CalendarScreen> {
                     }
                   }
 
-                  // 誕生日処理
+                  // 誕生日処理（修正版：複数年対応＋教室フィルタ連動）
                   if (familySnapshot.hasData && _showBirthdays) {
-                    final now = DateTime.now();
+                    // 現在表示中の年を基準に前後1年も含めて生成
+                    final displayDate = _controller.displayDate ?? DateTime.now();
+                    final baseYear = displayDate.year;
+                    
                     for (var doc in familySnapshot.data!.docs) {
                       final data = doc.data() as Map<String, dynamic>;
                       final children = List<Map<String, dynamic>>.from(data['children'] ?? []);
@@ -435,6 +438,11 @@ class _CalendarScreenState extends State<CalendarScreen> {
                       for (var child in children) {
                         final classroom = child['classroom'] as String?;
                         if (classroom == null || !_myClassrooms.contains(classroom)) continue;
+                        
+                        // 教室フィルタとの連動チェック
+                        if (_classroomFilters.containsKey(classroom) && _classroomFilters[classroom] != true) {
+                          continue;
+                        }
                         
                         final birthDateStr = child['birthDate'] as String?;
                         if (birthDateStr == null || birthDateStr.isEmpty) continue;
@@ -446,19 +454,23 @@ class _CalendarScreenState extends State<CalendarScreen> {
                         final birthDay = int.tryParse(parts[2]) ?? 0;
                         if (birthMonth == 0 || birthDay == 0) continue;
                         
-                        final thisYearBirthday = DateTime(now.year, birthMonth, birthDay);
                         final childName = child['firstName'] ?? '';
                         final displayName = '$parentLastName $childName';
                         
-                        appointments.add(Appointment(
-                          id: 'birthday_${doc.id}_$childName',
-                          startTime: thisYearBirthday,
-                          endTime: thisYearBirthday,
-                          isAllDay: true,
-                          subject: '🎂 $displayName',
-                          notes: 'BIRTHDAY',
-                          color: Colors.pink.shade300,
-                        ));
+                        // 表示中の年を中心に前後1年（計3年分）の誕生日を生成
+                        for (int year = baseYear - 1; year <= baseYear + 1; year++) {
+                          final birthdayDate = DateTime(year, birthMonth, birthDay);
+                          
+                          appointments.add(Appointment(
+                            id: 'birthday_${doc.id}_${childName}_$year',
+                            startTime: birthdayDate,
+                            endTime: birthdayDate,
+                            isAllDay: true,
+                            subject: '🎂 $displayName',
+                            notes: 'BIRTHDAY',
+                            color: Colors.pink.shade300,
+                          ));
+                        }
                       }
                     }
                   }

@@ -11,7 +11,7 @@ import 'package:flutter_app_badger/flutter_app_badger.dart';
 // バックグラウンドメッセージハンドラ（トップレベル関数である必要がある）
 @pragma('vm:entry-point')
 Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
-  debugPrint('📩 バックグラウンドメッセージ受信: ${message.notification?.title}');
+  // バックグラウンドメッセージ受信
 }
 
 class NotificationService {
@@ -69,19 +69,16 @@ class NotificationService {
     await clearBadge();
     
     _initialized = true;
-    debugPrint('✅ NotificationService 初期化完了');
   }
 
   /// 権限リクエスト
   Future<void> _requestPermission() async {
-    final settings = await _messaging.requestPermission(
+    await _messaging.requestPermission(
       alert: true,
       badge: true,
       sound: true,
       provisional: false,
     );
-    
-    debugPrint('📱 通知権限: ${settings.authorizationStatus}');
   }
 
   /// ローカル通知の初期化
@@ -101,7 +98,6 @@ class NotificationService {
     await _localNotifications.initialize(
       initSettings,
       onDidReceiveNotificationResponse: (response) {
-        debugPrint('🔔 ローカル通知タップ: ${response.payload}');
         // ローカル通知タップ時も画面遷移処理へ回す
         if (response.payload != null) {
            _navigationController.add(response.payload!);
@@ -126,21 +122,15 @@ class NotificationService {
     }
   }
 
-Future<void> _handleForegroundMessage(RemoteMessage message) async {
-    debugPrint('📩 フォアグラウンドメッセージ: ${message.notification?.title}');
-    
+  Future<void> _handleForegroundMessage(RemoteMessage message) async {
     // iOSはsetForegroundNotificationPresentationOptionsで自動表示される
     // Androidもシステム通知で表示される
     // ローカル通知を重複して表示しないようにreturn
     return;
   }
-    
-
 
   /// 通知タップ時の処理
   void _handleNotificationTap(RemoteMessage message) {
-    debugPrint('👆 通知タップ: ${message.data}');
-    
     // バッジをクリア
     clearBadge();
     
@@ -158,11 +148,10 @@ Future<void> _handleForegroundMessage(RemoteMessage message) async {
         final isSupported = await FlutterAppBadger.isAppBadgeSupported();
         if (isSupported) {
           await FlutterAppBadger.removeBadge();
-          debugPrint('✅ バッジをクリアしました');
         }
       }
     } catch (e) {
-      debugPrint('⚠️ バッジクリアエラー: $e');
+      // エラー時は何もしない
     }
   }
 
@@ -173,11 +162,10 @@ Future<void> _handleForegroundMessage(RemoteMessage message) async {
         final isSupported = await FlutterAppBadger.isAppBadgeSupported();
         if (isSupported) {
           await FlutterAppBadger.updateBadgeCount(count);
-          debugPrint('✅ バッジを$countに設定しました');
         }
       }
     } catch (e) {
-      debugPrint('⚠️ バッジ設定エラー: $e');
+      // エラー時は何もしない
     }
   }
 
@@ -192,7 +180,6 @@ Future<void> _handleForegroundMessage(RemoteMessage message) async {
       if (kIsWeb) {
         // WebではVAPIDキーが必要
         token = await _messaging.getToken(vapidKey: _vapidKey);
-        debugPrint('🌐 Web FCMトークン取得');
       } else {
         if (Platform.isIOS) {
           String? apnsToken = await _messaging.getAPNSToken();
@@ -201,7 +188,6 @@ Future<void> _handleForegroundMessage(RemoteMessage message) async {
             apnsToken = await _messaging.getAPNSToken();
           }
           if (apnsToken == null) {
-            debugPrint('⚠️ APNsトークンを取得できませんでした');
             return;
           }
         }
@@ -209,11 +195,8 @@ Future<void> _handleForegroundMessage(RemoteMessage message) async {
       }
       
       if (token == null) {
-        debugPrint('⚠️ FCMトークンを取得できませんでした');
         return;
       }
-      
-      debugPrint('🔑 FCMトークン: ${token.substring(0, 20)}...');
       
       await _saveTokenForUser(user.uid, token);
       
@@ -222,7 +205,7 @@ Future<void> _handleForegroundMessage(RemoteMessage message) async {
       });
       
     } catch (e) {
-      debugPrint('❌ トークン保存エラー: $e');
+      // エラー時は何もしない
     }
   }
 
@@ -241,7 +224,6 @@ Future<void> _handleForegroundMessage(RemoteMessage message) async {
         'fcmTokens': FieldValue.arrayUnion([token]),
         'lastTokenUpdate': FieldValue.serverTimestamp(),
       });
-      debugPrint('✅ スタッフのFCMトークンを保存しました');
       return;
     }
     
@@ -256,11 +238,8 @@ Future<void> _handleForegroundMessage(RemoteMessage message) async {
         'fcmTokens': FieldValue.arrayUnion([token]),
         'lastTokenUpdate': FieldValue.serverTimestamp(),
       });
-      debugPrint('✅ 保護者のFCMトークンを保存しました');
       return;
     }
-    
-    debugPrint('⚠️ ユーザードキュメントが見つかりません');
   }
 
   /// トークンを削除（ログアウト時）
@@ -306,9 +285,8 @@ Future<void> _handleForegroundMessage(RemoteMessage message) async {
       // バッジもクリア
       await clearBadge();
       
-      debugPrint('✅ FCMトークンを削除しました');
     } catch (e) {
-      debugPrint('❌ トークン削除エラー: $e');
+      // エラー時は何もしない
     }
   }
 
@@ -349,7 +327,7 @@ Future<void> _handleForegroundMessage(RemoteMessage message) async {
         };
       }
     } catch (e) {
-      debugPrint('❌ 通知設定取得エラー: $e');
+      // エラー時はデフォルト値を返す
     }
     
     return {
@@ -380,7 +358,6 @@ Future<void> _handleForegroundMessage(RemoteMessage message) async {
       
       if (staffSnap.docs.isNotEmpty) {
         await staffSnap.docs.first.reference.update(updateData);
-        debugPrint('✅ スタッフの通知設定を保存しました');
         return;
       }
       
@@ -392,11 +369,10 @@ Future<void> _handleForegroundMessage(RemoteMessage message) async {
       
       if (familySnap.docs.isNotEmpty) {
         await familySnap.docs.first.reference.update(updateData);
-        debugPrint('✅ 保護者の通知設定を保存しました');
         return;
       }
     } catch (e) {
-      debugPrint('❌ 通知設定保存エラー: $e');
+      // エラー時は何もしない
     }
   }
 }

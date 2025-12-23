@@ -86,6 +86,18 @@ class _StaffManageScreenState extends State<StaffManageScreen> {
     return '他';
   }
 
+  // スタッフタイプの表示名
+  String _getStaffTypeLabel(String? staffType) {
+    switch (staffType) {
+      case 'fulltime':
+        return '社員';
+      case 'part':
+        return 'パート';
+      default:
+        return '未設定';
+    }
+  }
+
   // セクションヘッダーウィジェット
   Widget _buildSectionHeader(String headerText) {
     return Padding(
@@ -178,6 +190,8 @@ appBar: AppBar(
 
             final List<String> classrooms = List<String>.from(data['classrooms'] ?? []);
             final String? photoUrl = data['photoUrl'];
+            final String? staffType = data['staffType'];
+            final Map<String, dynamic>? defaultShift = data['defaultShift'] as Map<String, dynamic>?;
             
             // コントローラーを取得または作成
             final controller = _controllers.putIfAbsent(
@@ -227,9 +241,31 @@ appBar: AppBar(
                           )
                         : null,
                   ),
-                  title: Text(
-                    data['name'] ?? '名称未設定',
-                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  title: Row(
+                    children: [
+                      Text(
+                        data['name'] ?? '名称未設定',
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(width: 8),
+                      // 社員/パートのバッジ
+                      if (staffType != null)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: staffType == 'fulltime' ? Colors.blue.shade100 : Colors.orange.shade100,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            _getStaffTypeLabel(staffType),
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                              color: staffType == 'fulltime' ? Colors.blue.shade700 : Colors.orange.shade700,
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
                   subtitle: Text('${data['role'] ?? ''} / ID: ${data['loginId'] ?? ''}'),
                   children: [
@@ -242,6 +278,13 @@ appBar: AppBar(
                           _buildInfoRow('ふりがな', data['furigana'] ?? ''),
                           _buildInfoRow('電話番号', _formatPhoneDisplay(data['phone'])),
                           _buildInfoRow('メール', data['email'] ?? ''),
+                          _buildInfoRow('雇用形態', _getStaffTypeLabel(staffType)),
+                          // 社員の場合はデフォルト勤務時間を表示
+                          if (staffType == 'fulltime' && defaultShift != null)
+                            _buildInfoRow(
+                              'デフォルト勤務', 
+                              '${defaultShift['start'] ?? ''} 〜 ${defaultShift['end'] ?? ''}'
+                            ),
                           const SizedBox(height: 8),
                           const Text('担当教室:', style: TextStyle(color: Colors.grey, fontSize: 12)),
                           const SizedBox(height: 4),
@@ -316,7 +359,7 @@ appBar: AppBar(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
         children: [
-          SizedBox(width: 80, child: Text(label, style: const TextStyle(color: Colors.grey, fontSize: 13))),
+          SizedBox(width: 100, child: Text(label, style: const TextStyle(color: Colors.grey, fontSize: 13))),
           Expanded(child: Text(value, style: const TextStyle(fontSize: 14))),
         ],
       ),
@@ -385,6 +428,14 @@ appBar: AppBar(
     
     List<String> selectedClassrooms = List<String>.from(data['classrooms'] ?? []);
     String? currentPhotoUrl = data['photoUrl'];
+    
+    // 社員/パート区分
+    String staffType = data['staffType'] ?? 'fulltime';
+    
+    // デフォルト勤務時間（社員用）
+    final defaultShift = data['defaultShift'] as Map<String, dynamic>?;
+    final defaultStartCtrl = TextEditingController(text: defaultShift?['start'] ?? '9:00');
+    final defaultEndCtrl = TextEditingController(text: defaultShift?['end'] ?? '18:00');
 
     showDialog(
       context: context,
@@ -484,6 +535,187 @@ appBar: AppBar(
                         
                         const SizedBox(height: 24),
                         
+                        // === 雇用形態セクション ===
+                        const Text('雇用形態', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: GestureDetector(
+                                onTap: () => setStateDialog(() => staffType = 'fulltime'),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(vertical: 12),
+                                  decoration: BoxDecoration(
+                                    color: staffType == 'fulltime' ? Colors.blue.shade50 : Colors.grey.shade100,
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(
+                                      color: staffType == 'fulltime' ? Colors.blue : Colors.grey.shade300,
+                                      width: staffType == 'fulltime' ? 2 : 1,
+                                    ),
+                                  ),
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(
+                                        staffType == 'fulltime' ? Icons.check_circle : Icons.circle_outlined,
+                                        color: staffType == 'fulltime' ? Colors.blue : Colors.grey,
+                                        size: 20,
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        '社員',
+                                        style: TextStyle(
+                                          fontWeight: staffType == 'fulltime' ? FontWeight.bold : FontWeight.normal,
+                                          color: staffType == 'fulltime' ? Colors.blue : Colors.grey.shade700,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: GestureDetector(
+                                onTap: () => setStateDialog(() => staffType = 'part'),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(vertical: 12),
+                                  decoration: BoxDecoration(
+                                    color: staffType == 'part' ? Colors.orange.shade50 : Colors.grey.shade100,
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(
+                                      color: staffType == 'part' ? Colors.orange : Colors.grey.shade300,
+                                      width: staffType == 'part' ? 2 : 1,
+                                    ),
+                                  ),
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(
+                                        staffType == 'part' ? Icons.check_circle : Icons.circle_outlined,
+                                        color: staffType == 'part' ? Colors.orange : Colors.grey,
+                                        size: 20,
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        'パート',
+                                        style: TextStyle(
+                                          fontWeight: staffType == 'part' ? FontWeight.bold : FontWeight.normal,
+                                          color: staffType == 'part' ? Colors.orange : Colors.grey.shade700,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        
+                        // === 社員の場合のみデフォルト勤務時間を表示 ===
+                        if (staffType == 'fulltime') ...[
+                          const SizedBox(height: 16),
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: Colors.blue.shade50,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: Colors.blue.shade200),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Icon(Icons.schedule, size: 18, color: Colors.blue.shade700),
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      'デフォルト勤務時間',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 13,
+                                        color: Colors.blue.shade700,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  '※プラスのシフト表示で使用されます',
+                                  style: TextStyle(fontSize: 11, color: Colors.blue.shade600),
+                                ),
+                                const SizedBox(height: 12),
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: TextField(
+                                        controller: defaultStartCtrl,
+                                        decoration: InputDecoration(
+                                          labelText: '開始時間',
+                                          hintText: '9:00',
+                                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                          isDense: true,
+                                          filled: true,
+                                          fillColor: Colors.white,
+                                        ),
+                                      ),
+                                    ),
+                                    const Padding(
+                                      padding: EdgeInsets.symmetric(horizontal: 12),
+                                      child: Text('〜', style: TextStyle(fontSize: 16)),
+                                    ),
+                                    Expanded(
+                                      child: TextField(
+                                        controller: defaultEndCtrl,
+                                        decoration: InputDecoration(
+                                          labelText: '終了時間',
+                                          hintText: '18:00',
+                                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                          isDense: true,
+                                          filled: true,
+                                          fillColor: Colors.white,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                        
+                        // === パートの場合の説明 ===
+                        if (staffType == 'part') ...[
+                          const SizedBox(height: 16),
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: Colors.orange.shade50,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: Colors.orange.shade200),
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(Icons.info_outline, size: 18, color: Colors.orange.shade700),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    'パートはシフト表で「休み」がデフォルトです。\n出勤日は手動で設定してください。',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.orange.shade700,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                        
+                        const SizedBox(height: 24),
+                        
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
@@ -561,7 +793,9 @@ appBar: AppBar(
                               final uid = data['uid'] ?? doc!.id;
                               uploadedUrl = await _uploadStaffPhoto(newImageBytes!, uid);
                             }
-                            await _staffsRef.doc(doc!.id).update({
+                            
+                            // 更新データを作成
+                            final updateData = {
                               'name': nameCtrl.text,
                               'furigana': furiganaCtrl.text,
                               'phone': phoneCtrl.text,
@@ -569,7 +803,21 @@ appBar: AppBar(
                               'role': roleCtrl.text,
                               'classrooms': selectedClassrooms,
                               'photoUrl': uploadedUrl,
-                            }).timeout(const Duration(seconds: 5));
+                              'staffType': staffType,
+                            };
+                            
+                            // 社員の場合はデフォルト勤務時間を追加
+                            if (staffType == 'fulltime') {
+                              updateData['defaultShift'] = {
+                                'start': defaultStartCtrl.text,
+                                'end': defaultEndCtrl.text,
+                              };
+                            } else {
+                              // パートの場合はデフォルト勤務時間を削除
+                              updateData['defaultShift'] = FieldValue.delete();
+                            }
+                            
+                            await _staffsRef.doc(doc!.id).update(updateData).timeout(const Duration(seconds: 5));
                           } else {
                             await _registerNewStaff(
                               loginId: loginIdCtrl.text,
@@ -580,6 +828,9 @@ appBar: AppBar(
                               role: roleCtrl.text,
                               classrooms: selectedClassrooms,
                               imageBytes: newImageBytes,
+                              staffType: staffType,
+                              defaultShiftStart: staffType == 'fulltime' ? defaultStartCtrl.text : null,
+                              defaultShiftEnd: staffType == 'fulltime' ? defaultEndCtrl.text : null,
                             );
                           }
                         }),
@@ -643,6 +894,9 @@ appBar: AppBar(
     required String email,
     required String role,
     required List<String> classrooms,
+    required String staffType,
+    String? defaultShiftStart,
+    String? defaultShiftEnd,
     Uint8List? imageBytes,
   }) async {
     String? photoUrl;
@@ -650,7 +904,7 @@ appBar: AppBar(
       photoUrl = await _uploadStaffPhoto(imageBytes, uid);
     }
 
-    await _staffsRef.add({
+    final staffData = {
       'uid': uid,
       'loginId': loginId,
       'name': name,
@@ -660,9 +914,20 @@ appBar: AppBar(
       'role': role,
       'classrooms': classrooms,
       'photoUrl': photoUrl,
+      'staffType': staffType,
       'createdAt': FieldValue.serverTimestamp(),
       'isInitialPassword': true,
-    }).timeout(const Duration(seconds: 5));
+    };
+    
+    // 社員の場合はデフォルト勤務時間を追加
+    if (staffType == 'fulltime' && defaultShiftStart != null && defaultShiftEnd != null) {
+      staffData['defaultShift'] = {
+        'start': defaultShiftStart,
+        'end': defaultShiftEnd,
+      };
+    }
+
+    await _staffsRef.add(staffData).timeout(const Duration(seconds: 5));
   }
 
   Future<void> _registerNewStaff({
@@ -673,6 +938,9 @@ appBar: AppBar(
     required String email,
     required String role,
     required List<String> classrooms,
+    required String staffType,
+    String? defaultShiftStart,
+    String? defaultShiftEnd,
     Uint8List? imageBytes,
   }) async {
     final String tempAppName = 'TempStaffRegister_${DateTime.now().millisecondsSinceEpoch}';
@@ -701,6 +969,9 @@ appBar: AppBar(
           email: email,
           role: role,
           classrooms: classrooms,
+          staffType: staffType,
+          defaultShiftStart: defaultShiftStart,
+          defaultShiftEnd: defaultShiftEnd,
           imageBytes: imageBytes,
         );
 
@@ -721,6 +992,9 @@ appBar: AppBar(
               email: email,
               role: role,
               classrooms: classrooms,
+              staffType: staffType,
+              defaultShiftStart: defaultShiftStart,
+              defaultShiftEnd: defaultShiftEnd,
               imageBytes: imageBytes,
             );
             return;

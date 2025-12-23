@@ -247,56 +247,50 @@ class _AdminShellState extends State<AdminShell> {
   }
   
   void _updateUnreadStatus(List<DocumentSnapshot> roomDocs, String myUid) {
-    for (var sub in _messageSubscriptions.values) {
-      sub.cancel();
-    }
-    _messageSubscriptions.clear();
-    
-    if (roomDocs.isEmpty) {
-      debugPrint("❌ No chat rooms");
-      if (mounted) setState(() => _hasUnreadChat = false);
-      return;
-    }
-    
-    final Map<String, bool> roomUnreadStatus = {};
-    
-    for (var roomDoc in roomDocs) {
-      final roomId = roomDoc.id;
-      roomUnreadStatus[roomId] = false;
-      
-      final sub = FirebaseFirestore.instance
-          .collection('chat_rooms')
-          .doc(roomId)
-          .collection('messages')
-          .where('senderId', isNotEqualTo: myUid)
-          .snapshots()
-          .listen((msgSnapshot) {
-        bool hasUnread = false;
-        int unreadCount = 0;
-        for (var doc in msgSnapshot.docs) {
-          final data = doc.data();
-          final readBy = List<String>.from(data['readBy'] ?? []);
-          if (!readBy.contains(myUid)) {
-            hasUnread = true;
-            unreadCount++;
-          }
-        }
-        
-        debugPrint("🔵 Room $roomId: unreadCount=$unreadCount, hasUnread=$hasUnread");
-        
-        roomUnreadStatus[roomId] = hasUnread;
-        final totalHasUnread = roomUnreadStatus.values.any((v) => v);
-        
-        debugPrint("🔵 Total hasUnread: $totalHasUnread");
-        
-        if (mounted) {
-          setState(() => _hasUnreadChat = totalHasUnread);
-        }
-      });
-      
-      _messageSubscriptions[roomId] = sub;
-    }
+  for (var sub in _messageSubscriptions.values) {
+    sub.cancel();
   }
+  _messageSubscriptions.clear();
+  
+  if (roomDocs.isEmpty) {
+    if (mounted) setState(() => _hasUnreadChat = false);
+    return;
+  }
+  
+  final Map<String, bool> roomUnreadStatus = {};
+  
+  for (var roomDoc in roomDocs) {
+    final roomId = roomDoc.id;
+    roomUnreadStatus[roomId] = false;
+    
+    final sub = FirebaseFirestore.instance
+        .collection('chat_rooms')
+        .doc(roomId)
+        .collection('messages')
+        .where('senderId', isNotEqualTo: myUid)
+        .snapshots()
+        .listen((msgSnapshot) {
+      bool hasUnread = false;
+      for (var doc in msgSnapshot.docs) {
+        final data = doc.data();
+        final readBy = List<String>.from(data['readBy'] ?? []);
+        if (!readBy.contains(myUid)) {
+          hasUnread = true;
+          break;
+        }
+      }
+      
+      roomUnreadStatus[roomId] = hasUnread;
+      final totalHasUnread = roomUnreadStatus.values.any((v) => v);
+      
+      if (mounted) {
+        setState(() => _hasUnreadChat = totalHasUnread);
+      }
+    });
+    
+    _messageSubscriptions[roomId] = sub;
+  }
+}
   
   Future<void> _loadStaffClassrooms() async {
     try {

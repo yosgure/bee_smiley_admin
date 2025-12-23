@@ -391,11 +391,13 @@ appBar: AppBar(
           Text('誕生日: ${child['birthDate']}', style: const TextStyle(fontSize: 12)),
           Text('所属: $classInfo', style: const TextStyle(fontSize: 12)),
           if ((child['allergy'] ?? '').isNotEmpty)
-            Text('特記事項: ${child['allergy']}', style: const TextStyle(fontSize: 12, color: Colors.red)),
-        ],
-      ),
-    );
-  }
+          Text('特記事項: ${child['allergy']}', style: const TextStyle(fontSize: 12, color: Colors.red)),
+        if ((child['profileUrl'] ?? '').isNotEmpty)
+          Text('URL: ${child['profileUrl']}', style: const TextStyle(fontSize: 12, color: Colors.blue)),
+      ],
+    ),
+  );
+}
 
   /// Cloud Functions経由でパスワードを初期化
   Future<void> _resetPassword(String docId, String? targetUid, String name) async {
@@ -788,6 +790,17 @@ appBar: AppBar(
                                   initialValue: child['allergy'],
                                   decoration: const InputDecoration(labelText: 'アレルギー・特記事項', isDense: true, border: OutlineInputBorder()),
                                   onChanged: (val) => child['allergy'] = val,
+                                ),
+                                const SizedBox(height: 8),
+                                TextFormField(
+                                  initialValue: child['profileUrl'] ?? '',
+                                  decoration: const InputDecoration(
+                                    labelText: 'プロフィールURL',
+                                    hintText: 'https://...',
+                                    isDense: true,
+                                    border: OutlineInputBorder(),
+                                  ),
+                                  onChanged: (val) => child['profileUrl'] = val,
                                 ),
                               ],
                             ),
