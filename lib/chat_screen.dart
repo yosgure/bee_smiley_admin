@@ -9,6 +9,7 @@ import 'package:intl/intl.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:flutter/gestures.dart';
 import 'app_theme.dart';
 
 // ==========================================
@@ -261,7 +262,6 @@ class _ChatListScreenState extends State<ChatListScreen> {
 
         final docs = snapshot.data!.docs;
         
-        // PC版で未選択の場合、最新のチャットを自動選択
         if (isWide && _selectedRoomId == null && docs.isNotEmpty) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted) {
@@ -316,31 +316,18 @@ class _RoomListTile extends StatelessWidget {
     var snap = await FirebaseFirestore.instance.collection('staffs').where('uid', isEqualTo: peerId).limit(1).get();
     if (snap.docs.isNotEmpty) {
       final d = snap.docs.first.data();
-      return {
-        'name': d['name'] ?? 'スタッフ',
-        'photoUrl': d['photoUrl'],
-        'isStaff': true,
-      };
+      return {'name': d['name'] ?? 'スタッフ', 'photoUrl': d['photoUrl'], 'isStaff': true};
     }
-    
     snap = await FirebaseFirestore.instance.collection('families').where('uid', isEqualTo: peerId).limit(1).get();
     if (snap.docs.isNotEmpty) {
       final d = snap.docs.first.data();
       final lastName = d['lastName'] ?? '';
       final firstName = d['firstName'] ?? '';
       final fullName = '$lastName $firstName'.trim();
-      
       String? childPhotoUrl;
       final children = List<Map<String, dynamic>>.from(d['children'] ?? []);
-      if (children.isNotEmpty) {
-        childPhotoUrl = children.first['photoUrl'] as String?;
-      }
-      
-      return {
-        'name': fullName.isNotEmpty ? fullName : '保護者',
-        'photoUrl': childPhotoUrl,
-        'isStaff': false,
-      };
+      if (children.isNotEmpty) childPhotoUrl = children.first['photoUrl'] as String?;
+      return {'name': fullName.isNotEmpty ? fullName : '保護者', 'photoUrl': childPhotoUrl, 'isStaff': false};
     }
     return {'name': '不明', 'photoUrl': null, 'isStaff': false};
   }
@@ -354,21 +341,14 @@ class _RoomListTile extends StatelessWidget {
 
   Widget _buildTrailing(String roomId, String timeStr) {
     return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('chat_rooms')
-          .doc(roomId)
-          .collection('messages')
-          .where('senderId', isNotEqualTo: myUid)
-          .snapshots(),
+      stream: FirebaseFirestore.instance.collection('chat_rooms').doc(roomId).collection('messages').where('senderId', isNotEqualTo: myUid).snapshots(),
       builder: (context, msgSnapshot) {
         int unreadCount = 0;
         if (msgSnapshot.hasData) {
           for (var doc in msgSnapshot.data!.docs) {
             final data = doc.data() as Map<String, dynamic>;
             final readBy = List<String>.from(data['readBy'] ?? []);
-            if (!readBy.contains(myUid)) {
-              unreadCount++;
-            }
+            if (!readBy.contains(myUid)) unreadCount++;
           }
         }
         return Column(
@@ -376,23 +356,13 @@ class _RoomListTile extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
             Text(timeStr, style: const TextStyle(fontSize: 11, color: Colors.grey)),
-if (unreadCount > 0)
-  Container(
-    margin: const EdgeInsets.only(top: 4),
-    width: 20,
-    height: 20,
-    decoration: const BoxDecoration(
-      color: Colors.red,
-      shape: BoxShape.circle,
-    ),
-child: Center(
-      child: Text(
-        unreadCount > 99 ? '99+' : '$unreadCount',
-        style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
-      ),
-    ),
-  ),
-],
+            if (unreadCount > 0)
+              Container(
+                margin: const EdgeInsets.only(top: 4), width: 20, height: 20,
+                decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
+                child: Center(child: Text(unreadCount > 99 ? '99+' : '$unreadCount', style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold))),
+              ),
+          ],
         );
       },
     );
@@ -404,26 +374,21 @@ child: Center(
     final roomId = roomDoc.id;
     final isGroup = (room['members'] as List).length > 2 || (room['groupName'] != null && room['groupName'].isNotEmpty);
     final memberNames = Map<String, dynamic>.from(room['names'] ?? {});
-
     String timeStr = '';
     if (room['lastMessageTime'] != null) {
       final ts = room['lastMessageTime'] as Timestamp;
       timeStr = _formatTime(ts.toDate());
     }
-
     if (isGroup) {
       final groupName = room['groupName'] ?? 'グループ';
       final photoUrl = room['photoUrl'] as String?;
       return ListTile(
-        selected: isSelected,
-        selectedTileColor: AppColors.primary.withOpacity(0.1),
+        selected: isSelected, selectedTileColor: AppColors.primary.withOpacity(0.1),
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         leading: CircleAvatar(
           backgroundColor: AppColors.primary.withOpacity(0.15),
           backgroundImage: photoUrl != null && photoUrl.isNotEmpty ? NetworkImage(photoUrl) : null,
-          child: (photoUrl == null || photoUrl.isEmpty) 
-              ? Text(groupName.isNotEmpty ? groupName[0] : 'G', style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold)) 
-              : null,
+          child: (photoUrl == null || photoUrl.isEmpty) ? Text(groupName.isNotEmpty ? groupName[0] : 'G', style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold)) : null,
         ),
         title: Text(groupName, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontWeight: isSelected ? FontWeight.bold : FontWeight.normal, color: isSelected ? AppColors.primary : AppColors.textMain)),
         subtitle: Text(room['lastMessage'] ?? '', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12, color: Colors.grey)),
@@ -431,10 +396,8 @@ child: Center(
         onTap: () => onTap(roomId, groupName, true, memberNames),
       );
     }
-
     final peerId = (room['members'] as List).firstWhere((id) => id != myUid, orElse: () => '');
     if (peerId.isEmpty) return const SizedBox();
-
     return FutureBuilder<Map<String, dynamic>>(
       future: _fetchPeerInfo(peerId),
       builder: (context, snapshot) {
@@ -442,17 +405,13 @@ child: Center(
         final name = peerData?['name'] ?? memberNames[peerId] ?? '読み込み中...';
         final photoUrl = peerData?['photoUrl'] as String?;
         final isStaff = peerData?['isStaff'] == true;
-
         return ListTile(
-          selected: isSelected,
-          selectedTileColor: AppColors.primary.withOpacity(0.1),
+          selected: isSelected, selectedTileColor: AppColors.primary.withOpacity(0.1),
           contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           leading: CircleAvatar(
             backgroundColor: isStaff ? AppColors.primary.withOpacity(0.15) : Colors.orange.shade100,
             backgroundImage: photoUrl != null && photoUrl.isNotEmpty ? NetworkImage(photoUrl) : null,
-            child: (photoUrl == null || photoUrl.isEmpty) 
-                ? Text(name.isNotEmpty ? name[0] : '?', style: TextStyle(color: isStaff ? AppColors.primary : Colors.orange, fontWeight: FontWeight.bold)) 
-                : null,
+            child: (photoUrl == null || photoUrl.isEmpty) ? Text(name.isNotEmpty ? name[0] : '?', style: TextStyle(color: isStaff ? AppColors.primary : Colors.orange, fontWeight: FontWeight.bold)) : null,
           ),
           title: Text(name, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontWeight: isSelected ? FontWeight.bold : FontWeight.normal, color: isSelected ? AppColors.primary : AppColors.textMain)),
           subtitle: Text(room['lastMessage'] ?? '', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12, color: Colors.grey)),
@@ -472,9 +431,7 @@ class NewChatDialog extends StatefulWidget {
   final String myUid;
   final String myName;
   final Function(String roomId, String roomName, bool isGroup, Map<String, dynamic> memberNames) onStartChat;
-
   const NewChatDialog({super.key, required this.myUid, required this.myName, required this.onStartChat});
-
   @override
   State<NewChatDialog> createState() => _NewChatDialogState();
 }
@@ -483,12 +440,10 @@ class _NewChatDialogState extends State<NewChatDialog> with SingleTickerProvider
   TabController? _tabController;
   final TextEditingController _groupNameController = TextEditingController();
   final TextEditingController _searchController = TextEditingController();
-
   List<Map<String, dynamic>> _families = [];
   List<Map<String, dynamic>> _staff = [];
   List<Map<String, dynamic>> _filteredFamilies = [];
   List<Map<String, dynamic>> _filteredStaff = [];
-
   final Set<String> _selectedUids = {};
   bool _isGroupMode = false;
   bool _isLoading = true;
@@ -499,26 +454,18 @@ class _NewChatDialogState extends State<NewChatDialog> with SingleTickerProvider
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
     _tabController!.addListener(() {
-      if (!_tabController!.indexIsChanging) {
-        setState(() { _selectedUids.clear(); _isGroupMode = false; _groupImageBytes = null; });
-      }
+      if (!_tabController!.indexIsChanging) setState(() { _selectedUids.clear(); _isGroupMode = false; _groupImageBytes = null; });
     });
     _fetchUsers();
   }
 
   @override
-  void dispose() {
-    _tabController?.dispose();
-    _groupNameController.dispose();
-    _searchController.dispose();
-    super.dispose();
-  }
+  void dispose() { _tabController?.dispose(); _groupNameController.dispose(); _searchController.dispose(); super.dispose(); }
 
   Future<void> _fetchUsers() async {
     try {
       final List<Map<String, dynamic>> tempFamilies = [];
       final List<Map<String, dynamic>> tempStaff = [];
-
       final familySnap = await FirebaseFirestore.instance.collection('families').get();
       for (var doc in familySnap.docs) {
         final d = doc.data();
@@ -526,21 +473,10 @@ class _NewChatDialogState extends State<NewChatDialog> with SingleTickerProvider
         final name = '${d['lastName'] ?? ''} ${d['firstName'] ?? ''}'.trim();
         final kana = '${d['lastNameKana'] ?? ''} ${d['firstNameKana'] ?? ''}'.trim();
         final children = List<Map<String, dynamic>>.from(d['children'] ?? []);
-        String? classroom;
-        String? childPhotoUrl;
-        if (children.isNotEmpty) {
-          classroom = children.first['classroom'];
-          childPhotoUrl = children.first['photoUrl'] as String?;
-        }
-        tempFamilies.add({
-          'uid': d['uid'] ?? doc.id,
-          'name': name.isEmpty ? '名称未設定' : name,
-          'kana': kana.isEmpty ? name : kana,
-          'photoUrl': childPhotoUrl,
-          'classroom': classroom,
-        });
+        String? classroom; String? childPhotoUrl;
+        if (children.isNotEmpty) { classroom = children.first['classroom']; childPhotoUrl = children.first['photoUrl'] as String?; }
+        tempFamilies.add({'uid': d['uid'] ?? doc.id, 'name': name.isEmpty ? '名称未設定' : name, 'kana': kana.isEmpty ? name : kana, 'photoUrl': childPhotoUrl, 'classroom': classroom});
       }
-
       final staffSnap = await FirebaseFirestore.instance.collection('staffs').get();
       for (var doc in staffSnap.docs) {
         final d = doc.data();
@@ -551,22 +487,12 @@ class _NewChatDialogState extends State<NewChatDialog> with SingleTickerProvider
         if (name.isEmpty) name = 'スタッフ (名称未設定)';
         String kana = d['furigana'] ?? '';
         if (kana.isEmpty) kana = name;
-        tempStaff.add({
-          'uid': uid,
-          'name': name,
-          'kana': kana,
-          'photoUrl': d['photoUrl'],
-          'classrooms': d['classrooms'],
-        });
+        tempStaff.add({'uid': uid, 'name': name, 'kana': kana, 'photoUrl': d['photoUrl'], 'classrooms': d['classrooms']});
       }
-
       tempFamilies.sort((a, b) => a['kana'].compareTo(b['kana']));
       tempStaff.sort((a, b) => a['kana'].compareTo(b['kana']));
-
       setState(() { _families = tempFamilies; _staff = tempStaff; _filteredFamilies = tempFamilies; _filteredStaff = tempStaff; _isLoading = false; });
-    } catch (e) {
-      setState(() => _isLoading = false);
-    }
+    } catch (e) { setState(() => _isLoading = false); }
   }
 
   void _onSearch(String query) {
@@ -597,52 +523,27 @@ class _NewChatDialogState extends State<NewChatDialog> with SingleTickerProvider
 
   Widget _buildSectionedList(List<Map<String, dynamic>> users, bool isStaffTab) {
     if (users.isEmpty) return const Center(child: Text('ユーザーがいません'));
-
     Map<String, List<Map<String, dynamic>>> grouped = {};
-    for (var user in users) {
-      final header = _getIndexHeader(user['kana']);
-      if (!grouped.containsKey(header)) grouped[header] = [];
-      grouped[header]!.add(user);
-    }
-
+    for (var user in users) { final header = _getIndexHeader(user['kana']); if (!grouped.containsKey(header)) grouped[header] = []; grouped[header]!.add(user); }
     final headers = grouped.keys.toList()..sort();
-
     return ListView.builder(
       itemCount: headers.length,
       itemBuilder: (context, index) {
         final header = headers[index];
         final groupUsers = grouped[header]!;
-
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-              color: Colors.white,
-              child: Text(header, style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary, fontSize: 14)),
-            ),
+            Container(width: double.infinity, padding: const EdgeInsets.fromLTRB(16, 12, 16, 8), color: Colors.white, child: Text(header, style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary, fontSize: 14))),
             const Divider(height: 1, thickness: 1, color: Color(0xFFF2F2F7)),
             ...groupUsers.map((user) {
-              final uid = user['uid'];
-              final isSelected = _selectedUids.contains(uid);
-              final photoUrl = user['photoUrl'];
-              final name = user['name'];
-
+              final uid = user['uid']; final isSelected = _selectedUids.contains(uid); final photoUrl = user['photoUrl']; final name = user['name'];
               return ListTile(
                 contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
-                leading: CircleAvatar(
-                  backgroundColor: isStaffTab ? AppColors.primary.withOpacity(0.15) : Colors.orange.shade100,
-                  backgroundImage: photoUrl != null && photoUrl.isNotEmpty ? NetworkImage(photoUrl) : null,
-                  child: (photoUrl == null || photoUrl.isEmpty) ? Text(name.isNotEmpty ? name[0] : '?', style: TextStyle(color: isStaffTab ? AppColors.primary : Colors.orange, fontWeight: FontWeight.bold)) : null,
-                ),
+                leading: CircleAvatar(backgroundColor: isStaffTab ? AppColors.primary.withOpacity(0.15) : Colors.orange.shade100, backgroundImage: photoUrl != null && photoUrl.isNotEmpty ? NetworkImage(photoUrl) : null, child: (photoUrl == null || photoUrl.isEmpty) ? Text(name.isNotEmpty ? name[0] : '?', style: TextStyle(color: isStaffTab ? AppColors.primary : Colors.orange, fontWeight: FontWeight.bold)) : null),
                 title: Text(name, style: const TextStyle(fontSize: 16)),
                 trailing: isStaffTab && _isGroupMode ? Checkbox(value: isSelected, activeColor: AppColors.primary, onChanged: (val) => _toggleSelection(uid)) : null,
-                onTap: () {
-                  if (isStaffTab && _isGroupMode) _toggleSelection(uid);
-                  else if (isStaffTab) _startSingleChat(uid, user['name']);
-                  else _startFamilyChat(user);
-                },
+                onTap: () { if (isStaffTab && _isGroupMode) _toggleSelection(uid); else if (isStaffTab) _startSingleChat(uid, user['name']); else _startFamilyChat(user); },
               );
             }),
           ],
@@ -651,20 +552,12 @@ class _NewChatDialogState extends State<NewChatDialog> with SingleTickerProvider
     );
   }
 
-  void _toggleSelection(String uid) {
-    setState(() {
-      if (_selectedUids.contains(uid)) _selectedUids.remove(uid);
-      else _selectedUids.add(uid);
-    });
-  }
+  void _toggleSelection(String uid) { setState(() { if (_selectedUids.contains(uid)) _selectedUids.remove(uid); else _selectedUids.add(uid); }); }
 
   Future<void> _pickGroupImage() async {
     final picker = ImagePicker();
     final picked = await picker.pickImage(source: ImageSource.gallery);
-    if (picked != null) {
-      final bytes = await picked.readAsBytes();
-      setState(() => _groupImageBytes = bytes);
-    }
+    if (picked != null) { final bytes = await picked.readAsBytes(); setState(() => _groupImageBytes = bytes); }
   }
 
   void _startSingleChat(String targetUid, String targetName) async {
@@ -676,38 +569,19 @@ class _NewChatDialogState extends State<NewChatDialog> with SingleTickerProvider
   }
 
   void _startFamilyChat(Map<String, dynamic> familyData) async {
-    final familyUid = familyData['uid'];
-    final familyName = familyData['name'];
-    final classroom = familyData['classroom'];
-
+    final familyUid = familyData['uid']; final familyName = familyData['name']; final classroom = familyData['classroom'];
     List<String> classroomStaffUids = [widget.myUid];
-    Map<String, String> namesMap = {
-      widget.myUid: widget.myName.isEmpty ? '担当者' : widget.myName,
-      familyUid: familyName,
-    };
-
+    Map<String, String> namesMap = {widget.myUid: widget.myName.isEmpty ? '担当者' : widget.myName, familyUid: familyName};
     if (classroom != null) {
       for (var staff in _staff) {
-        if (staff['classrooms'] != null && (staff['classrooms'] as List).contains(classroom) && staff['uid'] != widget.myUid) {
-          classroomStaffUids.add(staff['uid']);
-          namesMap[staff['uid']] = staff['name'];
-        }
+        if (staff['classrooms'] != null && (staff['classrooms'] as List).contains(classroom) && staff['uid'] != widget.myUid) { classroomStaffUids.add(staff['uid']); namesMap[staff['uid']] = staff['name']; }
       }
     }
-
     final List<String> memberIds = [familyUid, ...classroomStaffUids]..sort();
     final roomId = 'family_$familyUid';
-
-    String? groupName;
-    if (classroomStaffUids.length > 1) {
-      groupName = familyName;
-    }
-
+    String? groupName; if (classroomStaffUids.length > 1) groupName = familyName;
     await _createRoomIfNeeded(roomId, memberIds, namesMap, groupName, null);
-    if (mounted) {
-      Navigator.pop(context);
-      widget.onStartChat(roomId, groupName ?? familyName, classroomStaffUids.length > 1, namesMap);
-    }
+    if (mounted) { Navigator.pop(context); widget.onStartChat(roomId, groupName ?? familyName, classroomStaffUids.length > 1, namesMap); }
   }
 
   void _startGroupChat() async {
@@ -715,25 +589,13 @@ class _NewChatDialogState extends State<NewChatDialog> with SingleTickerProvider
     final roomId = FirebaseFirestore.instance.collection('chat_rooms').doc().id;
     final memberIds = [widget.myUid, ..._selectedUids]..sort();
     final Map<String, String> namesMap = {widget.myUid: widget.myName.isEmpty ? '担当者' : widget.myName};
-    for (var uid in _selectedUids) {
-      final user = _staff.firstWhere((u) => u['uid'] == uid, orElse: () => {'name': 'Unknown'});
-      namesMap[uid] = user['name'];
-    }
+    for (var uid in _selectedUids) { final user = _staff.firstWhere((u) => u['uid'] == uid, orElse: () => {'name': 'Unknown'}); namesMap[uid] = user['name']; }
     String groupName = _groupNameController.text.trim();
-    if (groupName.isEmpty) {
-      groupName = namesMap.values.where((n) => n != widget.myName).take(3).join(', ');
-      if (namesMap.length > 4) groupName += '...';
-    }
-
+    if (groupName.isEmpty) { groupName = namesMap.values.where((n) => n != widget.myName).take(3).join(', '); if (namesMap.length > 4) groupName += '...'; }
     String? photoUrl;
     if (_groupImageBytes != null) {
-      try {
-        final ref = FirebaseStorage.instance.ref().child('group_photos/$roomId.jpg');
-        await ref.putData(_groupImageBytes!, SettableMetadata(contentType: 'image/jpeg'));
-        photoUrl = await ref.getDownloadURL();
-      } catch (e) { debugPrint('Error uploading group image: $e'); }
+      try { final ref = FirebaseStorage.instance.ref().child('group_photos/$roomId.jpg'); await ref.putData(_groupImageBytes!, SettableMetadata(contentType: 'image/jpeg')); photoUrl = await ref.getDownloadURL(); } catch (e) { debugPrint('Error uploading group image: $e'); }
     }
-
     await _createRoomIfNeeded(roomId, memberIds, namesMap, groupName, photoUrl);
     if (mounted) { Navigator.pop(context); widget.onStartChat(roomId, groupName, true, namesMap); }
   }
@@ -741,38 +603,23 @@ class _NewChatDialogState extends State<NewChatDialog> with SingleTickerProvider
   Future<void> _createRoomIfNeeded(String roomId, List<String> members, Map<String, String> names, String? groupName, String? photoUrl) async {
     final roomRef = FirebaseFirestore.instance.collection('chat_rooms').doc(roomId);
     final doc = await roomRef.get();
-
     if (!doc.exists) {
-      await roomRef.set({
-        'roomId': roomId, 'members': members, 'names': names, 'groupName': groupName, 'photoUrl': photoUrl,
-        'lastMessage': groupName != null ? 'グループ作成' : 'チャット開始',
-        'lastMessageTime': FieldValue.serverTimestamp(), 'createdAt': FieldValue.serverTimestamp(),
-      });
-    } else {
-      await roomRef.update({
-        'members': members,
-        'names': names,
-      });
-    }
+      await roomRef.set({'roomId': roomId, 'members': members, 'names': names, 'groupName': groupName, 'photoUrl': photoUrl, 'lastMessage': groupName != null ? 'グループ作成' : 'チャット開始', 'lastMessageTime': FieldValue.serverTimestamp(), 'createdAt': FieldValue.serverTimestamp()});
+    } else { await roomRef.update({'members': members, 'names': names}); }
   }
 
   @override
   Widget build(BuildContext context) {
     if (_tabController == null) return const SizedBox.shrink();
-
     final screenWidth = MediaQuery.of(context).size.width;
     final screenHeight = MediaQuery.of(context).size.height;
     final dialogWidth = screenWidth < 600 ? screenWidth * 0.95 : 500.0;
     final dialogHeight = screenHeight < 700 ? screenHeight * 0.85 : 650.0;
-
     return AlertDialog(
-      contentPadding: EdgeInsets.zero,
-      backgroundColor: Colors.white,
-      surfaceTintColor: Colors.white,
+      contentPadding: EdgeInsets.zero, backgroundColor: Colors.white, surfaceTintColor: Colors.white,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       content: SizedBox(
-        width: dialogWidth,
-        height: dialogHeight,
+        width: dialogWidth, height: dialogHeight,
         child: Column(
           children: [
             Container(
@@ -781,21 +628,9 @@ class _NewChatDialogState extends State<NewChatDialog> with SingleTickerProvider
                 children: [
                   const Text('新規チャット', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 16),
-                  TextField(
-                    controller: _searchController,
-                    decoration: const InputDecoration(hintText: '名前で検索...', prefixIcon: Icon(Icons.search), border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8), isDense: true, filled: false),
-                    onChanged: _onSearch,
-                  ),
+                  TextField(controller: _searchController, decoration: const InputDecoration(hintText: '名前で検索...', prefixIcon: Icon(Icons.search), border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8), isDense: true, filled: false), onChanged: _onSearch),
                   const SizedBox(height: 16),
-                  TabBar(
-                    controller: _tabController,
-                    labelColor: AppColors.primary,
-                    unselectedLabelColor: Colors.grey,
-                    indicatorColor: AppColors.primary,
-                    indicatorSize: TabBarIndicatorSize.tab,
-                    labelStyle: const TextStyle(fontWeight: FontWeight.bold),
-                    tabs: const [Tab(text: '保護者'), Tab(text: 'スタッフ')],
-                  ),
+                  TabBar(controller: _tabController, labelColor: AppColors.primary, unselectedLabelColor: Colors.grey, indicatorColor: AppColors.primary, indicatorSize: TabBarIndicatorSize.tab, labelStyle: const TextStyle(fontWeight: FontWeight.bold), tabs: const [Tab(text: '保護者'), Tab(text: 'スタッフ')]),
                   AnimatedBuilder(
                     animation: _tabController!,
                     builder: (context, _) {
@@ -803,23 +638,11 @@ class _NewChatDialogState extends State<NewChatDialog> with SingleTickerProvider
                         return Column(
                           children: [
                             const SizedBox(height: 12),
-                            Row(mainAxisAlignment: MainAxisAlignment.end, children: [
-                              const Text('グループ作成', style: TextStyle(fontSize: 14)),
-                              const SizedBox(width: 8),
-                              Switch(value: _isGroupMode, activeColor: AppColors.primary, onChanged: (val) => setState(() => _isGroupMode = val)),
-                            ]),
+                            Row(mainAxisAlignment: MainAxisAlignment.end, children: [const Text('グループ作成', style: TextStyle(fontSize: 14)), const SizedBox(width: 8), Switch(value: _isGroupMode, activeColor: AppColors.primary, onChanged: (val) => setState(() => _isGroupMode = val))]),
                             if (_isGroupMode) ...[
                               const SizedBox(height: 16),
                               Row(children: [
-                                GestureDetector(
-                                  onTap: _pickGroupImage,
-                                  child: CircleAvatar(
-                                    radius: 24,
-                                    backgroundColor: Colors.grey.shade200,
-                                    backgroundImage: _groupImageBytes != null ? MemoryImage(_groupImageBytes!) : null,
-                                    child: _groupImageBytes == null ? const Icon(Icons.camera_alt, color: Colors.grey) : null,
-                                  ),
-                                ),
+                                GestureDetector(onTap: _pickGroupImage, child: CircleAvatar(radius: 24, backgroundColor: Colors.grey.shade200, backgroundImage: _groupImageBytes != null ? MemoryImage(_groupImageBytes!) : null, child: _groupImageBytes == null ? const Icon(Icons.camera_alt, color: Colors.grey) : null)),
                                 const SizedBox(width: 16),
                                 Expanded(child: TextField(controller: _groupNameController, decoration: const InputDecoration(labelText: 'グループ名（任意）', border: OutlineInputBorder(), isDense: true))),
                               ]),
@@ -834,12 +657,7 @@ class _NewChatDialogState extends State<NewChatDialog> with SingleTickerProvider
               ),
             ),
             const Divider(height: 1),
-            Expanded(
-              child: _isLoading ? const Center(child: CircularProgressIndicator()) : TabBarView(controller: _tabController, children: [
-                _buildSectionedList(_filteredFamilies, false),
-                _buildSectionedList(_filteredStaff, true)
-              ]),
-            ),
+            Expanded(child: _isLoading ? const Center(child: CircularProgressIndicator()) : TabBarView(controller: _tabController, children: [_buildSectionedList(_filteredFamilies, false), _buildSectionedList(_filteredStaff, true)])),
             if (_tabController!.index == 1 && _isGroupMode) Padding(padding: const EdgeInsets.all(16), child: SizedBox(width: double.infinity, child: ElevatedButton(onPressed: _selectedUids.isEmpty ? null : _startGroupChat, style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 12)), child: Text('選択した${_selectedUids.length}名でグループ作成')))) else const SizedBox(height: 16),
           ],
         ),
@@ -858,9 +676,7 @@ class ChatDetailView extends StatefulWidget {
   final bool showAppBar;
   final bool isGroup;
   final Map<String, dynamic> memberNames;
-
   const ChatDetailView({super.key, required this.roomId, required this.roomName, required this.isGroup, required this.memberNames, this.showAppBar = true});
-
   @override
   State<ChatDetailView> createState() => _ChatDetailViewState();
 }
@@ -873,16 +689,9 @@ class _ChatDetailViewState extends State<ChatDetailView> {
   bool _isUploading = false;
 
   @override
-  void dispose() {
-    _textController.dispose();
-    _scrollController.dispose();
-    _focusNode.dispose();
-    super.dispose();
-  }
+  void dispose() { _textController.dispose(); _scrollController.dispose(); _focusNode.dispose(); super.dispose(); }
 
-  void _dismissKeyboard() {
-    _focusNode.unfocus();
-  }
+  void _dismissKeyboard() { _focusNode.unfocus(); }
 
   @override
   Widget build(BuildContext context) {
@@ -892,21 +701,14 @@ class _ChatDetailViewState extends State<ChatDetailView> {
         children: [
           if (widget.showAppBar) ...[
             Container(
-              height: 40,
-              padding: const EdgeInsets.symmetric(horizontal: 16),
+              height: 40, padding: const EdgeInsets.symmetric(horizontal: 16),
               decoration: BoxDecoration(color: Colors.white, border: Border(bottom: BorderSide(color: Colors.grey.shade300, width: 1))),
               child: Row(children: [
                 Expanded(child: Text(widget.roomName, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis)),
                 PopupMenuButton<String>(
                   icon: const Icon(Icons.more_vert, color: Colors.grey),
-                  onSelected: (value) {
-                    if (value == 'delete') _deleteChat();
-                    if (value == 'members') _showMembers();
-                  },
-                  itemBuilder: (context) => [
-                    if (widget.isGroup) const PopupMenuItem(value: 'members', child: Text('メンバー一覧')),
-                    const PopupMenuItem(value: 'delete', child: Text('チャットを削除', style: TextStyle(color: Colors.red))),
-                  ],
+                  onSelected: (value) { if (value == 'delete') _deleteChat(); if (value == 'members') _showMembers(); },
+                  itemBuilder: (context) => [if (widget.isGroup) const PopupMenuItem(value: 'members', child: Text('メンバー一覧')), const PopupMenuItem(value: 'delete', child: Text('チャットを削除', style: TextStyle(color: Colors.red)))],
                 ),
               ]),
             ),
@@ -919,10 +721,7 @@ class _ChatDetailViewState extends State<ChatDetailView> {
                 builder: (context, snapshot) {
                   if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
                   final docs = snapshot.data!.docs;
-                  WidgetsBinding.instance.addPostFrameCallback((_) {
-                    if (_scrollController.hasClients) _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
-                  });
-
+                  WidgetsBinding.instance.addPostFrameCallback((_) { if (_scrollController.hasClients) _scrollController.jumpTo(_scrollController.position.maxScrollExtent); });
                   for (var doc in docs) {
                     final data = doc.data() as Map<String, dynamic>;
                     final senderId = data['senderId'];
@@ -931,16 +730,9 @@ class _ChatDetailViewState extends State<ChatDetailView> {
                       FirebaseFirestore.instance.collection('chat_rooms').doc(widget.roomId).collection('messages').doc(doc.id).update({'readBy': FieldValue.arrayUnion([currentUser!.uid])});
                     }
                   }
-
                   return ListView.builder(
-                    controller: _scrollController,
-                    padding: const EdgeInsets.all(16),
-                    itemCount: docs.length,
-                    itemBuilder: (context, index) {
-                      final msg = docs[index].data() as Map<String, dynamic>;
-                      final msgId = docs[index].id;
-                      return _buildMessageItem(msg, msgId);
-                    },
+                    controller: _scrollController, padding: const EdgeInsets.all(16), itemCount: docs.length,
+                    itemBuilder: (context, index) { final msg = docs[index].data() as Map<String, dynamic>; final msgId = docs[index].id; return _buildMessageItem(msg, msgId); },
                   );
                 },
               ),
@@ -954,40 +746,23 @@ class _ChatDetailViewState extends State<ChatDetailView> {
   }
 
   void _deleteChat() {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('チャットを削除'),
-        content: const Text('このチャットルームを削除しますか？'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('キャンセル')),
-          TextButton(onPressed: () async {
-            Navigator.pop(ctx);
-            await FirebaseFirestore.instance.collection('chat_rooms').doc(widget.roomId).delete();
-          }, child: const Text('削除', style: TextStyle(color: Colors.red))),
-        ],
-      ),
-    );
+    showDialog(context: context, builder: (ctx) => AlertDialog(
+      title: const Text('チャットを削除'), content: const Text('このチャットルームを削除しますか？'),
+      actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('キャンセル')), TextButton(onPressed: () async { Navigator.pop(ctx); await FirebaseFirestore.instance.collection('chat_rooms').doc(widget.roomId).delete(); }, child: const Text('削除', style: TextStyle(color: Colors.red)))],
+    ));
   }
 
   void _showMembers() {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('メンバー一覧'),
-        content: SizedBox(width: 300, height: 300, child: ListView(children: widget.memberNames.entries.map((e) {
-          final name = e.key == currentUser!.uid ? '${e.value} (自分)' : e.value;
-          return ListTile(leading: const Icon(Icons.person), title: Text(name));
-        }).toList())),
-        actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('閉じる'))],
-      ),
-    );
+    showDialog(context: context, builder: (ctx) => AlertDialog(
+      title: const Text('メンバー一覧'),
+      content: SizedBox(width: 300, height: 300, child: ListView(children: widget.memberNames.entries.map((e) { final name = e.key == currentUser!.uid ? '${e.value} (自分)' : e.value; return ListTile(leading: const Icon(Icons.person), title: Text(name)); }).toList())),
+      actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('閉じる'))],
+    ));
   }
 
   Widget _buildInputArea() {
     return Container(
-      padding: const EdgeInsets.all(12),
-      color: Colors.white,
+      padding: const EdgeInsets.all(12), color: Colors.white,
       child: SafeArea(
         top: false,
         child: Row(
@@ -998,58 +773,39 @@ class _ChatDetailViewState extends State<ChatDetailView> {
             Expanded(
               child: Focus(
                 onKeyEvent: (node, event) {
-                  // IME変換中（日本語入力で下線が出ている状態）はスキップ
-                  if (_textController.value.composing.isValid) {
-                    return KeyEventResult.ignored;
-                  }
-                  // Enter押下時（Shift押してない場合）に送信
-                  if (event is KeyDownEvent &&
-                      event.logicalKey == LogicalKeyboardKey.enter &&
-                      !HardwareKeyboard.instance.isShiftPressed) {
-                    _sendMessage();
-                    return KeyEventResult.handled;
-                  }
+                  if (_textController.value.composing.isValid) return KeyEventResult.ignored;
+                  if (event is KeyDownEvent && event.logicalKey == LogicalKeyboardKey.enter && !HardwareKeyboard.instance.isShiftPressed) { _sendMessage(); return KeyEventResult.handled; }
                   return KeyEventResult.ignored;
                 },
                 child: TextField(
-                  controller: _textController,
-                  focusNode: _focusNode,
-                  maxLines: null,
-                  minLines: 1,
-                  keyboardType: TextInputType.multiline,
-                  decoration: InputDecoration(
-                    hintText: 'メッセージを入力',
-                    filled: true,
-                    fillColor: Colors.grey.shade100,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(24),
-                      borderSide: BorderSide.none,
-                    ),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                  ),
+                  controller: _textController, focusNode: _focusNode, maxLines: null, minLines: 1, keyboardType: TextInputType.multiline,
+                  decoration: InputDecoration(hintText: 'メッセージを入力', filled: true, fillColor: Colors.grey.shade100, border: OutlineInputBorder(borderRadius: BorderRadius.circular(24), borderSide: BorderSide.none), contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10)),
                 ),
               ),
             ),
             const SizedBox(width: 8),
-Padding(
+            Padding(
               padding: const EdgeInsets.only(bottom: 2),
-              child: GestureDetector(
-                onTap: _sendMessage,
-                child: Container(
-                  width: 40,
-                  height: 40,
-                  decoration: const BoxDecoration(
-                    color: AppColors.primary,
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(Icons.send, color: Colors.white, size: 20),
-                ),
-              ),
+              child: GestureDetector(onTap: _sendMessage, child: Container(width: 40, height: 40, decoration: const BoxDecoration(color: AppColors.primary, shape: BoxShape.circle), child: const Icon(Icons.send, color: Colors.white, size: 20))),
             ),
-          ],  // ← Row の children を閉じる
+          ],
         ),
       ),
     );
+  }
+
+  List<InlineSpan> _buildTextSpansWithLinks(String text) {
+    final urlPattern = RegExp(r'https?://[^\s\u3000]+', caseSensitive: false);
+    final spans = <InlineSpan>[]; int lastEnd = 0;
+    for (final match in urlPattern.allMatches(text)) {
+      if (match.start > lastEnd) spans.add(TextSpan(text: text.substring(lastEnd, match.start), style: const TextStyle(fontSize: 15, color: Colors.black87)));
+      final url = match.group(0)!;
+      spans.add(TextSpan(text: url, style: const TextStyle(fontSize: 15, color: Colors.blue, decoration: TextDecoration.underline, decorationColor: Colors.blue), recognizer: TapGestureRecognizer()..onTap = () async { final uri = Uri.tryParse(url); if (uri != null && await canLaunchUrl(uri)) await launchUrl(uri, mode: LaunchMode.externalApplication); }));
+      lastEnd = match.end;
+    }
+    if (lastEnd < text.length) spans.add(TextSpan(text: text.substring(lastEnd), style: const TextStyle(fontSize: 15, color: Colors.black87)));
+    if (spans.isEmpty) spans.add(TextSpan(text: text, style: const TextStyle(fontSize: 15, color: Colors.black87)));
+    return spans;
   }
 
   Widget _buildMessageItem(Map<String, dynamic> msg, String msgId) {
@@ -1058,81 +814,82 @@ Padding(
     final String type = msg['type'] ?? 'text';
     final stamps = Map<String, dynamic>.from(msg['stamps'] ?? {});
     final readBy = List<String>.from(msg['readBy'] ?? []);
-    final isRead = isMe && readBy.any((uid) => uid != currentUser!.uid);
-
+    final readCount = readBy.where((uid) => uid != currentUser!.uid).length;
+    final isRead = isMe && readCount > 0;
+    final totalMembers = widget.memberNames.length - 1;
     String timeStr = '';
-    if (msg['createdAt'] != null) {
-      final ts = msg['createdAt'] as Timestamp;
-      timeStr = DateFormat('HH:mm').format(ts.toDate());
-    }
-
+    if (msg['createdAt'] != null) { final ts = msg['createdAt'] as Timestamp; timeStr = DateFormat('HH:mm').format(ts.toDate()); }
     String senderName = '';
-    if (widget.isGroup && !isMe) {
-      senderName = widget.memberNames[msg['senderId']] ?? '不明';
-    }
+    if (widget.isGroup && !isMe) senderName = widget.memberNames[msg['senderId']] ?? '不明';
 
     Widget content;
     final bool isImageOnly = type == 'image' && text.isEmpty;
-    
     if (type == 'image') {
       content = Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        GestureDetector(
-          onTap: () => _showImagePreview(msg['url']), 
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(12), 
-            child: Image.network(
-              msg['url'], 
-              width: 200, 
-              fit: BoxFit.cover, 
-              errorBuilder: (c, e, s) => const Icon(Icons.broken_image),
-            ),
-          ),
-        ),
-        if (text.isNotEmpty) ...[const SizedBox(height: 8), Text(text, style: const TextStyle(fontSize: 15))]
+        GestureDetector(onTap: () => _showImagePreview(msg['url']), child: ClipRRect(borderRadius: BorderRadius.circular(12), child: Image.network(msg['url'], width: 200, fit: BoxFit.cover, errorBuilder: (c, e, s) => const Icon(Icons.broken_image)))),
+        if (text.isNotEmpty) ...[const SizedBox(height: 8), SelectableText.rich(TextSpan(children: _buildTextSpansWithLinks(text)))]
       ]);
     } else if (type == 'file') {
-      content = InkWell(onTap: () async { final Uri url = Uri.parse(msg['url']); if (await canLaunchUrl(url)) await launchUrl(url); }, child: Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: Colors.grey.shade100, borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.grey.shade300)), child: Row(mainAxisSize: MainAxisSize.min, children: [const Icon(Icons.description, color: AppColors.primary), const SizedBox(width: 8), Flexible(child: Text(msg['fileName'] ?? 'ファイル', style: const TextStyle(fontSize: 14, decoration: TextDecoration.underline), overflow: TextOverflow.ellipsis))])));
-    } else {
-      content = Text(text, style: const TextStyle(fontSize: 15));
+      content = InkWell(
+        onTap: () async { final Uri url = Uri.parse(msg['url']); if (await canLaunchUrl(url)) await launchUrl(url); },
+        child: Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: Colors.grey.shade100, borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.grey.shade300)),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [const Icon(Icons.description, color: AppColors.primary), const SizedBox(width: 8), Flexible(child: Text(msg['fileName'] ?? 'ファイル', style: const TextStyle(fontSize: 14, decoration: TextDecoration.underline), overflow: TextOverflow.ellipsis))])));
+    } else { content = SelectableText.rich(TextSpan(children: _buildTextSpansWithLinks(text))); }
+
+    String readText = '';
+    if (isMe && isRead) {
+      if (widget.isGroup && totalMembers > 1) { readText = readCount >= totalMembers ? '全員既読' : '既読 $readCount'; }
+      else { readText = '既読'; }
     }
 
-    return GestureDetector(
+    final isDesktop = kIsWeb && MediaQuery.of(context).size.width >= 800;
+
+    Widget menuButton(bool visible) {
+      if (!visible) return const SizedBox(width: 24, height: 24);
+      return Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTapDown: (details) {
+            if (isDesktop) {
+              _showPopupMenu(details.globalPosition, msgId, isMe, type, text);
+            } else {
+              _showActionSheet(msgId, isMe, type, text);
+            }
+          },
+          child: Container(width: 24, height: 24, alignment: Alignment.center, child: const Icon(Icons.more_vert, size: 18, color: Colors.grey)),
+        ),
+      );
+    }
+
+    return _HoverableMessageRow(
+      isDesktop: isDesktop,
       onLongPress: () => _showActionSheet(msgId, isMe, type, text),
-      child: Align(
+      builder: (isHovering) => Align(
         alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
         child: Container(
-          margin: const EdgeInsets.only(bottom: 6),
-          constraints: const BoxConstraints(maxWidth: 600),
-          padding: const EdgeInsets.only(top: 12),
+          margin: const EdgeInsets.only(bottom: 6), constraints: const BoxConstraints(maxWidth: 600), padding: const EdgeInsets.only(top: 12),
           child: Column(
             crossAxisAlignment: isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
             children: [
-              if (senderName.isNotEmpty)
-                Padding(padding: const EdgeInsets.only(left: 8, bottom: 2), child: Text(senderName, style: const TextStyle(fontSize: 11, color: Colors.grey))),
+              if (senderName.isNotEmpty) Padding(padding: const EdgeInsets.only(left: 8, bottom: 2), child: Text(senderName, style: const TextStyle(fontSize: 11, color: Colors.grey))),
               Row(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   if (isMe) ...[
-                    Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-                      if (isRead) const Text('既読', style: TextStyle(fontSize: 10, color: Colors.grey)),
-                      Text(timeStr, style: const TextStyle(fontSize: 10, color: Colors.grey)),
-                    ]),
-                    const SizedBox(width: 8)
+                    if (isDesktop) menuButton(isHovering),
+                    if (isDesktop) const SizedBox(width: 4),
+                    Column(crossAxisAlignment: CrossAxisAlignment.end, children: [if (readText.isNotEmpty) Text(readText, style: const TextStyle(fontSize: 10, color: Colors.grey)), Text(timeStr, style: const TextStyle(fontSize: 10, color: Colors.grey))]),
+                    const SizedBox(width: 8),
                   ],
-                  Flexible(
-                    child: isImageOnly
-                      ? content
-                      : Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12), 
-                          decoration: BoxDecoration(
-                            color: isMe ? AppColors.primary.withOpacity(0.2) : Colors.white, 
-                            borderRadius: BorderRadius.circular(12),
-                          ), 
-                          child: content,
-                        ),
-                  ),
-                  if (!isMe) ...[const SizedBox(width: 8), Text(timeStr, style: const TextStyle(fontSize: 10, color: Colors.grey))],
+                  Flexible(child: isImageOnly ? content : Container(padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12), decoration: BoxDecoration(color: isMe ? AppColors.primary.withOpacity(0.2) : Colors.white, borderRadius: BorderRadius.circular(12)), child: content)),
+                  if (!isMe) ...[
+                    const SizedBox(width: 8),
+                    Text(timeStr, style: const TextStyle(fontSize: 10, color: Colors.grey)),
+                    if (isDesktop) const SizedBox(width: 4),
+                    if (isDesktop) menuButton(isHovering),
+                  ],
                 ],
               ),
               if (stamps.isNotEmpty) Padding(padding: EdgeInsets.only(top: 8, left: isMe ? 0 : 8, right: isMe ? 8 : 0), child: Wrap(spacing: 8, children: stamps.entries.map((entry) => _buildReactionChip(msgId, entry.key, entry.value, isMe)).toList())),
@@ -1143,48 +900,43 @@ Padding(
     );
   }
 
+  void _showPopupMenu(Offset position, String msgId, bool isMe, String type, String text) {
+    final RenderBox overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
+    showMenu<String>(
+      context: context,
+      position: RelativeRect.fromLTRB(position.dx, position.dy, overlay.size.width - position.dx, overlay.size.height - position.dy),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      items: [
+        const PopupMenuItem(value: 'stamp', height: 36, padding: EdgeInsets.symmetric(horizontal: 12), child: Row(children: [Icon(Icons.emoji_emotions_outlined, size: 18), SizedBox(width: 8), Text('スタンプ', style: TextStyle(fontSize: 14))])),
+        const PopupMenuItem(value: 'reply', height: 36, padding: EdgeInsets.symmetric(horizontal: 12), child: Row(children: [Icon(Icons.reply, size: 18), SizedBox(width: 8), Text('返信', style: TextStyle(fontSize: 14))])),
+        if (isMe && type == 'text') const PopupMenuItem(value: 'edit', height: 36, padding: EdgeInsets.symmetric(horizontal: 12), child: Row(children: [Icon(Icons.edit, size: 18), SizedBox(width: 8), Text('編集', style: TextStyle(fontSize: 14))])),
+        if (isMe) const PopupMenuItem(value: 'delete', height: 36, padding: EdgeInsets.symmetric(horizontal: 12), child: Row(children: [Icon(Icons.delete, size: 18, color: Colors.red), SizedBox(width: 8), Text('削除', style: TextStyle(fontSize: 14, color: Colors.red))])),
+      ],
+    ).then((value) {
+      if (value == null) return;
+      switch (value) {
+        case 'stamp': _showEmojiPicker(msgId); break;
+        case 'reply': String preview = type == 'image' ? '📷 画像' : (type == 'file' ? '📎 ファイル' : text); _textController.text = '> $preview\n'; break;
+        case 'edit': _showEditDialog(msgId, text); break;
+        case 'delete': _deleteMessage(msgId); break;
+      }
+    });
+  }
+
   void _showActionSheet(String msgId, bool isMe, String type, String text) {
     showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+      context: context, backgroundColor: Colors.white, shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
       builder: (sheetContext) => SafeArea(
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: 16),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              ListTile(
-                leading: const Icon(Icons.emoji_emotions_outlined),
-                title: const Text("スタンプを追加"),
-                onTap: () { Navigator.pop(sheetContext); _showEmojiPicker(msgId); },
-              ),
-              ListTile(
-                leading: const Icon(Icons.reply),
-                title: const Text("返信"),
-                onTap: () {
-                  Navigator.pop(sheetContext);
-                  String preview = type == 'image' ? '📷 画像' : (type == 'file' ? '📎 ファイル' : text);
-                  _textController.text = '> $preview\n';
-                },
-              ),
-              if (isMe && type == "text")
-                ListTile(
-                  leading: const Icon(Icons.edit),
-                  title: const Text("編集"),
-                  onTap: () { Navigator.pop(sheetContext); _showEditDialog(msgId, text); },
-                ),
-              if (isMe)
-                ListTile(
-                  leading: const Icon(Icons.delete, color: Colors.red),
-                  title: const Text("削除", style: TextStyle(color: Colors.red)),
-                  onTap: () { Navigator.pop(sheetContext); _deleteMessage(msgId); },
-                ),
-              ListTile(
-                leading: const Icon(Icons.close),
-                title: const Text("キャンセル"),
-                onTap: () => Navigator.pop(sheetContext),
-              ),
+              ListTile(leading: const Icon(Icons.emoji_emotions_outlined), title: const Text("スタンプを追加"), onTap: () { Navigator.pop(sheetContext); _showEmojiPicker(msgId); }),
+              ListTile(leading: const Icon(Icons.reply), title: const Text("返信"), onTap: () { Navigator.pop(sheetContext); String preview = type == 'image' ? '📷 画像' : (type == 'file' ? '📎 ファイル' : text); _textController.text = '> $preview\n'; }),
+              if (isMe && type == "text") ListTile(leading: const Icon(Icons.edit), title: const Text("編集"), onTap: () { Navigator.pop(sheetContext); _showEditDialog(msgId, text); }),
+              if (isMe) ListTile(leading: const Icon(Icons.delete, color: Colors.red), title: const Text("削除", style: TextStyle(color: Colors.red)), onTap: () { Navigator.pop(sheetContext); _deleteMessage(msgId); }),
+              ListTile(leading: const Icon(Icons.close), title: const Text("キャンセル"), onTap: () => Navigator.pop(sheetContext)),
             ],
           ),
         ),
@@ -1196,22 +948,10 @@ Padding(
     final List<String> userList = users is List ? List<String>.from(users) : [];
     final int count = users is List ? users.length : (users is int ? users : 1);
     final bool alreadyReacted = userList.contains(currentUser?.uid);
-    
     return GestureDetector(
       onTap: () => _toggleReaction(msgId, emoji),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        decoration: BoxDecoration(
-          color: alreadyReacted ? AppColors.primary.withOpacity(0.2) : (isMe ? AppColors.primary.withOpacity(0.1) : Colors.blueGrey.shade50),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: alreadyReacted ? AppColors.primary : Colors.grey.shade300),
-        ),
-        child: Row(mainAxisSize: MainAxisSize.min, children: [
-          Text(emoji, style: const TextStyle(fontSize: 14)),
-          if (count > 1) ...[const SizedBox(width: 4), Text('$count', style: const TextStyle(fontSize: 12, color: Colors.grey))]
-        ]),
-      ),
-    );
+      child: Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), decoration: BoxDecoration(color: alreadyReacted ? AppColors.primary.withOpacity(0.2) : (isMe ? AppColors.primary.withOpacity(0.1) : Colors.blueGrey.shade50), borderRadius: BorderRadius.circular(16), border: Border.all(color: alreadyReacted ? AppColors.primary : Colors.grey.shade300)),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [Text(emoji, style: const TextStyle(fontSize: 14)), if (count > 1) ...[const SizedBox(width: 4), Text('$count', style: const TextStyle(fontSize: 12, color: Colors.grey))]])));
   }
 
   Future<void> _pickAndUploadImage() async {
@@ -1228,7 +968,8 @@ Padding(
       final url = await ref.getDownloadURL();
       await _sendMessage(type: 'image', url: url, text: _textController.text);
       _textController.clear();
-    } catch (e) { ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('アップロード失敗: $e'))); } finally { setState(() => _isUploading = false); }
+    } catch (e) { ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('アップロード失敗: $e'))); }
+    finally { setState(() => _isUploading = false); }
   }
 
   Future<void> _pickAndUploadFile() async {
@@ -1246,21 +987,17 @@ Padding(
       final url = await ref.getDownloadURL();
       await _sendMessage(type: 'file', url: url, fileName: file.name, text: _textController.text);
       _textController.clear();
-    } catch (e) { ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('アップロード失敗: $e'))); } finally { setState(() => _isUploading = false); }
+    } catch (e) { ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('アップロード失敗: $e'))); }
+    finally { setState(() => _isUploading = false); }
   }
 
   Future<void> _sendMessage({String type = 'text', String? url, String? fileName, String? text}) async {
     final msgText = text ?? _textController.text;
     if (msgText.trim().isEmpty && type == 'text') return;
-    
     _dismissKeyboard();
-    
     if (type == 'text') _textController.clear();
     final roomRef = FirebaseFirestore.instance.collection('chat_rooms').doc(widget.roomId);
-    await roomRef.collection('messages').add({
-      'senderId': currentUser!.uid, 'text': msgText, 'type': type, 'url': url, 'fileName': fileName, 'stamps': {}, 'createdAt': FieldValue.serverTimestamp(),
-      'readBy': [currentUser!.uid],
-    });
+    await roomRef.collection('messages').add({'senderId': currentUser!.uid, 'text': msgText, 'type': type, 'url': url, 'fileName': fileName, 'stamps': {}, 'createdAt': FieldValue.serverTimestamp(), 'readBy': [currentUser!.uid]});
     String lastMsg = msgText;
     if (type == 'image') lastMsg = '画像を送信しました';
     if (type == 'file') lastMsg = 'ファイルを送信しました';
@@ -1270,86 +1007,87 @@ Padding(
   Future<void> _toggleReaction(String msgId, String emoji) async {
     final msgRef = FirebaseFirestore.instance.collection('chat_rooms').doc(widget.roomId).collection('messages').doc(msgId);
     final uid = currentUser!.uid;
-    
     await FirebaseFirestore.instance.runTransaction((transaction) async {
       final snapshot = await transaction.get(msgRef);
       if (!snapshot.exists) return;
       final data = snapshot.data() as Map<String, dynamic>;
       final stamps = Map<String, dynamic>.from(data['stamps'] ?? {});
-      
       List<String> userList = [];
-      if (stamps[emoji] is List) {
-        userList = List<String>.from(stamps[emoji]);
-      } else if (stamps[emoji] is int) {
-        userList = [];
-      }
-      
-      if (userList.contains(uid)) {
-        userList.remove(uid);
-        if (userList.isEmpty) {
-          stamps.remove(emoji);
-        } else {
-          stamps[emoji] = userList;
-        }
-      } else {
-        userList.add(uid);
-        stamps[emoji] = userList;
-      }
-      
+      if (stamps[emoji] is List) userList = List<String>.from(stamps[emoji]);
+      else if (stamps[emoji] is int) userList = [];
+      if (userList.contains(uid)) { userList.remove(uid); if (userList.isEmpty) stamps.remove(emoji); else stamps[emoji] = userList; }
+      else { userList.add(uid); stamps[emoji] = userList; }
       transaction.update(msgRef, {'stamps': stamps});
     });
   }
 
   void _showEmojiPicker(String msgId) {
     final emojis = ['👍', '❤️', '😄', '🎉', '🙏', '🆗', '😂', '😢', '✨', '🤔'];
-    showDialog(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('スタンプを選択'),
-        content: Wrap(
-          alignment: WrapAlignment.center,
-          spacing: 8,
-          runSpacing: 8,
-          children: emojis.map((e) => GestureDetector(
-            onTap: () { _toggleReaction(msgId, e); Navigator.of(dialogContext).pop(); },
-            child: Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: Colors.grey.shade100, borderRadius: BorderRadius.circular(8)), child: Text(e, style: const TextStyle(fontSize: 28))),
-          )).toList(),
-        ),
-        actions: [TextButton(onPressed: () => Navigator.of(dialogContext).pop(), child: const Text('キャンセル'))],
-      ),
-    );
+    showDialog(context: context, builder: (dialogContext) => AlertDialog(
+      title: const Text('スタンプを選択'),
+      content: Wrap(alignment: WrapAlignment.center, spacing: 8, runSpacing: 8, children: emojis.map((e) => GestureDetector(onTap: () { _toggleReaction(msgId, e); Navigator.of(dialogContext).pop(); }, child: Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: Colors.grey.shade100, borderRadius: BorderRadius.circular(8)), child: Text(e, style: const TextStyle(fontSize: 28))))).toList()),
+      actions: [TextButton(onPressed: () => Navigator.of(dialogContext).pop(), child: const Text('キャンセル'))],
+    ));
   }
 
   void _deleteMessage(String msgId) {
-    showDialog(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('メッセージを削除'),
-        content: const Text('このメッセージを削除しますか？'),
-        actions: [
-          TextButton(onPressed: () => Navigator.of(dialogContext).pop(), child: const Text('キャンセル')),
-          TextButton(onPressed: () async { await FirebaseFirestore.instance.collection('chat_rooms').doc(widget.roomId).collection('messages').doc(msgId).delete(); Navigator.of(dialogContext).pop(); }, child: const Text('削除', style: TextStyle(color: Colors.red))),
-        ],
-      ),
-    );
+    showDialog(context: context, builder: (dialogContext) => AlertDialog(
+      title: const Text('メッセージを削除'), content: const Text('このメッセージを削除しますか？'),
+      actions: [TextButton(onPressed: () => Navigator.of(dialogContext).pop(), child: const Text('キャンセル')), TextButton(onPressed: () async { await FirebaseFirestore.instance.collection('chat_rooms').doc(widget.roomId).collection('messages').doc(msgId).delete(); Navigator.of(dialogContext).pop(); }, child: const Text('削除', style: TextStyle(color: Colors.red)))],
+    ));
   }
 
   void _showEditDialog(String msgId, String currentText) {
     final ctrl = TextEditingController(text: currentText);
-    showDialog(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('メッセージを編集'),
-        content: TextField(controller: ctrl, maxLines: 3, autofocus: true, decoration: const InputDecoration(border: OutlineInputBorder(), hintText: 'メッセージを入力')),
-        actions: [
-          TextButton(onPressed: () => Navigator.of(dialogContext).pop(), child: const Text('キャンセル')),
-          ElevatedButton(onPressed: () async { await FirebaseFirestore.instance.collection('chat_rooms').doc(widget.roomId).collection('messages').doc(msgId).update({'text': ctrl.text}); Navigator.of(dialogContext).pop(); }, style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, foregroundColor: Colors.white), child: const Text('保存')),
-        ],
-      ),
-    );
+    showDialog(context: context, builder: (dialogContext) => AlertDialog(
+      title: const Text('メッセージを編集'),
+      content: TextField(controller: ctrl, maxLines: 3, autofocus: true, decoration: const InputDecoration(border: OutlineInputBorder(), hintText: 'メッセージを入力')),
+      actions: [TextButton(onPressed: () => Navigator.of(dialogContext).pop(), child: const Text('キャンセル')), ElevatedButton(onPressed: () async { await FirebaseFirestore.instance.collection('chat_rooms').doc(widget.roomId).collection('messages').doc(msgId).update({'text': ctrl.text}); Navigator.of(dialogContext).pop(); }, style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, foregroundColor: Colors.white), child: const Text('保存'))],
+    ));
   }
 
   void _showImagePreview(String url) {
     showDialog(context: context, builder: (_) => Dialog(child: Column(mainAxisSize: MainAxisSize.min, children: [Flexible(child: Image.network(url)), TextButton(onPressed: () => Navigator.pop(context), child: const Text('閉じる'))])));
+  }
+}
+
+// ==========================================
+// 4. ホバー対応メッセージ行ラッパー
+// ==========================================
+
+class _HoverableMessageRow extends StatefulWidget {
+  final bool isDesktop;
+  final VoidCallback onLongPress;
+  final Widget Function(bool isHovering) builder;
+
+  const _HoverableMessageRow({
+    required this.isDesktop,
+    required this.onLongPress,
+    required this.builder,
+  });
+
+  @override
+  State<_HoverableMessageRow> createState() => _HoverableMessageRowState();
+}
+
+class _HoverableMessageRowState extends State<_HoverableMessageRow> {
+  bool _isHovering = false;
+
+  @override
+  Widget build(BuildContext context) {
+    // スマホの場合は長押しでメニュー
+    if (!widget.isDesktop) {
+      return GestureDetector(
+        onLongPress: widget.onLongPress,
+        child: widget.builder(false),
+      );
+    }
+
+    // PCの場合はホバーで「⋮」表示（行全体がホバー範囲）
+    return MouseRegion(
+      onEnter: (_) => setState(() => _isHovering = true),
+      onExit: (_) => setState(() => _isHovering = false),
+      child: widget.builder(_isHovering),
+    );
   }
 }

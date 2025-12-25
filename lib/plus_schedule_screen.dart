@@ -47,8 +47,8 @@ class _PlusScheduleContentState extends State<PlusScheduleContent> with Automati
   List<Map<String, dynamic>>? _copiedWeekLessons;
   String _copiedWeekLabel = '';
 
-  // コース（内容）の定義と色
-  static const Map<String, Color> _courseColors = {
+  // コース（内容）の定義と色（カスタマイズ可能）
+  static const Map<String, Color> _defaultCourseColors = {
     '通常': Colors.blue,
     'モンテッソーリ': Colors.lightBlue,
     '感覚統合': Colors.teal,
@@ -58,8 +58,20 @@ class _PlusScheduleContentState extends State<PlusScheduleContent> with Automati
     '体験': Colors.green,
     '欠席': Colors.red,
   };
-
+  
+  // カスタマイズ可能なコース色
+  Map<String, Color> _courseColors = {};
+  
   final List<String> _courseList = ['通常', 'モンテッソーリ', '感覚統合', '言語', '就学支援', '契約', '体験', '欠席'];
+  
+  // カラーパレット（選択可能な色）
+  static const List<Color> _colorPalette = [
+    Colors.blue, Colors.lightBlue, Colors.cyan, Colors.teal,
+    Colors.green, Colors.lightGreen, Colors.lime, Colors.yellow,
+    Colors.amber, Colors.orange, Colors.deepOrange, Colors.red,
+    Colors.pink, Colors.purple, Colors.deepPurple, Colors.indigo,
+    Colors.brown, Colors.grey, Colors.blueGrey,
+  ];
 
   // レッスンデータ（Firestoreから取得）
   List<Map<String, dynamic>> _lessons = [];
@@ -94,21 +106,83 @@ class _PlusScheduleContentState extends State<PlusScheduleContent> with Automati
   DateTime _sideMenuMonth = DateTime.now();
   Set<String> _selectedFilters = {'all'}; // 'all', 'mySchedule', 'event', または講師名
 
+  // ページコントローラー（週スクロール用）
+  late PageController _weekPageController;
+  int _currentWeekPage = 1000; // 中央値から開始（前後にスクロール可能にするため）
+  DateTime _baseWeekStart = DateTime.now(); // 基準週
+
+bool _isScrolling = false;
+int _pendingPage = -1;
+
 @override
 void initState() {
   super.initState();
   _weekStart = _getMonday(DateTime.now());
+  _baseWeekStart = _weekStart; // 基準週を保存
   _monthViewDate = DateTime(DateTime.now().year, DateTime.now().month, 1);
+  _courseColors = Map.from(_defaultCourseColors);
+  _weekPageController = PageController(initialPage: _currentWeekPage);
   _initializeData();
+}
+
+// コース色をFirestoreから読み込む
+Future<void> _loadCourseColors() async {
+  try {
+    final doc = await FirebaseFirestore.instance
+        .collection('plus_settings')
+        .doc('course_colors')
+        .get();
+    
+    if (doc.exists) {
+      final data = doc.data()!;
+      final colors = data['colors'] as Map<String, dynamic>?;
+      if (colors != null) {
+        setState(() {
+          for (var entry in colors.entries) {
+            final colorValue = entry.value as int?;
+            if (colorValue != null) {
+              _courseColors[entry.key] = Color(colorValue);
+            }
+          }
+        });
+      }
+    }
+  } catch (e) {
+    debugPrint('Error loading course colors: $e');
+  }
+}
+
+// コース色をFirestoreに保存
+Future<void> _saveCourseColor(String course, Color color) async {
+  try {
+    setState(() {
+      _courseColors[course] = color;
+    });
+    
+    final colorsMap = <String, int>{};
+    for (var entry in _courseColors.entries) {
+      colorsMap[entry.key] = entry.value.value;
+    }
+    
+    await FirebaseFirestore.instance
+        .collection('plus_settings')
+        .doc('course_colors')
+        .set({
+      'colors': colorsMap,
+      'updatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+  } catch (e) {
+    debugPrint('Error saving course color: $e');
+  }
 }
 
 // 新しいメソッド（initStateの直後に追加）
 Future<void> _initializeData() async {
   await _loadSavedState();  // まず保存された状態を読み込む
+  await _loadCourseColors();
   await _loadInitialData(); // その後でデータを読み込む
 }
   
-// 保存された状態を読み込む
 Future<void> _loadSavedState() async {
   try {
     final prefs = await SharedPreferences.getInstance();
@@ -121,14 +195,24 @@ Future<void> _loadSavedState() async {
         if (savedViewMode != null) _viewMode = savedViewMode;
         if (savedWeekStart != null) {
           final date = DateTime.tryParse(savedWeekStart);
-          if (date != null) _weekStart = _getMonday(date);
+          if (date != null) {
+            _weekStart = _getMonday(date);
+            // ページ位置も更新
+            final weeksDiff = _weekStart.difference(_baseWeekStart).inDays ~/ 7;
+            _currentWeekPage = 1000 + weeksDiff;
+            // PageControllerが初期化済みならジャンプ
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (_weekPageController.hasClients) {
+                _weekPageController.jumpToPage(_currentWeekPage);
+              }
+            });
+          }
         }
         if (savedMonthViewDate != null) {
           final date = DateTime.tryParse(savedMonthViewDate);
           if (date != null) _monthViewDate = DateTime(date.year, date.month, 1);
         }
       });
-      // _loadLessonsForMonth() は削除（_loadInitialDataで読み込む）
     }
   } catch (e) {
     debugPrint('Error loading saved state: $e');
@@ -162,10 +246,11 @@ Future<void> _saveMonthViewDate(DateTime date) async {
 }
 
   @override
-  void dispose() {
-    _hideCurrentOverlay();
-    super.dispose();
-  }
+void dispose() {
+  _hideCurrentOverlay();
+  _weekPageController.dispose(); // ← 追加
+  super.dispose();
+}
   
   void _hideCurrentOverlay() {
     _currentOverlay?.remove();
@@ -812,37 +897,52 @@ Future<void> _saveMonthViewDate(DateTime date) async {
   }
 
   void _previousWeek() {
-    _hideCurrentOverlay();
-    setState(() {
-      _weekStart = _weekStart.subtract(const Duration(days: 7));
-    });
-    _saveWeekStart(_weekStart);
-    _loadShiftData();
-    _loadLessonsForWeek();
-    _loadAllTasks(); // タスクも再読み込み
-  }
+  _weekPageController.previousPage(
+    duration: const Duration(milliseconds: 300),
+    curve: Curves.easeInOut,
+  );
+}
 
-  void _nextWeek() {
-    _hideCurrentOverlay();
-    setState(() {
-      _weekStart = _weekStart.add(const Duration(days: 7));
-    });
-    _saveWeekStart(_weekStart);
-    _loadShiftData();
-    _loadLessonsForWeek();
-    _loadAllTasks(); // タスクも再読み込み
-  }
+void _nextWeek() {
+  _weekPageController.nextPage(
+    duration: const Duration(milliseconds: 300),
+    curve: Curves.easeInOut,
+  );
+}
 
-  void _goToThisWeek() {
-    _hideCurrentOverlay();
-    setState(() {
-      _weekStart = _getMonday(DateTime.now());
-    });
-    _saveWeekStart(_weekStart); 
-    _loadShiftData();
-    _loadLessonsForWeek();
-    _loadAllTasks(); // タスクも再読み込み
-  }
+void _goToThisWeek() {
+  _hideCurrentOverlay();
+  final thisWeekStart = _getMonday(DateTime.now());
+  final weeksDiff = thisWeekStart.difference(_baseWeekStart).inDays ~/ 7;
+  final targetPage = 1000 + weeksDiff;
+  
+  _weekPageController.animateToPage(
+    targetPage,
+    duration: const Duration(milliseconds: 300),
+    curve: Curves.easeInOut,
+  );
+}
+
+void _processPageChange(int page) {
+  if (page == _currentWeekPage) return;
+  
+  debugPrint('=== Processing Page Change ===');
+  debugPrint('From: $_currentWeekPage -> To: $page');
+  
+  _hideCurrentOverlay();
+  final weeksDiff = page - 1000;
+  final newWeekStart = _baseWeekStart.add(Duration(days: weeksDiff * 7));
+  
+  setState(() {
+    _currentWeekPage = page;
+    _weekStart = newWeekStart;
+  });
+  
+  _saveWeekStart(_weekStart);
+  _loadShiftData();
+  _loadLessonsForWeek();
+  _loadAllTasks();
+}
 
   Future<void> _loadStaffList() async {
     try {
@@ -969,22 +1069,148 @@ Future<void> _saveMonthViewDate(DateTime date) async {
               // メインコンテンツ
               // メインコンテンツ
               Expanded(
-                child: _viewMode == 0
-                    ? (_isLoadingLessons
-                        ? const Center(child: CircularProgressIndicator())
-                        : _buildScheduleTable())
-                    : _viewMode == 2
-                        ? (_isLoadingMonthLessons
-                            ? const Center(child: CircularProgressIndicator())
-                            : _buildMonthCalendar())
-                        : const PlusDashboardContent(),
-              ),
+  child: _viewMode == 0
+      ? _buildWeekPageView()  // ← ここを変更
+      : _viewMode == 2
+          ? (_isLoadingMonthLessons
+              ? const Center(child: CircularProgressIndicator())
+              : _buildMonthCalendar())
+          : const PlusDashboardContent(),
+),
             ],
           ),
         ),
       ],
     );
   }
+
+Widget _buildWeekPageView() {
+  return NotificationListener<ScrollNotification>(
+    onNotification: (notification) {
+      if (notification is ScrollStartNotification) {
+        _isScrolling = true;
+      } else if (notification is ScrollEndNotification) {
+        _isScrolling = false;
+        if (_pendingPage >= 0 && _pendingPage != _currentWeekPage) {
+          _processPageChange(_pendingPage);
+        }
+        _pendingPage = -1;
+      }
+      return false;
+    },
+    child: PageView.builder(
+      controller: _weekPageController,
+      onPageChanged: (page) {
+        if (_isScrolling) {
+          _pendingPage = page;
+        } else {
+          _processPageChange(page);
+        }
+      },
+      physics: const ClampingScrollPhysics(),
+      itemBuilder: (context, index) {
+        if (index == _currentWeekPage) {
+          return _isLoadingLessons
+              ? const Center(child: CircularProgressIndicator())
+              : _buildScheduleTable();
+        } else {
+          final weeksDiff = index - 1000;
+          final pageWeekStart = _baseWeekStart.add(Duration(days: weeksDiff * 7));
+          return _buildWeekPlaceholder(pageWeekStart);
+        }
+      },
+    ),
+  );
+}
+
+// スワイプ中に表示するプレースホルダー
+Widget _buildWeekPlaceholder(DateTime weekStart) {
+  return Container(
+    color: Colors.white,
+    child: Column(
+      children: [
+        // ヘッダー部分だけ表示
+        _buildDayHeaderForWeek(weekStart),
+        const Expanded(
+          child: Center(
+            child: CircularProgressIndicator(),
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+// 指定週のヘッダーを構築
+Widget _buildDayHeaderForWeek(DateTime weekStart) {
+  final days = ['月', '火', '水', '木', '金', '土'];
+  final today = DateTime.now();
+
+  return LayoutBuilder(
+    builder: (context, constraints) {
+      const timeColumnWidth = 60.0;
+      final cellWidth = (constraints.maxWidth - timeColumnWidth) / 6;
+      const headerHeight = 95.0;
+
+      return Container(
+        height: headerHeight,
+        decoration: const BoxDecoration(
+          color: AppColors.surface,
+        ),
+        child: Row(
+          children: [
+            SizedBox(width: timeColumnWidth),
+            ...List.generate(6, (index) {
+              final date = weekStart.add(Duration(days: index));
+              final isToday = date.year == today.year && 
+                             date.month == today.month && 
+                             date.day == today.day;
+              final isSaturday = index == 5;
+
+              return SizedBox(
+                width: cellWidth,
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      days[index],
+                      style: TextStyle(
+                        color: isSaturday ? Colors.blue : AppColors.textSub,
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Container(
+                      width: 36,
+                      height: 36,
+                      decoration: BoxDecoration(
+                        color: isToday ? AppColors.primary : Colors.transparent,
+                        shape: BoxShape.circle,
+                      ),
+                      alignment: Alignment.center,
+                      child: Text(
+                        '${date.day}',
+                        style: TextStyle(
+                          color: isToday ? Colors.white : (isSaturday ? Colors.blue : AppColors.textMain),
+                          fontSize: 22,
+                          fontWeight: FontWeight.w400,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 22),
+                  ],
+                ),
+              );
+            }),
+          ],
+        ),
+      );
+    },
+  );
+}
+
+
   
   // ========================================
   // スマホ用閲覧専用UI
@@ -5806,42 +6032,107 @@ await _loadLessonsForWeek(showLoading: false);
   }
 
   void _showCourseSelectionDialog(String currentCourse, Function(String) onSelect) {
-    showDialog(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        backgroundColor: Colors.white,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        title: const Text('内容を選択', style: TextStyle(fontSize: 18)),
-        content: SizedBox(
-          width: 300,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: _courseList.map((course) {
-              final color = _courseColors[course] ?? Colors.blue;
-              return ListTile(
-                leading: Container(
-                  width: 16,
-                  height: 16,
-                  decoration: BoxDecoration(
-                    color: color,
-                    borderRadius: BorderRadius.circular(4),
+  showDialog(
+    context: context,
+    builder: (dialogContext) => StatefulBuilder(
+      builder: (dialogContext, setDialogState) {
+        return AlertDialog(
+          backgroundColor: Colors.white,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          title: const Text('内容を選択', style: TextStyle(fontSize: 18)),
+          content: SizedBox(
+            width: 350,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: _courseList.map((course) {
+                final color = _courseColors[course] ?? Colors.blue;
+                return ListTile(
+                  leading: GestureDetector(
+                    onTap: () {
+                      _showColorPickerDialog(course, color, (newColor) {
+                        _saveCourseColor(course, newColor);
+                        setDialogState(() {});
+                      });
+                    },
+                    child: MouseRegion(
+                      cursor: SystemMouseCursors.click,
+                      child: Container(
+                        width: 24,
+                        height: 24,
+                        decoration: BoxDecoration(
+                          color: color,
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(color: Colors.grey.shade400),
+                        ),
+                        child: const Icon(Icons.edit, size: 14, color: Colors.white),
+                      ),
+                    ),
                   ),
-                ),
-                title: Text(course),
-                trailing: currentCourse == course
-                    ? const Icon(Icons.check, color: AppColors.primary)
-                    : null,
-                onTap: () {
-                  Navigator.pop(dialogContext);
-                  onSelect(course);
-                },
-              );
-            }).toList(),
+                  title: Text(course),
+                  trailing: currentCourse == course
+                      ? const Icon(Icons.check, color: AppColors.primary)
+                      : null,
+                  onTap: () {
+                    Navigator.pop(dialogContext);
+                    onSelect(course);
+                  },
+                );
+              }).toList(),
+            ),
           ),
+        );
+      },
+    ),
+  );
+}
+
+// カラーピッカーダイアログ（新規追加）
+void _showColorPickerDialog(String course, Color currentColor, Function(Color) onColorSelected) {
+  showDialog(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      backgroundColor: Colors.white,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      title: Text('$courseの色を選択', style: const TextStyle(fontSize: 16)),
+      content: SizedBox(
+        width: 300,
+        child: Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: _colorPalette.map((color) {
+            final isSelected = color.value == currentColor.value;
+            return GestureDetector(
+              onTap: () {
+                Navigator.pop(dialogContext);
+                onColorSelected(color);
+              },
+              child: Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: color,
+                  borderRadius: BorderRadius.circular(8),
+                  border: isSelected
+                      ? Border.all(color: Colors.black, width: 3)
+                      : Border.all(color: Colors.grey.shade300),
+                ),
+                child: isSelected
+                    ? const Icon(Icons.check, color: Colors.white, size: 20)
+                    : null,
+              ),
+            );
+          }).toList(),
         ),
       ),
-    );
-  }
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(dialogContext),
+          child: const Text('キャンセル'),
+        ),
+      ],
+    ),
+  );
+}
 
  // 講師クイック編集
   void _showQuickTeacherEdit(Map<String, dynamic> lesson, {Offset? cellOffset, double cellWidth = 0}) {
@@ -6627,46 +6918,70 @@ await _loadLessonsForWeek(showLoading: false);
                                   ),
                                 ),
                                 // レッスン一覧
-                                Expanded(
-                                  child: slotLessons.isEmpty
-                                      ? const SizedBox.shrink()
-                                      : SingleChildScrollView(
-                                          child: Column(
-                                            crossAxisAlignment: CrossAxisAlignment.start,
-                                            children: slotLessons.map((lesson) {
-                                              final course = lesson['course'] as String? ?? '通常';
-                                              final color = _courseColors[course] ?? Colors.blue;
-                                              final studentName = lesson['studentName'] as String? ?? '';
-                                              final nameParts = studentName.split(' ');
-                                              final firstName = nameParts.length > 1 ? nameParts[1] : studentName;
-                                              return Padding(
-                                                padding: const EdgeInsets.only(bottom: 1),
-                                                child: Row(
-                                                  mainAxisSize: MainAxisSize.min,
-                                                  children: [
-                                                    Container(
-                                                      width: 2,
-                                                      height: 15,
-                                                      decoration: BoxDecoration(
-                                                        color: color,
-                                                        borderRadius: BorderRadius.circular(1),
-                                                      ),
-                                                    ),
-                                                    const SizedBox(width: 2),
-                                                    Flexible(
-                                                      child: Text(
-                                                        firstName,
-                                                        style: const TextStyle(fontSize: 13), // フォントサイズ13に
-                                                        overflow: TextOverflow.ellipsis,
-                                                      ),
-                                                    ),
-                                                  ],
-                                                ),
-                                              );
-                                            }).toList(),
-                                          ),
-                                        ),
+Expanded(
+  child: slotLessons.isEmpty
+      ? const SizedBox.shrink()
+      : SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: slotLessons.map((lesson) {
+              final course = lesson['course'] as String? ?? '通常';
+              final color = _courseColors[course] ?? Colors.blue;
+              final studentName = lesson['studentName'] as String? ?? '';
+              final nameParts = studentName.split(' ');
+              final firstName = nameParts.length > 1 ? nameParts[1] : studentName;
+              
+              // 講師名を取得（苗字1文字目のみ）
+              final teachers = lesson['teachers'] as List<dynamic>? ?? [];
+              final teacherInitials = teachers.isNotEmpty
+                  ? teachers.map((t) {
+                      final name = t.toString().split(' ').first;
+                      return name.isNotEmpty ? name[0] : '';
+                    }).join('')
+                  : '';
+              
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 1),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 2,
+                      height: 13,
+                      decoration: BoxDecoration(
+                        color: color,
+                        borderRadius: BorderRadius.circular(1),
+                      ),
+                    ),
+                    const SizedBox(width: 2),
+                    Flexible(
+                      child: Text.rich(
+                        TextSpan(
+                          children: [
+                            TextSpan(
+                              text: firstName,
+                              style: const TextStyle(fontSize: 11),
+                            ),
+                            if (teacherInitials.isNotEmpty)
+                              TextSpan(
+                                text: ' $teacherInitials',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: Colors.grey.shade500,
                                 ),
+                              ),
+                          ],
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }).toList(),
+          ),
+        ),
+),
                               ],
                             ),
                           ),
@@ -6726,3 +7041,4 @@ class _NoteTrianglePainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
+
