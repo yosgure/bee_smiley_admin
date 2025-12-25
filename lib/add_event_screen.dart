@@ -39,11 +39,11 @@ class _AddEventDialogState extends State<AddEventDialog> {
   late DateTime _startDate;
   late DateTime _endDate;
   
-  String _selectedCategory = 'レッスン'; 
+  String _selectedCategory = 'マイカレンダー'; 
   final List<Map<String, dynamic>> _categories = [
+    {'label': 'マイカレンダー', 'color': 0xFF8E24AA},
     {'label': 'レッスン', 'color': 0xFF039BE5},
     {'label': 'イベント', 'color': 0xFF33B679},
-    {'label': 'その他', 'color': 0xFF8E24AA},
   ];
   
   String _recurrenceType = 'なし';
@@ -51,7 +51,7 @@ class _AddEventDialogState extends State<AddEventDialog> {
   
   String? _selectedClassroom;
   List<String> _classroomList = [];
-  bool _isManualLocation = false;
+  bool _isManualLocation = true; // デフォルトを自由入力に変更
   
   final Set<String> _selectedStudentIds = {}; 
   final Set<String> _selectedStaffIds = {};
@@ -88,13 +88,44 @@ class _AddEventDialogState extends State<AddEventDialog> {
       _startDate = DateTime(initial.year, initial.month, initial.day, initial.hour, roundedMinute);
       _endDate = _startDate.add(const Duration(hours: 1));
       _taskDate = DateTime(initial.year, initial.month, initial.day);
+      
+      // 新規作成時に自分自身を担当者としてデフォルト選択
+      _addCurrentUserAsStaff();
     }
 
     _fetchClassrooms().then((_) {
       if (!_isEditing && !_isTaskMode && mounted && _classroomList.isNotEmpty) {
-        setState(() => _selectedClassroom = _classroomList.first);
+        // レッスンカテゴリの場合のみ教室をデフォルト選択
+        if (_selectedCategory == 'レッスン') {
+          setState(() => _selectedClassroom = _classroomList.first);
+        }
       }
     });
+  }
+
+  // 現在のユーザーを担当者として追加
+  Future<void> _addCurrentUserAsStaff() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+    
+    try {
+      final snapshot = await FirebaseFirestore.instance
+          .collection('staffs')
+          .where('uid', isEqualTo: user.uid)
+          .limit(1)
+          .get();
+      
+      if (snapshot.docs.isNotEmpty && mounted) {
+        final data = snapshot.docs.first.data();
+        String name = data['name'] ?? '${data['lastName'] ?? ''} ${data['firstName'] ?? ''}';
+        setState(() {
+          _selectedStaffIds.add(user.uid);
+          _staffNamesMap[user.uid] = name;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error adding current user as staff: $e');
+    }
   }
 
   void _initializeEventData(Map<String, dynamic> data) {
@@ -102,7 +133,7 @@ class _AddEventDialogState extends State<AddEventDialog> {
     _notesController.text = data['notes'] ?? '';
     _startDate = (data['startTime'] as Timestamp).toDate();
     _endDate = (data['endTime'] as Timestamp).toDate();
-    _selectedCategory = data['category'] ?? 'レッスン';
+    _selectedCategory = data['category'] ?? 'マイカレンダー';
     _isAllDay = data['isAllDay'] ?? false;
 
     final location = data['classroom'] as String?;
@@ -762,7 +793,7 @@ Future<void> _deleteRecurrenceGroup(String recurrenceGroupId) async {
   }
 
   Widget _buildEventContent() {
-    final bool allowFreeLocation = _selectedCategory == 'イベント' || _selectedCategory == 'その他';
+    final bool allowFreeLocation = _selectedCategory == 'イベント' || _selectedCategory == 'マイカレンダー';
     
     return Column(
       children: [
@@ -887,6 +918,9 @@ Future<void> _deleteRecurrenceGroup(String recurrenceGroupId) async {
                     _selectedCategory = cat['label'];
                     if (cat['label'] == 'レッスン') {
                       _isManualLocation = false;
+                    } else {
+                      // マイカレンダーとイベントは自由入力をデフォルトに
+                      _isManualLocation = true;
                     }
                   }),
                   child: Container(
@@ -923,9 +957,9 @@ Future<void> _deleteRecurrenceGroup(String recurrenceGroupId) async {
                   padding: const EdgeInsets.only(top: 8, bottom: 8),
                   child: Row(
                     children: [
-                      _buildLocationTab('教室から選択', !_isManualLocation, () => setState(() => _isManualLocation = false)),
-                      const SizedBox(width: 8),
                       _buildLocationTab('自由入力', _isManualLocation, () => setState(() => _isManualLocation = true)),
+                      const SizedBox(width: 8),
+                      _buildLocationTab('教室から選択', !_isManualLocation, () => setState(() => _isManualLocation = false)),
                     ],
                   ),
                 ),
@@ -1032,7 +1066,7 @@ Future<void> _deleteRecurrenceGroup(String recurrenceGroupId) async {
         ),
         const Divider(height: 1),
         
-        if (_selectedCategory != 'その他') ...[
+        if (_selectedCategory != 'マイカレンダー') ...[
           _buildListTile(
             icon: Icons.face_outlined,
             child: Column(

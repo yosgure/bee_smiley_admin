@@ -5,6 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'app_theme.dart';
 import 'plus_dashboard_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter/gestures.dart';
 
 /// プラス予定のコンテンツウィジェット（埋め込み用）
 class PlusScheduleContent extends StatefulWidget {
@@ -107,12 +108,11 @@ class _PlusScheduleContentState extends State<PlusScheduleContent> with Automati
   Set<String> _selectedFilters = {'all'}; // 'all', 'mySchedule', 'event', または講師名
 
   // ページコントローラー（週スクロール用）
-  late PageController _weekPageController;
   int _currentWeekPage = 1000; // 中央値から開始（前後にスクロール可能にするため）
   DateTime _baseWeekStart = DateTime.now(); // 基準週
 
-bool _isScrolling = false;
-int _pendingPage = -1;
+  int _lastScrollTime = 0;
+  bool _slideFromRight = true;
 
 @override
 void initState() {
@@ -121,7 +121,6 @@ void initState() {
   _baseWeekStart = _weekStart; // 基準週を保存
   _monthViewDate = DateTime(DateTime.now().year, DateTime.now().month, 1);
   _courseColors = Map.from(_defaultCourseColors);
-  _weekPageController = PageController(initialPage: _currentWeekPage);
   _initializeData();
 }
 
@@ -197,15 +196,6 @@ Future<void> _loadSavedState() async {
           final date = DateTime.tryParse(savedWeekStart);
           if (date != null) {
             _weekStart = _getMonday(date);
-            // ページ位置も更新
-            final weeksDiff = _weekStart.difference(_baseWeekStart).inDays ~/ 7;
-            _currentWeekPage = 1000 + weeksDiff;
-            // PageControllerが初期化済みならジャンプ
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (_weekPageController.hasClients) {
-                _weekPageController.jumpToPage(_currentWeekPage);
-              }
-            });
           }
         }
         if (savedMonthViewDate != null) {
@@ -248,7 +238,7 @@ Future<void> _saveMonthViewDate(DateTime date) async {
   @override
 void dispose() {
   _hideCurrentOverlay();
-  _weekPageController.dispose(); // ← 追加
+
   super.dispose();
 }
   
@@ -896,53 +886,24 @@ void dispose() {
     return DateTime(monday.year, monday.month, monday.day);
   }
 
-  void _previousWeek() {
-  _weekPageController.previousPage(
-    duration: const Duration(milliseconds: 300),
-    curve: Curves.easeInOut,
-  );
+ void _previousWeek() {
+  setState(() => _slideFromRight = false);
+  _goToPage(_currentWeekPage - 1);
 }
 
 void _nextWeek() {
-  _weekPageController.nextPage(
-    duration: const Duration(milliseconds: 300),
-    curve: Curves.easeInOut,
-  );
+  setState(() => _slideFromRight = true);
+  _goToPage(_currentWeekPage + 1);
 }
 
 void _goToThisWeek() {
   _hideCurrentOverlay();
   final thisWeekStart = _getMonday(DateTime.now());
   final weeksDiff = thisWeekStart.difference(_baseWeekStart).inDays ~/ 7;
-  final targetPage = 1000 + weeksDiff;
-  
-  _weekPageController.animateToPage(
-    targetPage,
-    duration: const Duration(milliseconds: 300),
-    curve: Curves.easeInOut,
-  );
+  _goToPage(1000 + weeksDiff);
 }
+  
 
-void _processPageChange(int page) {
-  if (page == _currentWeekPage) return;
-  
-  debugPrint('=== Processing Page Change ===');
-  debugPrint('From: $_currentWeekPage -> To: $page');
-  
-  _hideCurrentOverlay();
-  final weeksDiff = page - 1000;
-  final newWeekStart = _baseWeekStart.add(Duration(days: weeksDiff * 7));
-  
-  setState(() {
-    _currentWeekPage = page;
-    _weekStart = newWeekStart;
-  });
-  
-  _saveWeekStart(_weekStart);
-  _loadShiftData();
-  _loadLessonsForWeek();
-  _loadAllTasks();
-}
 
   Future<void> _loadStaffList() async {
     try {
@@ -961,15 +922,16 @@ void _processPageChange(int page) {
             final data = doc.data();
             final defaultShift = data['defaultShift'] as Map<String, dynamic>?;
             return {
-              'id': doc.id,
-              'name': data['name'] ?? '',
-              'furigana': data['furigana'] ?? '',
-              'uid': data['uid'] ?? '',
-              'isPlus': true,
-              'staffType': data['staffType'] ?? 'fulltime', // 社員/パート
-              'defaultShiftStart': defaultShift?['start'] ?? '9:00',
-              'defaultShiftEnd': defaultShift?['end'] ?? '18:00',
-            };
+  'id': doc.id,
+  'name': data['name'] ?? '',
+  'furigana': data['furigana'] ?? '',
+  'uid': data['uid'] ?? '',
+  'isPlus': true,
+  'staffType': data['staffType'] ?? 'fulltime',
+  'defaultShiftStart': defaultShift?['start'] ?? '9:00',
+  'defaultShiftEnd': defaultShift?['end'] ?? '18:00',
+  'showInSchedule': data['showInSchedule'] ?? true,  // ← 追加
+};
           }).toList();
         });
       }
@@ -1084,130 +1046,102 @@ void _processPageChange(int page) {
     );
   }
 
+
 Widget _buildWeekPageView() {
-  return NotificationListener<ScrollNotification>(
-    onNotification: (notification) {
-      if (notification is ScrollStartNotification) {
-        _isScrolling = true;
-      } else if (notification is ScrollEndNotification) {
-        _isScrolling = false;
-        if (_pendingPage >= 0 && _pendingPage != _currentWeekPage) {
-          _processPageChange(_pendingPage);
+  const double kScrollDxTrigger = 14.0;
+  const int kLockMs = 1000;
+
+  bool isLocked() {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    return (now - _lastScrollTime) < kLockMs;
+  }
+
+  void lockAndMove({required bool next}) {
+    if (isLocked()) return;
+    _lastScrollTime = DateTime.now().millisecondsSinceEpoch;
+    setState(() {
+      _slideFromRight = next;  // 方向を記録
+    });
+    if (next) {
+      _nextWeek();
+    } else {
+      _previousWeek();
+    }
+  }
+
+  return Listener(
+    behavior: HitTestBehavior.translucent,
+    onPointerSignal: (signal) {
+      if (signal is PointerScrollEvent) {
+        if (isLocked()) return;
+
+        final dx = signal.scrollDelta.dx;
+        final dy = signal.scrollDelta.dy;
+
+        if (dx.abs() >= kScrollDxTrigger) {
+          lockAndMove(next: dx > 0);
+          return;
         }
-        _pendingPage = -1;
+
+        if (dy.abs() >= kScrollDxTrigger) {
+          lockAndMove(next: dy > 0);
+        }
       }
-      return false;
     },
-    child: PageView.builder(
-      controller: _weekPageController,
-      onPageChanged: (page) {
-        if (_isScrolling) {
-          _pendingPage = page;
-        } else {
-          _processPageChange(page);
+    child: GestureDetector(
+      behavior: HitTestBehavior.translucent,
+      onHorizontalDragEnd: (details) {
+        if (isLocked()) return;
+        final v = details.primaryVelocity ?? 0;
+        if (v < -100) {
+          lockAndMove(next: true);
+        } else if (v > 100) {
+          lockAndMove(next: false);
         }
       },
-      physics: const ClampingScrollPhysics(),
-      itemBuilder: (context, index) {
-        if (index == _currentWeekPage) {
-          return _isLoadingLessons
-              ? const Center(child: CircularProgressIndicator())
-              : _buildScheduleTable();
-        } else {
-          final weeksDiff = index - 1000;
-          final pageWeekStart = _baseWeekStart.add(Duration(days: weeksDiff * 7));
-          return _buildWeekPlaceholder(pageWeekStart);
-        }
-      },
+      child: _isLoadingLessons
+          ? const Center(child: CircularProgressIndicator())
+          : AnimatedSwitcher(
+              duration: const Duration(milliseconds: 200),
+              transitionBuilder: (child, animation) {
+                // スライド方向に応じたオフセット
+                final offsetAnimation = Tween<Offset>(
+                  begin: Offset(_slideFromRight ? 1.0 : -1.0, 0.0),
+                  end: Offset.zero,
+                ).animate(CurvedAnimation(
+                  parent: animation,
+                  curve: Curves.easeOutCubic,
+                ));
+                
+                return SlideTransition(
+                  position: offsetAnimation,
+                  child: child,
+                );
+              },
+              child: KeyedSubtree(
+                key: ValueKey(_weekStart),  // 週が変わるとアニメーション発動
+                child: _buildScheduleTable(),
+              ),
+            ),
     ),
   );
 }
+  
 
-// スワイプ中に表示するプレースホルダー
-Widget _buildWeekPlaceholder(DateTime weekStart) {
-  return Container(
-    color: Colors.white,
-    child: Column(
-      children: [
-        // ヘッダー部分だけ表示
-        _buildDayHeaderForWeek(weekStart),
-        const Expanded(
-          child: Center(
-            child: CircularProgressIndicator(),
-          ),
-        ),
-      ],
-    ),
-  );
-}
-
-// 指定週のヘッダーを構築
-Widget _buildDayHeaderForWeek(DateTime weekStart) {
-  final days = ['月', '火', '水', '木', '金', '土'];
-  final today = DateTime.now();
-
-  return LayoutBuilder(
-    builder: (context, constraints) {
-      const timeColumnWidth = 60.0;
-      final cellWidth = (constraints.maxWidth - timeColumnWidth) / 6;
-      const headerHeight = 95.0;
-
-      return Container(
-        height: headerHeight,
-        decoration: const BoxDecoration(
-          color: AppColors.surface,
-        ),
-        child: Row(
-          children: [
-            SizedBox(width: timeColumnWidth),
-            ...List.generate(6, (index) {
-              final date = weekStart.add(Duration(days: index));
-              final isToday = date.year == today.year && 
-                             date.month == today.month && 
-                             date.day == today.day;
-              final isSaturday = index == 5;
-
-              return SizedBox(
-                width: cellWidth,
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      days[index],
-                      style: TextStyle(
-                        color: isSaturday ? Colors.blue : AppColors.textSub,
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Container(
-                      width: 36,
-                      height: 36,
-                      decoration: BoxDecoration(
-                        color: isToday ? AppColors.primary : Colors.transparent,
-                        shape: BoxShape.circle,
-                      ),
-                      alignment: Alignment.center,
-                      child: Text(
-                        '${date.day}',
-                        style: TextStyle(
-                          color: isToday ? Colors.white : (isSaturday ? Colors.blue : AppColors.textMain),
-                          fontSize: 22,
-                          fontWeight: FontWeight.w400,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 22),
-                  ],
-                ),
-              );
-            }),
-          ],
-        ),
-      );
-    },
-  );
+void _goToPage(int page) {
+  _hideCurrentOverlay();
+  final weeksDiff = page - 1000;
+  final newWeekStart = _baseWeekStart.add(Duration(days: weeksDiff * 7));
+  
+  setState(() {
+    _currentWeekPage = page;
+    _weekStart = newWeekStart;
+  });
+  
+  _saveWeekStart(_weekStart);
+  _loadShiftData();
+  _loadLessonsForWeek(showLoading: false);  // ← ここを変更
+  _loadAllTasks();
 }
 
 
@@ -1302,7 +1236,9 @@ Widget _buildDayHeaderForWeek(DateTime weekStart) {
   }
   
   Widget _buildMobileSideMenu() {
-    final plusStaff = _staffList.where((s) => s['isPlus'] == true).toList();
+    final plusStaff = _staffList.where((s) => 
+  s['isPlus'] == true && s['showInSchedule'] != false
+).toList();
     final staffColors = [
       Colors.blue,
       Colors.teal,
@@ -2164,8 +2100,10 @@ Widget _buildDayHeaderForWeek(DateTime weekStart) {
   
   // サイドメニュー：フィルターリスト
   Widget _buildSideMenuFilters() {
-    // プラス担当のスタッフを取得
-    final plusStaff = _staffList.where((s) => s['isPlus'] == true).toList();
+   // プラス担当のスタッフを取得（showInSchedule=trueのみ）
+final plusStaff = _staffList.where((s) => 
+  s['isPlus'] == true && s['showInSchedule'] != false
+).toList();
     
     // スタッフごとの色を設定
     final staffColors = [
@@ -3542,6 +3480,8 @@ Expanded(
   
   
 
+// _showShiftDialogメソッドを以下に完全に置き換えてください
+
 void _showShiftDialog(DateTime date) {
     final dayKey = date.day.toString();
     final monthKey = DateFormat('yyyy-MM').format(date);
@@ -3554,8 +3494,8 @@ void _showShiftDialog(DateTime date) {
     // 既存のシフトデータを読み込み
     final existingShifts = _shiftData[dayKey] ?? [];
     
-    // 全スタッフを初期化
-    for (var staff in _staffList) {
+    // 全スタッフを初期化（showInSchedule=trueのみ）
+for (var staff in _staffList.where((s) => s['showInSchedule'] != false)) {
       final staffId = staff['id'] as String;
       final staffType = staff['staffType'] as String? ?? 'fulltime';
       
@@ -3565,15 +3505,15 @@ void _showShiftDialog(DateTime date) {
       );
       
       if (existingShift.isNotEmpty) {
-        staffShifts[staffId] = {
-          'name': staff['name'],
-          'staffType': staffType,
-          'start': existingShift['start'] ?? '',
-          'end': existingShift['end'] ?? '',
-          'note': existingShift['note'] ?? '',
-          'isWorking': true,
-        };
-      } else {
+  staffShifts[staffId] = {
+    'name': staff['name'],
+    'staffType': staffType,
+    'start': existingShift['start'] ?? '',
+    'end': existingShift['end'] ?? '',
+    'note': existingShift['note'] ?? '',
+    'isWorking': existingShift['isWorking'] ?? true,  // ← 保存されたisWorkingを読み込む
+  };
+} else {
         if (staffType == 'fulltime') {
           staffShifts[staffId] = {
             'name': staff['name'],
@@ -3598,24 +3538,36 @@ void _showShiftDialog(DateTime date) {
     
     bool isHolidayLocal = isHolidayDate;
 
+    // ★★★ ここが重要: TextEditingControllerをshowDialogの外で作成 ★★★
+    final Map<String, TextEditingController> startControllers = {};
+    final Map<String, TextEditingController> endControllers = {};
+    final Map<String, TextEditingController> noteControllers = {};
+    
+    for (var staffId in staffShifts.keys) {
+      final data = staffShifts[staffId]!;
+      startControllers[staffId] = TextEditingController(text: data['start'] as String? ?? '');
+      endControllers[staffId] = TextEditingController(text: data['end'] as String? ?? '');
+      noteControllers[staffId] = TextEditingController(text: data['note'] as String? ?? '');
+    }
+
     showDialog(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (dialogContext, setDialogState) {
           final sortedStaffIds = staffShifts.keys.toList();
-sortedStaffIds.sort((a, b) {
-  // 1. 社員/パートで分ける（社員が上）
-  final typeA = staffShifts[a]!['staffType'] == 'fulltime' ? 0 : 1;
-  final typeB = staffShifts[b]!['staffType'] == 'fulltime' ? 0 : 1;
-  if (typeA != typeB) return typeA.compareTo(typeB);
-  
-  // 2. 同じタイプ内ではふりがな順
-  final staffA = _staffList.firstWhere((s) => s['id'] == a, orElse: () => <String, dynamic>{});
-  final staffB = _staffList.firstWhere((s) => s['id'] == b, orElse: () => <String, dynamic>{});
-  final kanaA = (staffA['furigana'] as String?) ?? (staffShifts[a]!['name'] as String);
-  final kanaB = (staffB['furigana'] as String?) ?? (staffShifts[b]!['name'] as String);
-  return kanaA.compareTo(kanaB);
-});
+          sortedStaffIds.sort((a, b) {
+            // 1. 社員/パートで分ける（社員が上）
+            final typeA = staffShifts[a]!['staffType'] == 'fulltime' ? 0 : 1;
+            final typeB = staffShifts[b]!['staffType'] == 'fulltime' ? 0 : 1;
+            if (typeA != typeB) return typeA.compareTo(typeB);
+            
+            // 2. 同じタイプ内ではふりがな順
+            final staffA = _staffList.firstWhere((s) => s['id'] == a, orElse: () => <String, dynamic>{});
+            final staffB = _staffList.firstWhere((s) => s['id'] == b, orElse: () => <String, dynamic>{});
+            final kanaA = (staffA['furigana'] as String?) ?? (staffShifts[a]!['name'] as String);
+            final kanaB = (staffB['furigana'] as String?) ?? (staffShifts[b]!['name'] as String);
+            return kanaA.compareTo(kanaB);
+          });
           
           return AlertDialog(
             backgroundColor: Colors.white,
@@ -3662,18 +3614,18 @@ sortedStaffIds.sort((a, b) {
                     decoration: BoxDecoration(
                       border: Border(bottom: BorderSide(color: Colors.grey.shade300)),
                     ),
-                   child: Row(
-  children: [
-    SizedBox(width: 80, child: Text('スタッフ', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.grey.shade700))),
-    SizedBox(width: 70, child: Text('開始', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.grey.shade700), textAlign: TextAlign.center)),
-    const SizedBox(width: 8), // ← 追加
-    SizedBox(width: 70, child: Text('終了', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.grey.shade700), textAlign: TextAlign.center)),
-    const SizedBox(width: 8), // ← 追加
-    Expanded(child: Text('備考', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.grey.shade700))),
-    const SizedBox(width: 8), // ← 追加
-    SizedBox(width: 70, child: Text('出勤', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.grey.shade700), textAlign: TextAlign.center)),
-  ],
-),
+                    child: Row(
+                      children: [
+                        SizedBox(width: 80, child: Text('スタッフ', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.grey.shade700))),
+                        SizedBox(width: 70, child: Text('開始', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.grey.shade700), textAlign: TextAlign.center)),
+                        const SizedBox(width: 8),
+                        SizedBox(width: 70, child: Text('終了', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.grey.shade700), textAlign: TextAlign.center)),
+                        const SizedBox(width: 8),
+                        Expanded(child: Text('備考', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.grey.shade700))),
+                        const SizedBox(width: 8),
+                        SizedBox(width: 70, child: Text('出勤', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.grey.shade700), textAlign: TextAlign.center)),
+                      ],
+                    ),
                   ),
                   // スタッフリスト
                   Expanded(
@@ -3691,7 +3643,7 @@ sortedStaffIds.sort((a, b) {
                           ),
                           child: Row(
                             children: [
-                              // スタッフ名（バッジなし）
+                              // スタッフ名
                               SizedBox(
                                 width: 80,
                                 child: Text(
@@ -3709,7 +3661,7 @@ sortedStaffIds.sort((a, b) {
                                 width: 70,
                                 child: isWorking
                                     ? TextField(
-                                        controller: TextEditingController(text: data['start']),
+                                        controller: startControllers[staffId],
                                         enabled: !isHolidayLocal,
                                         decoration: InputDecoration(
                                           isDense: true,
@@ -3721,7 +3673,6 @@ sortedStaffIds.sort((a, b) {
                                         ),
                                         style: const TextStyle(fontSize: 14),
                                         textAlign: TextAlign.center,
-                                        onChanged: (value) => data['start'] = value,
                                       )
                                     : Center(
                                         child: Text(
@@ -3736,7 +3687,7 @@ sortedStaffIds.sort((a, b) {
                                 width: 70,
                                 child: isWorking
                                     ? TextField(
-                                        controller: TextEditingController(text: data['end']),
+                                        controller: endControllers[staffId],
                                         enabled: !isHolidayLocal,
                                         decoration: InputDecoration(
                                           isDense: true,
@@ -3748,16 +3699,15 @@ sortedStaffIds.sort((a, b) {
                                         ),
                                         style: const TextStyle(fontSize: 14),
                                         textAlign: TextAlign.center,
-                                        onChanged: (value) => data['end'] = value,
                                       )
                                     : const SizedBox.shrink(),
                               ),
                               const SizedBox(width: 8),
-                              // 備考（hintTextなし）
+                              // 備考
                               Expanded(
                                 child: isWorking
                                     ? TextField(
-                                        controller: TextEditingController(text: data['note']),
+                                        controller: noteControllers[staffId],
                                         enabled: !isHolidayLocal,
                                         decoration: InputDecoration(
                                           isDense: true,
@@ -3768,12 +3718,11 @@ sortedStaffIds.sort((a, b) {
                                           fillColor: Colors.white,
                                         ),
                                         style: const TextStyle(fontSize: 14),
-                                        onChanged: (value) => data['note'] = value,
                                       )
                                     : const SizedBox.shrink(),
                               ),
                               const SizedBox(width: 8),
-                              // 出勤トグル（一番右）
+                              // 出勤トグル
                               SizedBox(
                                 width: 70,
                                 child: Transform.scale(
@@ -3845,22 +3794,26 @@ sortedStaffIds.sort((a, b) {
               ),
               ElevatedButton(
                 onPressed: () async {
-                  final shiftsToSave = <Map<String, dynamic>>[];
-                  for (var entry in staffShifts.entries) {
-                    if (entry.value['isWorking'] == true) {
-                      shiftsToSave.add({
-                        'staffId': entry.key,
-                        'name': entry.value['name'],
-                        'staffType': entry.value['staffType'],
-                        'start': entry.value['start'],
-                        'end': entry.value['end'],
-                        'note': entry.value['note'],
-                      });
-                    }
-                  }
-                  await _saveShiftsAndHoliday(monthKey, dayKey, shiftsToSave, isHolidayLocal);
-                  if (dialogContext.mounted) Navigator.pop(dialogContext);
-                },
+  // ★★★ controllerから値を取得して保存 ★★★
+  // 休みのスタッフも含めて全員分保存する（isWorkingフラグ付き）
+  final shiftsToSave = <Map<String, dynamic>>[];
+  for (var entry in staffShifts.entries) {
+    final staffId = entry.key;
+    final data = entry.value;
+    final isWorking = data['isWorking'] == true;
+    shiftsToSave.add({
+      'staffId': staffId,
+      'name': data['name'],
+      'staffType': data['staffType'],
+      'start': isWorking ? (startControllers[staffId]?.text ?? '') : '',
+      'end': isWorking ? (endControllers[staffId]?.text ?? '') : '',
+      'note': isWorking ? (noteControllers[staffId]?.text ?? '') : '',
+      'isWorking': isWorking,  // ← 追加：休みかどうかを保存
+    });
+  }
+  await _saveShiftsAndHoliday(monthKey, dayKey, shiftsToSave, isHolidayLocal);
+  if (dialogContext.mounted) Navigator.pop(dialogContext);
+},
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.primary,
                   foregroundColor: Colors.white,
@@ -5250,8 +5203,8 @@ await _loadLessonsForWeek(showLoading: false);
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    // 個別スタッフ（先に表示）
-                    ..._staffList.map((staff) {
+                    // 個別スタッフ（showInSchedule=trueのみ表示）
+..._staffList.where((s) => s['showInSchedule'] != false).map((staff) {
                       final name = staff['name'] as String;
                       final isSelected = tempSelection.contains(name);
                       return CheckboxListTile(
@@ -6202,8 +6155,8 @@ void _showColorPickerDialog(String course, Color currentColor, Function(Color) o
                     ],
                   ),
                   const SizedBox(height: 12),
-                  // 個別スタッフ
-                  ..._staffList.map((staff) {
+                  // 個別スタッフ（showInSchedule=trueのみ表示）
+..._staffList.where((s) => s['showInSchedule'] != false).map((staff) {
                     final name = staff['name'] as String;
                     final isSelected = selectedTeachers.contains(name);
                     return CheckboxListTile(

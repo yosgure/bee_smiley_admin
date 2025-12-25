@@ -192,6 +192,7 @@ appBar: AppBar(
             final String? photoUrl = data['photoUrl'];
             final String? staffType = data['staffType'];
             final Map<String, dynamic>? defaultShift = data['defaultShift'] as Map<String, dynamic>?;
+            final bool showInSchedule = data['showInSchedule'] ?? true;
             
             // コントローラーを取得または作成
             final controller = _controllers.putIfAbsent(
@@ -265,6 +266,25 @@ appBar: AppBar(
                             ),
                           ),
                         ),
+                      // スケジュール非表示バッジ
+                      if (!showInSchedule) ...[
+                        const SizedBox(width: 4),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: Colors.grey.shade200,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            '非表示',
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.grey.shade600,
+                            ),
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                   subtitle: Text('${data['role'] ?? ''} / ID: ${data['loginId'] ?? ''}'),
@@ -285,6 +305,11 @@ appBar: AppBar(
                               'デフォルト勤務', 
                               '${defaultShift['start'] ?? ''} 〜 ${defaultShift['end'] ?? ''}'
                             ),
+                          // スケジュール表示設定
+                          _buildInfoRow(
+                            'スケジュール表示', 
+                            showInSchedule ? '表示' : '非表示'
+                          ),
                           const SizedBox(height: 8),
                           const Text('担当教室:', style: TextStyle(color: Colors.grey, fontSize: 12)),
                           const SizedBox(height: 4),
@@ -436,6 +461,9 @@ appBar: AppBar(
     final defaultShift = data['defaultShift'] as Map<String, dynamic>?;
     final defaultStartCtrl = TextEditingController(text: defaultShift?['start'] ?? '9:00');
     final defaultEndCtrl = TextEditingController(text: defaultShift?['end'] ?? '18:00');
+    
+    // スケジュール表示設定
+    bool showInSchedule = data['showInSchedule'] ?? true;
 
     showDialog(
       context: context,
@@ -716,6 +744,118 @@ appBar: AppBar(
                         
                         const SizedBox(height: 24),
                         
+                        // === スケジュール表示設定 ===
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.grey.shade100,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: Colors.grey.shade300),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Icon(Icons.calendar_month, size: 18, color: Colors.grey.shade700),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    'スケジュール表示設定',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 13,
+                                      color: Colors.grey.shade700,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 12),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: GestureDetector(
+                                      onTap: () => setStateDialog(() => showInSchedule = true),
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(vertical: 10),
+                                        decoration: BoxDecoration(
+                                          color: showInSchedule ? Colors.green.shade50 : Colors.white,
+                                          borderRadius: BorderRadius.circular(6),
+                                          border: Border.all(
+                                            color: showInSchedule ? Colors.green : Colors.grey.shade300,
+                                            width: showInSchedule ? 2 : 1,
+                                          ),
+                                        ),
+                                        child: Row(
+                                          mainAxisAlignment: MainAxisAlignment.center,
+                                          children: [
+                                            Icon(
+                                              showInSchedule ? Icons.visibility : Icons.visibility_outlined,
+                                              color: showInSchedule ? Colors.green : Colors.grey,
+                                              size: 18,
+                                            ),
+                                            const SizedBox(width: 6),
+                                            Text(
+                                              '表示',
+                                              style: TextStyle(
+                                                fontSize: 13,
+                                                fontWeight: showInSchedule ? FontWeight.bold : FontWeight.normal,
+                                                color: showInSchedule ? Colors.green : Colors.grey.shade600,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: GestureDetector(
+                                      onTap: () => setStateDialog(() => showInSchedule = false),
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(vertical: 10),
+                                        decoration: BoxDecoration(
+                                          color: !showInSchedule ? Colors.grey.shade200 : Colors.white,
+                                          borderRadius: BorderRadius.circular(6),
+                                          border: Border.all(
+                                            color: !showInSchedule ? Colors.grey.shade500 : Colors.grey.shade300,
+                                            width: !showInSchedule ? 2 : 1,
+                                          ),
+                                        ),
+                                        child: Row(
+                                          mainAxisAlignment: MainAxisAlignment.center,
+                                          children: [
+                                            Icon(
+                                              !showInSchedule ? Icons.visibility_off : Icons.visibility_off_outlined,
+                                              color: !showInSchedule ? Colors.grey.shade700 : Colors.grey,
+                                              size: 18,
+                                            ),
+                                            const SizedBox(width: 6),
+                                            Text(
+                                              '非表示',
+                                              style: TextStyle(
+                                                fontSize: 13,
+                                                fontWeight: !showInSchedule ? FontWeight.bold : FontWeight.normal,
+                                                color: !showInSchedule ? Colors.grey.shade700 : Colors.grey.shade600,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                '※非表示にすると講師選択やシフト表に表示されません\n　（管理者など現場に出ないスタッフ向け）',
+                                style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                              ),
+                            ],
+                          ),
+                        ),
+                        
+                        const SizedBox(height: 24),
+                        
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
@@ -804,6 +944,7 @@ appBar: AppBar(
                               'classrooms': selectedClassrooms,
                               'photoUrl': uploadedUrl,
                               'staffType': staffType,
+                              'showInSchedule': showInSchedule,
                             };
                             
                             // 社員の場合はデフォルト勤務時間を追加
@@ -831,6 +972,7 @@ appBar: AppBar(
                               staffType: staffType,
                               defaultShiftStart: staffType == 'fulltime' ? defaultStartCtrl.text : null,
                               defaultShiftEnd: staffType == 'fulltime' ? defaultEndCtrl.text : null,
+                              showInSchedule: showInSchedule,
                             );
                           }
                         }),
@@ -895,6 +1037,7 @@ appBar: AppBar(
     required String role,
     required List<String> classrooms,
     required String staffType,
+    required bool showInSchedule,
     String? defaultShiftStart,
     String? defaultShiftEnd,
     Uint8List? imageBytes,
@@ -915,6 +1058,7 @@ appBar: AppBar(
       'classrooms': classrooms,
       'photoUrl': photoUrl,
       'staffType': staffType,
+      'showInSchedule': showInSchedule,
       'createdAt': FieldValue.serverTimestamp(),
       'isInitialPassword': true,
     };
@@ -939,6 +1083,7 @@ appBar: AppBar(
     required String role,
     required List<String> classrooms,
     required String staffType,
+    required bool showInSchedule,
     String? defaultShiftStart,
     String? defaultShiftEnd,
     Uint8List? imageBytes,
@@ -970,6 +1115,7 @@ appBar: AppBar(
           role: role,
           classrooms: classrooms,
           staffType: staffType,
+          showInSchedule: showInSchedule,
           defaultShiftStart: defaultShiftStart,
           defaultShiftEnd: defaultShiftEnd,
           imageBytes: imageBytes,
@@ -993,6 +1139,7 @@ appBar: AppBar(
               role: role,
               classrooms: classrooms,
               staffType: staffType,
+              showInSchedule: showInSchedule,
               defaultShiftStart: defaultShiftStart,
               defaultShiftEnd: defaultShiftEnd,
               imageBytes: imageBytes,
