@@ -98,6 +98,7 @@ class _PlusScheduleContentState extends State<PlusScheduleContent> with Automati
   
   // 期限日ごとのタスク（カレンダー表示用）
   Map<String, List<Map<String, dynamic>>> _tasksByDueDate = {};
+  Map<String, Map<String, dynamic>> _cellMemos = {};
   
   // ホバーポップアップ用のオーバーレイエントリ（グローバル管理）
   OverlayEntry? _currentOverlay;
@@ -261,6 +262,99 @@ void dispose() {
   } else {
     await _loadLessonsForWeek();
   }
+}
+
+// ★追加★ コマメモを週単位で読み込み
+Future<void> _loadCellMemosForWeek() async {
+  try {
+    final memos = <String, Map<String, dynamic>>{};
+    
+    for (int dayIndex = 0; dayIndex < 6; dayIndex++) {
+      final date = _weekStart.add(Duration(days: dayIndex));
+      final dateStr = DateFormat('yyyy-MM-dd').format(date);
+      
+      for (int slotIndex = 0; slotIndex < 4; slotIndex++) {
+        final docId = '${dateStr}_$slotIndex';
+        final doc = await FirebaseFirestore.instance
+            .collection('plus_cell_memos')
+            .doc(docId)
+            .get();
+        
+        if (doc.exists) {
+          memos[docId] = {
+            'id': doc.id,
+            ...doc.data()!,
+          };
+        }
+      }
+    }
+    
+    if (mounted) {
+      setState(() {
+        _cellMemos = memos;
+      });
+    }
+  } catch (e) {
+    debugPrint('Error loading cell memos: $e');
+  }
+}
+
+// ★追加★ コマメモを保存
+Future<void> _saveCellMemo(DateTime date, int slotIndex, String title, String comment) async {
+  final dateStr = DateFormat('yyyy-MM-dd').format(date);
+  final docId = '${dateStr}_$slotIndex';
+  
+  try {
+    await FirebaseFirestore.instance
+        .collection('plus_cell_memos')
+        .doc(docId)
+        .set({
+      'title': title,
+      'comment': comment,
+      'date': Timestamp.fromDate(date),
+      'slotIndex': slotIndex,
+      'createdAt': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+    
+    setState(() {
+      _cellMemos[docId] = {
+        'id': docId,
+        'title': title,
+        'comment': comment,
+        'date': Timestamp.fromDate(date),
+        'slotIndex': slotIndex,
+      };
+    });
+  } catch (e) {
+    debugPrint('Error saving cell memo: $e');
+  }
+}
+
+// ★追加★ コマメモを削除
+Future<void> _deleteCellMemo(DateTime date, int slotIndex) async {
+  final dateStr = DateFormat('yyyy-MM-dd').format(date);
+  final docId = '${dateStr}_$slotIndex';
+  
+  try {
+    await FirebaseFirestore.instance
+        .collection('plus_cell_memos')
+        .doc(docId)
+        .delete();
+    
+    setState(() {
+      _cellMemos.remove(docId);
+    });
+  } catch (e) {
+    debugPrint('Error deleting cell memo: $e');
+  }
+}
+
+// ★追加★ コマメモを取得
+Map<String, dynamic>? _getCellMemo(DateTime date, int slotIndex) {
+  final dateStr = DateFormat('yyyy-MM-dd').format(date);
+  final docId = '${dateStr}_$slotIndex';
+  return _cellMemos[docId];
 }
   
   // 全タスクを読み込み
@@ -764,6 +858,7 @@ void dispose() {
         
         // 生徒メモを先読み（UIをブロックしない）
         _preloadStudentNotes(lessons);
+        _loadCellMemosForWeek();
       }
     } catch (e) {
       debugPrint('Error loading lessons: $e');
@@ -2682,8 +2777,9 @@ final plusStaff = _staffList.where((s) =>
   }
 
   Widget _buildCell(int dayIndex, int slotIndex, double cellWidth, double cellHeight) {
-    final date = _weekStart.add(Duration(days: dayIndex));
-    final isHoliday = _isHoliday(date);
+  final date = _weekStart.add(Duration(days: dayIndex));
+  final isHoliday = _isHoliday(date);
+  final cellMemo = _getCellMemo(date, slotIndex); // ★追加★
     
     // レッスンを取得してフィルタリング
     var lessons = _lessons.where((lesson) =>
@@ -2753,31 +2849,213 @@ final plusStaff = _staffList.where((s) =>
   height: cellHeight,
   clipBehavior: Clip.hardEdge,
   decoration: BoxDecoration(
-                  color: isHoliday ? Colors.grey.shade200 : Colors.white,
-                  border: Border(
-                    top: slotIndex == 0 ? BorderSide(color: Colors.grey.shade300) : BorderSide.none,
-                    bottom: BorderSide(color: Colors.grey.shade300),
-                    left: BorderSide(color: Colors.grey.shade300),
-                  ),
-                ),
-                padding: const EdgeInsets.all(6),
-                child: isHoliday && lessons.isEmpty
-                    ? null
-                    : Builder(
-                        builder: (cellContext) {
-                          return Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: _buildLessonListWithDropIndicators(lessons, dayIndex, slotIndex, cellContext),
-                          );
-                        },
-                      ),// ClipRect
-              ),  // Container
+    color: isHoliday ? Colors.grey.shade200 : Colors.white,
+    border: Border(
+      top: slotIndex == 0 ? BorderSide(color: Colors.grey.shade300) : BorderSide.none,
+      bottom: BorderSide(color: Colors.grey.shade300),
+      left: BorderSide(color: Colors.grey.shade300),
+    ),
+  ),
+  child: Stack(
+    children: [
+      // レッスンリスト
+      Padding(
+        padding: const EdgeInsets.all(6),
+        child: isHoliday && lessons.isEmpty
+            ? null
+            : Builder(
+                builder: (cellContext) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: _buildLessonListWithDropIndicators(lessons, dayIndex, slotIndex, cellContext),
+                  );
+                },
+              ),
+      ),
+      // ★追加★ コマメモアイコン（右下）
+      if (cellMemo != null)
+        Positioned(
+          right: 4,
+          bottom: 4,
+          child: _buildCellMemoIcon(date, slotIndex, cellMemo),
+        ),
+    ],
+  ),
+),
             );  // Builder
           },
         );  // GestureDetector
       },
     );  // DragTarget
   }
+
+  // ★追加★ コマメモアイコン
+Widget _buildCellMemoIcon(DateTime date, int slotIndex, Map<String, dynamic> memo) {
+  final key = GlobalKey();
+  
+  void showMemoOverlay() {
+    _hideCurrentOverlay();
+    
+    final renderBox = key.currentContext?.findRenderObject() as RenderBox?;
+    if (renderBox == null) return;
+    
+    final overlay = Overlay.of(context);
+    final offset = renderBox.localToGlobal(Offset.zero);
+    final screenWidth = MediaQuery.of(context).size.width;
+    
+    const popupWidth = 200.0;
+    final showOnLeft = offset.dx + popupWidth > screenWidth - 20;
+    
+    _currentOverlay = OverlayEntry(
+      builder: (ctx) {
+        double left = showOnLeft ? offset.dx - popupWidth - 8 : offset.dx + 24;
+        
+        return Positioned(
+          top: offset.dy - 8,
+          left: left,
+          child: Material(
+            elevation: 8,
+            borderRadius: BorderRadius.circular(8),
+            color: Colors.white,
+            child: Container(
+              width: popupWidth,
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    memo['title'] ?? '',
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                  ),
+                  if ((memo['comment'] ?? '').toString().isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      memo['comment'] ?? '',
+                      style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+    
+    overlay.insert(_currentOverlay!);
+  }
+  
+  return MouseRegion(
+    key: key,
+    cursor: SystemMouseCursors.click,
+    onEnter: (_) => showMemoOverlay(),
+    onExit: (_) => _hideCurrentOverlay(),
+    child: GestureDetector(
+      onTap: () {
+        _hideCurrentOverlay();
+        _showEditCellMemoDialog(date, slotIndex, memo);
+      },
+      child: Icon(
+  Icons.info_outline,
+  size: 16,
+  color: Colors.grey.shade500,
+),
+    ),
+  );
+}
+
+// ★追加★ コマメモ編集ダイアログ
+void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> memo) {
+  final titleController = TextEditingController(text: memo['title'] ?? '');
+  final commentController = TextEditingController(text: memo['comment'] ?? '');
+  final scaffoldMessenger = ScaffoldMessenger.of(context);
+  
+  showDialog(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      backgroundColor: Colors.white,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      title: Row(
+        children: [
+          Icon(Icons.info_outline, color: Colors.grey.shade600, size: 22),
+          const SizedBox(width: 8),
+          const Text('コマメモを編集', style: TextStyle(fontSize: 18)),
+          const Spacer(),
+          IconButton(
+            icon: const Icon(Icons.delete_outline, color: Colors.red, size: 20),
+            tooltip: '削除',
+            onPressed: () async {
+              final confirm = await showDialog<bool>(
+                context: dialogContext,
+                builder: (ctx) => AlertDialog(
+                  backgroundColor: Colors.white,
+                  title: const Text('メモを削除'),
+                  content: const Text('このメモを削除しますか？'),
+                  actions: [
+                    TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('キャンセル')),
+                    TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('削除', style: TextStyle(color: Colors.red))),
+                  ],
+                ),
+              );
+              if (confirm == true) {
+                await _deleteCellMemo(date, slotIndex);
+                if (dialogContext.mounted) Navigator.pop(dialogContext);
+                scaffoldMessenger.showSnackBar(const SnackBar(content: Text('メモを削除しました')));
+              }
+            },
+          ),
+        ],
+      ),
+      content: SizedBox(
+        width: 350,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '${DateFormat('M月d日 (E)', 'ja').format(date)} ${_timeSlots[slotIndex]}',
+              style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: titleController,
+              decoration: InputDecoration(
+                labelText: 'タイトル',
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                contentPadding: const EdgeInsets.all(12),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: commentController,
+              decoration: InputDecoration(
+                labelText: 'コメント（任意）',
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                contentPadding: const EdgeInsets.all(12),
+              ),
+              maxLines: 3,
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('キャンセル')),
+        ElevatedButton(
+          onPressed: () async {
+            final title = titleController.text.trim();
+            if (title.isEmpty) return;
+            await _saveCellMemo(date, slotIndex, title, commentController.text.trim());
+            if (dialogContext.mounted) Navigator.pop(dialogContext);
+            scaffoldMessenger.showSnackBar(const SnackBar(content: Text('メモを保存しました')));
+          },
+          style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, foregroundColor: Colors.white),
+          child: const Text('保存'),
+        ),
+      ],
+    ),
+  );
+}
 
   // レッスンリストを行間ドロップインジケーター付きで構築
   List<Widget> _buildLessonListWithDropIndicators(List<Map<String, dynamic>> lessons, int dayIndex, int slotIndex, [BuildContext? cellContext]) {
@@ -4352,6 +4630,8 @@ for (var staff in _staffList.where((s) => s['showInSchedule'] != false)) {
     
     // 入力モード: 'student'=生徒選択, 'custom'=イベント
     String inputMode = 'student';
+    final memoTitleController = TextEditingController();
+final memoCommentController = TextEditingController();
     Map<String, dynamic>? selectedStudent;
     final customTitleController = TextEditingController();
     List<String> selectedTeachers = [];
@@ -4429,8 +4709,9 @@ for (var staff in _staffList.where((s) => s['showInSchedule'] != false)) {
             });
           }
           
-          // 保存可能かチェック
-final bool canSave = title.isNotEmpty;
+          final bool canSave = inputMode == 'memo' 
+    ? memoTitleController.text.trim().isNotEmpty
+    : title.isNotEmpty;
           
           Widget dialogContent = Material(
             color: Colors.white,
@@ -4482,65 +4763,99 @@ final bool canSave = title.isNotEmpty;
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Row(
-                        children: [
-                          Expanded(
-                            child: GestureDetector(
-                              onTap: () => setDialogState(() => inputMode = 'student'),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(vertical: 10),
-                                decoration: BoxDecoration(
-                                  color: inputMode == 'student' ? Colors.white : Colors.transparent,
-                                  borderRadius: BorderRadius.circular(6),
-                                  boxShadow: inputMode == 'student' ? [
-                                    BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 2),
-                                  ] : null,
-                                ),
-                                child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Icon(Icons.person, size: 16, 
-                                      color: inputMode == 'student' ? AppColors.primary : AppColors.textSub),
-                                    const SizedBox(width: 6),
-                                    Text('生徒選択', style: TextStyle(
-                                      fontSize: 13,
-                                      fontWeight: inputMode == 'student' ? FontWeight.bold : FontWeight.normal,
-                                      color: inputMode == 'student' ? AppColors.primary : AppColors.textSub,
-                                    )),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-                          Expanded(
-                            child: GestureDetector(
-                              onTap: () => setDialogState(() => inputMode = 'custom'),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(vertical: 10),
-                                decoration: BoxDecoration(
-                                  color: inputMode == 'custom' ? Colors.white : Colors.transparent,
-                                  borderRadius: BorderRadius.circular(6),
-                                  boxShadow: inputMode == 'custom' ? [
-                                    BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 2),
-                                  ] : null,
-                                ),
-                                child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Icon(Icons.edit_note, size: 16,
-                                      color: inputMode == 'custom' ? AppColors.primary : AppColors.textSub),
-                                    const SizedBox(width: 6),
-                                    Text('イベント', style: TextStyle(
-                                      fontSize: 13,
-                                      fontWeight: inputMode == 'custom' ? FontWeight.bold : FontWeight.normal,
-                                      color: inputMode == 'custom' ? AppColors.primary : AppColors.textSub,
-                                    )),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
+  children: [
+    // 生徒選択タブ
+    Expanded(
+      child: GestureDetector(
+        onTap: () => setDialogState(() => inputMode = 'student'),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          decoration: BoxDecoration(
+            color: inputMode == 'student' ? Colors.white : Colors.transparent,
+            borderRadius: BorderRadius.circular(6),
+            boxShadow: inputMode == 'student' ? [
+              BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 2),
+            ] : null,
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.person, size: 16, 
+                color: inputMode == 'student' ? AppColors.primary : AppColors.textSub),
+              const SizedBox(width: 4),
+              Text('生徒', style: TextStyle(
+                fontSize: 12,
+                fontWeight: inputMode == 'student' ? FontWeight.bold : FontWeight.normal,
+                color: inputMode == 'student' ? AppColors.primary : AppColors.textSub,
+              )),
+            ],
+          ),
+        ),
+      ),
+    ),
+    // イベントタブ
+    Expanded(
+      child: GestureDetector(
+        onTap: () => setDialogState(() => inputMode = 'custom'),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          decoration: BoxDecoration(
+            color: inputMode == 'custom' ? Colors.white : Colors.transparent,
+            borderRadius: BorderRadius.circular(6),
+            boxShadow: inputMode == 'custom' ? [
+              BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 2),
+            ] : null,
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.edit_note, size: 16,
+                color: inputMode == 'custom' ? AppColors.primary : AppColors.textSub),
+              const SizedBox(width: 4),
+              Text('イベント', style: TextStyle(
+                fontSize: 12,
+                fontWeight: inputMode == 'custom' ? FontWeight.bold : FontWeight.normal,
+                color: inputMode == 'custom' ? AppColors.primary : AppColors.textSub,
+              )),
+            ],
+          ),
+        ),
+      ),
+    ),
+    // ★追加★ メモタブ
+    Expanded(
+      child: GestureDetector(
+        onTap: () => setDialogState(() => inputMode = 'memo'),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          decoration: BoxDecoration(
+            color: inputMode == 'memo' ? Colors.white : Colors.transparent,
+            borderRadius: BorderRadius.circular(6),
+            boxShadow: inputMode == 'memo' ? [
+              BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 2),
+            ] : null,
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+  Icons.info_outline,
+  size: 16,
+  color: inputMode == 'memo' ? AppColors.primary : AppColors.textSub,
+),
+              const SizedBox(width: 4),
+              Text('メモ', style: TextStyle(
+                fontSize: 12,
+                fontWeight: inputMode == 'memo' ? FontWeight.bold : FontWeight.normal,
+                color: inputMode == 'memo' ? AppColors.primary : AppColors.textSub,
+              )),
+            ],
+          ),
+        ),
+      ),
+    ),
+  ],
+),
                     ),
                   ),
                   const SizedBox(height: 16),
@@ -4612,11 +4927,41 @@ final bool canSave = title.isNotEmpty;
                             ),
                             const SizedBox(height: 12),
                           ],
+
+                          if (inputMode == 'memo') ...[
+  TextField(
+    controller: memoTitleController,
+    decoration: InputDecoration(
+      hintText: 'タイトルを入力',
+      prefixIcon: const Icon(Icons.info_outline, size: 20, color: Colors.grey),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: BorderSide(color: Colors.grey.shade300),
+      ),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+    ),
+    onChanged: (_) => setDialogState(() {}),
+  ),
+  const SizedBox(height: 12),
+  TextField(
+    controller: memoCommentController,
+    decoration: InputDecoration(
+      hintText: 'コメント（任意）',
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: BorderSide(color: Colors.grey.shade300),
+      ),
+      contentPadding: const EdgeInsets.all(12),
+    ),
+    maxLines: 3,
+  ),
+],
                           
-                          // 共通入力フォーム
-                          // 講師選択
-                          InkWell(
-                            onTap: () => _showMultiTeacherSelectionDialog(
+                         // 共通入力フォーム（メモモード以外）
+if (inputMode != 'memo') ...[
+  // 講師選択
+  InkWell(
+    onTap: () => _showMultiTeacherSelectionDialog(
                               selectedTeachers,
                               (newSelection) => setDialogState(() => selectedTeachers = newSelection),
                             ),
@@ -4724,6 +5069,7 @@ final bool canSave = title.isNotEmpty;
                               ),
                             ),
                           ),
+                           ],
                           
                           // === 生徒情報セクション（生徒モードで生徒選択済みの場合のみ） ===
                           if (inputMode == 'student' && title.isNotEmpty) ...[
@@ -4985,6 +5331,18 @@ InkWell(
                       child: ElevatedButton(
                         onPressed: canSave
                             ? () async {
+                              if (inputMode == 'memo') {
+          final memoTitle = memoTitleController.text.trim();
+          if (memoTitle.isEmpty) return;
+          
+          await _saveCellMemo(date, slotIndex, memoTitle, memoCommentController.text.trim());
+          if (!dialogContext.mounted) return;
+          Navigator.pop(dialogContext);
+          scaffoldMessenger.showSnackBar(
+            const SnackBar(content: Text('メモを保存しました')),
+          );
+          return;
+        }
                                 final saveDate = DateTime(date.year, date.month, date.day, 12, 0, 0);
 final lessonData = {
                                   'date': Timestamp.fromDate(saveDate),
@@ -5046,9 +5404,11 @@ await _loadLessonsForWeek(showLoading: false);
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                         ),
                         child: Text(
-  title.isEmpty
-      ? (inputMode == 'student' ? '生徒を選択してください' : 'タイトルを入力してください')
-      : '$titleを追加',
+  inputMode == 'memo'
+      ? (memoTitleController.text.trim().isEmpty ? 'タイトルを入力してください' : 'メモを追加')
+      : title.isEmpty
+          ? (inputMode == 'student' ? '生徒を選択してください' : 'タイトルを入力してください')
+          : '$titleを追加',
   style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
 ),
                       ),
