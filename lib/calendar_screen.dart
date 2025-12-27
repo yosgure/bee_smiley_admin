@@ -594,7 +594,7 @@ Future<void> _saveDisplayDate(DateTime date) async {
                                               appointment.subject.replaceAll('⚠️ ', ''), 
                                               style: const TextStyle(
                                                 color: AppColors.error, 
-                                                fontSize: 10,
+                                                fontSize: 12,
                                                 height: 1.0, 
                                               ),
                                               maxLines: 1,
@@ -627,7 +627,7 @@ Future<void> _saveDisplayDate(DateTime date) async {
                                               appointment.subject.replaceAll('◯ ', ''),
                                               style: const TextStyle(
                                                 color: Colors.white,
-                                                fontSize: 10, 
+                                                fontSize: 12, 
                                                 decoration: TextDecoration.none,
                                                 height: 1.0,
                                               ),
@@ -654,7 +654,7 @@ Future<void> _saveDisplayDate(DateTime date) async {
                                         appointment.subject,
                                         style: const TextStyle(
                                           color: Colors.white,
-                                          fontSize: 10,
+                                          fontSize: 12,
                                           height: 1.0,
                                         ),
                                         maxLines: 1,
@@ -679,7 +679,7 @@ Future<void> _saveDisplayDate(DateTime date) async {
                                       appointment.subject,
                                       style: const TextStyle(
                                         color: Colors.white,
-                                        fontSize: 10,
+                                        fontSize: 12,
                                         height: 1.0,
                                       ),
                                       maxLines: isMonthView ? 1 : 3,
