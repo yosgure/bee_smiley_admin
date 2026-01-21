@@ -1823,7 +1823,7 @@ class _PersonSelectSheetState extends State<_PersonSelectSheet> {
                 child: Text(
                   '${_selectedMap.length}名を選択して完了',
                   style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
-                ),2
+                ),
               ),
             ),
           ),
