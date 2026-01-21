@@ -9,14 +9,16 @@ class AddEventDialog extends StatefulWidget {
   final DateTime? initialStartDate;
   final DocumentSnapshot? appointment;
   final DocumentSnapshot? taskDoc;
-  final String? editScope; 
+  final String? editScope;
+  final bool initialIsTask; // 追加: タスクモードで開くかどうか
 
   const AddEventDialog({
     super.key,
     this.initialStartDate,
     this.appointment,
     this.taskDoc,
-    this.editScope, 
+    this.editScope,
+    this.initialIsTask = false, // デフォルトはfalse（イベントモード）
   });
 
   @override
@@ -82,6 +84,9 @@ class _AddEventDialogState extends State<AddEventDialog> {
       _initializeEventData(widget.appointment!.data() as Map<String, dynamic>);
     } else {
       _isEditing = false;
+      // 追加: initialIsTaskパラメータでタスクモードを初期化
+      _isTaskMode = widget.initialIsTask;
+      
       final now = DateTime.now();
       final initial = widget.initialStartDate ?? now;
       final roundedMinute = initial.minute >= 30 ? 30 : 0;
@@ -1818,7 +1823,7 @@ class _PersonSelectSheetState extends State<_PersonSelectSheet> {
                 child: Text(
                   '${_selectedMap.length}名を選択して完了',
                   style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
-                ),
+                ),2
               ),
             ),
           ),

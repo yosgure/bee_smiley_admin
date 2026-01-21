@@ -70,9 +70,9 @@ void initState() {
       });
     }
   });
-}  // ← initState はここで閉じる！
+}
 
-// 保存された表示月を読み込む（initState の外に置く）
+// 保存された表示月を読み込む
 Future<void> _loadSavedDisplayDate() async {
   try {
     final prefs = await SharedPreferences.getInstance();
@@ -95,7 +95,7 @@ Future<void> _loadSavedDisplayDate() async {
   _controller.displayDate = DateTime(now.year, now.month, now.day, 8, 0);
 }
 
-// 表示月を保存（initState の外に置く）
+// 表示月を保存
 Future<void> _saveDisplayDate(DateTime date) async {
   try {
     final prefs = await SharedPreferences.getInstance();
@@ -200,7 +200,7 @@ Future<void> _saveDisplayDate(DateTime date) async {
         if (_miniCalendarController.displayDate?.month != centerDate.month) {
           _miniCalendarController.displayDate = centerDate;
         }
-        _saveDisplayDate(centerDate); // 追加: 表示月を保存
+        _saveDisplayDate(centerDate);
       }
     });
   }
@@ -211,8 +211,127 @@ Future<void> _saveDisplayDate(DateTime date) async {
   _controller.displayDate = now;
   _miniCalendarController.displayDate = now;
   _updateHeaderText(now);
-  _saveDisplayDate(now); // 追加
+  _saveDisplayDate(now);
 }
+
+  // ドラッグでイベント移動時の処理（15分単位、週ビューは日単位の横移動）
+  void _onDragEnd(AppointmentDragEndDetails details) async {
+    if (details.appointment == null || details.droppingTime == null) return;
+    
+    final appointment = details.appointment as Appointment;
+    
+    // タスクや誕生日は移動不可
+    if (appointment.notes == _taskNoteMarker || 
+        appointment.notes == 'BIRTHDAY' || 
+        appointment.notes == 'PENDING_TASKS' ||
+        appointment.id == _pendingTasksId) {
+      return;
+    }
+    
+    if (appointment.id is! DocumentSnapshot) return;
+    
+    final doc = appointment.id as DocumentSnapshot;
+    final duration = appointment.endTime.difference(appointment.startTime);
+    final droppedTime = details.droppingTime!;
+    
+    // 15分単位に丸める
+    final roundedMinute = (droppedTime.minute / 15).round() * 15;
+    final adjustedMinute = roundedMinute == 60 ? 0 : roundedMinute;
+    final adjustedHour = roundedMinute == 60 ? droppedTime.hour + 1 : droppedTime.hour;
+    
+    DateTime newStart;
+    
+    if (_calendarView == CalendarView.week) {
+      // 週ビュー：日付はドロップ先の日付を使用（横方向は日単位で移動）
+      newStart = DateTime(
+        droppedTime.year, 
+        droppedTime.month, 
+        droppedTime.day, 
+        adjustedHour, 
+        adjustedMinute
+      );
+    } else if (_calendarView == CalendarView.day) {
+      // 日ビュー：横方向移動なし（元の日付を維持）
+      newStart = DateTime(
+        appointment.startTime.year, 
+        appointment.startTime.month, 
+        appointment.startTime.day, 
+        adjustedHour, 
+        adjustedMinute
+      );
+    } else {
+      newStart = DateTime(
+        droppedTime.year, 
+        droppedTime.month, 
+        droppedTime.day, 
+        adjustedHour, 
+        adjustedMinute
+      );
+    }
+    
+    final newEnd = newStart.add(duration);
+    
+    try {
+      await doc.reference.update({
+        'startTime': Timestamp.fromDate(newStart),
+        'endTime': Timestamp.fromDate(newEnd),
+      });
+    } catch (e) {
+      debugPrint('Error updating event time: $e');
+    }
+  }
+
+  // リサイズでイベントの時間変更時の処理（15分単位）
+  void _onAppointmentResizeEnd(AppointmentResizeEndDetails details) async {
+    if (details.appointment == null) return;
+    
+    final appointment = details.appointment as Appointment;
+    
+    // タスクや誕生日はリサイズ不可
+    if (appointment.notes == _taskNoteMarker || 
+        appointment.notes == 'BIRTHDAY' || 
+        appointment.notes == 'PENDING_TASKS' ||
+        appointment.id == _pendingTasksId) {
+      return;
+    }
+    
+    if (appointment.id is! DocumentSnapshot) return;
+    
+    final doc = appointment.id as DocumentSnapshot;
+    
+    // 開始時間を15分単位に丸める
+    final startMinute = (appointment.startTime.minute / 15).round() * 15;
+    final adjustedStartMinute = startMinute == 60 ? 0 : startMinute;
+    final adjustedStartHour = startMinute == 60 ? appointment.startTime.hour + 1 : appointment.startTime.hour;
+    final newStart = DateTime(
+      appointment.startTime.year,
+      appointment.startTime.month,
+      appointment.startTime.day,
+      adjustedStartHour,
+      adjustedStartMinute,
+    );
+    
+    // 終了時間を15分単位に丸める
+    final endMinute = (appointment.endTime.minute / 15).round() * 15;
+    final adjustedEndMinute = endMinute == 60 ? 0 : endMinute;
+    final adjustedEndHour = endMinute == 60 ? appointment.endTime.hour + 1 : appointment.endTime.hour;
+    final newEnd = DateTime(
+      appointment.endTime.year,
+      appointment.endTime.month,
+      appointment.endTime.day,
+      adjustedEndHour,
+      adjustedEndMinute,
+    );
+    
+    try {
+      await doc.reference.update({
+        'startTime': Timestamp.fromDate(newStart),
+        'endTime': Timestamp.fromDate(newEnd),
+      });
+    } catch (e) {
+      debugPrint('Error updating event time: $e');
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -527,27 +646,43 @@ Future<void> _saveDisplayDate(DateTime date) async {
                       Expanded(
                         child: Stack(
                           children: [
-                            SfCalendarTheme(
+                            Theme(
+                              data: Theme.of(context).copyWith(
+                                hoverColor: Colors.transparent,
+                                highlightColor: Colors.transparent,
+                                splashColor: Colors.transparent,
+                              ),
+                              child: SfCalendarTheme(
                               data: SfCalendarThemeData(
                                 selectionBorderColor: Colors.transparent,
                                 todayHighlightColor: AppColors.primary,
                                 cellBorderColor: Colors.grey.shade400,
                               ),
-                              child: SfCalendar(
+                              child: MouseRegion(
+                                onEnter: (_) {},
+                                onExit: (_) {},
+                                onHover: (_) {},
+                                child: SfCalendar(
                                 view: _calendarView,
                                 controller: _controller,
                                 firstDayOfWeek: 1,
                                 dataSource: _DataSource(appointments),
                                 onTap: calendarTapped, 
                                 onViewChanged: _onViewChanged,
+                                // ドラッグでイベント移動を有効化
+                                allowDragAndDrop: true,
+                                onDragEnd: _onDragEnd,
+                                // リサイズでイベントの時間変更を有効化
+                                allowAppointmentResize: true,
+                                onAppointmentResizeEnd: _onAppointmentResizeEnd,
                                 backgroundColor: AppColors.surface,
                                 cellBorderColor: Colors.grey.shade400,
                                 headerHeight: 0,
                                 viewHeaderHeight: 70,
                                 allowViewNavigation: false,
-                                selectionDecoration: BoxDecoration(
+                                selectionDecoration: const BoxDecoration(
                                   color: Colors.transparent,
-                                  border: Border.all(color: Colors.transparent, width: 0),
+                                  border: null,
                                 ),
                                 viewHeaderStyle: const ViewHeaderStyle(
                                   dayTextStyle: TextStyle(fontSize: 11, color: AppColors.textSub, fontWeight: FontWeight.bold),
@@ -690,11 +825,30 @@ Future<void> _saveDisplayDate(DateTime date) async {
                                 timeSlotViewSettings: const TimeSlotViewSettings(
                                   timeIntervalHeight: 60,
                                   timeFormat: 'H:mm',
+                                  // 時間グリッドは1時間単位
+                                  timeInterval: Duration(minutes: 60),
                                   timeTextStyle: TextStyle(color: AppColors.textSub, fontSize: 11),
                                   dateFormat: 'd',
                                   dayFormat: 'EEE',
+                                  allDayPanelColor: AppColors.surface,
+                                  // 15分単位で操作可能に
+                                  minimumAppointmentDuration: Duration(minutes: 15),
+                                ),
+                                // 【修正2】dragAndDropSettingsでドラッグ時の動作を設定
+                                dragAndDropSettings: const DragAndDropSettings(
+                                  allowNavigation: true,
+                                  allowScroll: true,
+                                  showTimeIndicator: true,
+                                  indicatorTimeFormat: 'HH:mm',
+                                  timeIndicatorStyle: TextStyle(
+                                    color: AppColors.primary,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                  ),
                                 ),
                               ),
+                              ),
+                            ),
                             ),
                           ],
                         ),
@@ -722,6 +876,60 @@ Future<void> _saveDisplayDate(DateTime date) async {
         ),
       ),
     );
+  }
+
+  // 新規タスク追加ダイアログ
+  Future<void> _showAddTaskDialog({DateTime? initialDate}) async {
+    final bool showSidebar = MediaQuery.of(context).size.width >= 800;
+    
+    if (showSidebar) {
+      await showDialog(
+        context: context,
+        barrierDismissible: true,
+        builder: (context) => Dialog(
+          backgroundColor: Colors.white,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          insetPadding: const EdgeInsets.symmetric(horizontal: 40, vertical: 24),
+          child: SizedBox(
+            width: 500,
+            height: MediaQuery.of(context).size.height * 0.85,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(16),
+              child: AddEventDialog(
+                initialStartDate: initialDate,
+                initialIsTask: true, // タスクモードで開く
+              ),
+            ),
+          ),
+        ),
+      );
+    } else {
+      await showModalBottomSheet(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: Colors.transparent,
+        builder: (context) => Container(
+          height: MediaQuery.of(context).size.height * 0.9,
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.only(
+              topLeft: Radius.circular(20),
+              topRight: Radius.circular(20),
+            ),
+          ),
+          child: ClipRRect(
+            borderRadius: const BorderRadius.only(
+              topLeft: Radius.circular(20),
+              topRight: Radius.circular(20),
+            ),
+            child: AddEventDialog(
+              initialStartDate: initialDate,
+              initialIsTask: true, // タスクモードで開く
+            ),
+          ),
+        ),
+      );
+    }
   }
 
   Widget _buildSidebarContent() {
@@ -973,7 +1181,44 @@ Future<void> _saveDisplayDate(DateTime date) async {
           _controller.displayDate = DateTime(details.date!.year, details.date!.month, details.date!.day, 8, 0);
         });
       } else {
-        _showAddEventDialog(initialDate: details.date);
+        // クリック位置で00か30を判定（minuteが0-29なら:00、30-59なら:30）
+        final date = details.date!;
+        final roundedMinute = date.minute < 30 ? 0 : 30;
+        final roundedDate = DateTime(date.year, date.month, date.day, date.hour, roundedMinute);
+        _showAddEventDialog(initialDate: roundedDate);
+      }
+    } else if (details.targetElement == CalendarElement.allDayPanel) {
+      // 週・日ビューの終日パネルクリックで新規タスク追加
+      _controller.selectedDate = null;
+      if (_calendarView == CalendarView.day || _calendarView == CalendarView.week) {
+        // 既存のタスクをタップした場合はその詳細を表示、空白なら新規タスク
+        if (details.appointments != null && details.appointments!.isNotEmpty) {
+          final first = details.appointments![0];
+          if (first is Appointment) {
+            if (first.id == _pendingTasksId) {
+              _showPendingTasksListDialog();
+            } else if (first.notes == _taskNoteMarker) {
+              if (first.id is DocumentSnapshot) {
+                _showTaskDetail(first.id as DocumentSnapshot);
+              }
+            } else if (first.notes == 'BIRTHDAY') {
+              // 誕生日は何もしない
+            } else {
+              if (first.id is DocumentSnapshot) {
+                _showRichAppointmentDetail(first.id as DocumentSnapshot);
+              }
+            }
+          }
+        } else {
+          // 空白部分クリックで新規タスク追加
+          _showAddTaskDialog(initialDate: details.date);
+        }
+      }
+    } else if (details.targetElement == CalendarElement.viewHeader) {
+      // 日付ヘッダー（日付の左右含む）クリックで新規タスク追加
+      _controller.selectedDate = null;
+      if (_calendarView == CalendarView.day || _calendarView == CalendarView.week) {
+        _showAddTaskDialog(initialDate: details.date);
       }
     } else if (details.appointments != null && details.appointments!.isNotEmpty) {
       _controller.selectedDate = null;
