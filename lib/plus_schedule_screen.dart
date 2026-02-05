@@ -2703,54 +2703,59 @@ final plusStaff = _staffList.where((s) =>
                   else
                     ...currentTasks.map((task) {
                       final studentName = task['studentName'] as String?;
-                      return Container(
-                        margin: const EdgeInsets.only(bottom: 8),
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          border: Border.all(color: Colors.grey.shade300),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  if (studentName != null && studentName.isNotEmpty)
+                      return GestureDetector(
+                        onTap: () {
+                          Navigator.pop(dialogContext);
+                          _showEditTaskDialog(context, task, () {
+                            _showTasksForDateDialog(date, _tasksByDueDate[dateKey] ?? []);
+                          });
+                        },
+                        child: Container(
+                          margin: const EdgeInsets.only(bottom: 8),
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            border: Border.all(color: Colors.grey.shade300),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    if (studentName != null && studentName.isNotEmpty)
+                                      Text(
+                                        studentName,
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 14,
+                                        ),
+                                      ),
                                     Text(
-                                      studentName,
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.bold,
+                                      task['title'] ?? '',
+                                      style: TextStyle(
                                         fontSize: 14,
+                                        color: studentName != null ? AppColors.textSub : AppColors.textMain,
                                       ),
                                     ),
-                                  Text(
-                                    task['title'] ?? '',
-                                    style: TextStyle(
-                                      fontSize: 14,
-                                      color: studentName != null ? AppColors.textSub : AppColors.textMain,
-                                    ),
-                                  ),
-                                ],
+                                  ],
+                                ),
                               ),
-                            ),
-                            // 完了ボタン
-                            IconButton(
-                              onPressed: () async {
-                                await _completeTask(task['id']);
-                                // ダイアログ内のリストを更新
-                                setDialogState(() {});
-                                // 親画面も更新
-                                setState(() {});
-                                scaffoldMessenger.showSnackBar(
-                                  const SnackBar(content: Text('タスクを完了しました')),
-                                );
-                              },
-                              icon: const Icon(Icons.check_circle_outline),
-                              color: Colors.green,
-                              tooltip: '完了',
-                            ),
-                          ],
+                              IconButton(
+                                onPressed: () async {
+                                  await _completeTask(task['id']);
+                                  setDialogState(() {});
+                                  setState(() {});
+                                  scaffoldMessenger.showSnackBar(
+                                    const SnackBar(content: Text('タスクを完了しました')),
+                                  );
+                                },
+                                icon: const Icon(Icons.check_circle_outline),
+                                color: Colors.green,
+                                tooltip: '完了',
+                              ),
+                            ],
+                          ),
                         ),
                       );
                     }),
