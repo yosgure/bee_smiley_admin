@@ -6,6 +6,7 @@ import 'app_theme.dart';
 import 'plus_dashboard_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/gestures.dart';
+import 'ai_chat_screen.dart';
 
 /// プラス予定のコンテンツウィジェット（埋め込み用）
 class PlusScheduleContent extends StatefulWidget {
@@ -6170,6 +6171,51 @@ await _loadLessonsForWeek(showLoading: false);
                             ),
                           ),
                         ),
+                        // AIに相談ボタン
+                        if (!isCustomEvent && studentName.isNotEmpty)
+                          Padding(
+                            padding: const EdgeInsets.only(left: 8),
+                            child: ElevatedButton.icon(
+                              onPressed: () {
+                                Navigator.pop(dialogContext);
+                                final nameParts = studentName.split(' ');
+                                final lastName = nameParts.isNotEmpty ? nameParts[0] : '';
+                                final firstName = nameParts.length > 1 ? nameParts[1] : '';
+                                final student = _allStudents.firstWhere(
+                                  (s) => s['name'] == studentName,
+                                  orElse: () => <String, dynamic>{},
+                                );
+                                final studentInfo = {
+                                  'firstName': firstName,
+                                  'lastName': lastName,
+                                  'age': '',
+                                  'gender': '',
+                                  'classroom': student['classroom'] ?? 'プラス',
+                                  'diagnosis': '',
+                                };
+                                final studentId = student['studentId'] ?? '${student['familyUid'] ?? ''}_$firstName';
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => AiChatScreen(
+                                      studentId: studentId,
+                                      studentName: studentName,
+                                      studentInfo: studentInfo,
+                                      supportPlan: null,
+                                    ),
+                                  ),
+                                );
+                              },
+                              icon: const Icon(Icons.smart_toy, size: 16),
+                              label: const Text('AIに相談'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.purple.shade600,
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                              ),
+                            ),
+                          ),
                       ],
                     ),
                   ),
@@ -6308,7 +6354,7 @@ await _loadLessonsForWeek(showLoading: false);
                             const SizedBox(height: 24),
                             Divider(height: 1, color: Colors.grey.shade200),
                             const SizedBox(height: 20),
-                            
+
                             // タスクセクション
                             Row(
                               children: [

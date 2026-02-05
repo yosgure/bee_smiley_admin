@@ -2,10 +2,15 @@
 
 const { onDocumentCreated, onDocumentUpdated, onDocumentDeleted } = require("firebase-functions/v2/firestore");
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
+const { defineSecret } = require("firebase-functions/params");
 const { initializeApp } = require("firebase-admin/app");
 const { getFirestore, FieldValue } = require("firebase-admin/firestore");
 const { getMessaging } = require("firebase-admin/messaging");
 const { getAuth } = require("firebase-admin/auth");
+const { GoogleGenerativeAI } = require("@google/generative-ai");
+
+// Secret Manager でAPIキーを管理
+const geminiApiKey = defineSecret("GEMINI_API_KEY");
 
 initializeApp();
 
@@ -1260,12 +1265,194 @@ exports.sendAttendanceNotification = onDocumentCreated(
       return null;
     } catch (error) {
       console.error('入退室通知エラー:', error);
-      await event.data.ref.update({ 
+      await event.data.ref.update({
         processed: true,
         processedAt: FieldValue.serverTimestamp(),
         error: String(error),
       });
       return null;
+    }
+  }
+);
+
+// ==========================================
+// AI チャット機能（個別支援計画相談）
+// ==========================================
+
+/**
+ * システムプロンプトを構築
+ */
+function buildSystemPrompt(context) {
+  const { studentInfo, supportPlan, recentMonitorings, hugAssessment } = context || {};
+
+  let prompt = `あなたは児童発達支援施設「Bee Smiley」の個別支援計画作成を支援する専門AIアシスタントです。
+
+## あなたの役割
+- 児童発達支援に関する専門的な知識を活用して、スタッフの相談に応じます
+- 個別支援計画の作成・見直しをサポートします
+- 子どもの発達段階や特性に応じた具体的なアドバイスを提供します
+
+## 個別支援計画の構成項目
+1. 長期目標
+2. 短期目標
+3. 健康と生活
+4. 運動と感覚
+5. 認知行動
+6. 言語コミュニケーション
+7. 人間関係や社会性
+8. 家族支援
+9. 移行支援
+10. 地域支援
+
+## 重要なルール
+- モニタリングで「継続」とした達成目標は変更しないでください
+- 支援内容は箇条書きではなく、一文で完結する形式で記述してください
+- 考察や説明は簡潔にまとめてください
+- 専門用語を使う場合は、必要に応じて補足説明を加えてください
+
+`;
+
+  if (studentInfo) {
+    prompt += `
+## 相談対象の児童情報
+- 氏名: ${studentInfo.lastName || ''} ${studentInfo.firstName || ''}
+- 年齢: ${studentInfo.age || '不明'}
+- 性別: ${studentInfo.gender || '不明'}
+- 所属クラス: ${studentInfo.classroom || '不明'}
+- 診断: ${studentInfo.diagnosis || '記載なし'}
+
+`;
+  }
+
+  if (supportPlan) {
+    prompt += `
+## 現在の個別支援計画
+- 長期目標: ${supportPlan.longTermGoal || '未設定'}
+`;
+    if (supportPlan.shortTermGoals && supportPlan.shortTermGoals.length > 0) {
+      prompt += `- 短期目標:\n`;
+      supportPlan.shortTermGoals.forEach((g, i) => {
+        prompt += `  ${i + 1}. ${g.goal || ''} (${g.category || ''})\n`;
+      });
+    }
+    prompt += '\n';
+  }
+
+  if (recentMonitorings && recentMonitorings.length > 0) {
+    prompt += `
+## 直近のモニタリング結果
+`;
+    recentMonitorings.forEach(m => {
+      let dateStr = '日付不明';
+      if (m.date && m.date.toDate) {
+        dateStr = m.date.toDate().toLocaleDateString('ja-JP');
+      } else if (m.date && m.date._seconds) {
+        dateStr = new Date(m.date._seconds * 1000).toLocaleDateString('ja-JP');
+      }
+      prompt += `- ${dateStr}: ${m.nextActions || '特記事項なし'}\n`;
+    });
+    prompt += '\n';
+  }
+
+  if (hugAssessment) {
+    prompt += `
+## HUGアセスメント情報（スタッフがHUGシステムから入力した情報）
+${hugAssessment}
+
+`;
+  }
+
+  prompt += `
+上記の情報を踏まえて、スタッフからの相談に丁寧に回答してください。
+`;
+
+  return prompt;
+}
+
+/**
+ * AIチャットメッセージを送信
+ */
+exports.sendAiMessage = onCall(
+  {
+    region: 'asia-northeast1',
+    secrets: [geminiApiKey],
+  },
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError('unauthenticated', '認証が必要です');
+    }
+
+    const { sessionId, message, context } = request.data;
+
+    if (!sessionId || !message) {
+      throw new HttpsError('invalid-argument', 'sessionIdとmessageが必要です');
+    }
+
+    try {
+      const sessionRef = db.collection('ai_chat_sessions').doc(sessionId);
+      const messagesRef = sessionRef.collection('messages');
+
+      // 1. ユーザーメッセージをFirestoreに保存
+      await messagesRef.add({
+        role: 'user',
+        content: message,
+        createdAt: FieldValue.serverTimestamp(),
+        status: 'sent',
+      });
+
+      // 2. 過去のメッセージを取得（最新20件）
+      const historySnap = await messagesRef
+        .orderBy('createdAt', 'asc')
+        .limit(20)
+        .get();
+
+      const chatHistory = [];
+      historySnap.docs.forEach(doc => {
+        const data = doc.data();
+        if (data.role && data.content) {
+          chatHistory.push({
+            role: data.role === 'user' ? 'user' : 'model',
+            parts: [{ text: data.content }],
+          });
+        }
+      });
+
+      // 3. システムプロンプト構築
+      const systemPrompt = buildSystemPrompt(context);
+
+      // 4. Gemini API呼び出し
+      const genAI = new GoogleGenerativeAI(geminiApiKey.value());
+      const model = genAI.getGenerativeModel({
+        model: "gemini-2.5-flash",
+        systemInstruction: systemPrompt,
+      });
+
+      // 履歴から最後のユーザーメッセージを除いてチャット開始
+      const historyForChat = chatHistory.slice(0, -1);
+      const chat = model.startChat({ history: historyForChat });
+      const result = await chat.sendMessage(message);
+      const aiResponse = result.response.text();
+
+      // 5. AI応答をFirestoreに保存
+      await messagesRef.add({
+        role: 'assistant',
+        content: aiResponse,
+        createdAt: FieldValue.serverTimestamp(),
+        status: 'sent',
+      });
+
+      // 6. セッションメタデータ更新
+      await sessionRef.update({
+        lastMessage: aiResponse.substring(0, 100),
+        messageCount: FieldValue.increment(2),
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+
+      return { success: true, response: aiResponse };
+
+    } catch (error) {
+      console.error('AI Chat Error:', error);
+      throw new HttpsError('internal', error.message);
     }
   }
 );

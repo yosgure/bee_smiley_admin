@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import 'assessment_edit_screen.dart';
 import 'assessment_detail_screen.dart';
 import 'app_theme.dart';
+import 'ai_chat_screen.dart';
 
 class StudentDetailScreen extends StatefulWidget {
   final String studentId;
@@ -21,12 +22,17 @@ class StudentDetailScreen extends StatefulWidget {
 
 class _StudentDetailScreenState extends State<StudentDetailScreen> with SingleTickerProviderStateMixin {
   late TabController _tabController;
-  
+
   // 生徒情報
   String _gender = '';
   String _birthDateStr = '';
   String _ageStr = '';
+  String _classroom = '';
+  String _diagnosis = '';
   bool _isLoadingInfo = true;
+
+  // 支援計画データ（AI相談用）
+  Map<String, dynamic>? _supportPlan;
 
   @override
   void initState() {
@@ -63,7 +69,7 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> with SingleTi
       if (snapshot.docs.isNotEmpty) {
         final data = snapshot.docs.first.data();
         final children = List<Map<String, dynamic>>.from(data['children'] ?? []);
-        
+
         final child = children.firstWhere(
           (c) => (c['firstName'] ?? '') == childName,
           orElse: () => {},
@@ -76,14 +82,67 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> with SingleTi
               _gender = child['gender'] ?? '';
               _birthDateStr = birthDate;
               _ageStr = _calculateAge(birthDate);
+              _classroom = child['classroom'] ?? '';
+              _diagnosis = child['diagnosis'] ?? '';
               _isLoadingInfo = false;
             });
           }
         }
       }
+
+      // 支援計画を取得
+      _fetchSupportPlan();
     } catch (e) {
       if (mounted) setState(() => _isLoadingInfo = false);
     }
+  }
+
+  Future<void> _fetchSupportPlan() async {
+    try {
+      final snap = await FirebaseFirestore.instance
+          .collection('support_plans')
+          .where('studentId', isEqualTo: widget.studentId)
+          .where('status', isEqualTo: 'active')
+          .orderBy('createdAt', descending: true)
+          .limit(1)
+          .get();
+
+      if (snap.docs.isNotEmpty && mounted) {
+        setState(() {
+          _supportPlan = snap.docs.first.data();
+        });
+      }
+    } catch (e) {
+      debugPrint('Error fetching support plan: $e');
+    }
+  }
+
+  void _openAiChat() {
+    // 生徒情報をまとめる
+    final studentInfo = {
+      'firstName': widget.studentName.split(' ').length > 1
+          ? widget.studentName.split(' ').last
+          : widget.studentName,
+      'lastName': widget.studentName.split(' ').length > 1
+          ? widget.studentName.split(' ').first
+          : '',
+      'age': _ageStr,
+      'gender': _gender,
+      'classroom': _classroom,
+      'diagnosis': _diagnosis.isNotEmpty ? _diagnosis : _supportPlan?['diagnosis'],
+    };
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => AiChatScreen(
+          studentId: widget.studentId,
+          studentName: widget.studentName,
+          studentInfo: studentInfo,
+          supportPlan: _supportPlan,
+        ),
+      ),
+    );
   }
 
   String _calculateAge(String dateStr) {
@@ -211,6 +270,18 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> with SingleTi
                     ],
                   ),
               ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          ElevatedButton.icon(
+            onPressed: _openAiChat,
+            icon: const Icon(Icons.smart_toy, size: 18),
+            label: const Text('AIに相談'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.purple.shade600,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
             ),
           ),
         ],
