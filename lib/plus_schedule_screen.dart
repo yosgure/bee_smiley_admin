@@ -2607,13 +2607,19 @@ final plusStaff = _staffList.where((s) =>
                       ),
                     ),
                   ),
-                  // タスク件数表示
+      // タスク件数表示（タスクがない場合も追加ボタンを表示）
                   SizedBox(
                     height: 22,
-                    child: taskCount > 0
-                        ? GestureDetector(
-                            onTap: () => _showTasksForDateDialog(date, tasksForDay),
-                            child: Container(
+                    child: GestureDetector(
+                      onTap: () {
+                        if (taskCount > 0) {
+                          _showTasksForDateDialog(date, tasksForDay);
+                        } else {
+                          _showAddTaskDialogForDate(date);
+                        }
+                      },
+                      child: taskCount > 0
+                          ? Container(
                               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                               decoration: BoxDecoration(
                                 border: Border.all(
@@ -2630,9 +2636,26 @@ final plusStaff = _staffList.where((s) =>
                                   fontWeight: FontWeight.w500,
                                 ),
                               ),
+                            )
+                          : MouseRegion(
+                              cursor: SystemMouseCursors.click,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                decoration: BoxDecoration(
+                                  border: Border.all(
+                                    color: Colors.transparent,
+                                    width: 1,
+                                  ),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Icon(
+                                  Icons.add_circle_outline,
+                                  size: 16,
+                                  color: Colors.grey.shade400,
+                                ),
+                              ),
                             ),
-                          )
-                        : null,
+                    ),
                   ),
                 ],
               ),
@@ -2643,13 +2666,17 @@ final plusStaff = _staffList.where((s) =>
     );
   }
   
-  // その日のタスク一覧ダイアログ
+// その日のタスク一覧ダイアログ
   void _showTasksForDateDialog(DateTime date, List<Map<String, dynamic>> tasks) {
     final scaffoldMessenger = ScaffoldMessenger.of(context);
     showDialog(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (dialogContext, setDialogState) {
+          // 最新のタスクリストを取得
+          final dateKey = DateFormat('yyyy-MM-dd').format(date);
+          final currentTasks = _tasksByDueDate[dateKey] ?? [];
+          
           return AlertDialog(
             backgroundColor: Colors.white,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -2665,71 +2692,360 @@ final plusStaff = _staffList.where((s) =>
             ),
             content: SizedBox(
               width: 400,
-              child: tasks.isEmpty
-                  ? const Padding(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (currentTasks.isEmpty)
+                    const Padding(
                       padding: EdgeInsets.all(20),
                       child: Text('タスクはありません', style: TextStyle(color: Colors.grey)),
                     )
-                  : Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: tasks.map((task) {
-                        final studentName = task['studentName'] as String?;
-                        return Container(
-                          margin: const EdgeInsets.only(bottom: 8),
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            border: Border.all(color: Colors.grey.shade300),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Row(
-                            children: [
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    if (studentName != null && studentName.isNotEmpty)
-                                      Text(
-                                        studentName,
-                                        style: const TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 14,
-                                        ),
-                                      ),
+                  else
+                    ...currentTasks.map((task) {
+                      final studentName = task['studentName'] as String?;
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          border: Border.all(color: Colors.grey.shade300),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  if (studentName != null && studentName.isNotEmpty)
                                     Text(
-                                      task['title'] ?? '',
-                                      style: TextStyle(
+                                      studentName,
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.bold,
                                         fontSize: 14,
-                                        color: studentName != null ? AppColors.textSub : AppColors.textMain,
                                       ),
                                     ),
-                                  ],
-                                ),
+                                  Text(
+                                    task['title'] ?? '',
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      color: studentName != null ? AppColors.textSub : AppColors.textMain,
+                                    ),
+                                  ),
+                                ],
                               ),
-                              // 完了ボタン
-                              IconButton(
-                                onPressed: () async {
-                                  await _completeTask(task['id']);
-                                  if (dialogContext.mounted) {
-                                    Navigator.pop(dialogContext);
-                                    scaffoldMessenger.showSnackBar(
-                                      const SnackBar(content: Text('タスクを完了しました')),
-                                    );
-                                  }
-                                },
-                                icon: const Icon(Icons.check_circle_outline),
-                                color: Colors.green,
-                                tooltip: '完了',
-                              ),
-                            ],
+                            ),
+                            // 完了ボタン
+                            IconButton(
+                              onPressed: () async {
+                                await _completeTask(task['id']);
+                                // ダイアログ内のリストを更新
+                                setDialogState(() {});
+                                // 親画面も更新
+                                setState(() {});
+                                scaffoldMessenger.showSnackBar(
+                                  const SnackBar(content: Text('タスクを完了しました')),
+                                );
+                              },
+                              icon: const Icon(Icons.check_circle_outline),
+                              color: Colors.green,
+                              tooltip: '完了',
+                            ),
+                          ],
+                        ),
+                      );
+                    }),
+                  const SizedBox(height: 8),
+                  // タスク追加ボタン
+                  InkWell(
+                    onTap: () {
+                      Navigator.pop(dialogContext);
+                      _showAddTaskDialogForDate(date);
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      decoration: BoxDecoration(
+                        border: Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
+                        borderRadius: BorderRadius.circular(8),
+                        color: AppColors.primary.withValues(alpha: 0.05),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.add, size: 18, color: AppColors.primary),
+                          const SizedBox(width: 4),
+                          Text(
+                            'タスクを追加',
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: AppColors.primary,
+                              fontWeight: FontWeight.w500,
+                            ),
                           ),
-                        );
-                      }).toList(),
+                        ],
+                      ),
                     ),
+                  ),
+                ],
+              ),
             ),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(dialogContext),
                 child: const Text('閉じる'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  // 日付指定でタスク追加ダイアログ（ダッシュボードと同等のUI）
+  void _showAddTaskDialogForDate(DateTime date) {
+    String inputMode = 'student'; // 'student' or 'custom'
+    Map<String, dynamic>? selectedStudent;
+    final titleController = TextEditingController();
+    final commentController = TextEditingController();
+    DateTime selectedDueDate = date;
+
+    showDialog(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) {
+          final canSave = inputMode == 'student'
+              ? (selectedStudent != null && titleController.text.isNotEmpty)
+              : titleController.text.isNotEmpty;
+
+          return AlertDialog(
+            backgroundColor: Colors.white,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            title: Row(
+              children: [
+                const Icon(Icons.task_alt, color: Colors.orange),
+                const SizedBox(width: 8),
+                const Text('タスクを追加', style: TextStyle(fontSize: 18)),
+              ],
+            ),
+            content: SizedBox(
+              width: 400,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // 入力モード切り替え
+                  Row(
+                    children: [
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: () => setDialogState(() => inputMode = 'student'),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(vertical: 10),
+                            decoration: BoxDecoration(
+                              color: inputMode == 'student'
+                                  ? AppColors.primary
+                                  : Colors.grey.shade200,
+                              borderRadius: const BorderRadius.horizontal(
+                                left: Radius.circular(8),
+                              ),
+                            ),
+                            alignment: Alignment.center,
+                            child: Text(
+                              '生徒',
+                              style: TextStyle(
+                                color: inputMode == 'student'
+                                    ? Colors.white
+                                    : AppColors.textMain,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: () => setDialogState(() => inputMode = 'custom'),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(vertical: 10),
+                            decoration: BoxDecoration(
+                              color: inputMode == 'custom'
+                                  ? AppColors.primary
+                                  : Colors.grey.shade200,
+                              borderRadius: const BorderRadius.horizontal(
+                                right: Radius.circular(8),
+                              ),
+                            ),
+                            alignment: Alignment.center,
+                            child: Text(
+                              '自由記述',
+                              style: TextStyle(
+                                color: inputMode == 'custom'
+                                    ? Colors.white
+                                    : AppColors.textMain,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  // 生徒選択（生徒モードのみ）
+                  if (inputMode == 'student') ...[
+                    InkWell(
+                      onTap: () => _showStudentSelectionDialog(
+                        selectedStudent,
+                        (student) => setDialogState(() => selectedStudent = student),
+                      ),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                        decoration: BoxDecoration(
+                          border: Border.all(color: Colors.grey.shade300),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.person, size: 20, color: AppColors.textSub),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                selectedStudent == null
+                                    ? '生徒を選択'
+                                    : selectedStudent!['name'] as String,
+                                style: TextStyle(
+                                  fontSize: 15,
+                                  color: selectedStudent == null
+                                      ? AppColors.textSub
+                                      : AppColors.textMain,
+                                ),
+                              ),
+                            ),
+                            const Icon(Icons.arrow_drop_down, color: AppColors.textSub),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    // 内容入力（生徒モード）
+                    TextField(
+                      controller: titleController,
+                      decoration: InputDecoration(
+                        hintText: '内容を入力',
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 12,
+                        ),
+                      ),
+                      onChanged: (_) => setDialogState(() {}),
+                    ),
+                  ] else
+                    // 内容入力（自由記述モード）
+                    TextField(
+                      controller: titleController,
+                      decoration: InputDecoration(
+                        hintText: '内容を入力',
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 12,
+                        ),
+                      ),
+                      onChanged: (_) => setDialogState(() {}),
+                    ),
+                  const SizedBox(height: 16),
+                  // 期限選択
+                  InkWell(
+                    onTap: () async {
+                      final picked = await showDatePicker(
+                        context: dialogContext,
+                        initialDate: selectedDueDate,
+                        firstDate: DateTime.now().subtract(const Duration(days: 30)),
+                        lastDate: DateTime.now().add(const Duration(days: 365)),
+                      );
+                      if (picked != null) {
+                        setDialogState(() => selectedDueDate = picked);
+                      }
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                      decoration: BoxDecoration(
+                        border: Border.all(color: Colors.grey.shade300),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.calendar_today, size: 20, color: Colors.orange.shade700),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              DateFormat('M月d日 (E)', 'ja').format(selectedDueDate),
+                              style: const TextStyle(
+                                fontSize: 15,
+                                color: AppColors.textMain,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  // コメント（生徒モードのみ）
+                  if (inputMode == 'student') ...[
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: commentController,
+                      decoration: InputDecoration(
+                        hintText: 'コメント（任意）',
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 12,
+                        ),
+                      ),
+                      maxLines: 3,
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('キャンセル'),
+              ),
+              ElevatedButton(
+                onPressed: canSave
+                    ? () async {
+                        final studentNameValue = inputMode == 'student' 
+                            ? (selectedStudent?['name'] as String?) 
+                            : null;
+                        await _addTaskForStudent(
+                          studentNameValue,
+                          titleController.text,
+                          selectedDueDate,
+                        );
+                        if (dialogContext.mounted) {
+                          Navigator.pop(dialogContext);
+                        }
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('タスクを追加しました')),
+                          );
+                        }
+                      }
+                    : null,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  foregroundColor: Colors.white,
+                ),
+                child: const Text('追加'),
               ),
             ],
           );
