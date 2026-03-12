@@ -3526,8 +3526,10 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               // 生徒名部分（クリックで詳細ダイアログ）
-              Expanded(
+              Flexible(
+                flex: 3,
                 child: Row(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
                     Flexible(
                       child: Text(
@@ -3551,37 +3553,41 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
                   ],
                 ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 4),
               // 講師名部分（クリックで講師選択）
-              MouseRegion(
-                cursor: SystemMouseCursors.click,
-                child: GestureDetector(
-                  onTap: () {
-                    if (cellContext != null) {
-                      final renderBox = cellContext.findRenderObject() as RenderBox?;
-                      final cellOffset = renderBox?.localToGlobal(Offset.zero);
-                      final cellW = renderBox?.size.width ?? 0;
-                      _showQuickTeacherEdit(lesson, cellOffset: cellOffset, cellWidth: cellW);
-                    } else {
-                      _showQuickTeacherEdit(lesson);
-                    }
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: Text(
-                      teacherLastNames.join('・'),
-                      style: const TextStyle(
-                        color: AppColors.textMain,
-                        fontSize: 13,
+              Flexible(
+                flex: 3,
+                child: MouseRegion(
+                  cursor: SystemMouseCursors.click,
+                  child: GestureDetector(
+                    onTap: () {
+                      if (cellContext != null) {
+                        final renderBox = cellContext.findRenderObject() as RenderBox?;
+                        final cellOffset = renderBox?.localToGlobal(Offset.zero);
+                        final cellW = renderBox?.size.width ?? 0;
+                        _showQuickTeacherEdit(lesson, cellOffset: cellOffset, cellWidth: cellW);
+                      } else {
+                        _showQuickTeacherEdit(lesson);
+                      }
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        teacherLastNames.join('・'),
+                        style: const TextStyle(
+                          color: AppColors.textMain,
+                          fontSize: 13,
+                        ),
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                   ),
                 ),
               ),
-              const SizedBox(width: 6),
+              const SizedBox(width: 4),
               // 部屋名部分（クリックで部屋選択）
               MouseRegion(
                 cursor: SystemMouseCursors.click,
