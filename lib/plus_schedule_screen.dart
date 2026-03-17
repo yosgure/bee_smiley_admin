@@ -7,6 +7,7 @@ import 'plus_dashboard_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/gestures.dart';
 import 'ai_chat_screen.dart';
+import 'student_detail_screen.dart';
 
 /// プラス予定のコンテンツウィジェット（埋め込み用）
 class PlusScheduleContent extends StatefulWidget {
@@ -730,6 +731,28 @@ Map<String, dynamic>? _getCellMemo(DateTime date, int slotIndex) {
     return false;
   }
 
+  // 生徒名から生徒詳細画面に遷移
+  void _navigateToStudentDetail(String studentName) {
+    final student = _allStudents.firstWhere(
+      (s) => s['name'] == studentName,
+      orElse: () => <String, dynamic>{},
+    );
+    if (student.isEmpty) return;
+    final familyUid = student['familyUid'] as String? ?? '';
+    final firstName = student['firstName'] as String? ?? '';
+    if (familyUid.isEmpty || firstName.isEmpty) return;
+    final studentId = '${familyUid}_$firstName';
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => StudentDetailScreen(
+          studentId: studentId,
+          studentName: studentName,
+        ),
+      ),
+    );
+  }
+
   // familiesコレクションから全児童リストを取得（プラスのみ）
   Future<void> _loadStudentsFromFirestore() async {
     try {
@@ -743,12 +766,13 @@ Map<String, dynamic>? _getCellMemo(DateTime date, int slotIndex) {
         final data = doc.data();
         final lastName = data['lastName'] as String? ?? '';
         final lastNameKana = data['lastNameKana'] as String? ?? '';
+        final familyUid = data['uid'] as String? ?? doc.id;
         final children = List<Map<String, dynamic>>.from(data['children'] ?? []);
-        
+
         for (var child in children) {
           final firstName = child['firstName'] as String? ?? '';
           final classroom = child['classroom'] as String? ?? '';
-          
+
           // プラスの教室のみ
           if (firstName.isNotEmpty && classroom.contains('プラス')) {
             students.add({
@@ -756,6 +780,7 @@ Map<String, dynamic>? _getCellMemo(DateTime date, int slotIndex) {
             'firstName': firstName,
             'lastName': lastName,
             'lastNameKana': lastNameKana,
+            'familyUid': familyUid,
             'classroom': classroom,
             'course': child['course'] ?? '',
             'profileUrl': child['profileUrl'] ?? '',
@@ -3525,32 +3550,35 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              // 生徒名部分（クリックで詳細ダイアログ）
+              // 生徒名部分（クリックで生徒詳細へ遷移）
               Flexible(
                 flex: 3,
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Flexible(
-                      child: Text(
-                        lesson['studentName'],
-                        style: TextStyle(
-                          color: textColor,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w500,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    if (courseInitial.isNotEmpty)
-                      Text(
-                        courseInitial,
-                        style: TextStyle(
-                          color: textColor,
-                          fontSize: 12,
+                child: GestureDetector(
+                  onTap: () => _navigateToStudentDetail(lesson['studentName'] ?? ''),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Flexible(
+                        child: Text(
+                          lesson['studentName'],
+                          style: TextStyle(
+                            color: textColor,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                          ),
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
-                  ],
+                      if (courseInitial.isNotEmpty)
+                        Text(
+                          courseInitial,
+                          style: TextStyle(
+                            color: textColor,
+                            fontSize: 12,
+                          ),
+                        ),
+                    ],
+                  ),
                 ),
               ),
               const SizedBox(width: 4),
@@ -3824,30 +3852,33 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              // 生徒名部分（親のInkWellでクリック処理するので、ここではGestureDetectorを削除）
+              // 生徒名部分（クリックで生徒詳細へ遷移）
 Expanded(
-  child: Row(
-    children: [
-      Flexible(
-        child: Text(
-          lesson['studentName'],
-          style: TextStyle(
-            color: textColor,
-            fontSize: 14,
-            fontWeight: FontWeight.w500,
-          ),
-          overflow: TextOverflow.ellipsis,
-        ),
-      ),
-      if (courseInitial.isNotEmpty)
-        Text(
-          courseInitial,
-          style: TextStyle(
-            color: textColor,
-            fontSize: 12,
+  child: GestureDetector(
+    onTap: () => _navigateToStudentDetail(lesson['studentName'] ?? ''),
+    child: Row(
+      children: [
+        Flexible(
+          child: Text(
+            lesson['studentName'],
+            style: TextStyle(
+              color: textColor,
+              fontSize: 14,
+              fontWeight: FontWeight.w500,
+            ),
+            overflow: TextOverflow.ellipsis,
           ),
         ),
-    ],
+        if (courseInitial.isNotEmpty)
+          Text(
+            courseInitial,
+            style: TextStyle(
+              color: textColor,
+              fontSize: 12,
+            ),
+          ),
+      ],
+    ),
   ),
 ),
               const SizedBox(width: 8),
