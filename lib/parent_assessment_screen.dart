@@ -222,6 +222,7 @@ Widget _buildHeader({bool showBack = false}) {
           .collection('assessments')
           .where('studentId', isEqualTo: widget.childId)
           .where('type', isEqualTo: type)
+          .where('isPublished', isEqualTo: true)
           .orderBy('date', descending: true)
           .snapshots(),
       builder: (context, snapshot) {
@@ -581,7 +582,7 @@ Widget _buildHeader({bool showBack = false}) {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Icon(Icons.check_circle, size: 18, color: Colors.orange),
+                  const Icon(Icons.check_circle, size: 18, color: AppColors.accent),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text.rich(

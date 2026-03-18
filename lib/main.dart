@@ -20,6 +20,7 @@ import 'login_screen.dart';
 import 'force_change_password_screen.dart';
 import 'plus_schedule_screen.dart';
 import 'parent_main.dart';
+import 'ai_chat_main_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -123,20 +124,30 @@ class _AuthCheckWrapperState extends State<AuthCheckWrapper> with WidgetsBinding
 
   Future<UserStatus> _checkUserStatus(String uid) async {
     try {
+      debugPrint('🔍 _checkUserStatus called with uid: $uid');
       final staffSnap = await FirebaseFirestore.instance
           .collection('staffs').where('uid', isEqualTo: uid).limit(1).get();
+      debugPrint('🔍 staffs query result: ${staffSnap.docs.length} docs');
       if (staffSnap.docs.isNotEmpty) {
         final data = staffSnap.docs.first.data();
+        // Custom Claims を反映するためトークンをリフレッシュ
+        await FirebaseAuth.instance.currentUser?.getIdToken(true);
         return UserStatus(type: UserType.staff, isInitialPassword: data['isInitialPassword'] == true, uid: uid);
       }
       final familySnap = await FirebaseFirestore.instance
           .collection('families').where('uid', isEqualTo: uid).limit(1).get();
+      debugPrint('🔍 families query result: ${familySnap.docs.length} docs');
       if (familySnap.docs.isNotEmpty) {
         final data = familySnap.docs.first.data();
+        debugPrint('🔍 family data: $data');
+        // Custom Claims を反映するためトークンをリフレッシュ
+        await FirebaseAuth.instance.currentUser?.getIdToken(true);
         return UserStatus(type: UserType.parent, isInitialPassword: data['isInitialPassword'] == true, uid: uid);
       }
+      debugPrint('⚠️ uid $uid not found in staffs or families → unknown');
       return UserStatus.unknown;
     } catch (e) {
+      debugPrint('❌ _checkUserStatus error: $e');
       return UserStatus.unknown;
     }
   }
@@ -164,15 +175,14 @@ class _LoadingScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Image.asset('assets/logo_beesmiley.png', height: 80, fit: BoxFit.contain),
-            const SizedBox(height: 32),
-            const CircularProgressIndicator(color: AppColors.primary),
-          ],
-        ),
+      body: Column(
+        children: [
+          LinearProgressIndicator(
+            color: AppColors.primary,
+            backgroundColor: Colors.grey.shade200,
+            minHeight: 3,
+          ),
+        ],
       ),
     );
   }
@@ -385,19 +395,21 @@ class _AdminShellState extends State<AdminShell> {
         switch (index) {
           case 0: return const CalendarScreen();
           case 1: return const PlusScheduleScreen();
-          case 2: return const ChatListScreen();
-          case 3: return const NotificationScreen();
-          case 4: return buildAdminScreen();
+          case 2: return const AiChatMainScreen();
+          case 3: return const ChatListScreen();
+          case 4: return const NotificationScreen();
+          case 5: return buildAdminScreen();
           default: return const CalendarScreen();
         }
       case StaffType.beesmiley:
         switch (index) {
           case 0: return const CalendarScreen();
           case 1: return const AssessmentScreen();
-          case 2: return const ChatListScreen();
-          case 3: return const NotificationScreen();
-          case 4: return const EventScreen();
-          case 5: return buildAdminScreen();
+          case 2: return const AiChatMainScreen();
+          case 3: return const ChatListScreen();
+          case 4: return const NotificationScreen();
+          case 5: return const EventScreen();
+          case 6: return buildAdminScreen();
           default: return const CalendarScreen();
         }
       case StaffType.both:
@@ -407,10 +419,11 @@ class _AdminShellState extends State<AdminShell> {
           case 0: return const CalendarScreen();
           case 1: return const PlusScheduleScreen();
           case 2: return const AssessmentScreen();
-          case 3: return const ChatListScreen();
-          case 4: return const NotificationScreen();
-          case 5: return const EventScreen();
-          case 6: return buildAdminScreen();
+          case 3: return const AiChatMainScreen();
+          case 4: return const ChatListScreen();
+          case 5: return const NotificationScreen();
+          case 6: return const EventScreen();
+          case 7: return buildAdminScreen();
           default: return const CalendarScreen();
         }
     }
@@ -418,9 +431,9 @@ class _AdminShellState extends State<AdminShell> {
   
   int get _screenCount {
     switch (_staffType) {
-      case StaffType.plusOnly: return 5;
-      case StaffType.beesmiley: return 6;
-      default: return 7;
+      case StaffType.plusOnly: return 6;
+      case StaffType.beesmiley: return 7;
+      default: return 8;
     }
   }
   
@@ -430,6 +443,7 @@ class _AdminShellState extends State<AdminShell> {
         return [
           NavigationRailDestination(icon: _buildBadgedIcon(Icons.calendar_month, _hasUnreadSchedule), label: const Text('予定')),
           const NavigationRailDestination(icon: Icon(Icons.grid_view), label: Text('プラス')),
+          const NavigationRailDestination(icon: Icon(Icons.psychology), label: Text('AI相談')),
           NavigationRailDestination(icon: _buildBadgedIcon(Icons.chat, _hasUnreadChat), label: const Text('チャット')),
           const NavigationRailDestination(icon: Icon(Icons.notifications), label: Text('お知らせ')),
           const NavigationRailDestination(icon: Icon(Icons.manage_accounts), label: Text('管理')),
@@ -438,6 +452,7 @@ class _AdminShellState extends State<AdminShell> {
         return [
           NavigationRailDestination(icon: _buildBadgedIcon(Icons.calendar_month, _hasUnreadSchedule), label: const Text('予定')),
           const NavigationRailDestination(icon: Icon(Icons.edit_note), label: Text('記録')),
+          const NavigationRailDestination(icon: Icon(Icons.psychology), label: Text('AI相談')),
           NavigationRailDestination(icon: _buildBadgedIcon(Icons.chat, _hasUnreadChat), label: const Text('チャット')),
           const NavigationRailDestination(icon: Icon(Icons.notifications), label: Text('お知らせ')),
           const NavigationRailDestination(icon: Icon(Icons.event), label: Text('イベント')),
@@ -450,6 +465,7 @@ class _AdminShellState extends State<AdminShell> {
           NavigationRailDestination(icon: _buildBadgedIcon(Icons.calendar_month, _hasUnreadSchedule), label: const Text('予定')),
           const NavigationRailDestination(icon: Icon(Icons.grid_view), label: Text('プラス')),
           const NavigationRailDestination(icon: Icon(Icons.edit_note), label: Text('記録')),
+          const NavigationRailDestination(icon: Icon(Icons.psychology), label: Text('AI相談')),
           NavigationRailDestination(icon: _buildBadgedIcon(Icons.chat, _hasUnreadChat), label: const Text('チャット')),
           const NavigationRailDestination(icon: Icon(Icons.notifications), label: Text('お知らせ')),
           const NavigationRailDestination(icon: Icon(Icons.event), label: Text('イベント')),
@@ -464,6 +480,7 @@ class _AdminShellState extends State<AdminShell> {
         return [
           BottomNavigationBarItem(icon: _buildBadgedIcon(Icons.calendar_month, _hasUnreadSchedule), label: '予定'),
           const BottomNavigationBarItem(icon: Icon(Icons.grid_view), label: 'プラス'),
+          const BottomNavigationBarItem(icon: Icon(Icons.psychology), label: 'AI相談'),
           BottomNavigationBarItem(icon: _buildBadgedIcon(Icons.chat, _hasUnreadChat), label: 'チャット'),
           const BottomNavigationBarItem(icon: Icon(Icons.notifications), label: 'お知らせ'),
           const BottomNavigationBarItem(icon: Icon(Icons.manage_accounts), label: '管理'),
@@ -472,6 +489,7 @@ class _AdminShellState extends State<AdminShell> {
         return [
           BottomNavigationBarItem(icon: _buildBadgedIcon(Icons.calendar_month, _hasUnreadSchedule), label: '予定'),
           const BottomNavigationBarItem(icon: Icon(Icons.edit_note), label: '記録'),
+          const BottomNavigationBarItem(icon: Icon(Icons.psychology), label: 'AI相談'),
           BottomNavigationBarItem(icon: _buildBadgedIcon(Icons.chat, _hasUnreadChat), label: 'チャット'),
           const BottomNavigationBarItem(icon: Icon(Icons.notifications), label: 'お知らせ'),
           const BottomNavigationBarItem(icon: Icon(Icons.event), label: 'イベント'),
@@ -484,6 +502,7 @@ class _AdminShellState extends State<AdminShell> {
           BottomNavigationBarItem(icon: _buildBadgedIcon(Icons.calendar_month, _hasUnreadSchedule), label: '予定'),
           const BottomNavigationBarItem(icon: Icon(Icons.grid_view), label: 'プラス'),
           const BottomNavigationBarItem(icon: Icon(Icons.edit_note), label: '記録'),
+          const BottomNavigationBarItem(icon: Icon(Icons.psychology), label: 'AI相談'),
           BottomNavigationBarItem(icon: _buildBadgedIcon(Icons.chat, _hasUnreadChat), label: 'チャット'),
           const BottomNavigationBarItem(icon: Icon(Icons.notifications), label: 'お知らせ'),
           const BottomNavigationBarItem(icon: Icon(Icons.event), label: 'イベント'),
@@ -572,7 +591,7 @@ class _AdminShellState extends State<AdminShell> {
 
   @override
   Widget build(BuildContext context) {
-    final isWebLayout = MediaQuery.of(context).size.width >= 600;
+    final isWebLayout = MediaQuery.of(context).size.width >= AppBreakpoints.tablet;
     
     if (_staffType == StaffType.loading) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
@@ -628,6 +647,8 @@ class _AdminShellState extends State<AdminShell> {
         },
         type: BottomNavigationBarType.fixed,
         selectedItemColor: AppColors.primary,
+        selectedFontSize: 10,
+        unselectedFontSize: 10,
         items: _bottomNavItems,
       ),
     );

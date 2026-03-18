@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
+import 'app_theme.dart';
 
 class NotificationScreen extends StatefulWidget {
   const NotificationScreen({super.key});
@@ -320,7 +321,7 @@ class _NotificationEditScreenState extends State<NotificationEditScreen> {
             child: ElevatedButton(
               onPressed: _isLoadingSave ? null : _save,
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.orange,
+                backgroundColor: AppColors.accent,
                 foregroundColor: Colors.white,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
               ),
@@ -369,7 +370,7 @@ class _NotificationEditScreenState extends State<NotificationEditScreen> {
                   Radio<String>(
                     value: 'all',
                     groupValue: _targetType,
-                    activeColor: Colors.orange,
+                    activeColor: AppColors.accent,
                     onChanged: (val) => setState(() => _targetType = val!),
                   ),
                   const Text('全体へ配信'),
@@ -377,7 +378,7 @@ class _NotificationEditScreenState extends State<NotificationEditScreen> {
                   Radio<String>(
                     value: 'specific',
                     groupValue: _targetType,
-                    activeColor: Colors.orange,
+                    activeColor: AppColors.accent,
                     onChanged: (val) => setState(() => _targetType = val!),
                   ),
                   const Text('教室を指定して配信'),
@@ -403,7 +404,7 @@ class _NotificationEditScreenState extends State<NotificationEditScreen> {
                                 return CheckboxListTile(
                                   value: _selectedClassrooms.contains(roomName),
                                   title: Text(roomName),
-                                  activeColor: Colors.orange,
+                                  activeColor: AppColors.accent,
                                   contentPadding: EdgeInsets.zero,
                                   controlAffinity: ListTileControlAffinity.leading,
                                   onChanged: (val) {

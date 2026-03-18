@@ -22,8 +22,8 @@ class NotificationService {
   final FirebaseMessaging _messaging = FirebaseMessaging.instance;
   final FlutterLocalNotificationsPlugin _localNotifications = FlutterLocalNotificationsPlugin();
   
-  // Web用のVAPIDキー
-  static const String _vapidKey = 'BG_L0_96sx40dyG0txpV6OBlXwWt0ufKdRnpSWOkGaZlJbsnTS5X81fSqLqYHQ3Pp83HLpJZhYdqf-iPAr9JFSc';
+  // Web用のVAPIDキー（--dart-define=VAPID_KEY=... でビルド時に注入）
+  static const String _vapidKey = String.fromEnvironment('VAPID_KEY');
   
   bool _initialized = false;
 

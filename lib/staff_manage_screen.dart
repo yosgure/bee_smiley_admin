@@ -1,9 +1,9 @@
 import 'dart:async';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'app_theme.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_core/firebase_core.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -30,8 +30,7 @@ class _StaffManageScreenState extends State<StaffManageScreen> {
   // 現在展開中のドキュメントID
   String? _currentExpandedId;
 
-  static const String _defaultPassword = 'bee2025';
-  static const String _fixedDomain = '@bee-smiley.com';
+  final _functions = FirebaseFunctions.instanceFor(region: 'asia-northeast1');
 
   @override
   void initState() {
@@ -254,7 +253,7 @@ appBar: AppBar(
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                           decoration: BoxDecoration(
-                            color: staffType == 'fulltime' ? Colors.blue.shade100 : Colors.orange.shade100,
+                            color: staffType == 'fulltime' ? Colors.blue.shade100 : AppColors.accent.shade100,
                             borderRadius: BorderRadius.circular(4),
                           ),
                           child: Text(
@@ -262,7 +261,7 @@ appBar: AppBar(
                             style: TextStyle(
                               fontSize: 10,
                               fontWeight: FontWeight.bold,
-                              color: staffType == 'fulltime' ? Colors.blue.shade700 : Colors.orange.shade700,
+                              color: staffType == 'fulltime' ? Colors.blue.shade700 : AppColors.accent.shade700,
                             ),
                           ),
                         ),
@@ -541,7 +540,7 @@ appBar: AppBar(
                           Padding(
                             padding: const EdgeInsets.only(bottom: 16.0),
                             child: Text(
-                              '※新規登録時の初期パスワードは「$_defaultPassword」になります。',
+                              '※新規登録時は初期パスワードが設定されます。',
                               style: const TextStyle(color: Colors.red, fontSize: 12),
                             ),
                           ),
@@ -609,10 +608,10 @@ appBar: AppBar(
                                 child: Container(
                                   padding: const EdgeInsets.symmetric(vertical: 12),
                                   decoration: BoxDecoration(
-                                    color: staffType == 'part' ? Colors.orange.shade50 : Colors.grey.shade100,
+                                    color: staffType == 'part' ? AppColors.accent.shade50 : Colors.grey.shade100,
                                     borderRadius: BorderRadius.circular(8),
                                     border: Border.all(
-                                      color: staffType == 'part' ? Colors.orange : Colors.grey.shade300,
+                                      color: staffType == 'part' ? AppColors.accent : Colors.grey.shade300,
                                       width: staffType == 'part' ? 2 : 1,
                                     ),
                                   ),
@@ -621,7 +620,7 @@ appBar: AppBar(
                                     children: [
                                       Icon(
                                         staffType == 'part' ? Icons.check_circle : Icons.circle_outlined,
-                                        color: staffType == 'part' ? Colors.orange : Colors.grey,
+                                        color: staffType == 'part' ? AppColors.accent : Colors.grey,
                                         size: 20,
                                       ),
                                       const SizedBox(width: 8),
@@ -629,7 +628,7 @@ appBar: AppBar(
                                         'パート',
                                         style: TextStyle(
                                           fontWeight: staffType == 'part' ? FontWeight.bold : FontWeight.normal,
-                                          color: staffType == 'part' ? Colors.orange : Colors.grey.shade700,
+                                          color: staffType == 'part' ? AppColors.accent : Colors.grey.shade700,
                                         ),
                                       ),
                                     ],
@@ -720,20 +719,20 @@ appBar: AppBar(
                           Container(
                             padding: const EdgeInsets.all(12),
                             decoration: BoxDecoration(
-                              color: Colors.orange.shade50,
+                              color: AppColors.accent.shade50,
                               borderRadius: BorderRadius.circular(8),
-                              border: Border.all(color: Colors.orange.shade200),
+                              border: Border.all(color: AppColors.accent.shade200),
                             ),
                             child: Row(
                               children: [
-                                Icon(Icons.info_outline, size: 18, color: Colors.orange.shade700),
+                                Icon(Icons.info_outline, size: 18, color: AppColors.accent.shade700),
                                 const SizedBox(width: 8),
                                 Expanded(
                                   child: Text(
                                     'パートはシフト表で「休み」がデフォルトです。\n出勤日は手動で設定してください。',
                                     style: TextStyle(
                                       fontSize: 12,
-                                      color: Colors.orange.shade700,
+                                      color: AppColors.accent.shade700,
                                     ),
                                   ),
                                 ),
@@ -1027,53 +1026,6 @@ appBar: AppBar(
     }
   }
 
-  Future<void> _saveStaffDataToFirestore({
-    required String uid,
-    required String loginId,
-    required String name,
-    required String furigana,
-    required String phone,
-    required String email,
-    required String role,
-    required List<String> classrooms,
-    required String staffType,
-    required bool showInSchedule,
-    String? defaultShiftStart,
-    String? defaultShiftEnd,
-    Uint8List? imageBytes,
-  }) async {
-    String? photoUrl;
-    if (imageBytes != null) {
-      photoUrl = await _uploadStaffPhoto(imageBytes, uid);
-    }
-
-    final staffData = {
-      'uid': uid,
-      'loginId': loginId,
-      'name': name,
-      'furigana': furigana,
-      'phone': phone,
-      'email': email,
-      'role': role,
-      'classrooms': classrooms,
-      'photoUrl': photoUrl,
-      'staffType': staffType,
-      'showInSchedule': showInSchedule,
-      'createdAt': FieldValue.serverTimestamp(),
-      'isInitialPassword': true,
-    };
-    
-    // 社員の場合はデフォルト勤務時間を追加
-    if (staffType == 'fulltime' && defaultShiftStart != null && defaultShiftEnd != null) {
-      staffData['defaultShift'] = {
-        'start': defaultShiftStart,
-        'end': defaultShiftEnd,
-      };
-    }
-
-    await _staffsRef.add(staffData).timeout(const Duration(seconds: 5));
-  }
-
   Future<void> _registerNewStaff({
     required String loginId,
     required String name,
@@ -1088,75 +1040,38 @@ appBar: AppBar(
     String? defaultShiftEnd,
     Uint8List? imageBytes,
   }) async {
-    final String tempAppName = 'TempStaffRegister_${DateTime.now().millisecondsSinceEpoch}';
-    
-    FirebaseApp tempApp = await Firebase.initializeApp(
-      name: tempAppName, 
-      options: Firebase.app().options
-    );
+    final staffData = <String, dynamic>{
+      'name': name,
+      'furigana': furigana,
+      'phone': phone,
+      'email': email,
+      'role': role,
+      'classrooms': classrooms,
+      'staffType': staffType,
+      'showInSchedule': showInSchedule,
+    };
 
-    try {
-      final tempAuth = FirebaseAuth.instanceFor(app: tempApp);
-      final authEmail = '$loginId$_fixedDomain';
+    if (staffType == 'fulltime' && defaultShiftStart != null && defaultShiftEnd != null) {
+      staffData['defaultShift'] = {
+        'start': defaultShiftStart,
+        'end': defaultShiftEnd,
+      };
+    }
 
-      try {
-        UserCredential userCredential = await tempAuth.createUserWithEmailAndPassword(
-          email: authEmail,
-          password: _defaultPassword,
-        ).timeout(const Duration(seconds: 10));
-        
-        await _saveStaffDataToFirestore(
-          uid: userCredential.user!.uid,
-          loginId: loginId,
-          name: name,
-          furigana: furigana,
-          phone: phone,
-          email: email,
-          role: role,
-          classrooms: classrooms,
-          staffType: staffType,
-          showInSchedule: showInSchedule,
-          defaultShiftStart: defaultShiftStart,
-          defaultShiftEnd: defaultShiftEnd,
-          imageBytes: imageBytes,
-        );
+    // Cloud Functions でアカウント作成 + Firestoreドキュメント保存
+    final result = await _functions.httpsCallable('createStaffAccount').call({
+      'loginId': loginId,
+      'staffData': staffData,
+    });
 
-      } on FirebaseAuthException catch (e) {
-        if (e.code == 'email-already-in-use') {
-          try {
-            UserCredential userCredential = await tempAuth.signInWithEmailAndPassword(
-              email: authEmail,
-              password: _defaultPassword,
-            ).timeout(const Duration(seconds: 10));
-            
-            await _saveStaffDataToFirestore(
-              uid: userCredential.user!.uid,
-              loginId: loginId,
-              name: name,
-              furigana: furigana,
-              phone: phone,
-              email: email,
-              role: role,
-              classrooms: classrooms,
-              staffType: staffType,
-              showInSchedule: showInSchedule,
-              defaultShiftStart: defaultShiftStart,
-              defaultShiftEnd: defaultShiftEnd,
-              imageBytes: imageBytes,
-            );
-            return;
-
-          } catch (signInError) {
-            throw 'パスワードが変更されています。復旧できません。';
-          }
-        } else {
-          rethrow;
-        }
+    // 写真がある場合はアップロードしてドキュメント更新
+    if (imageBytes != null) {
+      final uid = result.data['uid'] as String;
+      final docId = result.data['docId'] as String;
+      final photoUrl = await _uploadStaffPhoto(imageBytes, uid);
+      if (photoUrl != null) {
+        await _staffsRef.doc(docId).update({'photoUrl': photoUrl});
       }
-    } catch (e) {
-      rethrow;
-    } finally {
-      tempApp.delete(); 
     }
   }
 

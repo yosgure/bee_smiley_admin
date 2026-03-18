@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart'; // Firestore
+import 'app_theme.dart';
 
 class NonCognitiveSkillMasterScreen extends StatefulWidget {
   final VoidCallback? onBack;
@@ -73,10 +74,10 @@ centerTitle: true,
                   leading: Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      color: Colors.orange.shade100,
+                      color: AppColors.accent.shade100,
                       shape: BoxShape.circle,
                     ),
-                    child: const Icon(Icons.psychology, color: Colors.orange),
+                    child: const Icon(Icons.psychology, color: AppColors.accent),
                   ),
                   title: Text(
                     data['name'] ?? '名称未設定',
@@ -111,7 +112,7 @@ centerTitle: true,
                           ElevatedButton.icon(
                             icon: const Icon(Icons.edit),
                             label: const Text('編集'),
-                            style: ElevatedButton.styleFrom(backgroundColor: Colors.orange, foregroundColor: Colors.white),
+                            style: ElevatedButton.styleFrom(backgroundColor: AppColors.accent, foregroundColor: Colors.white),
                             onPressed: () => _showEditDialog(doc: doc),
                           ),
                         ],
@@ -126,7 +127,7 @@ centerTitle: true,
       ),
       floatingActionButton: FloatingActionButton(heroTag: null, 
         onPressed: () => _showEditDialog(),
-        backgroundColor: Colors.orange,
+        backgroundColor: AppColors.accent,
         child: const Icon(Icons.add),
       ),
     );
@@ -273,7 +274,7 @@ centerTitle: true,
                     
                     if (context.mounted) Navigator.pop(context);
                   },
-                  style: ElevatedButton.styleFrom(backgroundColor: Colors.orange, foregroundColor: Colors.white),
+                  style: ElevatedButton.styleFrom(backgroundColor: AppColors.accent, foregroundColor: Colors.white),
                   child: const Text('保存'),
                 ),
               ],

@@ -2,23 +2,37 @@ import 'package:flutter/material.dart';
 
 class AppColors {
   // ブランドカラー
-  static const Color primary = Colors.blue; 
+  static const Color primary = Colors.blue;
   static const Color onPrimary = Colors.white;
 
   static const Color secondary = Colors.indigo;
-  
+
+  // アクセントカラー（オレンジ系 — ボタン・アイコン・バッジ等）
+  static const MaterialColor accent = Colors.orange;
+
+  // 警告カラー
+  static const Color warning = Color(0xFFFFA726); // Colors.orange.shade400
+
   // 背景色
-  static const Color background = Colors.white; 
+  static const Color background = Colors.white;
   static const Color surface = Colors.white;
 
   static const Color textMain = Colors.black87;
   static const Color textSub = Colors.grey;
-  
+
   static const Color error = Colors.red;
   static const Color success = Colors.green;
 
   // 入力欄の背景色（薄いグレー）
-  static const Color inputFill = Color(0xFFF3F4F6); 
+  static const Color inputFill = Color(0xFFF3F4F6);
+}
+
+/// レスポンシブ対応のブレークポイント定数
+class AppBreakpoints {
+  /// タブレット判定（600px以上）
+  static const double tablet = 600;
+  /// デスクトップ判定（800px以上）
+  static const double desktop = 800;
 }
 
 class AppStyles {
@@ -44,7 +58,7 @@ ThemeData getAppTheme() {
     scaffoldBackgroundColor: AppColors.background,
     
     appBarTheme: const AppBarTheme(
-      toolbarHeight: 40,
+      toolbarHeight: 56,
       backgroundColor: AppColors.surface,
       elevation: 0,
       centerTitle: false,

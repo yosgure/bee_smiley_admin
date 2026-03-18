@@ -351,7 +351,7 @@ Future<void> _saveDisplayDate(DateTime date) async {
       );
     }
 
-    final bool showSidebar = MediaQuery.of(context).size.width >= 800;
+    final bool showSidebar = MediaQuery.of(context).size.width >= AppBreakpoints.desktop;
 
     if (_showPlusSchedule) {
       return Scaffold(
@@ -880,7 +880,7 @@ Future<void> _saveDisplayDate(DateTime date) async {
 
   // 新規タスク追加ダイアログ
   Future<void> _showAddTaskDialog({DateTime? initialDate}) async {
-    final bool showSidebar = MediaQuery.of(context).size.width >= 800;
+    final bool showSidebar = MediaQuery.of(context).size.width >= AppBreakpoints.desktop;
     
     if (showSidebar) {
       await showDialog(
@@ -1269,7 +1269,7 @@ Future<void> _saveDisplayDate(DateTime date) async {
   }
 
   Future<void> _showAddEventDialog({DateTime? initialDate}) async {
-    final bool showSidebar = MediaQuery.of(context).size.width >= 800;
+    final bool showSidebar = MediaQuery.of(context).size.width >= AppBreakpoints.desktop;
     
     if (showSidebar) {
       await showDialog(
@@ -1447,7 +1447,7 @@ Future<void> _saveDisplayDate(DateTime date) async {
   }
 
   void _showEditTaskDialog(DocumentSnapshot doc) {
-    final bool showSidebar = MediaQuery.of(context).size.width >= 800;
+    final bool showSidebar = MediaQuery.of(context).size.width >= AppBreakpoints.desktop;
     
     if (showSidebar) {
       showDialog(
@@ -1903,7 +1903,7 @@ Future<void> _saveDisplayDate(DateTime date) async {
       _showRecurringEditDialog(doc, data, startTime);
     } else {
       Navigator.pop(context);
-      final bool showSidebar = MediaQuery.of(context).size.width >= 800;
+      final bool showSidebar = MediaQuery.of(context).size.width >= AppBreakpoints.desktop;
       if (showSidebar) {
         showDialog(
           context: context,
@@ -1993,7 +1993,7 @@ Future<void> _saveDisplayDate(DateTime date) async {
               onPressed: () {
                 Navigator.pop(ctx);
                 Navigator.pop(context);
-                final bool showSidebar = MediaQuery.of(context).size.width >= 800;
+                final bool showSidebar = MediaQuery.of(context).size.width >= AppBreakpoints.desktop;
                 if (showSidebar) {
                   showDialog(
                     context: context,

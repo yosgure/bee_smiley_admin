@@ -1,10 +1,10 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'app_theme.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:csv/csv.dart';
-import 'package:firebase_core/firebase_core.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 
 class FamilyCsvImportScreen extends StatefulWidget {
   final VoidCallback? onBack;
@@ -23,7 +23,7 @@ class _FamilyCsvImportScreenState extends State<FamilyCsvImportScreen> {
   int _importMode = 0; // 0: 新規登録（従来形式）, 1: 新規登録（エクスポート形式）, 2: 更新
   
   static const String _fixedDomain = '@bee-smiley.com';
-  static const String _defaultPassword = 'pass1234';
+  // 初期パスワードはCloud Functions (Secret Manager) で管理
 
   Future<void> _pickCsv() async {
     try {
@@ -76,15 +76,7 @@ class _FamilyCsvImportScreenState extends State<FamilyCsvImportScreen> {
     int errorCount = 0;
     List<String> errorLogs = [];
 
-    FirebaseApp? tempApp;
-    try {
-      tempApp = await Firebase.initializeApp(name: 'TempFamilyApp', options: Firebase.app().options);
-    } catch (e) {
-      tempApp = Firebase.app('TempFamilyApp');
-    }
-
-    final tempAuth = FirebaseAuth.instanceFor(app: tempApp!);
-    final firestore = FirebaseFirestore.instance;
+    final functions = FirebaseFunctions.instanceFor(region: 'asia-northeast1');
 
     for (int i = 1; i < _csvData.length; i++) {
       final row = _csvData[i];
@@ -95,30 +87,29 @@ class _FamilyCsvImportScreenState extends State<FamilyCsvImportScreen> {
         final firstName = row[1].toString().trim();
         final lastNameKana = row[2].toString().trim();
         final firstNameKana = row[3].toString().trim();
-        
+
         final loginId = row[4].toString().trim();
-        final password = row[5].toString().trim();
-        
+
         final relation = row[6].toString().trim();
         final phone = _formatPhone(row[7]);
         final email = row[8].toString().trim();
         final postalCode = row[9].toString().trim();
         final address = row[10].toString().trim();
-        
+
         final emName = row[11].toString().trim();
         final emRelation = row[12].toString().trim();
         final emPhone = _formatPhone(row[13]);
 
-        if (loginId.isEmpty || password.isEmpty) {
-          throw Exception('IDまたはパスワードが空です');
+        if (loginId.isEmpty) {
+          throw Exception('ログインIDが空です');
         }
 
         List<Map<String, dynamic>> children = [];
-        
+
         int colIndex = 14;
-        while (colIndex + 6 < row.length) { 
+        while (colIndex + 6 < row.length) {
           final childName = row[colIndex].toString().trim();
-          
+
           if (childName.isEmpty) {
             colIndex += 7;
             continue;
@@ -147,42 +138,37 @@ class _FamilyCsvImportScreenState extends State<FamilyCsvImportScreen> {
           colIndex += 7;
         }
 
-        final authEmail = '$loginId$_fixedDomain';
-
-        UserCredential userCredential = await tempAuth.createUserWithEmailAndPassword(
-          email: authEmail,
-          password: password,
-        );
-
-        await firestore.collection('families').add({
-          'uid': userCredential.user!.uid,
+        // Cloud Functions経由でアカウント作成（パスワードはSecret Managerで管理）
+        final result = await functions.httpsCallable('createParentAccount').call({
           'loginId': loginId,
-          'lastName': lastName,
-          'firstName': firstName,
-          'lastNameKana': lastNameKana,
-          'firstNameKana': firstNameKana,
-          'relation': relation,
-          'phone': phone,
-          'email': email,
-          'postalCode': postalCode,
-          'address': address,
-          'emergencyName': emName,
-          'emergencyRelation': emRelation,
-          'emergencyPhone': emPhone,
-          'children': children,
-          'createdAt': FieldValue.serverTimestamp(),
-          'isInitialPassword': true, 
+          'familyData': {
+            'lastName': lastName,
+            'firstName': firstName,
+            'lastNameKana': lastNameKana,
+            'firstNameKana': firstNameKana,
+            'relation': relation,
+            'phone': phone,
+            'email': email,
+            'postalCode': postalCode,
+            'address': address,
+            'emergencyName': emName,
+            'emergencyRelation': emRelation,
+            'emergencyPhone': emPhone,
+            'children': children,
+          },
         });
 
-        successCount++;
+        if (result.data['success'] == true) {
+          successCount++;
+        } else {
+          throw Exception(result.data['message'] ?? '不明なエラー');
+        }
       } catch (e) {
         errorCount++;
         final idLog = row.length > 4 ? row[4] : 'Unknown';
         errorLogs.add('行${i + 1} (ID: $idLog): $e');
       }
     }
-
-    await tempApp.delete();
 
     setState(() {
       _isLoading = false;
@@ -206,15 +192,7 @@ class _FamilyCsvImportScreenState extends State<FamilyCsvImportScreen> {
     int errorCount = 0;
     List<String> errorLogs = [];
 
-    FirebaseApp? tempApp;
-    try {
-      tempApp = await Firebase.initializeApp(name: 'TempFamilyApp', options: Firebase.app().options);
-    } catch (e) {
-      tempApp = Firebase.app('TempFamilyApp');
-    }
-
-    final tempAuth = FirebaseAuth.instanceFor(app: tempApp!);
-    final firestore = FirebaseFirestore.instance;
+    final functions = FirebaseFunctions.instanceFor(region: 'asia-northeast1');
 
     // エクスポート形式のCSV列順序:
     // 0: ログインID, 1: 保護者姓, 2: 保護者名, 3: 保護者姓カナ, 4: 保護者名カナ,
@@ -224,14 +202,14 @@ class _FamilyCsvImportScreenState extends State<FamilyCsvImportScreen> {
 
     // 同じログインIDの行をグループ化（複数児童対応）
     Map<String, List<List<dynamic>>> groupedByLoginId = {};
-    
+
     for (int i = 1; i < _csvData.length; i++) {
       final row = _csvData[i];
       if (row.isEmpty) continue;
-      
+
       final loginId = row[0].toString().trim();
       if (loginId.isEmpty) continue;
-      
+
       groupedByLoginId.putIfAbsent(loginId, () => []);
       groupedByLoginId[loginId]!.add(row);
     }
@@ -240,7 +218,7 @@ class _FamilyCsvImportScreenState extends State<FamilyCsvImportScreen> {
     for (var entry in groupedByLoginId.entries) {
       final loginId = entry.key;
       final rows = entry.value;
-      
+
       try {
         final firstRow = rows.first;
 
@@ -262,7 +240,7 @@ class _FamilyCsvImportScreenState extends State<FamilyCsvImportScreen> {
         List<Map<String, dynamic>> children = [];
         for (var row in rows) {
           if (row.length < 15) continue;
-          
+
           final childName = row[14].toString().trim();
           if (childName.isEmpty) continue;
 
@@ -281,44 +259,37 @@ class _FamilyCsvImportScreenState extends State<FamilyCsvImportScreen> {
           });
         }
 
-        // Firebase Authにアカウント作成
-        final authEmail = '$loginId$_fixedDomain';
-        
-        UserCredential userCredential = await tempAuth.createUserWithEmailAndPassword(
-          email: authEmail,
-          password: _defaultPassword,
-        );
-
-        // Firestoreにドキュメント作成
-        await firestore.collection('families').add({
-          'uid': userCredential.user!.uid,
+        // Cloud Functions経由でアカウント作成（パスワードはSecret Managerで管理）
+        final result = await functions.httpsCallable('createParentAccount').call({
           'loginId': loginId,
-          'lastName': lastName,
-          'firstName': firstName,
-          'lastNameKana': lastNameKana,
-          'firstNameKana': firstNameKana,
-          'relation': relation,
-          'phone': phone,
-          'email': email,
-          'postalCode': postalCode,
-          'address': address,
-          'emergencyName': emName,
-          'emergencyRelation': emRelation,
-          'emergencyPhone': emPhone,
-          'children': children,
-          'createdAt': FieldValue.serverTimestamp(),
-          'isInitialPassword': true,
+          'familyData': {
+            'lastName': lastName,
+            'firstName': firstName,
+            'lastNameKana': lastNameKana,
+            'firstNameKana': firstNameKana,
+            'relation': relation,
+            'phone': phone,
+            'email': email,
+            'postalCode': postalCode,
+            'address': address,
+            'emergencyName': emName,
+            'emergencyRelation': emRelation,
+            'emergencyPhone': emPhone,
+            'children': children,
+          },
         });
 
-        successCount++;
+        if (result.data['success'] == true) {
+          successCount++;
+        } else {
+          throw Exception(result.data['message'] ?? '不明なエラー');
+        }
 
       } catch (e) {
         errorCount++;
         errorLogs.add('ID: $loginId - $e');
       }
     }
-
-    await tempApp.delete();
 
     setState(() {
       _isLoading = false;
@@ -514,8 +485,8 @@ appBar: AppBar(
                           1,
                           Icons.upload_file,
                           '新規（エクスポート形式）',
-                          'PW自動設定\n(pass1234)',
-                          Colors.orange,
+                          'PW自動設定\n(初期PW)',
+                          AppColors.accent,
                         ),
                       ),
                       const SizedBox(width: 8),
@@ -579,7 +550,7 @@ appBar: AppBar(
                       backgroundColor: _importMode == 0 
                           ? Colors.blue 
                           : _importMode == 1 
-                              ? Colors.orange 
+                              ? AppColors.accent 
                               : Colors.green,
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
@@ -685,20 +656,20 @@ appBar: AppBar(
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('【新規登録（エクスポート形式）】', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.orange)),
+        const Text('【新規登録（エクスポート形式）】', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppColors.accent)),
         const SizedBox(height: 8),
         const Text('エクスポート機能で出力したCSVをそのまま使用できます。', style: TextStyle(fontSize: 12)),
         const SizedBox(height: 8),
         Container(
           padding: const EdgeInsets.all(8),
           decoration: BoxDecoration(
-            color: Colors.orange.shade50,
+            color: AppColors.accent.shade50,
             borderRadius: BorderRadius.circular(4),
           ),
           child: const Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('✓ パスワードは自動で「pass1234」に設定', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+              Text('✓ パスワードは初期パスワードに自動設定', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
               Text('✓ 同じIDの複数行は1家族として統合', style: TextStyle(fontSize: 11)),
               Text('✓ 「アカウント状態」列は無視される', style: TextStyle(fontSize: 11)),
               Text('✓ 全員「初期PW」状態で登録', style: TextStyle(fontSize: 11)),

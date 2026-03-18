@@ -56,7 +56,7 @@ class _PlusScheduleContentState extends State<PlusScheduleContent> with Automati
     '感覚統合': Colors.teal,
     '言語': Colors.purple,
     '就学支援': Colors.indigo,
-    '契約': Colors.orange,
+    '契約': AppColors.accent,
     '体験': Colors.green,
     '欠席': Colors.red,
   };
@@ -74,6 +74,9 @@ class _PlusScheduleContentState extends State<PlusScheduleContent> with Automati
     Colors.pink, Colors.purple, Colors.deepPurple, Colors.indigo,
     Colors.brown, Colors.grey, Colors.blueGrey,
   ];
+
+  // ホバー中の生徒名（同じ生徒の他コマをハイライト）
+  String? _hoveredStudentName;
 
   // レッスンデータ（Firestoreから取得）
   List<Map<String, dynamic>> _lessons = [];
@@ -551,7 +554,7 @@ Map<String, dynamic>? _getCellMemo(DateTime date, int slotIndex) {
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             title: Row(
               children: [
-                const Icon(Icons.edit, color: Colors.orange, size: 20),
+                const Icon(Icons.edit, color: AppColors.accent, size: 20),
                 const SizedBox(width: 8),
                 const Text('タスクを編集', style: TextStyle(fontSize: 16)),
                 const Spacer(),
@@ -741,6 +744,7 @@ Map<String, dynamic>? _getCellMemo(DateTime date, int slotIndex) {
       
       for (var doc in snapshot.docs) {
         final data = doc.data();
+        final familyUid = data['uid'] as String? ?? doc.id;
         final lastName = data['lastName'] as String? ?? '';
         final lastNameKana = data['lastNameKana'] as String? ?? '';
         final children = List<Map<String, dynamic>>.from(data['children'] ?? []);
@@ -751,6 +755,8 @@ Map<String, dynamic>? _getCellMemo(DateTime date, int slotIndex) {
 
           // プラスの教室のみ
           if (firstName.isNotEmpty && classroom.contains('プラス')) {
+            // studentIdを生成（childにstudentIdがあればそれを使用）
+            final studentId = child['studentId'] ?? '${familyUid}_$firstName';
             students.add({
             'name': '$lastName $firstName'.trim(),
             'firstName': firstName,
@@ -759,6 +765,8 @@ Map<String, dynamic>? _getCellMemo(DateTime date, int slotIndex) {
             'classroom': classroom,
             'course': child['course'] ?? '',
             'profileUrl': child['profileUrl'] ?? '',
+            'familyUid': familyUid,
+            'studentId': studentId,
           });
           }
         }
@@ -1332,7 +1340,7 @@ void _goToPage(int page) {
   }
   
   Widget _buildMobileSideMenu() {
-    final plusStaff = _staffList.where((s) => 
+    final plusStaff = _staffList.where((s) =>
   s['isPlus'] == true && s['showInSchedule'] != false
 ).toList();
     final staffColors = [
@@ -2683,7 +2691,7 @@ final plusStaff = _staffList.where((s) =>
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             title: Row(
               children: [
-                const Icon(Icons.task_alt, color: Colors.orange),
+                const Icon(Icons.task_alt, color: AppColors.accent),
                 const SizedBox(width: 8),
                 Text(
                   '${DateFormat('M月d日 (E)', 'ja').format(date)} のタスク',
@@ -2827,7 +2835,7 @@ final plusStaff = _staffList.where((s) =>
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             title: Row(
               children: [
-                const Icon(Icons.task_alt, color: Colors.orange),
+                const Icon(Icons.task_alt, color: AppColors.accent),
                 const SizedBox(width: 8),
                 const Text('タスクを追加', style: TextStyle(fontSize: 18)),
               ],
@@ -2985,7 +2993,7 @@ final plusStaff = _staffList.where((s) =>
                       ),
                       child: Row(
                         children: [
-                          Icon(Icons.calendar_today, size: 20, color: Colors.orange.shade700),
+                          Icon(Icons.calendar_today, size: 20, color: AppColors.accent.shade700),
                           const SizedBox(width: 12),
                           Expanded(
                             child: Text(
@@ -3504,15 +3512,18 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
         ? '(${course.substring(0, 1)})' 
         : '';
     
-    // 講師名を苗字のみに変換（空要素を除外）
+    // 講師名を頭2文字のみに変換（空要素を除外）
     final teacherLastNames = teachers
         .where((name) => name != null && name.toString().isNotEmpty)
         .map((name) {
-          final parts = name.toString().split(' ');
-          return parts.first;
+          final lastName = name.toString().split(' ').first;
+          return lastName.length > 2 ? lastName.substring(0, 2) : lastName;
         })
         .where((name) => name.isNotEmpty)
         .toList();
+
+    final studentName = lesson['studentName'] as String? ?? '';
+    final isHighlighted = _hoveredStudentName != null && _hoveredStudentName == studentName;
 
     Widget lessonContent = Stack(
       clipBehavior: Clip.none,
@@ -3520,6 +3531,7 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
           decoration: BoxDecoration(
+            color: isHighlighted ? Colors.yellow.shade100 : Colors.transparent,
             borderRadius: BorderRadius.circular(4),
           ),
           child: Row(
@@ -3529,7 +3541,6 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
               Flexible(
                 flex: 3,
                 child: Row(
-                  mainAxisSize: MainAxisSize.min,
                   children: [
                     Flexible(
                       child: Text(
@@ -3553,41 +3564,37 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
                   ],
                 ),
               ),
-              const SizedBox(width: 4),
+              const SizedBox(width: 8),
               // 講師名部分（クリックで講師選択）
-              Flexible(
-                flex: 3,
-                child: MouseRegion(
-                  cursor: SystemMouseCursors.click,
-                  child: GestureDetector(
-                    onTap: () {
-                      if (cellContext != null) {
-                        final renderBox = cellContext.findRenderObject() as RenderBox?;
-                        final cellOffset = renderBox?.localToGlobal(Offset.zero);
-                        final cellW = renderBox?.size.width ?? 0;
-                        _showQuickTeacherEdit(lesson, cellOffset: cellOffset, cellWidth: cellW);
-                      } else {
-                        _showQuickTeacherEdit(lesson);
-                      }
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: Text(
-                        teacherLastNames.join('・'),
-                        style: const TextStyle(
-                          color: AppColors.textMain,
-                          fontSize: 13,
-                        ),
-                        overflow: TextOverflow.ellipsis,
+              MouseRegion(
+                cursor: SystemMouseCursors.click,
+                child: GestureDetector(
+                  onTap: () {
+                    if (cellContext != null) {
+                      final renderBox = cellContext.findRenderObject() as RenderBox?;
+                      final cellOffset = renderBox?.localToGlobal(Offset.zero);
+                      final cellW = renderBox?.size.width ?? 0;
+                      _showQuickTeacherEdit(lesson, cellOffset: cellOffset, cellWidth: cellW);
+                    } else {
+                      _showQuickTeacherEdit(lesson);
+                    }
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      teacherLastNames.join('・'),
+                      style: const TextStyle(
+                        color: AppColors.textMain,
+                        fontSize: 13,
                       ),
                     ),
                   ),
                 ),
               ),
-              const SizedBox(width: 4),
+              const SizedBox(width: 6),
               // 部屋名部分（クリックで部屋選択）
               MouseRegion(
                 cursor: SystemMouseCursors.click,
@@ -3674,10 +3681,7 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
           opacity: 0.3,
           child: lessonContent,
         ),
-        child: Material(
-          color: Colors.transparent,
-          child: _buildLessonWithHover(lesson, lessonContent, note, cellContext: cellContext),
-        ),
+        child: _buildLessonWithHover(lesson, lessonContent, note, cellContext: cellContext),
       ),
     );
   }
@@ -3705,16 +3709,20 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
     
     if (!hasInfo) {
       final noInfoKey = GlobalKey();
-      return InkWell(
+      return _HoverContainer(
         key: noInfoKey,
+        onEnter: () {
+          setState(() => _hoveredStudentName = studentName);
+        },
+        onExit: () {
+          setState(() => _hoveredStudentName = null);
+        },
         onTap: () {
           final renderBox = noInfoKey.currentContext?.findRenderObject() as RenderBox?;
           final cellOffset = renderBox?.localToGlobal(Offset.zero);
           final cellWidth = renderBox?.size.width ?? 0;
           _showEditLessonDialog(lesson, cellOffset: cellOffset, cellWidth: cellWidth);
         },
-        hoverColor: Colors.grey.shade100,
-        borderRadius: BorderRadius.circular(4),
         child: lessonContent,
       );
     }
@@ -3775,23 +3783,25 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
       overlay.insert(_currentOverlay!);
     }
     
-    return MouseRegion(
-  key: key,
-  onEnter: (_) => showOverlay(),
-  onExit: (_) => _hideCurrentOverlay(),
-  child: InkWell(
-    onTap: () {
-      _hideCurrentOverlay();
-      final renderBox = key.currentContext?.findRenderObject() as RenderBox?;
-      final cellOffset = renderBox?.localToGlobal(Offset.zero);
-      final cellWidth = renderBox?.size.width ?? 0;
-      _showEditLessonDialog(lesson, cellOffset: cellOffset, cellWidth: cellWidth);
-    },
-    hoverColor: Colors.grey.shade100,
-    borderRadius: BorderRadius.circular(4),
-    child: _buildClickableLessonContent(lesson, key, cellContext: cellContext),
-  ),
-);
+    return _HoverContainer(
+      key: key,
+      onEnter: () {
+        setState(() => _hoveredStudentName = studentName);
+        showOverlay();
+      },
+      onExit: () {
+        setState(() => _hoveredStudentName = null);
+        _hideCurrentOverlay();
+      },
+      onTap: () {
+        _hideCurrentOverlay();
+        final renderBox = key.currentContext?.findRenderObject() as RenderBox?;
+        final cellOffset = renderBox?.localToGlobal(Offset.zero);
+        final cellWidth = renderBox?.size.width ?? 0;
+        _showEditLessonDialog(lesson, cellOffset: cellOffset, cellWidth: cellWidth);
+      },
+      child: _buildClickableLessonContent(lesson, key, cellContext: cellContext),
+    );
   }
   
 // クリック可能なレッスン内容を構築（生徒名のみ詳細ダイアログ）
@@ -3801,24 +3811,31 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
     final teachers = lesson['teachers'] as List<dynamic>? ?? [];
     final note = lesson['note'] as String? ?? '';
     final hasNote = note.isNotEmpty;
-    
+
     final textColor = course == '通常' ? Colors.black87 : color;
-    final courseInitial = course != '通常' && course.isNotEmpty 
-        ? '(${course.substring(0, 1)})' 
+    final courseInitial = course != '通常' && course.isNotEmpty
+        ? '(${course.substring(0, 1)})'
         : '';
-    
+
     final teacherLastNames = teachers
         .where((name) => name != null && name.toString().isNotEmpty)
-        .map((name) => name.toString().split(' ').first)
+        .map((name) {
+          final lastName = name.toString().split(' ').first;
+          return lastName.length > 2 ? lastName.substring(0, 2) : lastName;
+        })
         .where((name) => name.isNotEmpty)
         .toList();
-    
+
+    final clickableStudentName = lesson['studentName'] as String? ?? '';
+    final isHighlighted = _hoveredStudentName != null && _hoveredStudentName == clickableStudentName;
+
     return Stack(
       clipBehavior: Clip.none,
       children: [
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
           decoration: BoxDecoration(
+            color: isHighlighted ? Colors.yellow.shade100 : Colors.transparent,
             borderRadius: BorderRadius.circular(4),
           ),
           child: Row(
@@ -5408,7 +5425,7 @@ if (inputMode != 'memo') ...[
                             // タスクセクション
                             Row(
                               children: [
-                                const Icon(Icons.task_alt, size: 18, color: Colors.orange),
+                                const Icon(Icons.task_alt, size: 18, color: AppColors.accent),
                                 const SizedBox(width: 8),
                                 const Text('タスク', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
                               ],
@@ -5428,7 +5445,7 @@ if (inputMode != 'memo') ...[
                                   margin: const EdgeInsets.only(bottom: 8),
                                   padding: const EdgeInsets.all(10),
                                   decoration: BoxDecoration(
-                                    color: Colors.orange.shade50,
+                                    color: AppColors.accent.shade50,
                                     borderRadius: BorderRadius.circular(6),
                                   ),
                                   child: Row(
@@ -6181,7 +6198,7 @@ await _loadLessonsForWeek(showLoading: false);
                         if (!isCustomEvent && studentName.isNotEmpty)
                           Padding(
                             padding: const EdgeInsets.only(left: 8),
-                            child: ElevatedButton.icon(
+                            child: ElevatedButton(
                               onPressed: () {
                                 Navigator.pop(dialogContext);
                                 final nameParts = studentName.split(' ');
@@ -6212,8 +6229,7 @@ await _loadLessonsForWeek(showLoading: false);
                                   ),
                                 );
                               },
-                              icon: const Icon(Icons.smart_toy, size: 16),
-                              label: const Text('AIに相談'),
+                              child: const Text('AIに相談'),
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: Colors.purple.shade600,
                                 foregroundColor: Colors.white,
@@ -6364,7 +6380,7 @@ await _loadLessonsForWeek(showLoading: false);
                             // タスクセクション
                             Row(
                               children: [
-                                const Icon(Icons.task_alt, size: 18, color: Colors.orange),
+                                const Icon(Icons.task_alt, size: 18, color: AppColors.accent),
                                 const SizedBox(width: 8),
                                 const Text('タスク', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
                               ],
@@ -6384,7 +6400,7 @@ await _loadLessonsForWeek(showLoading: false);
                                   margin: const EdgeInsets.only(bottom: 8),
                                   padding: const EdgeInsets.all(10),
                                   decoration: BoxDecoration(
-                                    color: Colors.orange.shade50,
+                                    color: AppColors.accent.shade50,
                                     borderRadius: BorderRadius.circular(6),
                                   ),
                                   child: Row(
@@ -7442,8 +7458,11 @@ await _loadLessonsForWeek(showLoading: false);
                               final color = _courseColors[course] ?? Colors.blue;
                               final teachers = lesson['teachers'] as List<dynamic>? ?? [];
                               final room = lesson['room'] as String? ?? '';
-                              final teacherNames = teachers.isNotEmpty 
-                                  ? teachers.map((t) => t.toString().split(' ').first).join('・')
+                              final teacherNames = teachers.isNotEmpty
+                                  ? teachers.map((t) {
+                                      final lastName = t.toString().split(' ').first;
+                                      return lastName.length > 2 ? lastName.substring(0, 2) : lastName;
+                                    }).join('・')
                                   : '';
                               
                               return Padding(
@@ -7728,3 +7747,37 @@ class _NoteTrianglePainter extends CustomPainter {
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
+
+/// ホバー時に背景色をハイライトするコンテナ
+class _HoverContainer extends StatefulWidget {
+  final Widget child;
+  final VoidCallback? onEnter;
+  final VoidCallback? onExit;
+  final VoidCallback? onTap;
+
+  const _HoverContainer({
+    super.key,
+    required this.child,
+    this.onEnter,
+    this.onExit,
+    this.onTap,
+  });
+
+  @override
+  State<_HoverContainer> createState() => _HoverContainerState();
+}
+
+class _HoverContainerState extends State<_HoverContainer> {
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      onEnter: (_) => widget.onEnter?.call(),
+      onExit: (_) => widget.onExit?.call(),
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: widget.onTap,
+        child: widget.child,
+      ),
+    );
+  }
+}

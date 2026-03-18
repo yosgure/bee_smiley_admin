@@ -25,7 +25,7 @@ class _PlusDashboardContentState extends State<PlusDashboardContent> {
     '感覚統合': Colors.teal,
     '言語': Colors.purple,
     '就学支援': Colors.indigo,
-    '契約': Colors.orange,
+    '契約': AppColors.accent,
     '体験': Colors.green,
     '欠席': Colors.red,
   };
@@ -1453,7 +1453,7 @@ if (studentTasks.isNotEmpty) {
             ),
             child: Row(
               children: [
-                const Icon(Icons.task_alt, size: 18, color: Colors.orange),
+                const Icon(Icons.task_alt, size: 18, color: AppColors.accent),
                 const SizedBox(width: 8),
                 Text(
                   'タスク',
@@ -1582,14 +1582,14 @@ if (studentTasks.isNotEmpty) {
                 margin: const EdgeInsets.only(left: 8),
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                 decoration: BoxDecoration(
-                  color: isOverdue ? Colors.red.shade50 : Colors.orange.shade50,
+                  color: isOverdue ? Colors.red.shade50 : AppColors.accent.shade50,
                   borderRadius: BorderRadius.circular(4),
                 ),
                 child: Text(
                   _formatDueDate(dueDate.toDate()),
                   style: TextStyle(
                     fontSize: 11,
-                    color: isOverdue ? Colors.red.shade700 : Colors.orange.shade700,
+                    color: isOverdue ? Colors.red.shade700 : AppColors.accent.shade700,
                     fontWeight: FontWeight.w500,
                   ),
                   textAlign: TextAlign.center,
@@ -1797,7 +1797,7 @@ if (studentTasks.isNotEmpty) {
                       ),
                       child: Row(
                         children: [
-                          Icon(Icons.calendar_today, size: 20, color: Colors.orange.shade700),
+                          Icon(Icons.calendar_today, size: 20, color: AppColors.accent.shade700),
                           const SizedBox(width: 12),
                           Expanded(
                             child: Text(
@@ -2352,7 +2352,7 @@ if (studentTasks.isNotEmpty) {
                             // タスクセクション
                             Row(
                               children: [
-                                const Icon(Icons.task_alt, size: 18, color: Colors.orange),
+                                const Icon(Icons.task_alt, size: 18, color: AppColors.accent),
                                 const SizedBox(width: 8),
                                 const Text('タスク', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
                               ],
@@ -2366,7 +2366,7 @@ if (studentTasks.isNotEmpty) {
                                   margin: const EdgeInsets.only(bottom: 8),
                                   padding: const EdgeInsets.all(10),
                                   decoration: BoxDecoration(
-                                    color: Colors.orange.shade50,
+                                    color: AppColors.accent.shade50,
                                     borderRadius: BorderRadius.circular(6),
                                   ),
                                   child: Row(
@@ -2970,7 +2970,7 @@ void _showStudentSelectionDialog(Function(Map<String, dynamic>) onSelect) {
                           
                           Row(
                             children: [
-                              const Icon(Icons.task_alt, size: 18, color: Colors.orange),
+                              const Icon(Icons.task_alt, size: 18, color: AppColors.accent),
                               const SizedBox(width: 8),
                               const Text('タスク', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
                             ],
@@ -2984,7 +2984,7 @@ void _showStudentSelectionDialog(Function(Map<String, dynamic>) onSelect) {
                                 margin: const EdgeInsets.only(bottom: 8),
                                 padding: const EdgeInsets.all(10),
                                 decoration: BoxDecoration(
-                                  color: Colors.orange.shade50,
+                                  color: AppColors.accent.shade50,
                                   borderRadius: BorderRadius.circular(6),
                                 ),
                                 child: Row(

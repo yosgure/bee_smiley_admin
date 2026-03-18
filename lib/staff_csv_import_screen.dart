@@ -1,10 +1,10 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'app_theme.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:csv/csv.dart';
-import 'package:firebase_core/firebase_core.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 
 class StaffCsvImportScreen extends StatefulWidget {
   final VoidCallback? onBack;
@@ -19,7 +19,7 @@ class _StaffCsvImportScreenState extends State<StaffCsvImportScreen> {
   bool _isLoading = false;
   String _statusMessage = '';
   
-  static const String _fixedDomain = '@bee-smiley.com';
+  final _functions = FirebaseFunctions.instanceFor(region: 'asia-northeast1');
 
   Future<void> _pickCsv() async {
     try {
@@ -66,19 +66,6 @@ class _StaffCsvImportScreenState extends State<StaffCsvImportScreen> {
     int errorCount = 0;
     List<String> errorLogs = [];
 
-    FirebaseApp? tempApp;
-    try {
-      tempApp = await Firebase.initializeApp(
-        name: 'TemporaryRegisterApp',
-        options: Firebase.app().options,
-      );
-    } catch (e) {
-      tempApp = Firebase.app('TemporaryRegisterApp');
-    }
-
-    final tempAuth = FirebaseAuth.instanceFor(app: tempApp!);
-    final firestore = FirebaseFirestore.instance;
-
     for (int i = 1; i < _csvData.length; i++) {
       final row = _csvData[i];
       if (row.length < 4) {
@@ -89,13 +76,13 @@ class _StaffCsvImportScreenState extends State<StaffCsvImportScreen> {
       final String name = row[0].toString().trim();
       final String furigana = row.length > 1 ? row[1].toString().trim() : '';
       final String loginId = row[2].toString().trim();
-      final String password = row[3].toString().trim();
-      
+      // row[3] はパスワード列だが、Cloud Functions側でSecret Managerの初期パスワードを使用
+
       final String phone = row.length > 4 ? _formatPhone(row[4]) : '';
-      
+
       final String contactEmail = row.length > 5 ? row[5].toString().trim() : '';
       final String role = row.length > 6 ? row[6].toString().trim() : 'スタッフ';
-      
+
       final String rawClassrooms = row.length > 7 ? row[7].toString() : '';
       final List<String> classrooms = rawClassrooms
           .replaceAll('、', '/')
@@ -104,25 +91,17 @@ class _StaffCsvImportScreenState extends State<StaffCsvImportScreen> {
           .where((e) => e.isNotEmpty)
           .toList();
 
-      final String authEmail = '$loginId$_fixedDomain';
-
       try {
-        UserCredential userCredential = await tempAuth.createUserWithEmailAndPassword(
-          email: authEmail,
-          password: password,
-        );
-
-        await firestore.collection('staffs').add({
-          'uid': userCredential.user!.uid,
+        await _functions.httpsCallable('createStaffAccount').call({
           'loginId': loginId,
-          'name': name,
-          'furigana': furigana,
-          'phone': phone,
-          'email': contactEmail,
-          'role': role,
-          'classrooms': classrooms,
-          'createdAt': FieldValue.serverTimestamp(),
-          'isInitialPassword': true, // ★ここを追加
+          'staffData': {
+            'name': name,
+            'furigana': furigana,
+            'phone': phone,
+            'email': contactEmail,
+            'role': role,
+            'classrooms': classrooms,
+          },
         });
 
         successCount++;
@@ -131,8 +110,6 @@ class _StaffCsvImportScreenState extends State<StaffCsvImportScreen> {
         errorLogs.add('$name ($loginId): $e');
       }
     }
-
-    await tempApp.delete();
 
     setState(() {
       _isLoading = false;
@@ -207,7 +184,7 @@ appBar: AppBar(
                     icon: const Icon(Icons.cloud_upload),
                     label: const Text('登録開始'),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.orange,
+                      backgroundColor: AppColors.accent,
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 24),
                     ),

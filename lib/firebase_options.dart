@@ -59,20 +59,20 @@ class DefaultFirebaseOptions {
 
   static const FirebaseOptions ios = FirebaseOptions(
     apiKey: 'AIzaSyA6q_tIIgCiVLtvl6dult3x2dDaCTUwdJM',
-    appId: '1:964732214398:ios:1723b80dda9e064ed24c2f',
+    appId: '1:964732214398:ios:aefec46e15989879d24c2f',
     messagingSenderId: '964732214398',
     projectId: 'bee-smiley-admin',
     storageBucket: 'bee-smiley-admin.firebasestorage.app',
-    iosBundleId: 'com.example.beeSmileyAdmin',
+    iosBundleId: 'com.beesmiley.admin',
   );
 
   static const FirebaseOptions macos = FirebaseOptions(
     apiKey: 'AIzaSyA6q_tIIgCiVLtvl6dult3x2dDaCTUwdJM',
-    appId: '1:964732214398:ios:1723b80dda9e064ed24c2f',
+    appId: '1:964732214398:ios:aefec46e15989879d24c2f',
     messagingSenderId: '964732214398',
     projectId: 'bee-smiley-admin',
     storageBucket: 'bee-smiley-admin.firebasestorage.app',
-    iosBundleId: 'com.example.beeSmileyAdmin',
+    iosBundleId: 'com.beesmiley.admin',
   );
 
   static const FirebaseOptions windows = FirebaseOptions(

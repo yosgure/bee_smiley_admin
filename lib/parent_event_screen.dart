@@ -223,7 +223,7 @@ class _ParentEventScreenState extends State<ParentEventScreen> {
                 // 締め切り
                 if (deadlineStr != null) ...[
                   const SizedBox(height: 6),
-                  _buildInfoRow(Icons.timer_outlined, '締切: $deadlineStr', color: Colors.orange.shade700),
+                  _buildInfoRow(Icons.timer_outlined, '締切: $deadlineStr', color: AppColors.accent.shade700),
                 ],
                 
                 // 詳細（一部表示）

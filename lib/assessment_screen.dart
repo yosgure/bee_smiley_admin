@@ -515,10 +515,10 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       decoration: BoxDecoration(
-        color: isPublished ? Colors.green.shade50 : Colors.orange.shade50,
+        color: isPublished ? Colors.green.shade50 : AppColors.accent.shade50,
         borderRadius: BorderRadius.circular(4),
         border: Border.all(
-          color: isPublished ? Colors.green : Colors.orange,
+          color: isPublished ? Colors.green : AppColors.accent,
           width: 0.5,
         ),
       ),
@@ -527,7 +527,7 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
         style: TextStyle(
           fontSize: 11,
           fontWeight: FontWeight.bold,
-          color: isPublished ? Colors.green.shade700 : Colors.orange.shade700,
+          color: isPublished ? Colors.green.shade700 : AppColors.accent.shade700,
         ),
       ),
     );

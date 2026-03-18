@@ -9,8 +9,9 @@ const { getMessaging } = require("firebase-admin/messaging");
 const { getAuth } = require("firebase-admin/auth");
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 
-// Secret Manager でAPIキーを管理
+// Secret Manager でAPIキー・初期パスワードを管理
 const geminiApiKey = defineSecret("GEMINI_API_KEY");
+const initialPassword = defineSecret("INITIAL_PASSWORD");
 
 initializeApp();
 
@@ -19,7 +20,63 @@ const messaging = getMessaging();
 const auth = getAuth();
 
 const FIXED_DOMAIN = '@bee-smiley.com';
-const INITIAL_PASSWORD = 'pass1234';
+
+// ==========================================
+// FCMトークン クリーンアップ ヘルパー
+// ==========================================
+
+/**
+ * sendEachForMulticast のレスポンスを確認し、
+ * 無効なトークンを Firestore から削除する。
+ *
+ * @param {object} response - sendEachForMulticast の戻り値
+ * @param {Array<{token: string, docRef: FirebaseFirestore.DocumentReference}>} tokenDocMap
+ *   各トークンとそれが格納されている Firestore ドキュメントの対応表
+ */
+async function cleanupInvalidTokens(response, tokenDocMap) {
+  if (!response || !response.responses || !tokenDocMap || tokenDocMap.length === 0) {
+    return;
+  }
+
+  const invalidTokenErrors = new Set([
+    'messaging/invalid-registration-token',
+    'messaging/registration-token-not-registered',
+  ]);
+
+  const tokensToRemove = new Map(); // docRef.path -> [token1, token2, ...]
+
+  response.responses.forEach((resp, idx) => {
+    if (resp.error && invalidTokenErrors.has(resp.error.code)) {
+      const entry = tokenDocMap[idx];
+      if (entry && entry.docRef) {
+        const path = entry.docRef.path;
+        if (!tokensToRemove.has(path)) {
+          tokensToRemove.set(path, { docRef: entry.docRef, tokens: [] });
+        }
+        tokensToRemove.get(path).tokens.push(entry.token);
+      }
+    }
+  });
+
+  if (tokensToRemove.size === 0) return;
+
+  const cleanupPromises = [];
+  for (const [path, { docRef, tokens }] of tokensToRemove) {
+    console.log(`Removing ${tokens.length} invalid token(s) from ${path}`);
+    cleanupPromises.push(
+      docRef.update({
+        fcmTokens: FieldValue.arrayRemove(...tokens),
+      })
+    );
+  }
+
+  try {
+    await Promise.all(cleanupPromises);
+    console.log(`Cleaned up invalid tokens from ${tokensToRemove.size} document(s)`);
+  } catch (error) {
+    console.error('Token cleanup error:', error);
+  }
+}
 
 // ==========================================
 // チャットメッセージ送信時の通知
@@ -73,6 +130,7 @@ exports.onChatMessageCreated = onDocumentCreated(
       }
 
       const tokens = [];
+      const tokenDocMap = [];
 
       for (const recipientId of recipientIds) {
         const staffSnap = await db
@@ -88,7 +146,11 @@ exports.onChatMessageCreated = onDocumentCreated(
             const filteredTokens = staffData.fcmTokens.filter(
               (token) => !senderTokens.includes(token)
             );
-            tokens.push(...filteredTokens);
+            const docRef = staffSnap.docs[0].ref;
+            filteredTokens.forEach((t) => {
+              tokens.push(t);
+              tokenDocMap.push({ token: t, docRef });
+            });
           }
           continue;
         }
@@ -106,15 +168,28 @@ exports.onChatMessageCreated = onDocumentCreated(
             const filteredTokens = familyData.fcmTokens.filter(
               (token) => !senderTokens.includes(token)
             );
-            tokens.push(...filteredTokens);
+            const docRef = familySnap.docs[0].ref;
+            filteredTokens.forEach((t) => {
+              tokens.push(t);
+              tokenDocMap.push({ token: t, docRef });
+            });
           }
         }
       }
 
       if (tokens.length === 0) return null;
 
-      // 重複トークンを除去
-      const uniqueTokens = [...new Set(tokens)];
+      // 重複トークンを除去（tokenDocMapも同期）
+      const seen = new Set();
+      const uniqueTokenDocMap = [];
+      const uniqueTokens = [];
+      for (const entry of tokenDocMap) {
+        if (!seen.has(entry.token)) {
+          seen.add(entry.token);
+          uniqueTokens.push(entry.token);
+          uniqueTokenDocMap.push(entry);
+        }
+      }
 
       const response = await messaging.sendEachForMulticast({
         tokens: uniqueTokens,
@@ -150,10 +225,16 @@ exports.onChatMessageCreated = onDocumentCreated(
         },
       });
 
-      console.log(`チャット通知送信: ${response.successCount}件成功`);
+      console.log(`チャット通知送信: ${response.successCount}件成功, ${response.failureCount}件失敗`);
+      await cleanupInvalidTokens(response, uniqueTokenDocMap);
       return null;
     } catch (error) {
-      console.error("チャット通知エラー:", error);
+      console.error(JSON.stringify({
+        function: 'onChatMessageCreated',
+        chatId,
+        messageId: event.params.messageId,
+        error: error.message || String(error),
+      }));
       return null;
     }
   }
@@ -172,10 +253,14 @@ exports.onNotificationCreated = onDocumentCreated(
 
     try {
       const tokens = [];
+      const tokenDocMap = [];
       const target = notification.target || "all";
       const targetClassrooms = notification.targetClassrooms || [];
 
-      const familiesSnap = await db.collection("families").get();
+      // fcmTokensが存在する保護者のみ取得（トークンなしのドキュメントをスキップ）
+      const familiesSnap = await db.collection("families")
+        .where("fcmTokens", "!=", [])
+        .get();
 
       for (const familyDoc of familiesSnap.docs) {
         const familyData = familyDoc.data();
@@ -190,9 +275,11 @@ exports.onNotificationCreated = onDocumentCreated(
           if (!isTarget) continue;
         }
 
-        if (familyData.fcmTokens) {
-          tokens.push(...familyData.fcmTokens);
-        }
+        const docRef = familyDoc.ref;
+        familyData.fcmTokens.forEach((t) => {
+          tokens.push(t);
+          tokenDocMap.push({ token: t, docRef });
+        });
       }
 
       if (tokens.length === 0) return null;
@@ -223,10 +310,15 @@ exports.onNotificationCreated = onDocumentCreated(
         },
       });
 
-      console.log(`お知らせ通知送信: ${response.successCount}件成功`);
+      console.log(`お知らせ通知送信: ${response.successCount}件成功, ${response.failureCount}件失敗`);
+      await cleanupInvalidTokens(response, tokenDocMap);
       return null;
     } catch (error) {
-      console.error("お知らせ通知エラー:", error);
+      console.error(JSON.stringify({
+        function: 'onNotificationCreated',
+        notificationId: event.params.notificationId,
+        error: error.message || String(error),
+      }));
       return null;
     }
   }
@@ -247,17 +339,23 @@ exports.onEventCreated = onDocumentCreated(
 
     try {
       const tokens = [];
+      const tokenDocMap = [];
 
-      const familiesSnap = await db.collection("families").get();
+      // fcmTokensが存在する保護者のみ取得
+      const familiesSnap = await db.collection("families")
+        .where("fcmTokens", "!=", [])
+        .get();
 
       for (const familyDoc of familiesSnap.docs) {
         const familyData = familyDoc.data();
 
         if (familyData.notifyEvent === false) continue;
 
-        if (familyData.fcmTokens) {
-          tokens.push(...familyData.fcmTokens);
-        }
+        const docRef = familyDoc.ref;
+        familyData.fcmTokens.forEach((t) => {
+          tokens.push(t);
+          tokenDocMap.push({ token: t, docRef });
+        });
       }
 
       if (tokens.length === 0) return null;
@@ -288,10 +386,15 @@ exports.onEventCreated = onDocumentCreated(
         },
       });
 
-      console.log(`イベント通知送信: ${response.successCount}件成功`);
+      console.log(`イベント通知送信: ${response.successCount}件成功, ${response.failureCount}件失敗`);
+      await cleanupInvalidTokens(response, tokenDocMap);
       return null;
     } catch (error) {
-      console.error("イベント通知エラー:", error);
+      console.error(JSON.stringify({
+        function: 'onEventCreated',
+        eventId: event.params.eventId,
+        error: error.message || String(error),
+      }));
       return null;
     }
   }
@@ -317,8 +420,12 @@ exports.onAssessmentPublished = onDocumentUpdated(
       const childId = after.childId;
       if (!childId) return null;
 
-      const familiesSnap = await db.collection("families").get();
+      // fcmTokensが存在する保護者のみ取得
+      const familiesSnap = await db.collection("families")
+        .where("fcmTokens", "!=", [])
+        .get();
       const tokens = [];
+      const tokenDocMap = [];
 
       for (const familyDoc of familiesSnap.docs) {
         const familyData = familyDoc.data();
@@ -333,9 +440,11 @@ exports.onAssessmentPublished = onDocumentUpdated(
 
         if (!hasChild) continue;
 
-        if (familyData.fcmTokens) {
-          tokens.push(...familyData.fcmTokens);
-        }
+        const docRef = familyDoc.ref;
+        familyData.fcmTokens.forEach((t) => {
+          tokens.push(t);
+          tokenDocMap.push({ token: t, docRef });
+        });
       }
 
       if (tokens.length === 0) return null;
@@ -367,10 +476,15 @@ exports.onAssessmentPublished = onDocumentUpdated(
         },
       });
 
-      console.log(`アセスメント通知送信: ${response.successCount}件成功`);
+      console.log(`アセスメント通知送信: ${response.successCount}件成功, ${response.failureCount}件失敗`);
+      await cleanupInvalidTokens(response, tokenDocMap);
       return null;
     } catch (error) {
-      console.error("アセスメント通知エラー:", error);
+      console.error(JSON.stringify({
+        function: 'onAssessmentPublished',
+        assessmentId: event.params.assessmentId,
+        error: error.message || String(error),
+      }));
       return null;
     }
   }
@@ -392,6 +506,7 @@ exports.onCalendarEventCreated = onDocumentCreated(
       if (staffIds.length === 0) return null;
 
       const tokens = [];
+      const tokenDocMap = [];
 
       for (const staffId of staffIds) {
         const staffSnap = await db
@@ -403,7 +518,11 @@ exports.onCalendarEventCreated = onDocumentCreated(
         if (!staffSnap.empty) {
           const staffData = staffSnap.docs[0].data();
           if (staffData.notifyCalendar !== false && staffData.fcmTokens) {
-            tokens.push(...staffData.fcmTokens);
+            const docRef = staffSnap.docs[0].ref;
+            staffData.fcmTokens.forEach((t) => {
+              tokens.push(t);
+              tokenDocMap.push({ token: t, docRef });
+            });
           }
         }
       }
@@ -441,10 +560,15 @@ exports.onCalendarEventCreated = onDocumentCreated(
         },
       });
 
-      console.log(`カレンダー追加通知送信: ${response.successCount}件成功`);
+      console.log(`カレンダー追加通知送信: ${response.successCount}件成功, ${response.failureCount}件失敗`);
+      await cleanupInvalidTokens(response, tokenDocMap);
       return null;
     } catch (error) {
-      console.error("カレンダー追加通知エラー:", error);
+      console.error(JSON.stringify({
+        function: 'onCalendarEventCreated',
+        eventId: event.params.eventId,
+        error: error.message || String(error),
+      }));
       return null;
     }
   }
@@ -475,6 +599,7 @@ exports.onCalendarEventUpdated = onDocumentUpdated(
       if (staffIds.length === 0) return null;
 
       const tokens = [];
+      const tokenDocMap = [];
 
       for (const staffId of staffIds) {
         const staffSnap = await db
@@ -486,7 +611,11 @@ exports.onCalendarEventUpdated = onDocumentUpdated(
         if (!staffSnap.empty) {
           const staffData = staffSnap.docs[0].data();
           if (staffData.notifyCalendar !== false && staffData.fcmTokens) {
-            tokens.push(...staffData.fcmTokens);
+            const docRef = staffSnap.docs[0].ref;
+            staffData.fcmTokens.forEach((t) => {
+              tokens.push(t);
+              tokenDocMap.push({ token: t, docRef });
+            });
           }
         }
       }
@@ -524,10 +653,15 @@ exports.onCalendarEventUpdated = onDocumentUpdated(
         },
       });
 
-      console.log(`カレンダー変更通知送信: ${response.successCount}件成功`);
+      console.log(`カレンダー変更通知送信: ${response.successCount}件成功, ${response.failureCount}件失敗`);
+      await cleanupInvalidTokens(response, tokenDocMap);
       return null;
     } catch (error) {
-      console.error("カレンダー変更通知エラー:", error);
+      console.error(JSON.stringify({
+        function: 'onCalendarEventUpdated',
+        eventId: event.params.eventId,
+        error: error.message || String(error),
+      }));
       return null;
     }
   }
@@ -549,6 +683,7 @@ exports.onCalendarEventDeleted = onDocumentDeleted(
       if (staffIds.length === 0) return null;
 
       const tokens = [];
+      const tokenDocMap = [];
 
       for (const staffId of staffIds) {
         const staffSnap = await db
@@ -560,7 +695,11 @@ exports.onCalendarEventDeleted = onDocumentDeleted(
         if (!staffSnap.empty) {
           const staffData = staffSnap.docs[0].data();
           if (staffData.notifyCalendar !== false && staffData.fcmTokens) {
-            tokens.push(...staffData.fcmTokens);
+            const docRef = staffSnap.docs[0].ref;
+            staffData.fcmTokens.forEach((t) => {
+              tokens.push(t);
+              tokenDocMap.push({ token: t, docRef });
+            });
           }
         }
       }
@@ -598,10 +737,15 @@ exports.onCalendarEventDeleted = onDocumentDeleted(
         },
       });
 
-      console.log(`カレンダー削除通知送信: ${response.successCount}件成功`);
+      console.log(`カレンダー削除通知送信: ${response.successCount}件成功, ${response.failureCount}件失敗`);
+      await cleanupInvalidTokens(response, tokenDocMap);
       return null;
     } catch (error) {
-      console.error("カレンダー削除通知エラー:", error);
+      console.error(JSON.stringify({
+        function: 'onCalendarEventDeleted',
+        eventId: event.params.eventId,
+        error: error.message || String(error),
+      }));
       return null;
     }
   }
@@ -625,15 +769,23 @@ exports.onPlusLessonCreated = onDocumentCreated(
       const isAllStaff = teacherNames.includes("全員");
 
       const tokens = [];
+      const tokenDocMap = [];
 
       if (isAllStaff) {
-        const staffSnap = await db.collection("staffs").get();
+        // fcmTokensが存在するスタッフのみ取得
+        const staffSnap = await db.collection("staffs")
+          .where("fcmTokens", "!=", [])
+          .get();
         for (const doc of staffSnap.docs) {
           const staffData = doc.data();
           const classrooms = staffData.classrooms || [];
           const isPlus = classrooms.some((c) => c.includes("プラス"));
-          if (isPlus && staffData.notifyPlusSchedule !== false && staffData.fcmTokens) {
-            tokens.push(...staffData.fcmTokens);
+          if (isPlus && staffData.notifyPlusSchedule !== false) {
+            const docRef = doc.ref;
+            staffData.fcmTokens.forEach((t) => {
+              tokens.push(t);
+              tokenDocMap.push({ token: t, docRef });
+            });
           }
         }
       } else {
@@ -647,7 +799,11 @@ exports.onPlusLessonCreated = onDocumentCreated(
           if (!staffSnap.empty) {
             const staffData = staffSnap.docs[0].data();
             if (staffData.notifyPlusSchedule !== false && staffData.fcmTokens) {
-              tokens.push(...staffData.fcmTokens);
+              const docRef = staffSnap.docs[0].ref;
+              staffData.fcmTokens.forEach((t) => {
+                tokens.push(t);
+                tokenDocMap.push({ token: t, docRef });
+              });
             }
           }
         }
@@ -688,10 +844,15 @@ exports.onPlusLessonCreated = onDocumentCreated(
         },
       });
 
-      console.log(`プラス追加通知送信: ${response.successCount}件成功`);
+      console.log(`プラス追加通知送信: ${response.successCount}件成功, ${response.failureCount}件失敗`);
+      await cleanupInvalidTokens(response, tokenDocMap);
       return null;
     } catch (error) {
-      console.error("プラス追加通知エラー:", error);
+      console.error(JSON.stringify({
+        function: 'onPlusLessonCreated',
+        lessonId: event.params.lessonId,
+        error: error.message || String(error),
+      }));
       return null;
     }
   }
@@ -724,15 +885,23 @@ exports.onPlusLessonUpdated = onDocumentUpdated(
 
       const isAllStaff = teacherNames.includes("全員");
       const tokens = [];
+      const tokenDocMap = [];
 
       if (isAllStaff) {
-        const staffSnap = await db.collection("staffs").get();
+        // fcmTokensが存在するスタッフのみ取得
+        const staffSnap = await db.collection("staffs")
+          .where("fcmTokens", "!=", [])
+          .get();
         for (const doc of staffSnap.docs) {
           const staffData = doc.data();
           const classrooms = staffData.classrooms || [];
           const isPlus = classrooms.some((c) => c.includes("プラス"));
-          if (isPlus && staffData.notifyPlusSchedule !== false && staffData.fcmTokens) {
-            tokens.push(...staffData.fcmTokens);
+          if (isPlus && staffData.notifyPlusSchedule !== false) {
+            const docRef = doc.ref;
+            staffData.fcmTokens.forEach((t) => {
+              tokens.push(t);
+              tokenDocMap.push({ token: t, docRef });
+            });
           }
         }
       } else {
@@ -746,7 +915,11 @@ exports.onPlusLessonUpdated = onDocumentUpdated(
           if (!staffSnap.empty) {
             const staffData = staffSnap.docs[0].data();
             if (staffData.notifyPlusSchedule !== false && staffData.fcmTokens) {
-              tokens.push(...staffData.fcmTokens);
+              const docRef = staffSnap.docs[0].ref;
+              staffData.fcmTokens.forEach((t) => {
+                tokens.push(t);
+                tokenDocMap.push({ token: t, docRef });
+              });
             }
           }
         }
@@ -787,10 +960,15 @@ exports.onPlusLessonUpdated = onDocumentUpdated(
         },
       });
 
-      console.log(`プラス変更通知送信: ${response.successCount}件成功`);
+      console.log(`プラス変更通知送信: ${response.successCount}件成功, ${response.failureCount}件失敗`);
+      await cleanupInvalidTokens(response, tokenDocMap);
       return null;
     } catch (error) {
-      console.error("プラス変更通知エラー:", error);
+      console.error(JSON.stringify({
+        function: 'onPlusLessonUpdated',
+        lessonId: event.params.lessonId,
+        error: error.message || String(error),
+      }));
       return null;
     }
   }
@@ -813,15 +991,23 @@ exports.onPlusLessonDeleted = onDocumentDeleted(
 
       const isAllStaff = teacherNames.includes("全員");
       const tokens = [];
+      const tokenDocMap = [];
 
       if (isAllStaff) {
-        const staffSnap = await db.collection("staffs").get();
+        // fcmTokensが存在するスタッフのみ取得
+        const staffSnap = await db.collection("staffs")
+          .where("fcmTokens", "!=", [])
+          .get();
         for (const doc of staffSnap.docs) {
           const staffData = doc.data();
           const classrooms = staffData.classrooms || [];
           const isPlus = classrooms.some((c) => c.includes("プラス"));
-          if (isPlus && staffData.notifyPlusSchedule !== false && staffData.fcmTokens) {
-            tokens.push(...staffData.fcmTokens);
+          if (isPlus && staffData.notifyPlusSchedule !== false) {
+            const docRef = doc.ref;
+            staffData.fcmTokens.forEach((t) => {
+              tokens.push(t);
+              tokenDocMap.push({ token: t, docRef });
+            });
           }
         }
       } else {
@@ -835,7 +1021,11 @@ exports.onPlusLessonDeleted = onDocumentDeleted(
           if (!staffSnap.empty) {
             const staffData = staffSnap.docs[0].data();
             if (staffData.notifyPlusSchedule !== false && staffData.fcmTokens) {
-              tokens.push(...staffData.fcmTokens);
+              const docRef = staffSnap.docs[0].ref;
+              staffData.fcmTokens.forEach((t) => {
+                tokens.push(t);
+                tokenDocMap.push({ token: t, docRef });
+              });
             }
           }
         }
@@ -876,10 +1066,15 @@ exports.onPlusLessonDeleted = onDocumentDeleted(
         },
       });
 
-      console.log(`プラス削除通知送信: ${response.successCount}件成功`);
+      console.log(`プラス削除通知送信: ${response.successCount}件成功, ${response.failureCount}件失敗`);
+      await cleanupInvalidTokens(response, tokenDocMap);
       return null;
     } catch (error) {
-      console.error("プラス削除通知エラー:", error);
+      console.error(JSON.stringify({
+        function: 'onPlusLessonDeleted',
+        lessonId: event.params.lessonId,
+        error: error.message || String(error),
+      }));
       return null;
     }
   }
@@ -892,7 +1087,7 @@ exports.onPlusLessonDeleted = onDocumentDeleted(
 /**
  * 保護者アカウントを作成する
  */
-exports.createParentAccount = onCall({ region: 'asia-northeast1' }, async (request) => {
+exports.createParentAccount = onCall({ region: 'asia-northeast1', secrets: [initialPassword] }, async (request) => {
   if (!request.auth) {
     throw new HttpsError('unauthenticated', '認証が必要です');
   }
@@ -919,9 +1114,12 @@ exports.createParentAccount = onCall({ region: 'asia-northeast1' }, async (reque
   try {
     const userRecord = await auth.createUser({
       email: email,
-      password: INITIAL_PASSWORD,
+      password: initialPassword.value(),
       emailVerified: false,
     });
+
+    // Custom Claims を設定（セキュリティルールで role 判定に使用）
+    await auth.setCustomUserClaims(userRecord.uid, { role: 'parent' });
 
     const saveData = {
       ...familyData,
@@ -941,7 +1139,7 @@ exports.createParentAccount = onCall({ region: 'asia-northeast1' }, async (reque
     };
 
   } catch (error) {
-    console.error('Error creating parent account:', error);
+    console.error(JSON.stringify({ function: 'createParentAccount', loginId: loginId?.trim(), error: error.message }));
 
     if (error.code === 'auth/email-already-exists') {
       throw new HttpsError('already-exists', 'このログインIDは既に使用されています');
@@ -954,7 +1152,7 @@ exports.createParentAccount = onCall({ region: 'asia-northeast1' }, async (reque
 /**
  * パスワードを初期化する
  */
-exports.resetParentPassword = onCall({ region: 'asia-northeast1' }, async (request) => {
+exports.resetParentPassword = onCall({ region: 'asia-northeast1', secrets: [initialPassword] }, async (request) => {
   if (!request.auth) {
     throw new HttpsError('unauthenticated', '認証が必要です');
   }
@@ -978,7 +1176,7 @@ exports.resetParentPassword = onCall({ region: 'asia-northeast1' }, async (reque
 
   try {
     await auth.updateUser(targetUid, {
-      password: INITIAL_PASSWORD,
+      password: initialPassword.value(),
     });
 
     if (familyDocId) {
@@ -993,7 +1191,7 @@ exports.resetParentPassword = onCall({ region: 'asia-northeast1' }, async (reque
     };
 
   } catch (error) {
-    console.error('Error resetting password:', error);
+    console.error(JSON.stringify({ function: 'resetParentPassword', targetUid, error: error.message }));
     throw new HttpsError('internal', error.message);
   }
 });
@@ -1040,7 +1238,7 @@ exports.deleteParentAccount = onCall({ region: 'asia-northeast1' }, async (reque
     };
 
   } catch (error) {
-    console.error('Error deleting account:', error);
+    console.error(JSON.stringify({ function: 'deleteParentAccount', targetUid, familyDocId, error: error.message }));
     throw new HttpsError('internal', error.message);
   }
 });
@@ -1048,7 +1246,7 @@ exports.deleteParentAccount = onCall({ region: 'asia-northeast1' }, async (reque
 /**
  * スタッフアカウントを作成する
  */
-exports.createStaffAccount = onCall({ region: 'asia-northeast1' }, async (request) => {
+exports.createStaffAccount = onCall({ region: 'asia-northeast1', secrets: [initialPassword] }, async (request) => {
   if (!request.auth) {
     throw new HttpsError('unauthenticated', '認証が必要です');
   }
@@ -1075,9 +1273,12 @@ exports.createStaffAccount = onCall({ region: 'asia-northeast1' }, async (reques
   try {
     const userRecord = await auth.createUser({
       email: email,
-      password: INITIAL_PASSWORD,
+      password: initialPassword.value(),
       emailVerified: false,
     });
+
+    // Custom Claims を設定（セキュリティルールで role 判定に使用）
+    await auth.setCustomUserClaims(userRecord.uid, { role: 'staff' });
 
     const saveData = {
       ...staffData,
@@ -1097,7 +1298,7 @@ exports.createStaffAccount = onCall({ region: 'asia-northeast1' }, async (reques
     };
 
   } catch (error) {
-    console.error('Error creating staff account:', error);
+    console.error(JSON.stringify({ function: 'createStaffAccount', loginId: loginId?.trim(), error: error.message }));
 
     if (error.code === 'auth/email-already-exists') {
       throw new HttpsError('already-exists', 'このログインIDは既に使用されています');
@@ -1110,7 +1311,7 @@ exports.createStaffAccount = onCall({ region: 'asia-northeast1' }, async (reques
 /**
  * スタッフのパスワードを初期化する
  */
-exports.resetStaffPassword = onCall({ region: 'asia-northeast1' }, async (request) => {
+exports.resetStaffPassword = onCall({ region: 'asia-northeast1', secrets: [initialPassword] }, async (request) => {
   if (!request.auth) {
     throw new HttpsError('unauthenticated', '認証が必要です');
   }
@@ -1134,7 +1335,7 @@ exports.resetStaffPassword = onCall({ region: 'asia-northeast1' }, async (reques
 
   try {
     await auth.updateUser(targetUid, {
-      password: INITIAL_PASSWORD,
+      password: initialPassword.value(),
     });
 
     if (staffDocId) {
@@ -1149,7 +1350,7 @@ exports.resetStaffPassword = onCall({ region: 'asia-northeast1' }, async (reques
     };
 
   } catch (error) {
-    console.error('Error resetting password:', error);
+    console.error(JSON.stringify({ function: 'resetStaffPassword', targetUid, error: error.message }));
     throw new HttpsError('internal', error.message);
   }
 });
@@ -1196,7 +1397,7 @@ exports.deleteStaffAccount = onCall({ region: 'asia-northeast1' }, async (reques
     };
 
   } catch (error) {
-    console.error('Error deleting account:', error);
+    console.error(JSON.stringify({ function: 'deleteStaffAccount', targetUid, staffDocId, error: error.message }));
     throw new HttpsError('internal', error.message);
   }
 });
@@ -1253,9 +1454,16 @@ exports.sendAttendanceNotification = onDocumentCreated(
         },
       });
       
-      console.log(`入退室通知送信: ${response.successCount}件成功`);
-      
-      await event.data.ref.update({ 
+      console.log(`入退室通知送信: ${response.successCount}件成功, ${response.failureCount}件失敗`);
+
+      // 無効トークンをクリーンアップ（familyDocIdがある場合）
+      if (data.familyDocId && response.failureCount > 0) {
+        const familyRef = db.collection('families').doc(data.familyDocId);
+        const tokenDocMap = fcmTokens.map((t) => ({ token: t, docRef: familyRef }));
+        await cleanupInvalidTokens(response, tokenDocMap);
+      }
+
+      await event.data.ref.update({
         processed: true,
         processedAt: FieldValue.serverTimestamp(),
         successCount: response.successCount,
@@ -1264,11 +1472,15 @@ exports.sendAttendanceNotification = onDocumentCreated(
       
       return null;
     } catch (error) {
-      console.error('入退室通知エラー:', error);
+      console.error(JSON.stringify({
+        function: 'sendAttendanceNotification',
+        docId: event.params.docId,
+        error: error.message || String(error),
+      }));
       await event.data.ref.update({
         processed: true,
         processedAt: FieldValue.serverTimestamp(),
-        error: String(error),
+        error: error.message || String(error),
       });
       return null;
     }
@@ -1283,7 +1495,12 @@ exports.sendAttendanceNotification = onDocumentCreated(
  * システムプロンプトを構築
  */
 function buildSystemPrompt(context) {
-  const { studentInfo, supportPlan, recentMonitorings, hugAssessment } = context || {};
+  const { studentInfo, supportPlan, recentMonitorings, hugAssessment, isFreeChat } = context || {};
+
+  // 自由チャット（生徒を選択していない場合）は最小限のプロンプト
+  if (isFreeChat || !studentInfo) {
+    return '日本語で回答してください。';
+  }
 
   let prompt = `あなたは児童発達支援施設「Bee Smiley」の個別支援計画作成を支援する専門AIアシスタントです。
 
@@ -1310,10 +1527,15 @@ function buildSystemPrompt(context) {
 - 考察や説明は簡潔にまとめてください
 - 専門用語を使う場合は、必要に応じて補足説明を加えてください
 
+## 出力フォーマットの指示
+- マークダウン記法（**太字**、*イタリック*、###見出し など）は絶対に使用しないでください
+- アスタリスク（*）は使用禁止です
+- 見出しや強調が必要な場合は、「【】」や「■」「●」などの記号を使ってください
+- 箇条書きには「・」や「-」を使ってください
+
 `;
 
-  if (studentInfo) {
-    prompt += `
+  prompt += `
 ## 相談対象の児童情報
 - 氏名: ${studentInfo.lastName || ''} ${studentInfo.firstName || ''}
 - 年齢: ${studentInfo.age || '不明'}
@@ -1322,7 +1544,6 @@ function buildSystemPrompt(context) {
 - 診断: ${studentInfo.diagnosis || '記載なし'}
 
 `;
-  }
 
   if (supportPlan) {
     prompt += `
@@ -1362,11 +1583,57 @@ ${hugAssessment}
 `;
   }
 
+  // 過去セッションの要約を注入
+  const pastSummaries = context.pastSummaries;
+  if (pastSummaries && pastSummaries.length > 0) {
+    prompt += `
+## 過去の相談履歴（要約）
+以下は過去の相談セッションの要約です。この文脈を踏まえて回答してください。
+`;
+    pastSummaries.forEach(s => {
+      prompt += `- ${s.date}: ${s.summary}\n`;
+    });
+    prompt += '\n';
+  }
+
   prompt += `
 上記の情報を踏まえて、スタッフからの相談に丁寧に回答してください。
 `;
 
   return prompt;
+}
+
+/**
+ * 会話履歴を要約する
+ */
+async function summarizeConversation(genAI, messages, existingSummary) {
+  const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+
+  let conversationText = '';
+  messages.forEach(msg => {
+    const role = msg.role === 'user' ? 'スタッフ' : 'AI';
+    conversationText += `${role}: ${msg.content}\n\n`;
+  });
+
+  let summaryPrompt = `以下の会話を簡潔に要約してください。要点を箇条書きで整理し、300文字以内にまとめてください。
+
+`;
+
+  if (existingSummary) {
+    summaryPrompt += `【これまでの要約】
+${existingSummary}
+
+【追加の会話】
+${conversationText}
+
+上記を統合して、新しい要約を作成してください。`;
+  } else {
+    summaryPrompt += `【会話内容】
+${conversationText}`;
+  }
+
+  const result = await model.generateContent(summaryPrompt);
+  return result.response.text();
 }
 
 /**
@@ -1388,6 +1655,9 @@ exports.sendAiMessage = onCall(
       throw new HttpsError('invalid-argument', 'sessionIdとmessageが必要です');
     }
 
+    const MESSAGE_THRESHOLD = 20;  // 要約を開始するメッセージ数
+    const RECENT_MESSAGE_COUNT = 10;  // 要約後に保持する最新メッセージ数
+
     try {
       const sessionRef = db.collection('ai_chat_sessions').doc(sessionId);
       const messagesRef = sessionRef.collection('messages');
@@ -1400,28 +1670,108 @@ exports.sendAiMessage = onCall(
         status: 'sent',
       });
 
-      // 2. 過去のメッセージを取得（最新20件）
-      const historySnap = await messagesRef
+      // 2. セッション情報を取得（要約があるか確認）
+      const sessionDoc = await sessionRef.get();
+      const sessionData = sessionDoc.data() || {};
+      let existingSummary = sessionData.summary || null;
+
+      // 3. 全メッセージ数を確認
+      const allMessagesSnap = await messagesRef
         .orderBy('createdAt', 'asc')
-        .limit(20)
         .get();
 
-      const chatHistory = [];
-      historySnap.docs.forEach(doc => {
-        const data = doc.data();
-        if (data.role && data.content) {
-          chatHistory.push({
-            role: data.role === 'user' ? 'user' : 'model',
-            parts: [{ text: data.content }],
-          });
-        }
-      });
+      const totalMessageCount = allMessagesSnap.docs.length;
+      console.log(`Total messages: ${totalMessageCount}, Threshold: ${MESSAGE_THRESHOLD}`);
 
-      // 3. システムプロンプト構築
+      // 4. Gemini API クライアント初期化
+      const genAI = new GoogleGenerativeAI(geminiApiKey.value());
+
+      // 5. メッセージ数が閾値を超えている場合、要約を作成
+      if (totalMessageCount > MESSAGE_THRESHOLD && !existingSummary) {
+        // 最新10件を除いた古いメッセージを要約
+        const oldMessages = allMessagesSnap.docs.slice(0, -RECENT_MESSAGE_COUNT);
+        const oldMessagesData = oldMessages.map(doc => doc.data());
+
+        console.log(`Summarizing ${oldMessagesData.length} old messages...`);
+        existingSummary = await summarizeConversation(genAI, oldMessagesData, null);
+
+        // 要約をセッションに保存
+        await sessionRef.update({
+          summary: existingSummary,
+          summarizedAt: FieldValue.serverTimestamp(),
+        });
+        console.log('Summary created and saved.');
+      } else if (totalMessageCount > MESSAGE_THRESHOLD + 10 && existingSummary) {
+        // 既に要約があり、さらに10件増えたら要約を更新
+        const messagesToSummarize = allMessagesSnap.docs.slice(0, -RECENT_MESSAGE_COUNT);
+        const newMessagesCount = messagesToSummarize.length;
+
+        // 前回要約時からのメッセージ数を概算（10件単位で更新）
+        const lastSummarizedCount = sessionData.lastSummarizedCount || MESSAGE_THRESHOLD - RECENT_MESSAGE_COUNT;
+
+        if (newMessagesCount >= lastSummarizedCount + 10) {
+          console.log(`Updating summary with ${newMessagesCount - lastSummarizedCount} new messages...`);
+
+          // 前回要約後の新しいメッセージだけを取得
+          const newOldMessages = messagesToSummarize.slice(lastSummarizedCount);
+          const newOldMessagesData = newOldMessages.map(doc => doc.data());
+
+          existingSummary = await summarizeConversation(genAI, newOldMessagesData, existingSummary);
+
+          await sessionRef.update({
+            summary: existingSummary,
+            summarizedAt: FieldValue.serverTimestamp(),
+            lastSummarizedCount: newMessagesCount,
+          });
+          console.log('Summary updated.');
+        }
+      }
+
+      // 6. 会話履歴を構築
+      let chatHistory = [];
+
+      if (existingSummary) {
+        // 要約がある場合：要約 + 最新10件
+        const recentMessages = allMessagesSnap.docs.slice(-RECENT_MESSAGE_COUNT);
+
+        // 要約をシステムコンテキストとして最初に追加
+        chatHistory.push({
+          role: 'user',
+          parts: [{ text: `【これまでの会話の要約】\n${existingSummary}\n\n上記を踏まえて会話を続けてください。` }],
+        });
+        chatHistory.push({
+          role: 'model',
+          parts: [{ text: 'はい、これまでの会話内容を理解しました。続きの相談をお聞かせください。' }],
+        });
+
+        // 最新のメッセージを追加
+        recentMessages.forEach(doc => {
+          const data = doc.data();
+          if (data.role && data.content) {
+            chatHistory.push({
+              role: data.role === 'user' ? 'user' : 'model',
+              parts: [{ text: data.content }],
+            });
+          }
+        });
+      } else {
+        // 要約がない場合：全メッセージ（最大20件）
+        const recentMessages = allMessagesSnap.docs.slice(-MESSAGE_THRESHOLD);
+        recentMessages.forEach(doc => {
+          const data = doc.data();
+          if (data.role && data.content) {
+            chatHistory.push({
+              role: data.role === 'user' ? 'user' : 'model',
+              parts: [{ text: data.content }],
+            });
+          }
+        });
+      }
+
+      // 7. システムプロンプト構築
       const systemPrompt = buildSystemPrompt(context);
 
-      // 4. Gemini API呼び出し
-      const genAI = new GoogleGenerativeAI(geminiApiKey.value());
+      // 8. Gemini API呼び出し
       const model = genAI.getGenerativeModel({
         model: "gemini-2.5-flash",
         systemInstruction: systemPrompt,
@@ -1431,9 +1781,24 @@ exports.sendAiMessage = onCall(
       const historyForChat = chatHistory.slice(0, -1);
       const chat = model.startChat({ history: historyForChat });
       const result = await chat.sendMessage(message);
-      const aiResponse = result.response.text();
+      let aiResponse = result.response.text();
 
-      // 5. AI応答をFirestoreに保存
+      // マークダウン記法を除去
+      aiResponse = aiResponse
+        .replace(/```[\s\S]*?```/g, '')     // ```コードブロック``` を除去
+        .replace(/\*\*([^*]+)\*\*/g, '$1')  // **太字** → 太字
+        .replace(/\*([^*]+)\*/g, '$1')      // *イタリック* → イタリック
+        .replace(/~~([^~]+)~~/g, '$1')      // ~~取り消し線~~ → 取り消し線
+        .replace(/`([^`]+)`/g, '$1')        // `コード` → コード
+        .replace(/^#{1,6}\s+/gm, '')        // ### 見出し → 見出し
+        .replace(/^>\s+/gm, '')             // > 引用 → 引用
+        .replace(/^[\*\-]\s+/gm, '・ ')     // * や - の箇条書き → ・
+        .replace(/^\d+\.\s+/gm, (m) => m)  // 1. 番号付きリストはそのまま
+        .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1') // [テキスト](URL) → テキスト
+        .replace(/^---+$/gm, '')            // --- 水平線を除去
+        .replace(/\n{3,}/g, '\n\n');        // 3行以上の空行を2行に
+
+      // 9. AI応答をFirestoreに保存
       await messagesRef.add({
         role: 'assistant',
         content: aiResponse,
@@ -1441,7 +1806,7 @@ exports.sendAiMessage = onCall(
         status: 'sent',
       });
 
-      // 6. セッションメタデータ更新
+      // 10. セッションメタデータ更新
       await sessionRef.update({
         lastMessage: aiResponse.substring(0, 100),
         messageCount: FieldValue.increment(2),
@@ -1451,8 +1816,143 @@ exports.sendAiMessage = onCall(
       return { success: true, response: aiResponse };
 
     } catch (error) {
-      console.error('AI Chat Error:', error);
+      console.error(JSON.stringify({ function: 'sendAiMessage', sessionId, error: error.message }));
       throw new HttpsError('internal', error.message);
     }
   }
 );
+
+// ==========================================
+// セッション要約生成（画面離脱時にクライアントから呼び出し）
+// ==========================================
+exports.summarizeSession = onCall(
+  {
+    region: 'asia-northeast1',
+    secrets: [geminiApiKey],
+  },
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError('unauthenticated', '認証が必要です');
+    }
+
+    const { sessionId } = request.data;
+    if (!sessionId) {
+      throw new HttpsError('invalid-argument', 'sessionIdが必要です');
+    }
+
+    try {
+      const sessionRef = db.collection('ai_chat_sessions').doc(sessionId);
+      const sessionDoc = await sessionRef.get();
+
+      if (!sessionDoc.exists) {
+        return { success: false, reason: 'session_not_found' };
+      }
+
+      const sessionData = sessionDoc.data();
+
+      // 既に要約がある場合はスキップ（sendAiMessage内の要約と重複しないよう）
+      if (sessionData.summary) {
+        return { success: true, reason: 'already_summarized' };
+      }
+
+      // メッセージを取得
+      const messagesSnap = await sessionRef
+        .collection('messages')
+        .orderBy('createdAt', 'asc')
+        .get();
+
+      // メッセージが3件未満なら要約不要
+      if (messagesSnap.docs.length < 3) {
+        return { success: false, reason: 'not_enough_messages' };
+      }
+
+      const messages = messagesSnap.docs.map(doc => doc.data());
+
+      // Gemini APIで要約生成
+      const genAI = new GoogleGenerativeAI(geminiApiKey.value());
+      const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+
+      let conversationText = '';
+      messages.forEach(msg => {
+        const role = msg.role === 'user' ? 'スタッフ' : 'AI';
+        conversationText += `${role}: ${msg.content}\n\n`;
+      });
+
+      const summaryPrompt = `以下の相談内容を3〜5文で簡潔に要約してください。重要な決定事項や次のアクションがあれば含めてください。
+
+【会話内容】
+${conversationText}`;
+
+      const result = await model.generateContent(summaryPrompt);
+      const summary = result.response.text();
+
+      // 要約をセッションに保存
+      await sessionRef.update({
+        summary: summary,
+        summarizedAt: FieldValue.serverTimestamp(),
+      });
+
+      console.log(`Session ${sessionId} summarized: ${summary.substring(0, 50)}...`);
+      return { success: true, summary: summary };
+
+    } catch (error) {
+      console.error(JSON.stringify({ function: 'summarizeSession', sessionId, error: error.message }));
+      throw new HttpsError('internal', error.message);
+    }
+  }
+);
+
+// ==========================================
+// 既存ユーザーへの Custom Claims マイグレーション
+// ==========================================
+exports.migrateCustomClaims = onCall({ region: 'asia-northeast1' }, async (request) => {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', '認証が必要です');
+  }
+
+  const callerUid = request.auth.uid;
+  const staffDoc = await db
+    .collection('staffs')
+    .where('uid', '==', callerUid)
+    .limit(1)
+    .get();
+
+  if (staffDoc.empty) {
+    throw new HttpsError('permission-denied', '管理者権限が必要です');
+  }
+
+  let staffCount = 0;
+  let familyCount = 0;
+
+  // 全スタッフに role: 'staff' を設定
+  const allStaffs = await db.collection('staffs').get();
+  for (const doc of allStaffs.docs) {
+    const uid = doc.data().uid;
+    if (uid) {
+      try {
+        await auth.setCustomUserClaims(uid, { role: 'staff' });
+        staffCount++;
+      } catch (e) {
+        console.error(`Failed to set claims for staff uid=${uid}:`, e.message);
+      }
+    }
+  }
+
+  // 全保護者に role: 'parent' を設定
+  const allFamilies = await db.collection('families').get();
+  for (const doc of allFamilies.docs) {
+    const uid = doc.data().uid;
+    if (uid) {
+      try {
+        await auth.setCustomUserClaims(uid, { role: 'parent' });
+        familyCount++;
+      } catch (e) {
+        console.error(`Failed to set claims for parent uid=${uid}:`, e.message);
+      }
+    }
+  }
+
+  console.log(`Custom Claims migration completed: ${staffCount} staff, ${familyCount} families`);
+  return { success: true, staffCount, familyCount };
+});
+

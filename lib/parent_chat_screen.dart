@@ -853,7 +853,7 @@ class _ChatMessageListState extends State<_ChatMessageList> {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text('Web版では保存できません'),
-              backgroundColor: Colors.orange,
+              backgroundColor: AppColors.accent,
             ),
           );
         }
@@ -869,7 +869,7 @@ class _ChatMessageListState extends State<_ChatMessageList> {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(
                 content: Text('写真へのアクセス許可が必要です'),
-                backgroundColor: Colors.orange,
+                backgroundColor: AppColors.accent,
               ),
             );
           }

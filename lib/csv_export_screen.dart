@@ -9,6 +9,7 @@ import 'package:share_plus/share_plus.dart';
 
 // Web用の条件付きインポート
 import 'csv_export_web.dart' if (dart.library.io) 'csv_export_stub.dart' as web_helper;
+import 'app_theme.dart';
 
 // ==========================================
 // CSVエクスポート共通クラス
@@ -630,7 +631,7 @@ appBar: AppBar(
                   ),
                   child: Column(
                     children: [
-                      Icon(Icons.extension, size: 64, color: Colors.orange.shade300),
+                      Icon(Icons.extension, size: 64, color: AppColors.accent.shade300),
                       const SizedBox(height: 16),
                       const Text(
                         '教具マスタをエクスポート',
@@ -662,7 +663,7 @@ appBar: AppBar(
                               : const Icon(Icons.download),
                           label: Text(_isLoading ? 'エクスポート中...' : 'CSVをダウンロード'),
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.orange,
+                            backgroundColor: AppColors.accent,
                             foregroundColor: Colors.white,
                             padding: const EdgeInsets.symmetric(vertical: 16),
                           ),

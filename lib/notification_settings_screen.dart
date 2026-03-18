@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'notification_service.dart';
+import 'app_theme.dart';
 
 class NotificationSettingsScreen extends StatefulWidget {
   final VoidCallback? onBack;
@@ -131,7 +132,7 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
                 ),
                 _buildSwitchTile(
                   icon: Icons.campaign_outlined,
-                  iconColor: Colors.orange,
+                  iconColor: AppColors.accent,
                   title: 'お知らせ',
                   subtitle: '新しいお知らせが投稿されたとき',
                   value: _notifyAnnouncement,

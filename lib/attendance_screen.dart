@@ -267,15 +267,15 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
-                      color: Colors.orange.shade100,
+                      color: AppColors.accent.shade100,
                       borderRadius: BorderRadius.circular(4),
-                      border: Border.all(color: Colors.orange.shade300),
+                      border: Border.all(color: AppColors.accent.shade300),
                     ),
                     child: Text(
                       '未退室あり',
                       style: TextStyle(
                         fontSize: 12,
-                        color: Colors.orange.shade800,
+                        color: AppColors.accent.shade800,
                         fontWeight: FontWeight.bold,
                       ),
                     ),

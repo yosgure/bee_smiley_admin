@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'app_theme.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:image_picker/image_picker.dart';
@@ -58,7 +59,7 @@ class _ToolMasterScreenState extends State<ToolMasterScreen> {
             width: 4,
             height: 18,
             decoration: BoxDecoration(
-              color: Colors.orange,
+              color: AppColors.accent,
               borderRadius: BorderRadius.circular(2),
             ),
           ),
@@ -144,7 +145,7 @@ class _ToolMasterScreenState extends State<ToolMasterScreen> {
                 ),
                 focusedBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(8),
-                  borderSide: const BorderSide(color: Colors.orange),
+                  borderSide: const BorderSide(color: AppColors.accent),
                 ),
                 filled: true,
                 fillColor: Colors.grey.shade50,
@@ -274,7 +275,7 @@ class _ToolMasterScreenState extends State<ToolMasterScreen> {
                           padding: const EdgeInsets.only(top: 4),
                           child: Row(
                             children: [
-                              const Icon(Icons.accessibility_new, size: 14, color: Colors.orange),
+                              const Icon(Icons.accessibility_new, size: 14, color: AppColors.accent),
                               const SizedBox(width: 4),
                               Expanded(
                                 child: Text(
@@ -323,7 +324,7 @@ class _ToolMasterScreenState extends State<ToolMasterScreen> {
       floatingActionButton: FloatingActionButton(
         heroTag: null, 
         onPressed: () => _showEditDialog(),
-        backgroundColor: Colors.orange,
+        backgroundColor: AppColors.accent,
         child: const Icon(Icons.add),
       ),
     );
@@ -466,7 +467,7 @@ class _ToolMasterScreenState extends State<ToolMasterScreen> {
                     
                     if (context.mounted) Navigator.pop(context);
                   },
-                  style: ElevatedButton.styleFrom(backgroundColor: Colors.orange, foregroundColor: Colors.white),
+                  style: ElevatedButton.styleFrom(backgroundColor: AppColors.accent, foregroundColor: Colors.white),
                   child: const Text('保存'),
                 ),
               ],

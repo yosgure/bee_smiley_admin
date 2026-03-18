@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:csv/csv.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'app_theme.dart';
 
 class ToolCsvImportScreen extends StatefulWidget {
   final VoidCallback? onBack;
@@ -135,7 +136,7 @@ return Scaffold(
                     onPressed: _isLoading ? null : _registerAll,
                     icon: const Icon(Icons.cloud_upload),
                     label: const Text('登録開始'),
-                    style: ElevatedButton.styleFrom(backgroundColor: Colors.orange, foregroundColor: Colors.white),
+                    style: ElevatedButton.styleFrom(backgroundColor: AppColors.accent, foregroundColor: Colors.white),
                   ),
               ],
             ),

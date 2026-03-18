@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
+import 'app_theme.dart';
 
 class StudentManageScreen extends StatefulWidget {
   final VoidCallback? onBack;
@@ -39,7 +40,7 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
 
   final List<String> _genders = ['男', '女', 'その他'];
 
-  static const String _initialPassword = 'pass1234';
+  // 初期パスワードはCloud Functions (Secret Manager) で管理
 
   @override
   void initState() {
@@ -334,14 +335,14 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
                               Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                 decoration: BoxDecoration(
-                                  color: isInitialPassword ? Colors.orange.shade100 : Colors.green.shade100,
+                                  color: isInitialPassword ? AppColors.accent.shade100 : Colors.green.shade100,
                                   borderRadius: BorderRadius.circular(4),
                                 ),
                                 child: Text(
                                   isInitialPassword ? '初期PW' : 'アクティブ',
                                   style: TextStyle(
                                     fontSize: 10,
-                                    color: isInitialPassword ? Colors.orange.shade800 : Colors.green.shade800,
+                                    color: isInitialPassword ? AppColors.accent.shade800 : Colors.green.shade800,
                                   ),
                                 ),
                               )
@@ -390,8 +391,8 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
                                   children: [
                                     if (hasAccount)
                                       TextButton.icon(
-                                        icon: const Icon(Icons.lock_reset, color: Colors.orange),
-                                        label: const Text('PW初期化', style: TextStyle(color: Colors.orange)),
+                                        icon: Icon(Icons.lock_reset, color: AppColors.accent),
+                                        label: Text('PW初期化', style: TextStyle(color: AppColors.accent)),
                                         onPressed: () => _resetPassword(
                                           familyDoc.id, 
                                           data['uid'], 
@@ -516,12 +517,12 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('パスワード初期化'),
-        content: Text('$name さんのパスワードを「$_initialPassword」に初期化しますか？\n\n次回ログイン時にパスワード変更が求められます。'),
+        content: Text('$name さんのパスワードを初期パスワードに戻しますか？\n\n次回ログイン時にパスワード変更が求められます。'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('キャンセル')),
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.orange, foregroundColor: Colors.white),
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.accent, foregroundColor: Colors.white),
             child: const Text('初期化'),
           ),
         ],
@@ -688,7 +689,7 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
                                 SizedBox(width: 8),
                                 Expanded(
                                   child: Text(
-                                    '初期パスワード: pass1234\n初回ログイン時にパスワード変更が必要です。',
+                                    '初回ログイン時にパスワード変更が必要です。\n初期パスワードは管理者にお問い合わせください。',
                                     style: TextStyle(fontSize: 12, color: Colors.blue),
                                   ),
                                 ),
@@ -981,7 +982,7 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
                         Navigator.pop(context);
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
-                            content: Text(isEditing ? '更新しました' : '登録しました（初期PW: $_initialPassword）'),
+                            content: Text(isEditing ? '更新しました' : '登録しました'),
                             backgroundColor: Colors.green,
                           ),
                         );

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'main.dart'; // AdminShellに戻るため
+import 'app_theme.dart';
 
 class ForceChangePasswordScreen extends StatefulWidget {
   const ForceChangePasswordScreen({super.key});
@@ -98,7 +99,7 @@ class _ForceChangePasswordScreenState extends State<ForceChangePasswordScreen> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Icon(Icons.lock_reset, size: 64, color: Colors.orange),
+                const Icon(Icons.lock_reset, size: 64, color: AppColors.accent),
                 const SizedBox(height: 16),
                 const Text(
                   '初回ログインのため\n新しいパスワードを設定してください',
@@ -136,7 +137,7 @@ class _ForceChangePasswordScreenState extends State<ForceChangePasswordScreen> {
                   child: ElevatedButton(
                     onPressed: _isLoading ? null : _changePassword,
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.orange,
+                      backgroundColor: AppColors.accent,
                       foregroundColor: Colors.white,
                     ),
                     child: _isLoading

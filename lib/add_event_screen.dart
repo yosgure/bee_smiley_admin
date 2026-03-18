@@ -1276,7 +1276,7 @@ Future<void> _deleteRecurrenceGroup(String recurrenceGroupId) async {
   }
 
   void _showClassroomDialog() {
-    final bool isPC = MediaQuery.of(context).size.width >= 800;
+    final bool isPC = MediaQuery.of(context).size.width >= AppBreakpoints.desktop;
     
     if (isPC) {
       showDialog(
@@ -1420,7 +1420,7 @@ Future<void> _deleteRecurrenceGroup(String recurrenceGroupId) async {
   }
 
   void _showStudentSelectSheet() {
-    final bool isPC = MediaQuery.of(context).size.width >= 800;
+    final bool isPC = MediaQuery.of(context).size.width >= AppBreakpoints.desktop;
     
     if (isPC) {
       showDialog(
@@ -1475,7 +1475,7 @@ Future<void> _deleteRecurrenceGroup(String recurrenceGroupId) async {
   }
 
   void _showStaffSelectSheet() {
-    final bool isPC = MediaQuery.of(context).size.width >= 800;
+    final bool isPC = MediaQuery.of(context).size.width >= AppBreakpoints.desktop;
     
     if (isPC) {
       showDialog(
@@ -1695,7 +1695,7 @@ class _PersonSelectSheetState extends State<_PersonSelectSheet> {
   @override
   Widget build(BuildContext context) {
     final groupedList = _buildGroupedList();
-    final bool isPC = MediaQuery.of(context).size.width >= 800;
+    final bool isPC = MediaQuery.of(context).size.width >= AppBreakpoints.desktop;
     
     return Container(
       height: isPC ? null : MediaQuery.of(context).size.height * 0.85,

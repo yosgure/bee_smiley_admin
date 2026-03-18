@@ -621,7 +621,7 @@ class _AssessmentEditScreenState extends State<AssessmentEditScreen> {
                       const SizedBox(width: 12),
                       _buildCircleRating(index, '△', Colors.blue),
                       const SizedBox(width: 8),
-                      _buildCircleRating(index, '○', Colors.orange),
+                      _buildCircleRating(index, '○', AppColors.accent),
                       const SizedBox(width: 8),
                       _buildCircleRating(index, '◎', Colors.red),
                     ],

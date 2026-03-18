@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'app_theme.dart';
 
 class GenericMasterScreen extends StatefulWidget {
   final String title;          // 画面タイトル (例: 教室設定)
@@ -54,7 +55,7 @@ class _GenericMasterScreenState extends State<GenericMasterScreen> {
       ),
       floatingActionButton: FloatingActionButton(heroTag: null, 
         onPressed: () => _showEditDialog(),
-        backgroundColor: Colors.orange,
+        backgroundColor: AppColors.accent,
         child: const Icon(Icons.add),
       ),
     );
@@ -107,7 +108,7 @@ class _GenericMasterScreenState extends State<GenericMasterScreen> {
                 Navigator.pop(context);
               }
             },
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.accent),
             child: const Text('保存', style: TextStyle(color: Colors.white)),
           ),
         ],

@@ -137,10 +137,10 @@ class _AssessmentDetailScreenState extends State<AssessmentDetailScreen> {
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                       decoration: BoxDecoration(
-                        color: isPublished ? Colors.green.shade50 : Colors.orange.shade50,
+                        color: isPublished ? Colors.green.shade50 : AppColors.accent.shade50,
                         borderRadius: BorderRadius.circular(4),
                         border: Border.all(
-                          color: isPublished ? Colors.green : Colors.orange,
+                          color: isPublished ? Colors.green : AppColors.accent,
                           width: 0.5,
                         ),
                       ),
@@ -149,7 +149,7 @@ class _AssessmentDetailScreenState extends State<AssessmentDetailScreen> {
                         style: TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.bold,
-                          color: isPublished ? Colors.green.shade700 : Colors.orange.shade700,
+                          color: isPublished ? Colors.green.shade700 : AppColors.accent.shade700,
                         ),
                       ),
                     ),
@@ -310,7 +310,7 @@ class _AssessmentDetailScreenState extends State<AssessmentDetailScreen> {
           _buildSectionCard(
             title: '非認知能力・伸びている力',
             icon: Icons.psychology,
-            iconColor: Colors.orange,
+            iconColor: AppColors.accent,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: monthlyEntries.map((e) => Padding(
@@ -323,7 +323,7 @@ class _AssessmentDetailScreenState extends State<AssessmentDetailScreen> {
                       height: 6,
                       margin: const EdgeInsets.only(top: 6, right: 10),
                       decoration: const BoxDecoration(
-                        color: Colors.orange,
+                        color: AppColors.accent,
                         shape: BoxShape.circle,
                       ),
                     ),

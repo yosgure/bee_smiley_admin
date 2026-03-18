@@ -20,6 +20,7 @@ import 'family_csv_import_screen.dart';
 import 'tool_csv_import_screen.dart';
 import 'csv_export_screen.dart';
 import 'notification_settings_screen.dart';
+import 'app_theme.dart';
 
 class AdminScreen extends StatefulWidget {
   // Web版で画面を差し替えるためのコールバック
@@ -78,7 +79,7 @@ class _AdminScreenState extends State<AdminScreen> {
   }
 
 void _navigateTo(BuildContext context, Widget screen) {
-  final isWide = MediaQuery.of(context).size.width >= 600;
+  final isWide = MediaQuery.of(context).size.width >= AppBreakpoints.tablet;
   
   if (isWide && widget.onOpenWebScreen != null) {
     // Web版: onBackを注入した画面を渡す
@@ -170,21 +171,21 @@ void _navigateTo(BuildContext context, Widget screen) {
               _MenuData(
                 title: '教具マスタ',
                 icon: Icons.extension,
-                color: Colors.orange,
+                color: AppColors.accent,
                 description: 'アセスメントで使う教具一覧',
                 destination: const ToolMasterScreen(),
               ),
               _MenuData(
                 title: '非認知能力',
                 icon: Icons.psychology,
-                color: Colors.orange,
+                color: AppColors.accent,
                 description: '月間サマリの評価項目',
                 destination: const NonCognitiveSkillMasterScreen(),
               ),
               _MenuData(
                 title: '敏感期リスト',
                 icon: Icons.hourglass_top,
-                color: Colors.orange,
+                color: AppColors.accent,
                 description: '発達段階のキーワード',
                 destination: const SensitivePeriodMasterScreen(),
               ),
@@ -328,7 +329,7 @@ Container(
   }
 
   void _showCsvImportMenu(BuildContext context) {
-    final isWide = MediaQuery.of(context).size.width >= 600;
+    final isWide = MediaQuery.of(context).size.width >= AppBreakpoints.tablet;
 
     if (isWide) {
       showDialog(
@@ -361,7 +362,7 @@ Container(
                   },
                 ),
                 ListTile(
-                  leading: const Icon(Icons.extension, color: Colors.orange),
+                  leading: const Icon(Icons.extension, color: AppColors.accent),
                   title: const Text('教具'),
                   subtitle: const Text('教具マスタを一括登録'),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
@@ -427,7 +428,7 @@ Container(
                   },
                 ),
                 ListTile(
-                  leading: const Icon(Icons.extension, color: Colors.orange),
+                  leading: const Icon(Icons.extension, color: AppColors.accent),
                   title: const Text('教具'),
                   subtitle: const Text('教具マスタを一括登録'),
                   onTap: () {
@@ -445,7 +446,7 @@ Container(
   }
 
   void _showCsvExportMenu(BuildContext context) {
-    final isWide = MediaQuery.of(context).size.width >= 600;
+    final isWide = MediaQuery.of(context).size.width >= AppBreakpoints.tablet;
 
     if (isWide) {
       showDialog(
@@ -478,7 +479,7 @@ Container(
                   },
                 ),
                 ListTile(
-                  leading: const Icon(Icons.extension, color: Colors.orange),
+                  leading: const Icon(Icons.extension, color: AppColors.accent),
                   title: const Text('教具'),
                   subtitle: const Text('教具マスタをCSV出力'),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
@@ -544,7 +545,7 @@ Container(
                   },
                 ),
                 ListTile(
-                  leading: const Icon(Icons.extension, color: Colors.orange),
+                  leading: const Icon(Icons.extension, color: AppColors.accent),
                   title: const Text('教具'),
                   subtitle: const Text('教具マスタをCSV出力'),
                   onTap: () {
@@ -705,10 +706,10 @@ Container(
                 leading: Container(
                   padding: const EdgeInsets.all(6),
                   decoration: BoxDecoration(
-                    color: Colors.orange.withOpacity(0.1),
+                    color: AppColors.accent.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: const Icon(Icons.lock, color: Colors.orange, size: 24),
+                  child: const Icon(Icons.lock, color: AppColors.accent, size: 24),
                 ),
                 title: const Text(
                   'パスワード変更',

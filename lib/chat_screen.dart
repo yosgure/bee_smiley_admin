@@ -140,7 +140,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
                         myUid: currentUser!.uid,
                         myName: _myDisplayName,
                         onStartChat: (roomId, name, isGroup, memberNames) {
-                          if (MediaQuery.of(context).size.width >= 800) {
+                          if (MediaQuery.of(context).size.width >= AppBreakpoints.desktop) {
                             setState(() => _selectedRoomId = roomId);
                           } else {
                             Navigator.push(context, MaterialPageRoute(
@@ -340,6 +340,16 @@ class _RoomListTile extends StatelessWidget {
   }
 
   Widget _buildTrailing(String roomId, String timeStr) {
+    // 選択中（表示中）のルームは未読バッジを表示しない（ChatDetailViewが自動既読にするため点滅防止）
+    if (isSelected) {
+      return Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          Text(timeStr, style: const TextStyle(fontSize: 11, color: Colors.grey)),
+        ],
+      );
+    }
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance.collection('chat_rooms').doc(roomId).collection('messages').where('senderId', isNotEqualTo: myUid).snapshots(),
       builder: (context, msgSnapshot) {
@@ -409,9 +419,9 @@ class _RoomListTile extends StatelessWidget {
           selected: isSelected, selectedTileColor: AppColors.primary.withOpacity(0.1),
           contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           leading: CircleAvatar(
-            backgroundColor: isStaff ? AppColors.primary.withOpacity(0.15) : Colors.orange.shade100,
+            backgroundColor: isStaff ? AppColors.primary.withOpacity(0.15) : AppColors.accent.shade100,
             backgroundImage: photoUrl != null && photoUrl.isNotEmpty ? NetworkImage(photoUrl) : null,
-            child: (photoUrl == null || photoUrl.isEmpty) ? Text(name.isNotEmpty ? name[0] : '?', style: TextStyle(color: isStaff ? AppColors.primary : Colors.orange, fontWeight: FontWeight.bold)) : null,
+            child: (photoUrl == null || photoUrl.isEmpty) ? Text(name.isNotEmpty ? name[0] : '?', style: TextStyle(color: isStaff ? AppColors.primary : AppColors.accent, fontWeight: FontWeight.bold)) : null,
           ),
           title: Text(name, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontWeight: isSelected ? FontWeight.bold : FontWeight.normal, color: isSelected ? AppColors.primary : AppColors.textMain)),
           subtitle: Text(room['lastMessage'] ?? '', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12, color: Colors.grey)),
@@ -540,7 +550,7 @@ class _NewChatDialogState extends State<NewChatDialog> with SingleTickerProvider
               final uid = user['uid']; final isSelected = _selectedUids.contains(uid); final photoUrl = user['photoUrl']; final name = user['name'];
               return ListTile(
                 contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
-                leading: CircleAvatar(backgroundColor: isStaffTab ? AppColors.primary.withOpacity(0.15) : Colors.orange.shade100, backgroundImage: photoUrl != null && photoUrl.isNotEmpty ? NetworkImage(photoUrl) : null, child: (photoUrl == null || photoUrl.isEmpty) ? Text(name.isNotEmpty ? name[0] : '?', style: TextStyle(color: isStaffTab ? AppColors.primary : Colors.orange, fontWeight: FontWeight.bold)) : null),
+                leading: CircleAvatar(backgroundColor: isStaffTab ? AppColors.primary.withOpacity(0.15) : AppColors.accent.shade100, backgroundImage: photoUrl != null && photoUrl.isNotEmpty ? NetworkImage(photoUrl) : null, child: (photoUrl == null || photoUrl.isEmpty) ? Text(name.isNotEmpty ? name[0] : '?', style: TextStyle(color: isStaffTab ? AppColors.primary : AppColors.accent, fontWeight: FontWeight.bold)) : null),
                 title: Text(name, style: const TextStyle(fontSize: 16)),
                 trailing: isStaffTab && _isGroupMode ? Checkbox(value: isSelected, activeColor: AppColors.primary, onChanged: (val) => _toggleSelection(uid)) : null,
                 onTap: () { if (isStaffTab && _isGroupMode) _toggleSelection(uid); else if (isStaffTab) _startSingleChat(uid, user['name']); else _startFamilyChat(user); },
@@ -687,6 +697,16 @@ class _ChatDetailViewState extends State<ChatDetailView> {
   final FocusNode _focusNode = FocusNode();
   final currentUser = FirebaseAuth.instance.currentUser;
   bool _isUploading = false;
+  bool _hasText = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _textController.addListener(() {
+      final hasText = _textController.text.trim().isNotEmpty;
+      if (hasText != _hasText) setState(() => _hasText = hasText);
+    });
+  }
 
   @override
   void dispose() { _textController.dispose(); _scrollController.dispose(); _focusNode.dispose(); super.dispose(); }
@@ -767,8 +787,19 @@ class _ChatDetailViewState extends State<ChatDetailView> {
         top: false,
         child: Row(
           children: [
-            IconButton(icon: const Icon(Icons.attach_file, color: Colors.grey), onPressed: _isUploading ? null : _pickAndUploadFile),
-            IconButton(icon: const Icon(Icons.image, color: Colors.grey), onPressed: _isUploading ? null : _pickAndUploadImage),
+            if (_hasText)
+              GestureDetector(
+                onTap: () => setState(() => _hasText = false),
+                child: Container(
+                  width: 32, height: 32, margin: const EdgeInsets.only(right: 4),
+                  decoration: BoxDecoration(color: Colors.grey.shade200, shape: BoxShape.circle),
+                  child: const Icon(Icons.add, color: Colors.grey, size: 20),
+                ),
+              )
+            else ...[
+              IconButton(icon: const Icon(Icons.attach_file, color: Colors.grey), constraints: const BoxConstraints(minWidth: 36, minHeight: 36), padding: EdgeInsets.zero, onPressed: _isUploading ? null : _pickAndUploadFile),
+              IconButton(icon: const Icon(Icons.image, color: Colors.grey), constraints: const BoxConstraints(minWidth: 36, minHeight: 36), padding: EdgeInsets.zero, onPressed: _isUploading ? null : _pickAndUploadImage),
+            ],
             const SizedBox(width: 8),
             Expanded(
               child: Focus(
@@ -842,7 +873,7 @@ class _ChatDetailViewState extends State<ChatDetailView> {
       else { readText = '既読'; }
     }
 
-    final isDesktop = kIsWeb && MediaQuery.of(context).size.width >= 800;
+    final isDesktop = kIsWeb && MediaQuery.of(context).size.width >= AppBreakpoints.desktop;
 
     Widget menuButton(bool visible) {
       if (!visible) return const SizedBox(width: 24, height: 24);
@@ -868,7 +899,7 @@ class _ChatDetailViewState extends State<ChatDetailView> {
       builder: (isHovering) => Align(
         alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
         child: Container(
-          margin: const EdgeInsets.only(bottom: 6), constraints: const BoxConstraints(maxWidth: 600), padding: const EdgeInsets.only(top: 12),
+          margin: const EdgeInsets.only(bottom: 6), constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.75), padding: const EdgeInsets.only(top: 12),
           child: Column(
             crossAxisAlignment: isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
             children: [
