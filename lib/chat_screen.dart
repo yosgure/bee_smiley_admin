@@ -274,7 +274,14 @@ class _ChatListScreenState extends State<ChatListScreen> {
           itemCount: docs.length,
           itemBuilder: (context, index) {
             final roomDoc = docs[index];
-            return _RoomListTile(
+            return _SwipeTile(
+              key: ValueKey(roomDoc.id),
+              roomId: roomDoc.id,
+              onDelete: () async {
+                await FirebaseFirestore.instance.collection('chat_rooms').doc(roomDoc.id).delete();
+                if (isWide && _selectedRoomId == roomDoc.id) setState(() => _selectedRoomId = null);
+              },
+              child: _RoomListTile(
               roomDoc: roomDoc,
               myUid: currentUser!.uid,
               isSelected: isWide && roomDoc.id == _selectedRoomId,
@@ -293,7 +300,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
                   ));
                 }
               },
-            );
+            ));
           },
         );
       },
@@ -302,15 +309,116 @@ class _ChatListScreenState extends State<ChatListScreen> {
 }
 
 // ==========================================
+// スワイプ削除ラッパー
+// ==========================================
+class _SwipeTile extends StatefulWidget {
+  final String roomId;
+  final VoidCallback onDelete;
+  final Widget child;
+  const _SwipeTile({super.key, required this.roomId, required this.onDelete, required this.child});
+  @override
+  State<_SwipeTile> createState() => _SwipeTileState();
+}
+
+class _SwipeTileState extends State<_SwipeTile> with SingleTickerProviderStateMixin {
+  double _dragOffset = 0;
+  bool _showButton = false;
+  static const double _buttonWidth = 80;
+
+  void _onHorizontalDragUpdate(DragUpdateDetails details) {
+    setState(() {
+      _dragOffset += details.delta.dx;
+      _dragOffset = _dragOffset.clamp(-_buttonWidth, 0);
+      _showButton = _dragOffset < -20;
+    });
+  }
+
+  void _onHorizontalDragEnd(DragEndDetails details) {
+    setState(() {
+      if (_dragOffset < -_buttonWidth / 2) {
+        _dragOffset = -_buttonWidth;
+        _showButton = true;
+      } else {
+        _dragOffset = 0;
+        _showButton = false;
+      }
+    });
+  }
+
+  void _close() {
+    setState(() { _dragOffset = 0; _showButton = false; });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onHorizontalDragUpdate: _onHorizontalDragUpdate,
+      onHorizontalDragEnd: _onHorizontalDragEnd,
+      child: ClipRect(
+        child: Stack(
+          children: [
+            // 削除ボタン（スワイプで露出する部分のみ）
+            if (_showButton)
+              Positioned(
+                top: 0,
+                bottom: 0,
+                right: 0,
+                width: _buttonWidth,
+                child: GestureDetector(
+                  onTap: () {
+                    _close();
+                    showDialog(
+                      context: context,
+                      builder: (ctx) => AlertDialog(
+                        title: const Text('チャットを削除'),
+                        content: const Text('このチャットルームを削除しますか？'),
+                        actions: [
+                          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('キャンセル')),
+                          TextButton(onPressed: () { Navigator.pop(ctx); widget.onDelete(); }, child: const Text('削除', style: TextStyle(color: Colors.red))),
+                        ],
+                      ),
+                    );
+                  },
+                  child: Container(
+                    color: Colors.red,
+                    alignment: Alignment.center,
+                    child: const Text('削除', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                  ),
+                ),
+              ),
+            // メインのタイル（背景色付き）
+            Transform.translate(
+              offset: Offset(_dragOffset, 0),
+              child: Container(
+                color: Theme.of(context).scaffoldBackgroundColor,
+                child: widget.child,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ==========================================
 // リストアイテム
 // ==========================================
-class _RoomListTile extends StatelessWidget {
+class _RoomListTile extends StatefulWidget {
   final DocumentSnapshot roomDoc;
   final String myUid;
   final bool isSelected;
   final Function(String, String, bool, Map<String, dynamic>) onTap;
 
   const _RoomListTile({required this.roomDoc, required this.myUid, required this.isSelected, required this.onTap});
+
+  @override
+  State<_RoomListTile> createState() => _RoomListTileState();
+}
+
+class _RoomListTileState extends State<_RoomListTile> {
+  Future<Map<String, dynamic>>? _peerInfoFuture;
+  String? _cachedPeerId;
 
   Future<Map<String, dynamic>> _fetchPeerInfo(String peerId) async {
     var snap = await FirebaseFirestore.instance.collection('staffs').where('uid', isEqualTo: peerId).limit(1).get();
@@ -341,7 +449,7 @@ class _RoomListTile extends StatelessWidget {
 
   Widget _buildTrailing(String roomId, String timeStr) {
     // 選択中（表示中）のルームは未読バッジを表示しない（ChatDetailViewが自動既読にするため点滅防止）
-    if (isSelected) {
+    if (widget.isSelected) {
       return Column(
         mainAxisAlignment: MainAxisAlignment.center,
         crossAxisAlignment: CrossAxisAlignment.end,
@@ -351,14 +459,14 @@ class _RoomListTile extends StatelessWidget {
       );
     }
     return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance.collection('chat_rooms').doc(roomId).collection('messages').where('senderId', isNotEqualTo: myUid).snapshots(),
+      stream: FirebaseFirestore.instance.collection('chat_rooms').doc(roomId).collection('messages').where('senderId', isNotEqualTo: widget.myUid).snapshots(),
       builder: (context, msgSnapshot) {
         int unreadCount = 0;
         if (msgSnapshot.hasData) {
           for (var doc in msgSnapshot.data!.docs) {
             final data = doc.data() as Map<String, dynamic>;
             final readBy = List<String>.from(data['readBy'] ?? []);
-            if (!readBy.contains(myUid)) unreadCount++;
+            if (!readBy.contains(widget.myUid)) unreadCount++;
           }
         }
         return Column(
@@ -380,8 +488,8 @@ class _RoomListTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final room = roomDoc.data() as Map<String, dynamic>;
-    final roomId = roomDoc.id;
+    final room = widget.roomDoc.data() as Map<String, dynamic>;
+    final roomId = widget.roomDoc.id;
     final isGroup = (room['members'] as List).length > 2 || (room['groupName'] != null && room['groupName'].isNotEmpty);
     final memberNames = Map<String, dynamic>.from(room['names'] ?? {});
     String timeStr = '';
@@ -393,40 +501,45 @@ class _RoomListTile extends StatelessWidget {
       final groupName = room['groupName'] ?? 'グループ';
       final photoUrl = room['photoUrl'] as String?;
       return ListTile(
-        selected: isSelected, selectedTileColor: AppColors.primary.withOpacity(0.1),
+        selected: widget.isSelected, selectedTileColor: AppColors.primary.withOpacity(0.1),
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         leading: CircleAvatar(
           backgroundColor: AppColors.primary.withOpacity(0.15),
           backgroundImage: photoUrl != null && photoUrl.isNotEmpty ? NetworkImage(photoUrl) : null,
           child: (photoUrl == null || photoUrl.isEmpty) ? Text(groupName.isNotEmpty ? groupName[0] : 'G', style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold)) : null,
         ),
-        title: Text(groupName, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontWeight: isSelected ? FontWeight.bold : FontWeight.normal, color: isSelected ? AppColors.primary : AppColors.textMain)),
+        title: Text(groupName, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontWeight: widget.isSelected ? FontWeight.bold : FontWeight.normal, color: widget.isSelected ? AppColors.primary : AppColors.textMain)),
         subtitle: Text(room['lastMessage'] ?? '', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12, color: Colors.grey)),
         trailing: _buildTrailing(roomId, timeStr),
-        onTap: () => onTap(roomId, groupName, true, memberNames),
+        onTap: () => widget.onTap(roomId, groupName, true, memberNames),
       );
     }
-    final peerId = (room['members'] as List).firstWhere((id) => id != myUid, orElse: () => '');
+    final peerId = (room['members'] as List).firstWhere((id) => id != widget.myUid, orElse: () => '');
     if (peerId.isEmpty) return const SizedBox();
+    // Futureをキャッシュして、リビルドごとに再フェッチしないようにする
+    if (_peerInfoFuture == null || _cachedPeerId != peerId) {
+      _cachedPeerId = peerId;
+      _peerInfoFuture = _fetchPeerInfo(peerId);
+    }
     return FutureBuilder<Map<String, dynamic>>(
-      future: _fetchPeerInfo(peerId),
+      future: _peerInfoFuture,
       builder: (context, snapshot) {
         final peerData = snapshot.data;
         final name = peerData?['name'] ?? memberNames[peerId] ?? '読み込み中...';
         final photoUrl = peerData?['photoUrl'] as String?;
         final isStaff = peerData?['isStaff'] == true;
         return ListTile(
-          selected: isSelected, selectedTileColor: AppColors.primary.withOpacity(0.1),
+          selected: widget.isSelected, selectedTileColor: AppColors.primary.withOpacity(0.1),
           contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           leading: CircleAvatar(
             backgroundColor: isStaff ? AppColors.primary.withOpacity(0.15) : AppColors.accent.shade100,
             backgroundImage: photoUrl != null && photoUrl.isNotEmpty ? NetworkImage(photoUrl) : null,
             child: (photoUrl == null || photoUrl.isEmpty) ? Text(name.isNotEmpty ? name[0] : '?', style: TextStyle(color: isStaff ? AppColors.primary : AppColors.accent, fontWeight: FontWeight.bold)) : null,
           ),
-          title: Text(name, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontWeight: isSelected ? FontWeight.bold : FontWeight.normal, color: isSelected ? AppColors.primary : AppColors.textMain)),
+          title: Text(name, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontWeight: widget.isSelected ? FontWeight.bold : FontWeight.normal, color: widget.isSelected ? AppColors.primary : AppColors.textMain)),
           subtitle: Text(room['lastMessage'] ?? '', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12, color: Colors.grey)),
           trailing: _buildTrailing(roomId, timeStr),
-          onTap: () => onTap(roomId, name, false, memberNames),
+          onTap: () => widget.onTap(roomId, name, false, memberNames),
         );
       },
     );
@@ -741,7 +854,6 @@ class _ChatDetailViewState extends State<ChatDetailView> {
                 builder: (context, snapshot) {
                   if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
                   final docs = snapshot.data!.docs;
-                  WidgetsBinding.instance.addPostFrameCallback((_) { if (_scrollController.hasClients) _scrollController.jumpTo(_scrollController.position.maxScrollExtent); });
                   for (var doc in docs) {
                     final data = doc.data() as Map<String, dynamic>;
                     final senderId = data['senderId'];
@@ -751,8 +863,8 @@ class _ChatDetailViewState extends State<ChatDetailView> {
                     }
                   }
                   return ListView.builder(
-                    controller: _scrollController, padding: const EdgeInsets.all(16), itemCount: docs.length,
-                    itemBuilder: (context, index) { final msg = docs[index].data() as Map<String, dynamic>; final msgId = docs[index].id; return _buildMessageItem(msg, msgId); },
+                    controller: _scrollController, reverse: true, padding: const EdgeInsets.all(16), itemCount: docs.length,
+                    itemBuilder: (context, index) { final reversedIndex = docs.length - 1 - index; final msg = docs[reversedIndex].data() as Map<String, dynamic>; final msgId = docs[reversedIndex].id; return _buildMessageItem(msg, msgId); },
                   );
                 },
               ),
@@ -782,7 +894,7 @@ class _ChatDetailViewState extends State<ChatDetailView> {
 
   Widget _buildInputArea() {
     return Container(
-      padding: const EdgeInsets.all(12), color: Colors.white,
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8), color: Colors.white,
       child: SafeArea(
         top: false,
         child: Row(
@@ -791,16 +903,16 @@ class _ChatDetailViewState extends State<ChatDetailView> {
               GestureDetector(
                 onTap: () => setState(() => _hasText = false),
                 child: Container(
-                  width: 32, height: 32, margin: const EdgeInsets.only(right: 4),
+                  width: 28, height: 28, margin: const EdgeInsets.only(right: 4),
                   decoration: BoxDecoration(color: Colors.grey.shade200, shape: BoxShape.circle),
-                  child: const Icon(Icons.add, color: Colors.grey, size: 20),
+                  child: const Icon(Icons.add, color: Colors.grey, size: 18),
                 ),
               )
             else ...[
-              IconButton(icon: const Icon(Icons.attach_file, color: Colors.grey), constraints: const BoxConstraints(minWidth: 36, minHeight: 36), padding: EdgeInsets.zero, onPressed: _isUploading ? null : _pickAndUploadFile),
-              IconButton(icon: const Icon(Icons.image, color: Colors.grey), constraints: const BoxConstraints(minWidth: 36, minHeight: 36), padding: EdgeInsets.zero, onPressed: _isUploading ? null : _pickAndUploadImage),
+              IconButton(icon: const Icon(Icons.attach_file, color: Colors.grey, size: 20), constraints: const BoxConstraints(minWidth: 28, minHeight: 28), padding: EdgeInsets.zero, onPressed: _isUploading ? null : _pickAndUploadFile),
+              IconButton(icon: const Icon(Icons.image, color: Colors.grey, size: 20), constraints: const BoxConstraints(minWidth: 28, minHeight: 28), padding: EdgeInsets.zero, onPressed: _isUploading ? null : _pickAndUploadImage),
             ],
-            const SizedBox(width: 8),
+            const SizedBox(width: 4),
             Expanded(
               child: Focus(
                 onKeyEvent: (node, event) {
