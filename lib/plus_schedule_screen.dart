@@ -9,6 +9,9 @@ import 'package:flutter/gestures.dart';
 import 'ai_chat_screen.dart';
 import 'student_detail_screen.dart';
 
+// 講師名・教室名クリック時に生徒編集ダイアログの発火を抑制するフラグ
+bool _quickEditTappedGlobal = false;
+
 /// プラス予定のコンテンツウィジェット（埋め込み用）
 class PlusScheduleContent extends StatefulWidget {
   final VoidCallback? onBack;
@@ -98,8 +101,6 @@ class _PlusScheduleContentState extends State<PlusScheduleContent> with Automati
   // レッスンアイテムがタップされたかのフラグ（セルの追加ダイアログ抑制用）
   bool _lessonItemTapped = false;
 
-  // 講師名・教室名がタップされたかのフラグ（生徒編集ダイアログ抑制用）
-  bool _quickEditTapped = false;
 
   // 生徒メモ（療育プラン、園訪問、就学相談、移動希望）のキャッシュ
   final Map<String, Map<String, dynamic>> _studentNotes = {};
@@ -4346,7 +4347,7 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
                 child: Listener(
                   behavior: HitTestBehavior.opaque,
                   onPointerDown: (_) {
-                    _quickEditTapped = true;
+                    _quickEditTappedGlobal = true;
                   },
                   onPointerUp: (_) {
                     if (cellContext != null) {
@@ -4380,7 +4381,7 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
                 child: Listener(
                   behavior: HitTestBehavior.opaque,
                   onPointerDown: (_) {
-                    _quickEditTapped = true;
+                    _quickEditTappedGlobal = true;
                   },
                   onPointerUp: (_) {
                     if (cellContext != null) {
@@ -4657,7 +4658,7 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
                 child: Listener(
                   behavior: HitTestBehavior.opaque,
                   onPointerDown: (_) {
-                    _quickEditTapped = true;
+                    _quickEditTappedGlobal = true;
                   },
                   onPointerUp: (_) {
                     _hideCurrentOverlay();
@@ -4692,7 +4693,7 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
                 child: Listener(
                   behavior: HitTestBehavior.opaque,
                   onPointerDown: (_) {
-                    _quickEditTapped = true;
+                    _quickEditTappedGlobal = true;
                   },
                   onPointerUp: (_) {
                     _hideCurrentOverlay();
@@ -8616,9 +8617,8 @@ class _HoverContainerState extends State<_HoverContainer> {
         },
         onPointerUp: (_) {
           // 講師名・教室名がタップされた場合は生徒編集ダイアログを開かない
-          final state = context.findAncestorStateOfType<_PlusScheduleContentState>();
-          if (state != null && state._quickEditTapped) {
-            state._quickEditTapped = false;
+          if (_quickEditTappedGlobal) {
+            _quickEditTappedGlobal = false;
             return;
           }
           widget.onTap?.call();
