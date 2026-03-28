@@ -52,7 +52,6 @@ class _StaffManageScreenState extends State<StaffManageScreen> {
         _classroomList = [
           'ビースマイリー湘南藤沢教室',
           'ビースマイリー湘南台教室',
-          'ビースマイリープラス湘南藤沢教室',
         ];
       });
     }
@@ -475,7 +474,7 @@ appBar: AppBar(
           builder: (context, setStateDialog) {
             final displayClassrooms = _classroomList.isNotEmpty 
                 ? _classroomList 
-                : ['ビースマイリー湘南藤沢教室', 'ビースマイリー湘南台教室', 'ビースマイリープラス湘南藤沢教室'];
+                : ['ビースマイリー湘南藤沢教室', 'ビースマイリー湘南台教室'];
 
             final isAllSelected = displayClassrooms.isNotEmpty && selectedClassrooms.length == displayClassrooms.length;
 

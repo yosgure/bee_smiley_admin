@@ -45,7 +45,10 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
   Future<void> _fetchData() async {
     try {
       final classSnap = await FirebaseFirestore.instance.collection('classrooms').get();
-      final classList = classSnap.docs.map((d) => d['name'] as String).toList();
+      final classList = classSnap.docs
+          .where((d) => d.data()['category'] == '幼児教室')
+          .map((d) => d['name'] as String)
+          .toList();
       
       final familySnap = await FirebaseFirestore.instance.collection('families').get();
       final List<Map<String, dynamic>> studentList = [];
