@@ -3303,22 +3303,19 @@ final plusStaff = _staffList.where((s) =>
       // タスク件数表示（タスクがない場合も追加ボタンを表示）
                   SizedBox(
                     height: 22,
-                    child: GestureDetector(
-                      onTap: () {
-                        if (taskCount > 0) {
-                          _showTasksForDateDialog(date, tasksForDay);
-                        } else {
-                          _showAddTaskDialogForDate(date);
-                        }
-                      },
-                      child: taskCount > 0
-                          ? Center(
+                    child: taskCount > 0
+                        ? Center(
+                            child: GestureDetector(
+                              onTap: () => _showTasksForDateDialog(date, tasksForDay),
                               child: _TaskBadge(
                                 taskCount: taskCount,
                                 isToday: isToday,
                               ),
-                            )
-                          : MouseRegion(
+                            ),
+                          )
+                        : GestureDetector(
+                            onTap: () => _showAddTaskDialogForDate(date),
+                            child: MouseRegion(
                               cursor: SystemMouseCursors.click,
                               child: Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
@@ -3336,7 +3333,7 @@ final plusStaff = _staffList.where((s) =>
                                 ),
                               ),
                             ),
-                    ),
+                          ),
                   ),
                 ],
               ),
@@ -8537,15 +8534,12 @@ class _TaskBadgeState extends State<_TaskBadge> {
       cursor: SystemMouseCursors.click,
       onEnter: (_) => setState(() => _isHovered = true),
       onExit: (_) => setState(() => _isHovered = false),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
-        height: 22,
-        padding: const EdgeInsets.symmetric(horizontal: 6),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
         decoration: BoxDecoration(
           color: bgColor,
           borderRadius: BorderRadius.circular(7),
         ),
-        alignment: Alignment.center,
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
