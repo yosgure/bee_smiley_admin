@@ -95,6 +95,9 @@ class _PlusScheduleContentState extends State<PlusScheduleContent> with Automati
   // ドラッグ中のレッスン（行間インジケーター表示用）
   Map<String, dynamic>? _draggingLesson;
   
+  // レッスンアイテムがタップされたかのフラグ（セルの追加ダイアログ抑制用）
+  bool _lessonItemTapped = false;
+
   // 生徒メモ（療育プラン、園訪問、就学相談、移動希望）のキャッシュ
   final Map<String, Map<String, dynamic>> _studentNotes = {};
   
@@ -3185,6 +3188,11 @@ final plusStaff = _staffList.where((s) =>
             return GestureDetector(
               behavior: HitTestBehavior.deferToChild,
               onTap: () {
+                // レッスンアイテムがタップされた場合はスキップ
+                if (_lessonItemTapped) {
+                  _lessonItemTapped = false;
+                  return;
+                }
                 // セル全体（空白部分）をタップしたらレッスン追加
                 if (!isHoliday) {
                   final renderBox = cellContext.findRenderObject() as RenderBox?;
@@ -3561,12 +3569,10 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              // 生徒名部分（クリックで生徒詳細へ遷移）
+              // 生徒名部分
               Flexible(
                 flex: 3,
-                child: GestureDetector(
-                  onTap: () => _navigateToStudentDetail(lesson['studentName'] ?? ''),
-                  child: Row(
+                child: Row(
                     children: [
                       Flexible(
                         child: Text(
@@ -3588,7 +3594,6 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
                         ),
                       ),
                     ],
-                  ),
                 ),
               ),
               const SizedBox(width: 4),
@@ -3745,10 +3750,10 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
           setState(() => _hoveredStudentName = null);
         },
         onTap: () {
-          final renderBox = noInfoKey.currentContext?.findRenderObject() as RenderBox?;
+          final renderBox = (cellContext ?? noInfoKey.currentContext)?.findRenderObject() as RenderBox?;
           final cellOffset = renderBox?.localToGlobal(Offset.zero);
-          final cellWidth = renderBox?.size.width ?? 0;
-          _showEditLessonDialog(lesson, cellOffset: cellOffset, cellWidth: cellWidth);
+          final cellW = renderBox?.size.width ?? 0;
+          _showEditLessonDialog(lesson, cellOffset: cellOffset, cellWidth: cellW);
         },
         child: lessonContent,
       );
@@ -3822,10 +3827,10 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
       },
       onTap: () {
         _hideCurrentOverlay();
-        final renderBox = key.currentContext?.findRenderObject() as RenderBox?;
+        final renderBox = (cellContext ?? key.currentContext)?.findRenderObject() as RenderBox?;
         final cellOffset = renderBox?.localToGlobal(Offset.zero);
-        final cellWidth = renderBox?.size.width ?? 0;
-        _showEditLessonDialog(lesson, cellOffset: cellOffset, cellWidth: cellWidth);
+        final cellW = renderBox?.size.width ?? 0;
+        _showEditLessonDialog(lesson, cellOffset: cellOffset, cellWidth: cellW);
       },
       child: _buildClickableLessonContent(lesson, key, cellContext: cellContext),
     );
@@ -3868,33 +3873,30 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              // 生徒名部分（クリックで生徒詳細へ遷移）
+              // 生徒名部分
 Expanded(
-  child: GestureDetector(
-    onTap: () => _navigateToStudentDetail(lesson['studentName'] ?? ''),
-    child: Row(
-      children: [
-        Flexible(
-          child: Text(
-            lesson['studentName'],
-            style: TextStyle(
-              color: textColor,
-              fontSize: 14,
-              fontWeight: FontWeight.w500,
-            ),
-            overflow: TextOverflow.ellipsis,
+  child: Row(
+    children: [
+      Flexible(
+        child: Text(
+          lesson['studentName'],
+          style: TextStyle(
+            color: textColor,
+            fontSize: 14,
+            fontWeight: FontWeight.w500,
+          ),
+          overflow: TextOverflow.ellipsis,
+        ),
+      ),
+      if (courseInitial.isNotEmpty)
+        Text(
+          courseInitial,
+          style: TextStyle(
+            color: textColor,
+            fontSize: 12,
           ),
         ),
-        if (courseInitial.isNotEmpty)
-          Text(
-            courseInitial,
-            style: TextStyle(
-              color: textColor,
-              fontSize: 12,
-            ),
-          ),
-      ],
-    ),
+    ],
   ),
 ),
               const SizedBox(width: 8),
@@ -7803,9 +7805,18 @@ class _HoverContainerState extends State<_HoverContainer> {
     return MouseRegion(
       onEnter: (_) => widget.onEnter?.call(),
       onExit: (_) => widget.onExit?.call(),
-      child: GestureDetector(
+      child: Listener(
         behavior: HitTestBehavior.opaque,
-        onTap: widget.onTap,
+        onPointerDown: (_) {
+          // フラグを設定して、セルレベルのGestureDetectorの追加ダイアログを抑制
+          final state = context.findAncestorStateOfType<_PlusScheduleContentState>();
+          if (state != null) {
+            state._lessonItemTapped = true;
+          }
+        },
+        onPointerUp: (_) {
+          widget.onTap?.call();
+        },
         child: widget.child,
       ),
     );
