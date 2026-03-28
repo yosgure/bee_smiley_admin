@@ -2895,22 +2895,10 @@ final plusStaff = _staffList.where((s) =>
                         }
                       },
                       child: taskCount > 0
-                          ? Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                              decoration: BoxDecoration(
-                                border: Border.all(
-                                  color: isToday ? AppColors.primary : Colors.grey.shade400,
-                                  width: 1,
-                                ),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Text(
-                                '$taskCount件のタスク',
-                                style: TextStyle(
-                                  color: isToday ? AppColors.primary : Colors.grey.shade600,
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w500,
-                                ),
+                          ? Center(
+                              child: _TaskBadge(
+                                taskCount: taskCount,
+                                isToday: isToday,
                               ),
                             )
                           : MouseRegion(
@@ -8100,6 +8088,67 @@ class _HoverContainerState extends State<_HoverContainer> {
           widget.onTap?.call();
         },
         child: widget.child,
+      ),
+    );
+  }
+}
+
+class _TaskBadge extends StatefulWidget {
+  final int taskCount;
+  final bool isToday;
+
+  const _TaskBadge({
+    required this.taskCount,
+    required this.isToday,
+  });
+
+  @override
+  State<_TaskBadge> createState() => _TaskBadgeState();
+}
+
+class _TaskBadgeState extends State<_TaskBadge> {
+  bool _isHovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final baseColor = widget.isToday ? AppColors.primary : const Color(0xFF78909C);
+    final bgColor = _isHovered
+        ? baseColor.withOpacity(0.2)
+        : baseColor.withOpacity(0.12);
+
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _isHovered = true),
+      onExit: (_) => setState(() => _isHovered = false),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        height: 22,
+        padding: const EdgeInsets.symmetric(horizontal: 6),
+        decoration: BoxDecoration(
+          color: bgColor,
+          borderRadius: BorderRadius.circular(7),
+        ),
+        alignment: Alignment.center,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.check_circle_outline,
+              size: 12,
+              color: baseColor,
+            ),
+            const SizedBox(width: 2),
+            Text(
+              '${widget.taskCount}',
+              style: TextStyle(
+                color: baseColor,
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                height: 1,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
