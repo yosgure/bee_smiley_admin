@@ -98,6 +98,9 @@ class _PlusScheduleContentState extends State<PlusScheduleContent> with Automati
   // レッスンアイテムがタップされたかのフラグ（セルの追加ダイアログ抑制用）
   bool _lessonItemTapped = false;
 
+  // 講師名・教室名がタップされたかのフラグ（生徒編集ダイアログ抑制用）
+  bool _quickEditTapped = false;
+
   // 生徒メモ（療育プラン、園訪問、就学相談、移動希望）のキャッシュ
   final Map<String, Map<String, dynamic>> _studentNotes = {};
   
@@ -4215,39 +4218,62 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              // 生徒名部分
+              // 生徒名部分（クリックで生徒編集ダイアログ）
               Flexible(
                 flex: 3,
-                child: Row(
-                    children: [
-                      Flexible(
-                        child: Text(
-                          lesson['studentName'],
-                          style: TextStyle(
-                            color: textColor,
-                            fontSize: 14,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    if (courseInitial.isNotEmpty)
-                      Text(
-                        courseInitial,
-                        style: TextStyle(
-                          color: textColor,
-                          fontSize: 12,
+                child: MouseRegion(
+                  cursor: SystemMouseCursors.click,
+                  child: Listener(
+                    behavior: HitTestBehavior.opaque,
+                    onPointerDown: (_) {
+                      _quickEditTapped = true;
+                    },
+                    onPointerUp: (_) {
+                      if (cellContext != null) {
+                        final renderBox = cellContext.findRenderObject() as RenderBox?;
+                        final cellOffset = renderBox?.localToGlobal(Offset.zero);
+                        final cellW = renderBox?.size.width ?? 0;
+                        _showEditLessonDialog(lesson, cellOffset: cellOffset, cellWidth: cellW);
+                      } else {
+                        _showEditLessonDialog(lesson);
+                      }
+                    },
+                    child: Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            lesson['studentName'],
+                            style: TextStyle(
+                              color: textColor,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
-                    ],
+                      if (courseInitial.isNotEmpty)
+                        Text(
+                          courseInitial,
+                          style: TextStyle(
+                            color: textColor,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
               ),
               const SizedBox(width: 4),
               // 講師名部分（クリックで講師選択）
               MouseRegion(
                 cursor: SystemMouseCursors.click,
-                child: GestureDetector(
-                  onTap: () {
+                child: Listener(
+                  behavior: HitTestBehavior.opaque,
+                  onPointerDown: (_) {
+                    _quickEditTapped = true;
+                  },
+                  onPointerUp: (_) {
                     if (cellContext != null) {
                       final renderBox = cellContext.findRenderObject() as RenderBox?;
                       final cellOffset = renderBox?.localToGlobal(Offset.zero);
@@ -4276,8 +4302,12 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
               // 部屋名部分（クリックで部屋選択）
               MouseRegion(
                 cursor: SystemMouseCursors.click,
-                child: GestureDetector(
-                  onTap: () {
+                child: Listener(
+                  behavior: HitTestBehavior.opaque,
+                  onPointerDown: (_) {
+                    _quickEditTapped = true;
+                  },
+                  onPointerUp: (_) {
                     if (cellContext != null) {
                       final renderBox = cellContext.findRenderObject() as RenderBox?;
                       final cellOffset = renderBox?.localToGlobal(Offset.zero);
@@ -4519,38 +4549,62 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              // 生徒名部分
+              // 生徒名部分（クリックで生徒編集ダイアログ）
 Expanded(
-  child: Row(
-    children: [
-      Flexible(
-        child: Text(
-          lesson['studentName'],
-          style: TextStyle(
-            color: textColor,
-            fontSize: 14,
-            fontWeight: FontWeight.w500,
+  child: MouseRegion(
+    cursor: SystemMouseCursors.click,
+    child: Listener(
+      behavior: HitTestBehavior.opaque,
+      onPointerDown: (_) {
+        _quickEditTapped = true;
+      },
+      onPointerUp: (_) {
+        _hideCurrentOverlay();
+        if (cellContext != null) {
+          final renderBox = cellContext.findRenderObject() as RenderBox?;
+          final cellOffset = renderBox?.localToGlobal(Offset.zero);
+          final cellW = renderBox?.size.width ?? 0;
+          _showEditLessonDialog(lesson, cellOffset: cellOffset, cellWidth: cellW);
+        } else {
+          _showEditLessonDialog(lesson);
+        }
+      },
+      child: Row(
+        children: [
+          Flexible(
+            child: Text(
+              lesson['studentName'],
+              style: TextStyle(
+                color: textColor,
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+              ),
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
-          overflow: TextOverflow.ellipsis,
-        ),
+          if (courseInitial.isNotEmpty)
+            Text(
+              courseInitial,
+              style: TextStyle(
+                color: textColor,
+                fontSize: 12,
+              ),
+            ),
+        ],
       ),
-      if (courseInitial.isNotEmpty)
-        Text(
-          courseInitial,
-          style: TextStyle(
-            color: textColor,
-            fontSize: 12,
-          ),
-        ),
-    ],
+    ),
   ),
 ),
               const SizedBox(width: 8),
               // 講師名部分（クリックで講師選択）
               MouseRegion(
                 cursor: SystemMouseCursors.click,
-                child: GestureDetector(
-                  onTap: () {
+                child: Listener(
+                  behavior: HitTestBehavior.opaque,
+                  onPointerDown: (_) {
+                    _quickEditTapped = true;
+                  },
+                  onPointerUp: (_) {
                     _hideCurrentOverlay();
                     if (cellContext != null) {
                       final renderBox = cellContext.findRenderObject() as RenderBox?;
@@ -4580,8 +4634,12 @@ Expanded(
             // 部屋名部分（クリックで部屋選択）
               MouseRegion(
                 cursor: SystemMouseCursors.click,
-                child: GestureDetector(
-                  onTap: () {
+                child: Listener(
+                  behavior: HitTestBehavior.opaque,
+                  onPointerDown: (_) {
+                    _quickEditTapped = true;
+                  },
+                  onPointerUp: (_) {
                     _hideCurrentOverlay();
                     if (cellContext != null) {
                       final renderBox = cellContext.findRenderObject() as RenderBox?;
@@ -8502,6 +8560,12 @@ class _HoverContainerState extends State<_HoverContainer> {
           }
         },
         onPointerUp: (_) {
+          // 講師名・教室名がタップされた場合は生徒編集ダイアログを開かない
+          final state = context.findAncestorStateOfType<_PlusScheduleContentState>();
+          if (state != null && state._quickEditTapped) {
+            state._quickEditTapped = false;
+            return;
+          }
           widget.onTap?.call();
         },
         child: widget.child,
