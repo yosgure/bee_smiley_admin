@@ -237,7 +237,6 @@ class _NotificationEditScreenState extends State<NotificationEditScreen> {
         list.addAll([
           'ビースマイリー湘南藤沢教室',
           'ビースマイリー湘南台教室',
-          'ビースマイリープラス湘南藤沢教室',
         ]);
       }
 
@@ -254,8 +253,7 @@ class _NotificationEditScreenState extends State<NotificationEditScreen> {
           _classroomOptions = [
             'ビースマイリー湘南藤沢教室',
             'ビースマイリー湘南台教室',
-            'ビースマイリープラス湘南藤沢教室',
-          ];
+            ];
           _isLoadingClassrooms = false;
         });
       }

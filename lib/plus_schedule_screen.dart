@@ -4782,7 +4782,7 @@ for (var staff in _staffList.where((s) => s['showInSchedule'] != false)) {
       
       // 保存
       await docRef.set({
-        'classroom': 'ビースマイリープラス湘南藤沢',
+        'classroom': 'ビースマイリー湘南藤沢',
         'days': allDays,
         'holidays': holidays,
         'updatedAt': FieldValue.serverTimestamp(),
@@ -5017,7 +5017,7 @@ for (var staff in _staffList.where((s) => s['showInSchedule'] != false)) {
           });
         } else {
           await shiftDocRef.set({
-            'classroom': 'ビースマイリープラス湘南藤沢',
+            'classroom': 'ビースマイリー湘南藤沢',
             'days': shiftUpdates,
             'updatedAt': FieldValue.serverTimestamp(),
           });
@@ -5157,7 +5157,7 @@ for (var staff in _staffList.where((s) => s['showInSchedule'] != false)) {
           });
         } else {
           await docRef.set({
-            'classroom': 'ビースマイリープラス湘南藤沢',
+            'classroom': 'ビースマイリー湘南藤沢',
             'days': updates,
             'updatedAt': FieldValue.serverTimestamp(),
           });
@@ -5241,7 +5241,7 @@ for (var staff in _staffList.where((s) => s['showInSchedule'] != false)) {
           .collection('plus_shifts')
           .doc(toMonth)
           .set({
-            'classroom': fromData['classroom'] ?? 'ビースマイリープラス湘南藤沢',
+            'classroom': fromData['classroom'] ?? 'ビースマイリー湘南藤沢',
             'days': fromDays,
             'copiedFrom': fromMonth,
             'updatedAt': FieldValue.serverTimestamp(),
