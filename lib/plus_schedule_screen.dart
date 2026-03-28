@@ -1302,6 +1302,20 @@ void _goToPage(int page) {
   }
   
   Widget _buildMobileUI() {
+    // ダッシュボードモードの場合
+    if (_viewMode == 1) {
+      return SafeArea(
+        child: Column(
+          children: [
+            _buildMobileHeader(),
+            const Expanded(
+              child: PlusDashboardContent(),
+            ),
+          ],
+        ),
+      );
+    }
+
     // 選択中の日付の週が現在読み込み中の週と異なる場合、再読み込み
     final currentDateWeekStart = _getMonday(_currentMobileDate);
     if (currentDateWeekStart != _weekStart && !_isLoadingLessons) {
@@ -1316,7 +1330,7 @@ void _goToPage(int page) {
         }
       });
     }
-    
+
     return SafeArea(
       child: Stack(
         children: [
@@ -1502,9 +1516,8 @@ void _goToPage(int page) {
   
   Widget _buildMobileHeader() {
     final dateStr = DateFormat('M月d日 (E)', 'ja').format(_currentMobileDate);
-    
+
     return Container(
-      height: 56,
       padding: const EdgeInsets.symmetric(horizontal: 4),
       decoration: BoxDecoration(
         color: Colors.white,
@@ -1516,53 +1529,137 @@ void _goToPage(int page) {
           ),
         ],
       ),
-      child: Row(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          // 左側: ハンバーガーメニュー
-          IconButton(
-            icon: const Icon(Icons.menu, color: AppColors.textMain),
-            tooltip: 'メニュー',
-            onPressed: () => setState(() => _isMobileSideMenuOpen = true),
-          ),
-          // 中央部分: 前日 + 日付 + 翌日
-          Expanded(
+          // 上段: ナビゲーション
+          SizedBox(
+            height: 48,
             child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                // 前日
-                IconButton(
-                  icon: const Icon(Icons.chevron_left, color: AppColors.textSub),
-                  onPressed: _goToPreviousDay,
-                ),
-                // 日付
-                GestureDetector(
-                  onTap: () => _showMobileDatePicker(),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 8),
-                    child: Text(
-                      dateStr,
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w500,
-                        color: AppColors.textMain,
-                      ),
+                if (_viewMode == 0) ...[
+                  // スケジュールモード: ハンバーガーメニュー + 日付ナビ
+                  IconButton(
+                    icon: const Icon(Icons.menu, size: 22, color: AppColors.textMain),
+                    tooltip: 'メニュー',
+                    onPressed: () => setState(() => _isMobileSideMenuOpen = true),
+                  ),
+                  Expanded(
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        IconButton(
+                          icon: const Icon(Icons.chevron_left, color: AppColors.textSub),
+                          onPressed: _goToPreviousDay,
+                        ),
+                        GestureDetector(
+                          onTap: () => _showMobileDatePicker(),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 4),
+                            child: Text(
+                              dateStr,
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w500,
+                                color: AppColors.textMain,
+                              ),
+                            ),
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.chevron_right, color: AppColors.textSub),
+                          onPressed: _goToNextDay,
+                        ),
+                      ],
                     ),
                   ),
-                ),
-                // 翌日
-                IconButton(
-                  icon: const Icon(Icons.chevron_right, color: AppColors.textSub),
-                  onPressed: _goToNextDay,
-                ),
+                  TextButton(
+                    onPressed: _goToToday,
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    child: const Text('今日', style: TextStyle(fontSize: 13)),
+                  ),
+                ] else ...[
+                  // ダッシュボードモード: タイトル
+                  const SizedBox(width: 12),
+                  const Icon(Icons.dashboard_outlined, size: 20, color: AppColors.textMain),
+                  const SizedBox(width: 8),
+                  const Text(
+                    'ダッシュボード',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w500,
+                      color: AppColors.textMain,
+                    ),
+                  ),
+                ],
+                const SizedBox(width: 4),
               ],
             ),
           ),
-          // 右側: 今日ボタン
-          TextButton(
-            onPressed: _goToToday,
-            child: const Text('今日'),
+          // 下段: ビューモード切り替えタブ
+          Padding(
+            padding: const EdgeInsets.fromLTRB(8, 0, 8, 6),
+            child: Container(
+              height: 32,
+              decoration: BoxDecoration(
+                color: Colors.grey.shade100,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                children: [
+                  _buildMobileViewModeTab(0, Icons.calendar_today, '週'),
+                  _buildMobileViewModeTab(1, Icons.dashboard_outlined, 'ダッシュボード'),
+                ],
+              ),
+            ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildMobileViewModeTab(int mode, IconData icon, String label) {
+    final isSelected = _viewMode == mode;
+    return Expanded(
+      child: GestureDetector(
+        onTap: () {
+          if (_viewMode != mode) {
+            _hideCurrentOverlay();
+            setState(() {
+              _viewMode = mode;
+            });
+            _saveViewMode(mode);
+          }
+        },
+        child: Container(
+          margin: const EdgeInsets.all(2),
+          decoration: BoxDecoration(
+            color: isSelected ? Colors.white : Colors.transparent,
+            borderRadius: BorderRadius.circular(6),
+            boxShadow: isSelected
+                ? [BoxShadow(color: Colors.black.withValues(alpha: 0.08), blurRadius: 2)]
+                : null,
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, size: 14, color: isSelected ? AppColors.primary : AppColors.textSub),
+              const SizedBox(width: 4),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                  color: isSelected ? AppColors.primary : AppColors.textSub,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

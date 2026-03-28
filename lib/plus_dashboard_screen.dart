@@ -46,6 +46,9 @@ class _PlusDashboardContentState extends State<PlusDashboardContent> {
   
   // タブ選択状態
   String _selectedTab = 'tasks';
+
+  // モバイル: スケジュール/タスク切り替え（0=スケジュール, 1=タスク）
+  int _mobileViewIndex = 0;
   
   // ローディング状態
   bool _isLoading = true;
@@ -363,6 +366,13 @@ class _PlusDashboardContentState extends State<PlusDashboardContent> {
       );
     }
 
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < 600;
+
+    if (isMobile) {
+      return _buildMobileLayout();
+    }
+
     return Container(
       color: Colors.white,
       padding: const EdgeInsets.all(16),
@@ -393,6 +403,102 @@ class _PlusDashboardContentState extends State<PlusDashboardContent> {
           ),
         ],
       ),
+    );
+  }
+
+  // モバイルレイアウト
+  Widget _buildMobileLayout() {
+    return Container(
+      color: Colors.white,
+      child: Column(
+        children: [
+          // スケジュール/タスク切り替えタブ
+          Padding(
+            padding: const EdgeInsets.fromLTRB(8, 6, 8, 4),
+            child: Container(
+              height: 32,
+              decoration: BoxDecoration(
+                color: Colors.grey.shade100,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                children: [
+                  _buildMobileDashboardTab(0, Icons.grid_view, 'スケジュール'),
+                  _buildMobileDashboardTab(1, Icons.task_alt, 'タスク'),
+                ],
+              ),
+            ),
+          ),
+          // コンテンツ
+          Expanded(
+            child: _mobileViewIndex == 0
+                ? _buildMobileScheduleView()
+                : _buildMobileTaskView(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMobileDashboardTab(int index, IconData icon, String label) {
+    final isSelected = _mobileViewIndex == index;
+    return Expanded(
+      child: GestureDetector(
+        onTap: () => setState(() => _mobileViewIndex = index),
+        child: Container(
+          margin: const EdgeInsets.all(2),
+          decoration: BoxDecoration(
+            color: isSelected ? Colors.white : Colors.transparent,
+            borderRadius: BorderRadius.circular(6),
+            boxShadow: isSelected
+                ? [BoxShadow(color: Colors.black.withValues(alpha: 0.08), blurRadius: 2)]
+                : null,
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, size: 14, color: isSelected ? AppColors.primary : AppColors.textSub),
+              const SizedBox(width: 4),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                  color: isSelected ? AppColors.primary : AppColors.textSub,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // モバイル: スケジュール表（フル画面、横スクロール）
+  Widget _buildMobileScheduleView() {
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      padding: const EdgeInsets.fromLTRB(8, 4, 8, 8),
+      child: SizedBox(
+        width: 700,
+        child: _buildScheduleTable(),
+      ),
+    );
+  }
+
+  // モバイル: タスクビュー
+  Widget _buildMobileTaskView() {
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(8, 4, 8, 0),
+          child: _buildTabButtons(),
+        ),
+        const SizedBox(height: 8),
+        Expanded(
+          child: _buildTabContent(),
+        ),
+      ],
     );
   }
 
