@@ -848,7 +848,7 @@ class _ChatDetailViewState extends State<ChatDetailView> {
           ],
           Expanded(
             child: Container(
-              color: const Color(0xFFF2F2F7),
+              color: Colors.white,
               child: StreamBuilder<QuerySnapshot>(
                 stream: FirebaseFirestore.instance.collection('chat_rooms').doc(widget.roomId).collection('messages').orderBy('createdAt', descending: false).snapshots(),
                 builder: (context, snapshot) {
@@ -864,7 +864,33 @@ class _ChatDetailViewState extends State<ChatDetailView> {
                   }
                   return ListView.builder(
                     controller: _scrollController, reverse: true, padding: const EdgeInsets.all(16), itemCount: docs.length,
-                    itemBuilder: (context, index) { final reversedIndex = docs.length - 1 - index; final msg = docs[reversedIndex].data() as Map<String, dynamic>; final msgId = docs[reversedIndex].id; return _buildMessageItem(msg, msgId); },
+                    itemBuilder: (context, index) {
+                      final reversedIndex = docs.length - 1 - index;
+                      final msg = docs[reversedIndex].data() as Map<String, dynamic>;
+                      final msgId = docs[reversedIndex].id;
+                      Widget? dateSeparator;
+                      if (msg['createdAt'] != null) {
+                        final date = (msg['createdAt'] as Timestamp).toDate();
+                        final dateStr = DateFormat('yyyy年M月d日 EEEE', 'ja').format(date);
+                        bool showDate = true;
+                        if (reversedIndex > 0) {
+                          final prevMsg = docs[reversedIndex - 1].data() as Map<String, dynamic>;
+                          if (prevMsg['createdAt'] != null) {
+                            final prevDate = (prevMsg['createdAt'] as Timestamp).toDate();
+                            if (DateFormat('yyyyMMdd').format(date) == DateFormat('yyyyMMdd').format(prevDate)) showDate = false;
+                          }
+                        }
+                        if (showDate) {
+                          dateSeparator = Center(child: Container(
+                            margin: const EdgeInsets.symmetric(vertical: 16),
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                            decoration: BoxDecoration(color: Colors.grey.shade200, borderRadius: BorderRadius.circular(12)),
+                            child: Text(dateStr, style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                          ));
+                        }
+                      }
+                      return Column(children: [if (dateSeparator != null) dateSeparator, _buildMessageItem(msg, msgId)]);
+                    },
                   );
                 },
               ),
@@ -893,6 +919,50 @@ class _ChatDetailViewState extends State<ChatDetailView> {
   }
 
   Widget _buildInputArea() {
+    final isWide = MediaQuery.of(context).size.width > 600;
+
+    if (isWide) {
+      return Container(
+        decoration: BoxDecoration(color: Colors.white, border: Border(top: BorderSide(color: Colors.grey.shade200))),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (_isUploading) const LinearProgressIndicator(),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+              child: Focus(
+                onKeyEvent: (node, event) {
+                  if (_textController.value.composing.isValid) return KeyEventResult.ignored;
+                  if (event is KeyDownEvent && event.logicalKey == LogicalKeyboardKey.enter && !HardwareKeyboard.instance.isShiftPressed) { _sendMessage(); return KeyEventResult.handled; }
+                  return KeyEventResult.ignored;
+                },
+                child: TextField(
+                  controller: _textController, focusNode: _focusNode, maxLines: 5, minLines: 3, keyboardType: TextInputType.multiline,
+                  style: const TextStyle(fontSize: 15),
+                  decoration: InputDecoration(
+                    hintText: 'メッセージを入力してください。(Enterで送信 / Shift + Enterで改行)',
+                    hintStyle: TextStyle(fontSize: 13, color: Colors.grey.shade400),
+                    border: InputBorder.none, contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4), isDense: true,
+                  ),
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+              child: Row(
+                children: [
+                  IconButton(icon: Icon(Icons.attach_file, color: _isUploading ? Colors.grey.shade300 : Colors.grey.shade600, size: 22), constraints: const BoxConstraints(minWidth: 36, minHeight: 36), padding: EdgeInsets.zero, onPressed: _isUploading ? null : _pickAndUploadFile),
+                  IconButton(icon: Icon(Icons.image_outlined, color: _isUploading ? Colors.grey.shade300 : Colors.grey.shade600, size: 22), constraints: const BoxConstraints(minWidth: 36, minHeight: 36), padding: EdgeInsets.zero, onPressed: _isUploading ? null : _pickAndUploadImage),
+                  const Spacer(),
+                  GestureDetector(onTap: _sendMessage, child: Container(width: 36, height: 36, decoration: const BoxDecoration(color: AppColors.primary, shape: BoxShape.circle), child: const Icon(Icons.send, color: Colors.white, size: 18))),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8), color: Colors.white,
       child: SafeArea(
@@ -1026,7 +1096,7 @@ class _ChatDetailViewState extends State<ChatDetailView> {
                     Column(crossAxisAlignment: CrossAxisAlignment.end, children: [if (readText.isNotEmpty) Text(readText, style: const TextStyle(fontSize: 10, color: Colors.grey)), Text(timeStr, style: const TextStyle(fontSize: 10, color: Colors.grey))]),
                     const SizedBox(width: 8),
                   ],
-                  Flexible(child: isImageOnly ? content : Container(padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12), decoration: BoxDecoration(color: isMe ? AppColors.primary.withOpacity(0.2) : Colors.white, borderRadius: BorderRadius.circular(12)), child: content)),
+                  Flexible(child: isImageOnly ? content : Container(padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12), decoration: BoxDecoration(color: isMe ? const Color(0xFFD6EEFF) : const Color(0xFFF0F0F0), borderRadius: BorderRadius.circular(12)), child: content)),
                   if (!isMe) ...[
                     const SizedBox(width: 8),
                     Text(timeStr, style: const TextStyle(fontSize: 10, color: Colors.grey)),
@@ -1176,7 +1246,21 @@ class _ChatDetailViewState extends State<ChatDetailView> {
   void _deleteMessage(String msgId) {
     showDialog(context: context, builder: (dialogContext) => AlertDialog(
       title: const Text('メッセージを削除'), content: const Text('このメッセージを削除しますか？'),
-      actions: [TextButton(onPressed: () => Navigator.of(dialogContext).pop(), child: const Text('キャンセル')), TextButton(onPressed: () async { await FirebaseFirestore.instance.collection('chat_rooms').doc(widget.roomId).collection('messages').doc(msgId).delete(); Navigator.of(dialogContext).pop(); }, child: const Text('削除', style: TextStyle(color: Colors.red)))],
+      actions: [TextButton(onPressed: () => Navigator.of(dialogContext).pop(), child: const Text('キャンセル')), TextButton(onPressed: () async {
+        final roomRef = FirebaseFirestore.instance.collection('chat_rooms').doc(widget.roomId);
+        await roomRef.collection('messages').doc(msgId).delete();
+        final latest = await roomRef.collection('messages').orderBy('createdAt', descending: true).limit(1).get();
+        if (latest.docs.isNotEmpty) {
+          final d = latest.docs.first.data();
+          String lastMsg = d['text'] ?? '';
+          if (d['type'] == 'image') lastMsg = '画像を送信しました';
+          if (d['type'] == 'file') lastMsg = 'ファイルを送信しました';
+          await roomRef.update({'lastMessage': lastMsg, 'lastMessageTime': d['createdAt']});
+        } else {
+          await roomRef.update({'lastMessage': '', 'lastMessageTime': FieldValue.serverTimestamp()});
+        }
+        Navigator.of(dialogContext).pop();
+      }, child: const Text('削除', style: TextStyle(color: Colors.red)))],
     ));
   }
 
