@@ -2469,6 +2469,30 @@ final plusStaff = _staffList.where((s) =>
             ),
           ],
           const Spacer(),
+          // 集計ボタン
+          if (_viewMode == 0)
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: SizedBox(
+                height: 32,
+                child: OutlinedButton(
+                  onPressed: _showStatsDialog,
+                  style: ButtonStyle(
+                    padding: WidgetStateProperty.all(const EdgeInsets.symmetric(horizontal: 12)),
+                    side: WidgetStateProperty.all(BorderSide(color: Colors.grey.shade300)),
+                    shape: WidgetStateProperty.all(RoundedRectangleBorder(borderRadius: BorderRadius.circular(6))),
+                    foregroundColor: WidgetStateProperty.all(AppColors.textSub),
+                    backgroundColor: WidgetStateProperty.resolveWith((states) {
+                      if (states.contains(WidgetState.hovered)) return Colors.grey.shade100;
+                      return Colors.transparent;
+                    }),
+                    minimumSize: WidgetStateProperty.all(Size.zero),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                  child: const Text('集計', style: TextStyle(fontSize: 13)),
+                ),
+              ),
+            ),
           // タブ切り替え
           Container(
             height: 36,
@@ -2581,6 +2605,208 @@ final plusStaff = _staffList.where((s) =>
     );
   }
 
+  void _showStatsDialog() async {
+    // 対象スタッフと勤務日数
+    final targetStaff = <String, int>{
+      '安保 さゆり': 3,
+      '石川 真利': 2,
+      '栗林 志織': 3,
+      '松永 智栄': 3,
+    };
+
+    // Firestoreに保存された勤務日数があれば上書き
+    for (final staff in _staffList) {
+      final name = staff['name'] as String? ?? '';
+      if (targetStaff.containsKey(name) && staff['workDaysPerWeek'] != null) {
+        targetStaff[name] = staff['workDaysPerWeek'] as int;
+      }
+    }
+
+    // 2026年4月1日から集計開始
+    final startDate = DateTime(2026, 4, 1);
+    final now = DateTime.now();
+    final snapshot = await FirebaseFirestore.instance
+        .collection('plus_lessons')
+        .where('date', isGreaterThanOrEqualTo: Timestamp.fromDate(startDate))
+        .where('date', isLessThanOrEqualTo: Timestamp.fromDate(now))
+        .get();
+
+    // スタッフごとの実施コマ数を集計（欠席除外）
+    final actualCounts = <String, int>{};
+    for (final doc in snapshot.docs) {
+      final data = doc.data();
+      final course = data['course'] as String? ?? '';
+      if (course == '欠席') continue;
+      final teachers = data['teachers'] as List<dynamic>? ?? [];
+      for (final teacher in teachers) {
+        final name = teacher.toString();
+        if (name.isNotEmpty && name != '全員') {
+          actualCounts[name] = (actualCounts[name] ?? 0) + 1;
+        }
+      }
+    }
+
+    // 開始日から現在までの週数を計算（開始前なら0）
+    final totalWeeks = now.isBefore(startDate) ? 0.0 : now.difference(startDate).inDays / 7;
+
+    if (!mounted) return;
+
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setDialogState) {
+            // 対象スタッフのみ、ふりがな順でソート
+            final sortedStaff = _staffList.where((s) {
+              final name = s['name'] as String? ?? '';
+              return targetStaff.containsKey(name);
+            }).toList()
+              ..sort((a, b) {
+                final fa = a['furigana'] as String? ?? a['name'] as String? ?? '';
+                final fb = b['furigana'] as String? ?? b['name'] as String? ?? '';
+                return fa.compareTo(fb);
+              });
+
+            return AlertDialog(
+              title: Row(
+                children: [
+                  Icon(Icons.bar_chart, color: AppColors.primary),
+                  const SizedBox(width: 8),
+                  const Text('コマ数集計', style: TextStyle(fontWeight: FontWeight.bold)),
+                ],
+              ),
+              content: SizedBox(
+                width: 500,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '2026年4月1日〜 累計',
+                      style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+                    ),
+                    const SizedBox(height: 16),
+                    // ヘッダー
+                    Container(
+                      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade100,
+                        borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
+                      ),
+                      child: const Row(
+                        children: [
+                          Expanded(flex: 3, child: Text('スタッフ', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13))),
+                          Expanded(flex: 2, child: Text('実施', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13), textAlign: TextAlign.center)),
+                          Expanded(flex: 2, child: Text('理想', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13), textAlign: TextAlign.center)),
+                          Expanded(flex: 2, child: Text('差分', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13), textAlign: TextAlign.center)),
+                        ],
+                      ),
+                    ),
+                    const Divider(height: 1),
+                    // データ行
+                    ...sortedStaff.map((staff) {
+                      final name = staff['name'] as String? ?? '';
+                      final lastName = name.split(' ').first;
+                      final workDays = targetStaff[name] ?? 3;
+                      final actual = actualCounts[name] ?? 0;
+                      final ideal = (workDays * totalWeeks).round();
+                      final diff = actual - ideal;
+
+                      return Container(
+                        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+                        decoration: BoxDecoration(
+                          border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
+                        ),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              flex: 3,
+                              child: Row(
+                                children: [
+                                  Text(lastName, style: const TextStyle(fontSize: 14)),
+                                  const SizedBox(width: 4),
+                                  GestureDetector(
+                                    onTap: () {
+                                      // 勤務日数を変更するポップアップ
+                                      showDialog(
+                                        context: ctx,
+                                        builder: (editCtx) {
+                                          int editDays = workDays;
+                                          return StatefulBuilder(
+                                            builder: (editCtx, setEditState) => AlertDialog(
+                                              title: Text('$lastName の勤務日数/週'),
+                                              content: DropdownButton<int>(
+                                                value: editDays,
+                                                items: [1, 2, 3, 4, 5, 6].map((d) => DropdownMenuItem(value: d, child: Text('$d日/週'))).toList(),
+                                                onChanged: (v) {
+                                                  if (v != null) setEditState(() => editDays = v);
+                                                },
+                                              ),
+                                              actions: [
+                                                TextButton(onPressed: () => Navigator.pop(editCtx), child: const Text('キャンセル')),
+                                                ElevatedButton(
+                                                  onPressed: () async {
+                                                    // Firestoreのスタッフ情報を更新
+                                                    final staffDoc = _staffList.firstWhere((s) => s['name'] == name, orElse: () => {});
+                                                    final staffId = staffDoc['id'] as String?;
+                                                    if (staffId != null) {
+                                                      await FirebaseFirestore.instance.collection('staffs').doc(staffId).update({'workDaysPerWeek': editDays});
+                                                      targetStaff[name] = editDays;
+                                                      // ローカルも更新
+                                                      final idx = _staffList.indexWhere((s) => s['name'] == name);
+                                                      if (idx != -1) _staffList[idx]['workDaysPerWeek'] = editDays;
+                                                    }
+                                                    Navigator.pop(editCtx);
+                                                    setDialogState(() {});
+                                                  },
+                                                  style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, foregroundColor: Colors.white),
+                                                  child: const Text('保存'),
+                                                ),
+                                              ],
+                                            ),
+                                          );
+                                        },
+                                      );
+                                    },
+                                    child: Text(
+                                      '($workDays)',
+                                      style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Expanded(flex: 2, child: Text('$actual', style: const TextStyle(fontSize: 14), textAlign: TextAlign.center)),
+                            Expanded(flex: 2, child: Text('$ideal', style: const TextStyle(fontSize: 14), textAlign: TextAlign.center)),
+                            Expanded(
+                              flex: 2,
+                              child: Text(
+                                diff >= 0 ? '+$diff' : '$diff',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.bold,
+                                  color: diff >= 0 ? Colors.blue : Colors.red,
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    }),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('閉じる')),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
   Widget _buildDayHeader(double cellWidth, double timeColumnWidth, double headerHeight) {
     final days = ['月', '火', '水', '木', '金', '土'];
     final today = DateTime.now();
@@ -2619,28 +2845,43 @@ final plusStaff = _staffList.where((s) =>
                     ),
                   ),
                   const SizedBox(height: 2),
-                  MouseRegion(
-                    cursor: SystemMouseCursors.click,
-                    child: GestureDetector(
-                      onTap: () => _showShiftDialog(date),
-                      child: Container(
-                        width: 36,
-                        height: 36,
-                        decoration: BoxDecoration(
-                          color: isToday ? AppColors.primary : Colors.transparent,
-                          shape: BoxShape.circle,
-                        ),
-                        alignment: Alignment.center,
-                        child: Text(
-                          '${date.day}',
-                          style: TextStyle(
-                            color: isToday ? Colors.white : (isSaturday ? Colors.blue : AppColors.textMain),
-                            fontSize: 22,
-                            fontWeight: FontWeight.w400,
+                  Builder(
+                    builder: (context) {
+                      final summary = _getTeacherLessonSummary(index);
+                      final dateWidget = MouseRegion(
+                        cursor: SystemMouseCursors.click,
+                        child: GestureDetector(
+                          onTap: () => _showShiftDialog(date),
+                          child: Container(
+                            width: 36,
+                            height: 36,
+                            decoration: BoxDecoration(
+                              color: isToday ? AppColors.primary : Colors.transparent,
+                              shape: BoxShape.circle,
+                            ),
+                            alignment: Alignment.center,
+                            child: Text(
+                              '${date.day}',
+                              style: TextStyle(
+                                color: isToday ? Colors.white : (isSaturday ? Colors.blue : AppColors.textMain),
+                                fontSize: 22,
+                                fontWeight: FontWeight.w400,
+                              ),
+                            ),
                           ),
                         ),
-                      ),
-                    ),
+                      );
+                      if (summary.isEmpty) return dateWidget;
+                      return Tooltip(
+                        message: summary,
+                        preferBelow: true,
+                        verticalOffset: 20,
+                        textStyle: const TextStyle(color: Colors.white, fontSize: 12, height: 1.5),
+                        decoration: BoxDecoration(color: Colors.grey.shade800, borderRadius: BorderRadius.circular(8)),
+                        waitDuration: const Duration(milliseconds: 300),
+                        child: dateWidget,
+                      );
+                    },
                   ),
       // タスク件数表示（タスクがない場合も追加ボタンを表示）
                   SizedBox(
@@ -4135,7 +4376,48 @@ Expanded(
   
   
 
-// _showShiftDialogメソッドを以下に完全に置き換えてください
+  /// その日の講師ごとのコマ数を取得（欠席除外、五十音順）
+  String _getTeacherLessonSummary(int dayIndex) {
+    final lessonsForDay = _lessons.where((lesson) =>
+        lesson['dayIndex'] == dayIndex &&
+        (lesson['course'] as String? ?? '') != '欠席').toList();
+
+    // 講師ごとのコマ数を集計
+    final teacherCounts = <String, int>{};
+    for (final lesson in lessonsForDay) {
+      final teachers = lesson['teachers'] as List<dynamic>? ?? [];
+      for (final teacher in teachers) {
+        final name = teacher.toString();
+        if (name.isNotEmpty && name != '全員') {
+          final lastName = name.split(' ').first;
+          teacherCounts[lastName] = (teacherCounts[lastName] ?? 0) + 1;
+        }
+      }
+    }
+
+    if (teacherCounts.isEmpty) return '';
+
+    final lastNameToFurigana = <String, String>{};
+    for (final staff in _staffList) {
+      final fullName = staff['name'] as String? ?? '';
+      final furigana = staff['furigana'] as String? ?? '';
+      final lastName = fullName.split(' ').first;
+      if (lastName.isNotEmpty) {
+        lastNameToFurigana[lastName] = furigana.isNotEmpty ? furigana : lastName;
+      }
+    }
+
+    final sortedTeachers = teacherCounts.keys.toList()
+      ..sort((a, b) {
+        final kanaA = lastNameToFurigana[a] ?? a;
+        final kanaB = lastNameToFurigana[b] ?? b;
+        return kanaA.compareTo(kanaB);
+      });
+
+    return sortedTeachers
+        .map((name) => '$name: ${teacherCounts[name]}コマ')
+        .join('\n');
+  }
 
 void _showShiftDialog(DateTime date) {
     final dayKey = date.day.toString();
