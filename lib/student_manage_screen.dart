@@ -68,7 +68,6 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
         _classroomList = [
           'ビースマイリー湘南藤沢教室',
           'ビースマイリー湘南台教室',
-          'ビースマイリープラス湘南藤沢教室',
         ];
       });
     }

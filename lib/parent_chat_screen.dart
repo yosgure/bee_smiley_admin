@@ -43,8 +43,8 @@ class _ParentChatScreenState extends State<ParentChatScreen> {
 
   void _setDisplayName() {
     if (widget.familyData != null) {
-      final lastName = widget.familyData!['lastName'] ?? '';
-      final firstName = widget.familyData!['firstName'] ?? '';
+      final lastName = (widget.familyData!['lastName'] ?? '').toString().trim();
+      final firstName = (widget.familyData!['firstName'] ?? '').toString().trim();
       _myDisplayName = '$lastName $firstName'.trim();
       if (_myDisplayName.isEmpty) _myDisplayName = '保護者';
     }
@@ -141,7 +141,7 @@ class _ParentChatScreenState extends State<ParentChatScreen> {
           if (hasMatchingClassroom) {
             staffUids.add(staffUid);
             final name = staffData['name'] ?? 
-                '${staffData['lastName'] ?? ''} ${staffData['firstName'] ?? ''}'.trim();
+                '${(staffData['lastName'] ?? '').toString().trim()} ${(staffData['firstName'] ?? '').toString().trim()}'.trim();
             staffNames[staffUid] = name.isNotEmpty ? name : '先生';
           }
         }
@@ -160,7 +160,7 @@ class _ParentChatScreenState extends State<ParentChatScreen> {
           if (staffUid != null) {
             staffUids.add(staffUid);
             final name = staffData['name'] ?? 
-                '${staffData['lastName'] ?? ''} ${staffData['firstName'] ?? ''}'.trim();
+                '${(staffData['lastName'] ?? '').toString().trim()} ${(staffData['firstName'] ?? '').toString().trim()}'.trim();
             staffNames[staffUid] = name.isNotEmpty ? name : '先生';
           }
         }

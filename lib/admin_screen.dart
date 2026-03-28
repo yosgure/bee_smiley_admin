@@ -13,7 +13,6 @@ import 'tool_master_screen.dart';
 import 'generic_master_screen.dart';
 import 'staff_manage_screen.dart';
 import 'non_cognitive_skill_master_screen.dart';
-import 'sensitive_period_master_screen.dart';
 import 'classroom_master_screen.dart';
 import 'staff_csv_import_screen.dart';
 import 'family_csv_import_screen.dart';
@@ -93,8 +92,6 @@ void _navigateTo(BuildContext context, Widget screen) {
       screenWithBack = ToolMasterScreen(onBack: widget.onCloseWebScreen);
     } else if (screen is NonCognitiveSkillMasterScreen) {
       screenWithBack = NonCognitiveSkillMasterScreen(onBack: widget.onCloseWebScreen);
-    } else if (screen is SensitivePeriodMasterScreen) {
-      screenWithBack = SensitivePeriodMasterScreen(onBack: widget.onCloseWebScreen);
     } else if (screen is ClassroomMasterScreen) {
       screenWithBack = ClassroomMasterScreen(onBack: widget.onCloseWebScreen);
     } else if (screen is NotificationSettingsScreen) {
@@ -181,13 +178,6 @@ void _navigateTo(BuildContext context, Widget screen) {
                 color: AppColors.accent,
                 description: '月間サマリの評価項目',
                 destination: const NonCognitiveSkillMasterScreen(),
-              ),
-              _MenuData(
-                title: '敏感期リスト',
-                icon: Icons.hourglass_top,
-                color: AppColors.accent,
-                description: '発達段階のキーワード',
-                destination: const SensitivePeriodMasterScreen(),
               ),
             ],
           ),

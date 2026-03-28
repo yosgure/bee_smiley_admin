@@ -173,10 +173,10 @@ class _ChatListScreenState extends State<ChatListScreen> {
         final data = snapshot.data!.data() as Map<String, dynamic>?;
         if (data == null) return const Center(child: Text('チャットが存在しません'));
 
-        String roomName = data['groupName'] ?? '';
+        String roomName = (data['groupName'] ?? '').toString().trim();
         if (roomName.isEmpty) {
           final names = Map<String, dynamic>.from(data['names'] ?? {});
-          final otherNames = names.entries.where((e) => e.key != currentUser!.uid).map((e) => e.value).toList();
+          final otherNames = names.entries.where((e) => e.key != currentUser!.uid).map((e) => e.value.toString().trim().replaceAll(RegExp(r'\s+'), ' ')).toList();
           if (otherNames.isNotEmpty) roomName = otherNames.join(', ');
         }
         if (roomName.isEmpty) roomName = '名称未設定';
@@ -429,8 +429,8 @@ class _RoomListTileState extends State<_RoomListTile> {
     snap = await FirebaseFirestore.instance.collection('families').where('uid', isEqualTo: peerId).limit(1).get();
     if (snap.docs.isNotEmpty) {
       final d = snap.docs.first.data();
-      final lastName = d['lastName'] ?? '';
-      final firstName = d['firstName'] ?? '';
+      final lastName = (d['lastName'] ?? '').toString().trim();
+      final firstName = (d['firstName'] ?? '').toString().trim();
       final fullName = '$lastName $firstName'.trim();
       String? childPhotoUrl;
       final children = List<Map<String, dynamic>>.from(d['children'] ?? []);
@@ -498,7 +498,7 @@ class _RoomListTileState extends State<_RoomListTile> {
       timeStr = _formatTime(ts.toDate());
     }
     if (isGroup) {
-      final groupName = room['groupName'] ?? 'グループ';
+      final groupName = (room['groupName'] ?? 'グループ').toString().trim().replaceAll(RegExp(r'\s+'), ' ');
       final photoUrl = room['photoUrl'] as String?;
       return ListTile(
         selected: widget.isSelected, selectedTileColor: AppColors.primary.withOpacity(0.1),
@@ -519,15 +519,33 @@ class _RoomListTileState extends State<_RoomListTile> {
     // Futureをキャッシュして、リビルドごとに再フェッチしないようにする
     if (_peerInfoFuture == null || _cachedPeerId != peerId) {
       _cachedPeerId = peerId;
-      _peerInfoFuture = _fetchPeerInfo(peerId);
+      _peerInfoFuture = _fetchPeerInfo(peerId).then((info) {
+        // names mapの名前が古い場合、Firestoreを同期更新
+        final currentName = memberNames[peerId]?.toString() ?? '';
+        final fetchedName = info['name']?.toString() ?? '';
+        if (fetchedName.isNotEmpty && currentName != fetchedName) {
+          FirebaseFirestore.instance.collection('chat_rooms').doc(roomId).update({'names.$peerId': fetchedName});
+        }
+        return info;
+      });
     }
     return FutureBuilder<Map<String, dynamic>>(
       future: _peerInfoFuture,
       builder: (context, snapshot) {
-        final peerData = snapshot.data;
-        final name = peerData?['name'] ?? memberNames[peerId] ?? '読み込み中...';
-        final photoUrl = peerData?['photoUrl'] as String?;
-        final isStaff = peerData?['isStaff'] == true;
+        if (!snapshot.hasData) {
+          // フェッチ完了まではスケルトン表示（names mapの古いデータでチラつくのを防止）
+          return ListTile(
+            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            leading: CircleAvatar(backgroundColor: Colors.grey.shade200),
+            title: Container(height: 14, width: 80, decoration: BoxDecoration(color: Colors.grey.shade200, borderRadius: BorderRadius.circular(4))),
+            subtitle: Container(height: 10, width: 120, margin: const EdgeInsets.only(top: 4), decoration: BoxDecoration(color: Colors.grey.shade100, borderRadius: BorderRadius.circular(4))),
+            trailing: _buildTrailing(roomId, timeStr),
+          );
+        }
+        final peerData = snapshot.data!;
+        final name = (peerData['name'] ?? '不明').toString().trim().replaceAll(RegExp(r'\s+'), ' ');
+        final photoUrl = peerData['photoUrl'] as String?;
+        final isStaff = peerData['isStaff'] == true;
         return ListTile(
           selected: widget.isSelected, selectedTileColor: AppColors.primary.withOpacity(0.1),
           contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -593,8 +611,8 @@ class _NewChatDialogState extends State<NewChatDialog> with SingleTickerProvider
       for (var doc in familySnap.docs) {
         final d = doc.data();
         if (d['uid'] == widget.myUid) continue;
-        final name = '${d['lastName'] ?? ''} ${d['firstName'] ?? ''}'.trim();
-        final kana = '${d['lastNameKana'] ?? ''} ${d['firstNameKana'] ?? ''}'.trim();
+        final name = '${(d['lastName'] ?? '').toString().trim()} ${(d['firstName'] ?? '').toString().trim()}'.trim();
+        final kana = '${(d['lastNameKana'] ?? '').toString().trim()} ${(d['firstNameKana'] ?? '').toString().trim()}'.trim();
         final children = List<Map<String, dynamic>>.from(d['children'] ?? []);
         String? classroom; String? childPhotoUrl;
         if (children.isNotEmpty) { classroom = children.first['classroom']; childPhotoUrl = children.first['photoUrl'] as String?; }
@@ -605,8 +623,8 @@ class _NewChatDialogState extends State<NewChatDialog> with SingleTickerProvider
         final d = doc.data();
         final String uid = d['uid'] ?? doc.id;
         if (uid == widget.myUid) continue;
-        String name = d['name'] ?? '';
-        if (name.isEmpty) name = '${d['lastName'] ?? ''} ${d['firstName'] ?? ''}'.trim();
+        String name = (d['name'] ?? '').toString().trim();
+        if (name.isEmpty) name = '${(d['lastName'] ?? '').toString().trim()} ${(d['firstName'] ?? '').toString().trim()}'.trim();
         if (name.isEmpty) name = 'スタッフ (名称未設定)';
         String kana = d['furigana'] ?? '';
         if (kana.isEmpty) kana = name;
@@ -728,7 +746,7 @@ class _NewChatDialogState extends State<NewChatDialog> with SingleTickerProvider
     final doc = await roomRef.get();
     if (!doc.exists) {
       await roomRef.set({'roomId': roomId, 'members': members, 'names': names, 'groupName': groupName, 'photoUrl': photoUrl, 'lastMessage': groupName != null ? 'グループ作成' : 'チャット開始', 'lastMessageTime': FieldValue.serverTimestamp(), 'createdAt': FieldValue.serverTimestamp()});
-    } else { await roomRef.update({'members': members, 'names': names}); }
+    } else { final updateData = <String, dynamic>{'members': members, 'names': names}; if (groupName != null) updateData['groupName'] = groupName; await roomRef.update(updateData); }
   }
 
   @override
