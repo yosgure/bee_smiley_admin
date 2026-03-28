@@ -4312,50 +4312,31 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              // 生徒名部分（クリックで生徒編集ダイアログ）
+              // 生徒名部分（クリックは_HoverContainerのonTapで処理）
               Flexible(
                 flex: 3,
-                child: MouseRegion(
-                  cursor: SystemMouseCursors.click,
-                  child: Listener(
-                    behavior: HitTestBehavior.opaque,
-                    onPointerDown: (_) {
-                      _quickEditTapped = true;
-                    },
-                    onPointerUp: (_) {
-                      if (cellContext != null) {
-                        final renderBox = cellContext.findRenderObject() as RenderBox?;
-                        final cellOffset = renderBox?.localToGlobal(Offset.zero);
-                        final cellW = renderBox?.size.width ?? 0;
-                        _showEditLessonDialog(lesson, cellOffset: cellOffset, cellWidth: cellW);
-                      } else {
-                        _showEditLessonDialog(lesson);
-                      }
-                    },
-                    child: Row(
-                      children: [
-                        Flexible(
-                          child: Text(
-                            lesson['studentName'],
-                            style: TextStyle(
-                              color: textColor,
-                              fontSize: 14,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          overflow: TextOverflow.ellipsis,
+                child: Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        lesson['studentName'],
+                        style: TextStyle(
+                          color: textColor,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    if (courseInitial.isNotEmpty)
+                      Text(
+                        courseInitial,
+                        style: TextStyle(
+                          color: textColor,
+                          fontSize: 12,
                         ),
                       ),
-                      if (courseInitial.isNotEmpty)
-                        Text(
-                          courseInitial,
-                          style: TextStyle(
-                            color: textColor,
-                            fontSize: 12,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+                  ],
                 ),
               ),
               const SizedBox(width: 4),
@@ -4643,52 +4624,32 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              // 生徒名部分（クリックで生徒編集ダイアログ）
-Expanded(
-  child: MouseRegion(
-    cursor: SystemMouseCursors.click,
-    child: Listener(
-      behavior: HitTestBehavior.opaque,
-      onPointerDown: (_) {
-        _quickEditTapped = true;
-      },
-      onPointerUp: (_) {
-        _hideCurrentOverlay();
-        if (cellContext != null) {
-          final renderBox = cellContext.findRenderObject() as RenderBox?;
-          final cellOffset = renderBox?.localToGlobal(Offset.zero);
-          final cellW = renderBox?.size.width ?? 0;
-          _showEditLessonDialog(lesson, cellOffset: cellOffset, cellWidth: cellW);
-        } else {
-          _showEditLessonDialog(lesson);
-        }
-      },
-      child: Row(
-        children: [
-          Flexible(
-            child: Text(
-              lesson['studentName'],
-              style: TextStyle(
-                color: textColor,
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
+              // 生徒名部分（クリックは_HoverContainerのonTapで処理）
+              Expanded(
+                child: Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        lesson['studentName'],
+                        style: TextStyle(
+                          color: textColor,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    if (courseInitial.isNotEmpty)
+                      Text(
+                        courseInitial,
+                        style: TextStyle(
+                          color: textColor,
+                          fontSize: 12,
+                        ),
+                      ),
+                  ],
+                ),
               ),
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          if (courseInitial.isNotEmpty)
-            Text(
-              courseInitial,
-              style: TextStyle(
-                color: textColor,
-                fontSize: 12,
-              ),
-            ),
-        ],
-      ),
-    ),
-  ),
-),
               const SizedBox(width: 8),
               // 講師名部分（クリックで講師選択）
               MouseRegion(
