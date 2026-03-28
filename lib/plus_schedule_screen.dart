@@ -1872,157 +1872,574 @@ void _goToPage(int page) {
   
   void _showMobileLessonDetail(Map<String, dynamic> lesson) {
     final isEvent = lesson['isEvent'] == true;
+    final isCustomEvent = lesson['isCustomEvent'] == true;
     final studentName = lesson['studentName'] as String? ?? '';
     final eventTitle = lesson['title'] as String? ?? '';
     final displayName = isEvent ? eventTitle : studentName;
-    final teachers = lesson['teachers'] as List<dynamic>? ?? [];
-    final room = lesson['room'] as String? ?? '';
-    final course = lesson['course'] as String? ?? '通常';
-    final courseColor = _courseColors[course] ?? Colors.blue;
-    final note = lesson['note'] as String? ?? '';
-    
-    // 生徒の場合はメモを取得
-    Map<String, dynamic>? studentNote;
-    if (!isEvent && studentName.isNotEmpty) {
-      studentNote = _studentNotes[studentName];
-    }
-    
+    final dayIndex = lesson['dayIndex'] as int;
+    final slotIndex = lesson['slotIndex'] as int;
+    final date = _weekStart.add(Duration(days: dayIndex));
+
+    // 編集用の状態変数
+    List<String> selectedTeachers = List<String>.from(lesson['teachers'] ?? []);
+    String selectedRoom = lesson['room'] ?? '';
+    String selectedCourse = lesson['course'] ?? '通常';
+
+    // 生徒メモ用コントローラー
+    final therapyController = TextEditingController();
+    final schoolVisitController = TextEditingController();
+    final consultationController = TextEditingController();
+    final moveRequestController = TextEditingController();
+
+    // タスク用
+    List<Map<String, dynamic>> studentTasks = [];
+    final newTaskController = TextEditingController();
+    DateTime? newTaskDueDate = date;
+
+    bool isLoading = true;
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) {
-        return Container(
-          constraints: BoxConstraints(
-            maxHeight: MediaQuery.of(context).size.height * 0.7,
-          ),
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // ハンドル
-              Container(
-                margin: const EdgeInsets.only(top: 12),
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade300,
-                  borderRadius: BorderRadius.circular(2),
-                ),
+      builder: (sheetContext) {
+        return StatefulBuilder(
+          builder: (sheetContext, setSheetState) {
+            // 初回のみデータ読み込み
+            if (isLoading && !isCustomEvent && studentName.isNotEmpty) {
+              isLoading = false;
+              _loadStudentNotes(studentName).then((notes) {
+                if (sheetContext.mounted) {
+                  setSheetState(() {
+                    therapyController.text = notes['therapyPlan'] ?? '';
+                    schoolVisitController.text = notes['schoolVisit'] ?? '';
+                    consultationController.text = notes['schoolConsultation'] ?? '';
+                    moveRequestController.text = notes['moveRequest'] ?? '';
+                    studentTasks = _getTasksForStudent(studentName);
+                  });
+                }
+              });
+            }
+
+            final currentColor = _courseColors[selectedCourse] ?? Colors.blue;
+
+            return Container(
+              constraints: BoxConstraints(
+                maxHeight: MediaQuery.of(sheetContext).size.height * 0.85,
               ),
-              // ヘッダー
-              Padding(
-                padding: const EdgeInsets.all(16),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 8,
-                      height: 40,
-                      decoration: BoxDecoration(
-                        color: courseColor,
-                        borderRadius: BorderRadius.circular(4),
-                      ),
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // ハンドル
+                  Container(
+                    margin: const EdgeInsets.only(top: 12),
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade300,
+                      borderRadius: BorderRadius.circular(2),
                     ),
-                    const SizedBox(width: 12),
-                    Expanded(
+                  ),
+                  // ヘッダー
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 4, 0),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 8,
+                          height: 40,
+                          decoration: BoxDecoration(
+                            color: currentColor,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                displayName,
+                                style: const TextStyle(
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              Text(
+                                '${DateFormat('M月d日 (E)', 'ja').format(date)}　${_timeSlots[slotIndex]}',
+                                style: const TextStyle(fontSize: 13, color: AppColors.textSub),
+                              ),
+                            ],
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.delete_outline, size: 20),
+                          onPressed: () {
+                            Navigator.pop(sheetContext);
+                            _showDeleteConfirmDialog(lesson);
+                          },
+                          tooltip: '削除',
+                          color: AppColors.textSub,
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.close),
+                          onPressed: () => Navigator.pop(sheetContext),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Divider(height: 1, color: Colors.grey.shade200),
+                  // 編集コンテンツ
+                  Flexible(
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.all(16),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            displayName,
-                            style: const TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
+                          // 講師選択
+                          InkWell(
+                            onTap: () => _showMultiTeacherSelectionDialog(
+                              selectedTeachers,
+                              (newSelection) => setSheetState(() => selectedTeachers = newSelection),
                             ),
-                          ),
-                          if (!isEvent)
-                            Text(
-                              course,
-                              style: TextStyle(
-                                fontSize: 14,
-                                color: courseColor,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                              decoration: BoxDecoration(
+                                border: Border.all(color: Colors.grey.shade300),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Row(
+                                children: [
+                                  const Icon(Icons.person, size: 20, color: AppColors.textSub),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Text(
+                                      selectedTeachers.isEmpty
+                                          ? '講師を選択'
+                                          : selectedTeachers.contains('全員')
+                                              ? '全員'
+                                              : selectedTeachers.join('、'),
+                                      style: TextStyle(
+                                        fontSize: 15,
+                                        color: selectedTeachers.isEmpty ? AppColors.textSub : AppColors.textMain,
+                                      ),
+                                    ),
+                                  ),
+                                  if (selectedTeachers.isNotEmpty)
+                                    GestureDetector(
+                                      onTap: () => setSheetState(() => selectedTeachers = []),
+                                      child: const Padding(
+                                        padding: EdgeInsets.only(right: 4),
+                                        child: Icon(Icons.close, size: 18, color: AppColors.textSub),
+                                      ),
+                                    ),
+                                  const Icon(Icons.arrow_drop_down, color: AppColors.textSub),
+                                ],
                               ),
                             ),
+                          ),
+                          const SizedBox(height: 12),
+                          // 部屋選択
+                          InkWell(
+                            onTap: () => _showRoomSelectionDialog(
+                              selectedRoom,
+                              (newRoom) => setSheetState(() => selectedRoom = newRoom),
+                            ),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                              decoration: BoxDecoration(
+                                border: Border.all(color: Colors.grey.shade300),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Row(
+                                children: [
+                                  const Icon(Icons.meeting_room, size: 20, color: AppColors.textSub),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Text(
+                                      selectedRoom.isEmpty ? '部屋を選択' : selectedRoom,
+                                      style: TextStyle(
+                                        fontSize: 15,
+                                        color: selectedRoom.isEmpty ? AppColors.textSub : AppColors.textMain,
+                                      ),
+                                    ),
+                                  ),
+                                  if (selectedRoom.isNotEmpty)
+                                    GestureDetector(
+                                      onTap: () => setSheetState(() => selectedRoom = ''),
+                                      child: const Padding(
+                                        padding: EdgeInsets.only(right: 4),
+                                        child: Icon(Icons.close, size: 18, color: AppColors.textSub),
+                                      ),
+                                    ),
+                                  const Icon(Icons.arrow_drop_down, color: AppColors.textSub),
+                                ],
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          // コース選択
+                          InkWell(
+                            onTap: () => _showCourseSelectionDialog(
+                              selectedCourse,
+                              (newCourse) => setSheetState(() => selectedCourse = newCourse),
+                            ),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                              decoration: BoxDecoration(
+                                border: Border.all(color: Colors.grey.shade300),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Row(
+                                children: [
+                                  Container(
+                                    width: 12, height: 12,
+                                    decoration: BoxDecoration(
+                                      color: currentColor,
+                                      borderRadius: BorderRadius.circular(2),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(child: Text(selectedCourse, style: const TextStyle(fontSize: 15))),
+                                  const Icon(Icons.arrow_drop_down, color: AppColors.textSub),
+                                ],
+                              ),
+                            ),
+                          ),
+
+                          // 生徒情報セクション
+                          if (!isCustomEvent && studentName.isNotEmpty) ...[
+                            const SizedBox(height: 24),
+                            Divider(height: 1, color: Colors.grey.shade200),
+                            const SizedBox(height: 20),
+
+                            // タスクセクション
+                            Row(
+                              children: [
+                                const Icon(Icons.task_alt, size: 18, color: AppColors.accent),
+                                const SizedBox(width: 8),
+                                const Text('タスク', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                              ],
+                            ),
+                            const SizedBox(height: 12),
+                            if (studentTasks.isNotEmpty) ...[
+                              ...studentTasks.map((task) => GestureDetector(
+                                onTap: () => _showEditTaskDialog(
+                                  sheetContext,
+                                  task,
+                                  () => setSheetState(() {
+                                    studentTasks = _getTasksForStudent(studentName);
+                                  }),
+                                ),
+                                child: Container(
+                                  margin: const EdgeInsets.only(bottom: 8),
+                                  padding: const EdgeInsets.all(10),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.accent.shade50,
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Text(task['title'] ?? '', style: const TextStyle(fontSize: 13)),
+                                            if (task['dueDate'] != null)
+                                              Text(
+                                                '期限: ${DateFormat('M/d').format((task['dueDate'] as Timestamp).toDate())}',
+                                                style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                                              ),
+                                          ],
+                                        ),
+                                      ),
+                                      IconButton(
+                                        onPressed: () async {
+                                          await _completeTask(task['id']);
+                                          setSheetState(() {
+                                            studentTasks = _getTasksForStudent(studentName);
+                                          });
+                                        },
+                                        icon: const Icon(Icons.check_circle_outline, size: 20),
+                                        color: Colors.green,
+                                        padding: EdgeInsets.zero,
+                                        constraints: const BoxConstraints(),
+                                        tooltip: '完了',
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              )),
+                            ],
+                            // 新規タスク入力
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: TextField(
+                                    controller: newTaskController,
+                                    decoration: InputDecoration(
+                                      hintText: '新しいタスク',
+                                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                      isDense: true,
+                                    ),
+                                    style: const TextStyle(fontSize: 13),
+                                    onChanged: (_) => setSheetState(() {}),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                InkWell(
+                                  onTap: () async {
+                                    final picked = await showDatePicker(
+                                      context: sheetContext,
+                                      initialDate: newTaskDueDate ?? DateTime.now(),
+                                      firstDate: DateTime.now().subtract(const Duration(days: 365)),
+                                      lastDate: DateTime.now().add(const Duration(days: 365)),
+                                    );
+                                    if (picked != null) {
+                                      setSheetState(() => newTaskDueDate = picked);
+                                    }
+                                  },
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                                    decoration: BoxDecoration(
+                                      border: Border.all(color: Colors.grey.shade300),
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(Icons.calendar_today, size: 16, color: newTaskDueDate != null ? AppColors.primary : AppColors.textSub),
+                                        if (newTaskDueDate != null) ...[
+                                          const SizedBox(width: 4),
+                                          Text(
+                                            DateFormat('M/d').format(newTaskDueDate!),
+                                            style: const TextStyle(fontSize: 12),
+                                          ),
+                                          const SizedBox(width: 4),
+                                          GestureDetector(
+                                            onTap: () => setSheetState(() => newTaskDueDate = null),
+                                            child: const Icon(Icons.close, size: 14, color: AppColors.textSub),
+                                          ),
+                                        ],
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            Align(
+                              alignment: Alignment.centerLeft,
+                              child: GestureDetector(
+                                onTap: () async {
+                                  final taskText = newTaskController.text.trim();
+                                  if (taskText.isEmpty) return;
+                                  final newTask = await _addTaskForStudent(
+                                    studentName,
+                                    taskText,
+                                    newTaskDueDate,
+                                  );
+                                  newTaskController.clear();
+                                  setSheetState(() {
+                                    newTaskDueDate = date;
+                                    if (newTask != null) {
+                                      studentTasks = [...studentTasks, newTask];
+                                    }
+                                  });
+                                },
+                                child: Container(
+                                  width: 24,
+                                  height: 24,
+                                  decoration: BoxDecoration(
+                                    color: newTaskController.text.trim().isEmpty
+                                        ? Colors.grey.shade300
+                                        : AppColors.primary,
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: const Icon(Icons.add, color: Colors.white, size: 16),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 20),
+                            // 療育プラン
+                            Row(
+                              children: [
+                                const Icon(Icons.psychology, size: 18, color: AppColors.primary),
+                                const SizedBox(width: 8),
+                                const Text('療育プラン', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            TextField(
+                              controller: therapyController,
+                              decoration: InputDecoration(
+                                hintText: '療育の目標や方針を記入',
+                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                                contentPadding: const EdgeInsets.all(12),
+                              ),
+                              maxLines: 3,
+                              minLines: 2,
+                              style: const TextStyle(fontSize: 13),
+                            ),
+                            const SizedBox(height: 16),
+                            // 園訪問
+                            Row(
+                              children: [
+                                Icon(Icons.school, size: 18, color: Colors.teal.shade600),
+                                const SizedBox(width: 8),
+                                const Text('園訪問', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            TextField(
+                              controller: schoolVisitController,
+                              decoration: InputDecoration(
+                                hintText: '園訪問の記録や予定を記入',
+                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                                contentPadding: const EdgeInsets.all(12),
+                              ),
+                              maxLines: 3,
+                              minLines: 2,
+                              style: const TextStyle(fontSize: 13),
+                            ),
+                            const SizedBox(height: 16),
+                            // 就学相談
+                            Row(
+                              children: [
+                                Icon(Icons.celebration, size: 18, color: Colors.indigo.shade600),
+                                const SizedBox(width: 8),
+                                const Text('就学相談', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            TextField(
+                              controller: consultationController,
+                              decoration: InputDecoration(
+                                hintText: '就学相談の記録や予定を記入',
+                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                                contentPadding: const EdgeInsets.all(12),
+                              ),
+                              maxLines: 3,
+                              minLines: 2,
+                              style: const TextStyle(fontSize: 13),
+                            ),
+                            const SizedBox(height: 16),
+                            // 移動希望
+                            Row(
+                              children: [
+                                Icon(Icons.swap_horiz, size: 18, color: Colors.purple.shade600),
+                                const SizedBox(width: 8),
+                                const Text('移動希望', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            TextField(
+                              controller: moveRequestController,
+                              decoration: InputDecoration(
+                                hintText: '曜日や時間の変更希望を記入',
+                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                                contentPadding: const EdgeInsets.all(12),
+                              ),
+                              maxLines: 3,
+                              minLines: 2,
+                              style: const TextStyle(fontSize: 13),
+                            ),
+                          ],
                         ],
                       ),
                     ),
-                    IconButton(
-                      icon: const Icon(Icons.close),
-                      onPressed: () => Navigator.pop(context),
-                    ),
-                  ],
-                ),
-              ),
-              const Divider(height: 1),
-              // 内容
-              Flexible(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // 講師
-                      if (teachers.isNotEmpty) ...[
-                        _buildMobileDetailRow(Icons.person, '講師', teachers.join(', ')),
-                        const SizedBox(height: 12),
-                      ],
-                      // 部屋
-                      if (room.isNotEmpty) ...[
-                        _buildMobileDetailRow(Icons.room, '部屋', room),
-                        const SizedBox(height: 12),
-                      ],
-                      // メモ
-                      if (note.isNotEmpty) ...[
-                        _buildMobileDetailRow(Icons.note, 'メモ', note),
-                        const SizedBox(height: 12),
-                      ],
-                      // 生徒情報
-                      if (!isEvent && studentNote != null) ...[
-                        const Divider(),
-                        const SizedBox(height: 12),
-                        const Text(
-                          '生徒情報',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        if ((studentNote['therapyPlan'] ?? '').toString().isNotEmpty)
-                          _buildMobileDetailRow(Icons.psychology, '療育プラン', studentNote['therapyPlan']),
-                        if ((studentNote['schoolVisit'] ?? '').toString().isNotEmpty) ...[
-                          const SizedBox(height: 12),
-                          _buildMobileDetailRow(Icons.school, '園訪問', studentNote['schoolVisit']),
-                        ],
-                        if ((studentNote['schoolConsultation'] ?? '').toString().isNotEmpty) ...[
-                          const SizedBox(height: 12),
-                          _buildMobileDetailRow(Icons.psychology_alt, '就学相談', studentNote['schoolConsultation']),
-                        ],
-                        if ((studentNote['moveRequest'] ?? '').toString().isNotEmpty) ...[
-                          const SizedBox(height: 12),
-                          _buildMobileDetailRow(Icons.swap_horiz, '移動希望', studentNote['moveRequest']),
-                        ],
-                      ],
-                      const SizedBox(height: 24),
-                      // 編集はPCで
-                      Center(
-                        child: Text(
-                          '編集はPC版で行ってください',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.grey.shade500,
-                          ),
-                        ),
-                      ),
-                    ],
                   ),
-                ),
+                  // 保存ボタン
+                  Container(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      border: Border(top: BorderSide(color: Colors.grey.shade200)),
+                    ),
+                    child: SafeArea(
+                      top: false,
+                      child: SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton(
+                          onPressed: () async {
+                            final lessonId = lesson['id'] as String?;
+                            if (lessonId == null) {
+                              Navigator.pop(sheetContext);
+                              return;
+                            }
+
+                            try {
+                              // タスクを追加（入力欄にテキストがある場合）
+                              final taskText = newTaskController.text.trim();
+                              if (taskText.isNotEmpty && studentName.isNotEmpty) {
+                                await _addTaskForStudent(
+                                  studentName,
+                                  taskText,
+                                  newTaskDueDate,
+                                );
+                              }
+
+                              // レッスン情報を保存
+                              await FirebaseFirestore.instance
+                                  .collection('plus_lessons')
+                                  .doc(lessonId)
+                                  .update({
+                                'teachers': selectedTeachers,
+                                'room': selectedRoom,
+                                'course': selectedCourse,
+                                'updatedAt': FieldValue.serverTimestamp(),
+                              });
+
+                              // 生徒メモを保存
+                              if (!isCustomEvent && studentName.isNotEmpty) {
+                                await _saveStudentNotes(studentName, {
+                                  'therapyPlan': therapyController.text,
+                                  'schoolVisit': schoolVisitController.text,
+                                  'schoolConsultation': consultationController.text,
+                                  'moveRequest': moveRequestController.text,
+                                });
+                              }
+
+                              if (!sheetContext.mounted) return;
+                              Navigator.pop(sheetContext);
+                              await _loadLessonsForWeek(showLoading: false);
+
+                              if (mounted) {
+                                scaffoldMessenger.showSnackBar(
+                                  const SnackBar(content: Text('保存しました')),
+                                );
+                              }
+                            } catch (e) {
+                              debugPrint('Error updating lesson: $e');
+                              if (mounted) {
+                                scaffoldMessenger.showSnackBar(
+                                  SnackBar(content: Text('エラー: $e')),
+                                );
+                              }
+                            }
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.primary,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          ),
+                          child: const Text('保存', style: TextStyle(fontSize: 16)),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
-            ],
-          ),
+            );
+          },
         );
       },
     );
@@ -2895,10 +3312,22 @@ final plusStaff = _staffList.where((s) =>
                         }
                       },
                       child: taskCount > 0
-                          ? Center(
-                              child: _TaskBadge(
-                                taskCount: taskCount,
-                                isToday: isToday,
+                          ? Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                              decoration: BoxDecoration(
+                                border: Border.all(
+                                  color: isToday ? AppColors.primary : Colors.grey.shade400,
+                                  width: 1,
+                                ),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(
+                                '$taskCount件のタスク',
+                                style: TextStyle(
+                                  color: isToday ? AppColors.primary : Colors.grey.shade600,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w500,
+                                ),
                               ),
                             )
                           : MouseRegion(
@@ -4782,7 +5211,7 @@ for (var staff in _staffList.where((s) => s['showInSchedule'] != false)) {
       
       // 保存
       await docRef.set({
-        'classroom': 'ビースマイリー湘南藤沢',
+        'classroom': 'ビースマイリープラス湘南藤沢',
         'days': allDays,
         'holidays': holidays,
         'updatedAt': FieldValue.serverTimestamp(),
@@ -5017,7 +5446,7 @@ for (var staff in _staffList.where((s) => s['showInSchedule'] != false)) {
           });
         } else {
           await shiftDocRef.set({
-            'classroom': 'ビースマイリー湘南藤沢',
+            'classroom': 'ビースマイリープラス湘南藤沢',
             'days': shiftUpdates,
             'updatedAt': FieldValue.serverTimestamp(),
           });
@@ -5157,7 +5586,7 @@ for (var staff in _staffList.where((s) => s['showInSchedule'] != false)) {
           });
         } else {
           await docRef.set({
-            'classroom': 'ビースマイリー湘南藤沢',
+            'classroom': 'ビースマイリープラス湘南藤沢',
             'days': updates,
             'updatedAt': FieldValue.serverTimestamp(),
           });
@@ -5241,7 +5670,7 @@ for (var staff in _staffList.where((s) => s['showInSchedule'] != false)) {
           .collection('plus_shifts')
           .doc(toMonth)
           .set({
-            'classroom': fromData['classroom'] ?? 'ビースマイリー湘南藤沢',
+            'classroom': fromData['classroom'] ?? 'ビースマイリープラス湘南藤沢',
             'days': fromDays,
             'copiedFrom': fromMonth,
             'updatedAt': FieldValue.serverTimestamp(),
@@ -8088,67 +8517,6 @@ class _HoverContainerState extends State<_HoverContainer> {
           widget.onTap?.call();
         },
         child: widget.child,
-      ),
-    );
-  }
-}
-
-class _TaskBadge extends StatefulWidget {
-  final int taskCount;
-  final bool isToday;
-
-  const _TaskBadge({
-    required this.taskCount,
-    required this.isToday,
-  });
-
-  @override
-  State<_TaskBadge> createState() => _TaskBadgeState();
-}
-
-class _TaskBadgeState extends State<_TaskBadge> {
-  bool _isHovered = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final baseColor = widget.isToday ? AppColors.primary : const Color(0xFF78909C);
-    final bgColor = _isHovered
-        ? baseColor.withOpacity(0.2)
-        : baseColor.withOpacity(0.12);
-
-    return MouseRegion(
-      cursor: SystemMouseCursors.click,
-      onEnter: (_) => setState(() => _isHovered = true),
-      onExit: (_) => setState(() => _isHovered = false),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
-        height: 22,
-        padding: const EdgeInsets.symmetric(horizontal: 6),
-        decoration: BoxDecoration(
-          color: bgColor,
-          borderRadius: BorderRadius.circular(7),
-        ),
-        alignment: Alignment.center,
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.check_circle_outline,
-              size: 12,
-              color: baseColor,
-            ),
-            const SizedBox(width: 2),
-            Text(
-              '${widget.taskCount}',
-              style: TextStyle(
-                color: baseColor,
-                fontSize: 11,
-                fontWeight: FontWeight.w700,
-                height: 1,
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }
