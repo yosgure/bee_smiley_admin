@@ -595,9 +595,7 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
                             ],
                           ),
                         )
-                      : SingleChildScrollView(
-                          child: _buildCourseTable(courseColumnWidth),
-                        ),
+                      : _buildCourseTable(courseColumnWidth),
                 ),
                 // フッター行（合計人数）
                 _buildFooterRow(courseColumnWidth, footerHeight),
@@ -650,204 +648,215 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
   }
 
   Widget _buildCourseTable(double courseColumnWidth) {
-    return Table(
-      columnWidths: {
-        0: FixedColumnWidth(courseColumnWidth),
-        for (var i = 1; i <= 6; i++) i: const FlexColumnWidth(1),
-      },
-      border: TableBorder(
-        horizontalInside: BorderSide(color: Colors.grey.shade300),
-        verticalInside: BorderSide(color: Colors.grey.shade300),
-        top: BorderSide(color: Colors.grey.shade300),
-        bottom: BorderSide(color: Colors.grey.shade300),
-      ),
+    return Column(
       children: _courses.map((course) {
         final courseName = course['courseName'] as String;
         final startTime = course['startTime'] as String;
         final endTime = course['endTime'] as String;
         final defaultCapacity = course['capacity'] as int;
+        final isLast = course == _courses.last;
 
-        return TableRow(
-          children: [
-            // コース名セル（中央寄せ、背景色fill）
-            TableCell(
-              verticalAlignment: TableCellVerticalAlignment.intrinsicHeight,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
-                constraints: const BoxConstraints(minHeight: 80),
-                color: Colors.grey.shade50,
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    Text(
-                      courseName,
-                      style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.textMain,
-                      ),
-                      textAlign: TextAlign.center,
-                      softWrap: true,
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      '$startTime〜$endTime',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.grey.shade500,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                  ],
-                ),
+        return Expanded(
+          child: Container(
+            decoration: BoxDecoration(
+              border: Border(
+                top: BorderSide(color: Colors.grey.shade300),
+                bottom: isLast ? BorderSide.none : BorderSide.none,
               ),
             ),
-            // 各曜日セル（講師縦書き左 | 生徒右）
-            ...List.generate(6, (dayIndex) {
-              final day = _weekDays[dayIndex];
-              final cellEntries = _schedule[courseName]?[day] ?? [];
-              final students = cellEntries.where((e) => e['type'] == 'student').toList();
-              final teachers = cellEntries.where((e) => e['type'] == 'teacher').toList();
-              // コマごとの定員（未設定ならコースのデフォルト）
-              final cellCapacityEntry = cellEntries.firstWhere(
-                (e) => e['type'] == 'capacity',
-                orElse: () => <String, dynamic>{},
-              );
-              final cellCapacity = cellCapacityEntry.isNotEmpty
-                  ? (cellCapacityEntry['value'] as int? ?? defaultCapacity)
-                  : defaultCapacity;
-              final remainingSeats = cellCapacity - students.length;
-              final hasContent = students.isNotEmpty || teachers.isNotEmpty;
-              final isDisabled = cellEntries.any((e) => e['type'] == 'disabled');
-
-              if (isDisabled) {
-                return TableCell(
-                  verticalAlignment: TableCellVerticalAlignment.intrinsicHeight,
-                  child: GestureDetector(
-                    behavior: HitTestBehavior.translucent,
-                    onTap: () => _showCellEditDialog(courseName, day, cellCapacity),
-                    child: Container(
-                      constraints: const BoxConstraints(minHeight: 80),
-                      color: Colors.grey.shade200,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // コース名セル
+                Container(
+                  width: courseColumnWidth,
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade50,
+                    border: Border(
+                      right: BorderSide(color: Colors.grey.shade300),
                     ),
                   ),
-                );
-              }
+                  padding: const EdgeInsets.symmetric(horizontal: 6),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Text(
+                        courseName,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.textMain,
+                        ),
+                        textAlign: TextAlign.center,
+                        softWrap: true,
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        '$startTime〜$endTime',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey.shade500,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                  ),
+                ),
+                // 各曜日セル
+                ...List.generate(6, (dayIndex) {
+                  final day = _weekDays[dayIndex];
+                  final cellEntries = _schedule[courseName]?[day] ?? [];
+                  final students = cellEntries.where((e) => e['type'] == 'student').toList();
+                  final teachers = cellEntries.where((e) => e['type'] == 'teacher').toList();
+                  final cellCapacityEntry = cellEntries.firstWhere(
+                    (e) => e['type'] == 'capacity',
+                    orElse: () => <String, dynamic>{},
+                  );
+                  final cellCapacity = cellCapacityEntry.isNotEmpty
+                      ? (cellCapacityEntry['value'] as int? ?? defaultCapacity)
+                      : defaultCapacity;
+                  final remainingSeats = cellCapacity - students.length;
+                  final hasContent = students.isNotEmpty || teachers.isNotEmpty;
+                  final isDisabled = cellEntries.any((e) => e['type'] == 'disabled');
+                  final isLastDay = dayIndex == 5;
 
-              return TableCell(
-                verticalAlignment: TableCellVerticalAlignment.intrinsicHeight,
-                child: GestureDetector(
-                  behavior: HitTestBehavior.translucent,
-                  onTap: () => _showCellEditDialog(courseName, day, cellCapacity),
-                  child: IntrinsicHeight(
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        // 講師エリア（常に罫線で区切り、セル全高）
-                        Container(
-                          width: 26,
+                  if (isDisabled) {
+                    return Expanded(
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.translucent,
+                        onTap: () => _showCellEditDialog(courseName, day, cellCapacity),
+                        child: Container(
                           decoration: BoxDecoration(
-                            border: Border(
+                            color: Colors.grey.shade200,
+                            border: isLastDay ? null : Border(
                               right: BorderSide(color: Colors.grey.shade300),
                             ),
                           ),
-                          padding: const EdgeInsets.symmetric(vertical: 4),
-                          child: teachers.isNotEmpty
-                              ? Column(
-                                  mainAxisAlignment: MainAxisAlignment.start,
-                                  children: teachers.map((t) {
-                                    final name = t['name'] as String;
-                                    return Padding(
-                                      padding: const EdgeInsets.only(bottom: 4),
-                                      child: Column(
-                                        children: name.split('').map((char) => Text(
-                                          char,
-                                          style: TextStyle(
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.bold,
-                                            color: Colors.blue.shade700,
-                                            height: 1.15,
-                                          ),
-                                        )).toList(),
-                                      ),
-                                    );
-                                  }).toList(),
-                                )
-                              : const SizedBox.shrink(),
                         ),
-                        // 生徒名 + 残席（右側）
-                        Expanded(
-                          child: Stack(
-                            children: [
-                              Padding(
-                                padding: const EdgeInsets.fromLTRB(5, 6, 4, 20),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: students.map((s) {
-                                    final name = s['name'] as String;
-                                    final note = s['note'] as String? ?? '';
-                                    return Padding(
-                                      padding: const EdgeInsets.only(bottom: 4),
-                                      child: Row(
-                                        children: [
-                                          Flexible(
-                                            child: Text(
-                                              name,
-                                              style: const TextStyle(
-                                                fontSize: 13,
-                                                fontWeight: FontWeight.w500,
-                                                color: AppColors.textMain,
-                                                height: 1.4,
-                                              ),
-                                              overflow: TextOverflow.ellipsis,
-                                            ),
-                                          ),
-                                          if (note.isNotEmpty)
-                                            Padding(
-                                              padding: const EdgeInsets.only(left: 1),
-                                              child: Text(
-                                                '($note)',
-                                                style: TextStyle(
-                                                  fontSize: 12,
-                                                  color: Colors.orange.shade600,
-                                                ),
-                                              ),
-                                            ),
-                                        ],
-                                      ),
-                                    );
-                                  }).toList(),
-                                ),
-                              ),
-                              // 残席数（右下固定）
-                              if (hasContent && cellCapacity > 0)
-                                Positioned(
-                                  right: 4,
-                                  bottom: 2,
-                                  child: Text(
-                                    '残席$remainingSeats',
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      color: remainingSeats <= 0
-                                          ? Colors.red.shade600
-                                          : Colors.grey.shade500,
-                                      fontWeight: remainingSeats <= 0
-                                          ? FontWeight.bold
-                                          : FontWeight.normal,
-                                    ),
-                                  ),
-                                ),
-                            ],
+                      ),
+                    );
+                  }
+
+                  return Expanded(
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.translucent,
+                      onTap: () => _showCellEditDialog(courseName, day, cellCapacity),
+                      child: Container(
+                        decoration: BoxDecoration(
+                          border: isLastDay ? null : Border(
+                            right: BorderSide(color: Colors.grey.shade300),
                           ),
                         ),
-                      ],
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            // 講師エリア
+                            Container(
+                              width: 26,
+                              decoration: BoxDecoration(
+                                border: Border(
+                                  right: BorderSide(color: Colors.grey.shade300),
+                                ),
+                              ),
+                              padding: const EdgeInsets.symmetric(vertical: 4),
+                              child: teachers.isNotEmpty
+                                  ? Column(
+                                      mainAxisAlignment: MainAxisAlignment.start,
+                                      children: teachers.map((t) {
+                                        final name = t['name'] as String;
+                                        return Padding(
+                                          padding: const EdgeInsets.only(bottom: 4),
+                                          child: Column(
+                                            children: name.split('').map((char) => Text(
+                                              char,
+                                              style: TextStyle(
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.bold,
+                                                color: Colors.blue.shade700,
+                                                height: 1.15,
+                                              ),
+                                            )).toList(),
+                                          ),
+                                        );
+                                      }).toList(),
+                                    )
+                                  : const SizedBox.shrink(),
+                            ),
+                            // 生徒名 + 残席
+                            Expanded(
+                              child: Stack(
+                                children: [
+                                  Padding(
+                                    padding: const EdgeInsets.fromLTRB(5, 6, 4, 20),
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: students.map((s) {
+                                        final name = s['name'] as String;
+                                        final note = s['note'] as String? ?? '';
+                                        return Padding(
+                                          padding: const EdgeInsets.only(bottom: 4),
+                                          child: Row(
+                                            children: [
+                                              Flexible(
+                                                child: Text(
+                                                  name,
+                                                  style: const TextStyle(
+                                                    fontSize: 13,
+                                                    fontWeight: FontWeight.w500,
+                                                    color: AppColors.textMain,
+                                                    height: 1.4,
+                                                  ),
+                                                  overflow: TextOverflow.ellipsis,
+                                                ),
+                                              ),
+                                              if (note.isNotEmpty)
+                                                Padding(
+                                                  padding: const EdgeInsets.only(left: 1),
+                                                  child: Text(
+                                                    '($note)',
+                                                    style: TextStyle(
+                                                      fontSize: 12,
+                                                      color: Colors.orange.shade600,
+                                                    ),
+                                                  ),
+                                                ),
+                                            ],
+                                          ),
+                                        );
+                                      }).toList(),
+                                    ),
+                                  ),
+                                  // 残席数（右下固定）
+                                  if (hasContent && cellCapacity > 0)
+                                    Positioned(
+                                      right: 4,
+                                      bottom: 2,
+                                      child: Text(
+                                        '残席$remainingSeats',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: remainingSeats <= 0
+                                              ? Colors.red.shade600
+                                              : Colors.grey.shade500,
+                                          fontWeight: remainingSeats <= 0
+                                              ? FontWeight.bold
+                                              : FontWeight.normal,
+                                        ),
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                     ),
-                  ),
-                ),
-              );
-            }),
-          ],
+                  );
+                }),
+              ],
+            ),
+          ),
         );
       }).toList(),
     );
