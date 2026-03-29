@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:url_launcher/url_launcher.dart';
+// ignore: avoid_web_libraries_in_flutter
+import 'dart:html' as html;
 import 'app_theme.dart';
 import 'plus_dashboard_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -7047,10 +7049,9 @@ await _loadLessonsForWeek(showLoading: false);
                                 onPressed: () {
                                   for (final item in meetingUrls) {
                                     final url = item['url'] as String;
-                                    final uri = Uri.tryParse(url);
-                                    if (uri != null) {
-                                      launchUrl(uri, mode: LaunchMode.externalApplication);
-                                    }
+                                    html.AnchorElement(href: url)
+                                      ..target = '_blank'
+                                      ..click();
                                   }
                                 },
                                 child: const Text('策定会議'),
