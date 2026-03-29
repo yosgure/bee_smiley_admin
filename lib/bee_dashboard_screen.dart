@@ -672,7 +672,7 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
                     Text(
                       courseName,
                       style: const TextStyle(
-                        fontSize: 12,
+                        fontSize: 14,
                         fontWeight: FontWeight.bold,
                         color: AppColors.textMain,
                       ),
@@ -683,7 +683,7 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
                     Text(
                       '$startTime〜$endTime',
                       style: TextStyle(
-                        fontSize: 10,
+                        fontSize: 12,
                         color: Colors.grey.shade500,
                       ),
                       textAlign: TextAlign.center,
@@ -735,7 +735,7 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
                       children: [
                         // 講師エリア（常に罫線で区切り、セル全高）
                         Container(
-                          width: 22,
+                          width: 26,
                           decoration: BoxDecoration(
                             border: Border(
                               right: BorderSide(color: Colors.grey.shade300),
@@ -753,7 +753,7 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
                                         children: name.split('').map((char) => Text(
                                           char,
                                           style: TextStyle(
-                                            fontSize: 10,
+                                            fontSize: 12,
                                             fontWeight: FontWeight.bold,
                                             color: Colors.blue.shade700,
                                             height: 1.15,
@@ -770,14 +770,14 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
                           child: Stack(
                             children: [
                               Padding(
-                                padding: const EdgeInsets.fromLTRB(5, 4, 4, 18),
+                                padding: const EdgeInsets.fromLTRB(5, 6, 4, 20),
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: students.map((s) {
                                     final name = s['name'] as String;
                                     final note = s['note'] as String? ?? '';
                                     return Padding(
-                                      padding: const EdgeInsets.only(bottom: 2),
+                                      padding: const EdgeInsets.only(bottom: 4),
                                       child: Row(
                                         children: [
                                           Flexible(
@@ -787,7 +787,7 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
                                                 fontSize: 13,
                                                 fontWeight: FontWeight.w500,
                                                 color: AppColors.textMain,
-                                                height: 1.3,
+                                                height: 1.4,
                                               ),
                                               overflow: TextOverflow.ellipsis,
                                             ),
@@ -798,7 +798,7 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
                                               child: Text(
                                                 '($note)',
                                                 style: TextStyle(
-                                                  fontSize: 10,
+                                                  fontSize: 12,
                                                   color: Colors.orange.shade600,
                                                 ),
                                               ),
@@ -817,7 +817,7 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
                                   child: Text(
                                     '残席$remainingSeats',
                                     style: TextStyle(
-                                      fontSize: 10,
+                                      fontSize: 12,
                                       color: remainingSeats <= 0
                                           ? Colors.red.shade600
                                           : Colors.grey.shade500,
@@ -877,7 +877,7 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
                   child: Text(
                     '($note)',
                     style: TextStyle(
-                      fontSize: 10,
+                      fontSize: 12,
                       color: Colors.orange.shade600,
                     ),
                   ),
