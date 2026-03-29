@@ -25,12 +25,13 @@ class _PlusDashboardContentState extends State<PlusDashboardContent> {
     '感覚統合': Colors.teal,
     '言語': Colors.purple,
     '就学支援': Colors.indigo,
+    '放デイ': Colors.deepOrange,
     '契約': AppColors.accent,
     '体験': Colors.green,
     '欠席': Colors.red,
   };
 
-  final List<String> _courseList = ['通常', 'モンテッソーリ', '感覚統合', '言語', '就学支援', '契約', '体験', '欠席'];
+  final List<String> _courseList = ['通常', 'モンテッソーリ', '感覚統合', '言語', '就学支援', '放デイ', '契約', '体験', '欠席'];
 
   // レギュラースケジュールデータ
   Map<String, Map<String, List<Map<String, dynamic>>>> _regularSchedule = {};
