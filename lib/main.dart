@@ -101,9 +101,13 @@ class _AuthCheckWrapperState extends State<AuthCheckWrapper> with WidgetsBinding
       if (user != null) {
         final status = await _checkUserStatus(user.uid);
         if (status.type != UserType.unknown) {
-          final notificationService = NotificationService();
-          await notificationService.initialize();
-          await notificationService.saveTokenToFirestore();
+          try {
+            final notificationService = NotificationService();
+            await notificationService.initialize().timeout(const Duration(seconds: 5));
+            await notificationService.saveTokenToFirestore().timeout(const Duration(seconds: 5));
+          } catch (e) {
+            debugPrint('Notification init skipped: $e');
+          }
         }
         if (mounted) {
           setState(() {
