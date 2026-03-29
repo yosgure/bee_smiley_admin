@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'app_theme.dart';
 
 /// プラスダッシュボードのコンテンツウィジェット
@@ -115,6 +116,7 @@ class _PlusDashboardContentState extends State<PlusDashboardContent> {
               'lastNameKana': lastNameKana,
               'classroom': classroom,
               'course': child['course'] ?? '',
+              'meetingUrls': child['meetingUrls'] ?? [],
             });
           }
         }
@@ -3019,6 +3021,39 @@ void _showStudentSelectionDialog(Function(Map<String, dynamic>) onSelect) {
                             ),
                           ),
                         ),
+                        // 策定会議ボタン
+                        Builder(builder: (_) {
+                          final matchedStudent = _allStudents.firstWhere(
+                            (s) => s['name'] == studentName,
+                            orElse: () => <String, dynamic>{},
+                          );
+                          final meetingUrls = (matchedStudent['meetingUrls'] as List<dynamic>? ?? [])
+                              .map((e) => Map<String, dynamic>.from(e))
+                              .where((e) => (e['url'] as String? ?? '').isNotEmpty)
+                              .toList();
+                          if (meetingUrls.isEmpty) return const SizedBox.shrink();
+                          return Padding(
+                            padding: const EdgeInsets.only(left: 8),
+                            child: ElevatedButton(
+                              onPressed: () async {
+                                for (final item in meetingUrls) {
+                                  final url = item['url'] as String;
+                                  final uri = Uri.tryParse(url);
+                                  if (uri != null) {
+                                    await launchUrl(uri, mode: LaunchMode.externalApplication);
+                                  }
+                                }
+                              },
+                              child: const Text('策定会議'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.teal,
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                              ),
+                            ),
+                          );
+                        }),
                       ],
                     ),
                   ),

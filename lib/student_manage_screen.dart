@@ -25,6 +25,9 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
   String _searchQuery = '';
   final TextEditingController _searchController = TextEditingController();
 
+  // 教室フィルター
+  String _selectedClassroomFilter = 'すべて';
+
   // ExpansionTileControllerのマップ
   final Map<String, ExpansionTileController> _controllers = {};
   
@@ -142,48 +145,79 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
       backgroundColor: const Color(0xFFF2F2F7),
       body: Column(
         children: [
-          // 検索窓
+          // 検索窓 + 教室フィルター
           Container(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
             color: Colors.white,
-            child: TextField(
-              controller: _searchController,
-              decoration: InputDecoration(
-                hintText: '名前で検索...',
-                prefixIcon: const Icon(Icons.search, color: Colors.grey),
-                suffixIcon: _searchQuery.isNotEmpty
-                    ? IconButton(
-                        icon: const Icon(Icons.clear, color: Colors.grey),
-                        onPressed: () {
-                          setState(() {
-                            _searchController.clear();
-                            _searchQuery = '';
-                          });
-                        },
-                      )
-                    : null,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  borderSide: BorderSide(color: Colors.grey.shade300),
+            child: Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _searchController,
+                    decoration: InputDecoration(
+                      hintText: '名前で検索...',
+                      prefixIcon: const Icon(Icons.search, color: Colors.grey),
+                      suffixIcon: _searchQuery.isNotEmpty
+                          ? IconButton(
+                              icon: const Icon(Icons.clear, color: Colors.grey),
+                              onPressed: () {
+                                setState(() {
+                                  _searchController.clear();
+                                  _searchQuery = '';
+                                });
+                              },
+                            )
+                          : null,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: BorderSide(color: Colors.grey.shade300),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: BorderSide(color: Colors.grey.shade300),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: const BorderSide(color: Colors.blue),
+                      ),
+                      filled: true,
+                      fillColor: Colors.grey.shade50,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      isDense: true,
+                    ),
+                    onChanged: (value) {
+                      setState(() {
+                        _searchQuery = value.toLowerCase();
+                      });
+                    },
+                  ),
                 ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  borderSide: BorderSide(color: Colors.grey.shade300),
+                const SizedBox(width: 12),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: Colors.grey.shade300),
+                    borderRadius: BorderRadius.circular(8),
+                    color: Colors.grey.shade50,
+                  ),
+                  child: DropdownButtonHideUnderline(
+                    child: DropdownButton<String>(
+                      value: _selectedClassroomFilter,
+                      icon: const Icon(Icons.filter_list, size: 20),
+                      isDense: true,
+                      items: [
+                        const DropdownMenuItem(value: 'すべて', child: Text('すべての教室')),
+                        ..._classroomList.map((c) => DropdownMenuItem(value: c, child: Text(c))),
+                      ],
+                      onChanged: (value) {
+                        setState(() {
+                          _selectedClassroomFilter = value ?? 'すべて';
+                        });
+                      },
+                    ),
+                  ),
                 ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  borderSide: const BorderSide(color: Colors.blue),
-                ),
-                filled: true,
-                fillColor: Colors.grey.shade50,
-                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                isDense: true,
-              ),
-              onChanged: (value) {
-                setState(() {
-                  _searchQuery = value.toLowerCase();
-                });
-              },
+              ],
             ),
           ),
           // リスト部分
@@ -215,10 +249,20 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
                   return kanaA.compareTo(kanaB);
                 });
 
-                // 検索フィルタリング
-                final filteredDocs = _searchQuery.isEmpty
+                // 教室フィルタリング
+                final classroomFiltered = _selectedClassroomFilter == 'すべて'
                     ? docs
                     : docs.where((doc) {
+                        final data = doc.data() as Map<String, dynamic>;
+                        final children = List<Map<String, dynamic>>.from(data['children'] ?? []);
+                        return children.any((child) =>
+                          (child['classroom'] as String? ?? '') == _selectedClassroomFilter);
+                      }).toList();
+
+                // 検索フィルタリング
+                final filteredDocs = _searchQuery.isEmpty
+                    ? classroomFiltered
+                    : classroomFiltered.where((doc) {
                         final data = doc.data() as Map<String, dynamic>;
                         final lastName = (data['lastName'] ?? '').toString().toLowerCase();
                         final firstName = (data['firstName'] ?? '').toString().toLowerCase();
@@ -226,7 +270,7 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
                         final firstNameKana = (data['firstNameKana'] ?? '').toString().toLowerCase();
                         final fullName = '$lastName$firstName';
                         final fullNameKana = '$lastNameKana$firstNameKana';
-                        
+
                         // 児童名も検索対象
                         final children = List<Map<String, dynamic>>.from(data['children'] ?? []);
                         final childMatch = children.any((child) {
@@ -234,7 +278,7 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
                           final childKana = (child['firstNameKana'] ?? '').toString().toLowerCase();
                           return childName.contains(_searchQuery) || childKana.contains(_searchQuery);
                         });
-                        
+
                         return fullName.contains(_searchQuery) ||
                                fullNameKana.contains(_searchQuery) ||
                                childMatch;
@@ -906,6 +950,53 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
                                   ),
                                   onChanged: (val) => child['profileUrl'] = val,
                                 ),
+                                // 策定会議URL（プラス湘南藤沢の生徒のみ）
+                                if ((child['classroom'] as String? ?? '').contains('プラス湘南藤沢')) ...[
+                                  const SizedBox(height: 16),
+                                  const Text('策定会議URL', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+                                  const SizedBox(height: 8),
+                                  ...List.generate(5, (urlIndex) {
+                                    const labels = ['アセスメント', '個別支援計画書(原案)', '議事録', '個別支援計画書', 'モニタリング'];
+                                    final meetingUrls = child['meetingUrls'] as List<dynamic>? ?? [];
+                                    final urlData = urlIndex < meetingUrls.length
+                                        ? Map<String, dynamic>.from(meetingUrls[urlIndex])
+                                        : {'label': labels[urlIndex], 'url': ''};
+                                    return Padding(
+                                      padding: const EdgeInsets.only(bottom: 8),
+                                      child: Row(
+                                        children: [
+                                          SizedBox(
+                                            width: 160,
+                                            child: Text(labels[urlIndex], style: const TextStyle(fontSize: 13)),
+                                          ),
+                                          const SizedBox(width: 8),
+                                          Expanded(
+                                            child: TextFormField(
+                                              initialValue: urlData['url'] ?? '',
+                                              decoration: const InputDecoration(
+                                                hintText: 'https://...',
+                                                isDense: true,
+                                                border: OutlineInputBorder(),
+                                              ),
+                                              onChanged: (val) {
+                                                const fixedLabels = ['アセスメント', '個別支援計画書(原案)', '議事録', '個別支援計画書', 'モニタリング'];
+                                                final urls = List<Map<String, dynamic>>.from(
+                                                  (child['meetingUrls'] as List<dynamic>? ?? []).map((e) => Map<String, dynamic>.from(e)),
+                                                );
+                                                while (urls.length <= urlIndex) {
+                                                  urls.add({'label': fixedLabels[urls.length], 'url': ''});
+                                                }
+                                                urls[urlIndex]['label'] = fixedLabels[urlIndex];
+                                                urls[urlIndex]['url'] = val;
+                                                child['meetingUrls'] = urls;
+                                              },
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    );
+                                  }),
+                                ],
                               ],
                             ),
                           );
