@@ -796,6 +796,7 @@ Map<String, dynamic>? _getCellMemo(DateTime date, int slotIndex) {
             'classroom': classroom,
             'course': child['course'] ?? '',
             'profileUrl': child['profileUrl'] ?? '',
+            'meetingUrls': child['meetingUrls'] ?? [],
             'familyUid': familyUid,
             'studentId': studentId,
           });
@@ -7028,6 +7029,40 @@ await _loadLessonsForWeek(showLoading: false);
                             ),
                           ),
                         ),
+                        // 策定会議ボタン
+                        if (!isCustomEvent && studentName.isNotEmpty)
+                          Builder(builder: (_) {
+                            final student = _allStudents.firstWhere(
+                              (s) => s['name'] == studentName,
+                              orElse: () => <String, dynamic>{},
+                            );
+                            final meetingUrls = (student['meetingUrls'] as List<dynamic>? ?? [])
+                                .map((e) => Map<String, dynamic>.from(e))
+                                .where((e) => (e['url'] as String? ?? '').isNotEmpty)
+                                .toList();
+                            if (meetingUrls.isEmpty) return const SizedBox.shrink();
+                            return Padding(
+                              padding: const EdgeInsets.only(left: 8),
+                              child: ElevatedButton(
+                                onPressed: () async {
+                                  for (final item in meetingUrls) {
+                                    final url = item['url'] as String;
+                                    final uri = Uri.tryParse(url);
+                                    if (uri != null) {
+                                      await launchUrl(uri, mode: LaunchMode.externalApplication);
+                                    }
+                                  }
+                                },
+                                child: const Text('策定会議'),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.teal,
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                                ),
+                              ),
+                            );
+                          }),
                         // AIに相談ボタン
                         if (!isCustomEvent && studentName.isNotEmpty)
                           Padding(
