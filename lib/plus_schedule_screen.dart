@@ -7044,12 +7044,12 @@ await _loadLessonsForWeek(showLoading: false);
                             return Padding(
                               padding: const EdgeInsets.only(left: 8),
                               child: ElevatedButton(
-                                onPressed: () async {
+                                onPressed: () {
                                   for (final item in meetingUrls) {
                                     final url = item['url'] as String;
                                     final uri = Uri.tryParse(url);
                                     if (uri != null) {
-                                      await launchUrl(uri, mode: LaunchMode.externalApplication);
+                                      launchUrl(uri, mode: LaunchMode.externalApplication);
                                     }
                                   }
                                 },
