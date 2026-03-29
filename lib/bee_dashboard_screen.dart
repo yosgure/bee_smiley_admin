@@ -429,16 +429,19 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
     }
   }
 
+  // 教室切り替え中フラグ（全画面ローディングではなく部分的に表示）
+  bool _isSwitching = false;
+
   // 教室切り替え
   Future<void> _switchClassroom(String classroomName) async {
     if (_selectedClassroom == classroomName) return;
     setState(() {
       _selectedClassroom = classroomName;
-      _isLoading = true;
+      _isSwitching = true;
     });
     await _loadDataForClassroom();
     if (mounted) {
-      setState(() => _isLoading = false);
+      setState(() => _isSwitching = false);
     }
   }
 
@@ -470,21 +473,28 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
           _buildClassroomSelector(),
           const SizedBox(height: 12),
           Expanded(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // スケジュールグリッド（左側）
-                Expanded(
-                  flex: 3,
-                  child: _buildScheduleGrid(),
+            child: AnimatedOpacity(
+              opacity: _isSwitching ? 0.3 : 1.0,
+              duration: const Duration(milliseconds: 150),
+              child: IgnorePointer(
+                ignoring: _isSwitching,
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // スケジュールグリッド（左側）
+                    Expanded(
+                      flex: 3,
+                      child: _buildScheduleGrid(),
+                    ),
+                    const SizedBox(width: 32),
+                    // タスクパネル（右側）
+                    SizedBox(
+                      width: 400,
+                      child: _buildTaskSection(),
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 32),
-                // タスクパネル（右側）
-                SizedBox(
-                  width: 400,
-                  child: _buildTaskSection(),
-                ),
-              ],
+              ),
             ),
           ),
         ],
@@ -2813,9 +2823,16 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
           ),
           // コンテンツ
           Expanded(
-            child: _mobileViewIndex == 0
-                ? _buildMobileScheduleView()
-                : _buildMobileTaskView(),
+            child: AnimatedOpacity(
+              opacity: _isSwitching ? 0.3 : 1.0,
+              duration: const Duration(milliseconds: 150),
+              child: IgnorePointer(
+                ignoring: _isSwitching,
+                child: _mobileViewIndex == 0
+                    ? _buildMobileScheduleView()
+                    : _buildMobileTaskView(),
+              ),
+            ),
           ),
         ],
       ),
