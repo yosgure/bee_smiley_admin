@@ -8,6 +8,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'add_event_screen.dart';
 import 'student_detail_screen.dart';
 import 'plus_schedule_screen.dart';
+import 'bee_dashboard_screen.dart';
 import 'app_theme.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -36,6 +37,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
   bool _isLoadingStaffInfo = true;
 
   bool _showPlusSchedule = false;
+  bool _showDashboard = false;
 
   // フィルタ
   bool _showMySchedule = true;
@@ -386,7 +388,9 @@ Future<void> _saveDisplayDate(DateTime date) async {
             elevation: 0,
             toolbarHeight: 64,
             titleSpacing: 24, 
-            title: Row(
+            title: _showDashboard
+                ? const SizedBox.shrink()
+                : Row(
               children: [
                 SizedBox(
                   height: 36,
@@ -487,7 +491,9 @@ Future<void> _saveDisplayDate(DateTime date) async {
               ],
             ),
           ),
-      body: StreamBuilder<QuerySnapshot>(
+      body: _showDashboard
+        ? const BeeDashboardContent()
+        : StreamBuilder<QuerySnapshot>(
         stream: _eventsRef.snapshots(),
         builder: (context, eventSnapshot) {
           return StreamBuilder<QuerySnapshot>(
@@ -861,7 +867,7 @@ Future<void> _saveDisplayDate(DateTime date) async {
           );
         },
       ),
-      floatingActionButton: FloatingActionButton(
+      floatingActionButton: _showDashboard ? null : FloatingActionButton(
         heroTag: null, 
         onPressed: () => _showAddEventDialog(),
         backgroundColor: AppColors.surface,
@@ -1051,15 +1057,33 @@ Future<void> _saveDisplayDate(DateTime date) async {
   }
 
   Widget _buildSegmentedControl() {
-    final views = [CalendarView.day, CalendarView.week, CalendarView.month];
+    // 4つのセグメント: 日, 週, 月, ダッシュボード(アイコン)
     final labels = ['日', '週', '月'];
-    final selectedIndex = views.indexOf(_calendarView);
-    const double buttonWidth = 48.0;
+    int selectedIndex;
+    if (_showDashboard) {
+      selectedIndex = 3;
+    } else {
+      final views = [CalendarView.day, CalendarView.week, CalendarView.month];
+      selectedIndex = views.indexOf(_calendarView);
+    }
+    const double buttonWidth = 42.0;
+    const double dashboardButtonWidth = 42.0;
     const double buttonHeight = 32.0;
     const double containerPadding = 3.0;
-    
+    const totalWidth = buttonWidth * 3 + dashboardButtonWidth + containerPadding * 2;
+
+    double selectedLeft;
+    double selectedWidth;
+    if (selectedIndex < 3) {
+      selectedLeft = selectedIndex * buttonWidth;
+      selectedWidth = buttonWidth;
+    } else {
+      selectedLeft = buttonWidth * 3;
+      selectedWidth = dashboardButtonWidth;
+    }
+
     return Container(
-      width: buttonWidth * 3 + containerPadding * 2,
+      width: totalWidth,
       height: buttonHeight + containerPadding * 2,
       padding: EdgeInsets.all(containerPadding),
       decoration: BoxDecoration(
@@ -1071,10 +1095,10 @@ Future<void> _saveDisplayDate(DateTime date) async {
           AnimatedPositioned(
             duration: const Duration(milliseconds: 200),
             curve: Curves.easeInOut,
-            left: selectedIndex * buttonWidth,
+            left: selectedLeft,
             top: 0,
             child: Container(
-              width: buttonWidth,
+              width: selectedWidth,
               height: buttonHeight,
               decoration: BoxDecoration(
                 color: Colors.white,
@@ -1090,29 +1114,51 @@ Future<void> _saveDisplayDate(DateTime date) async {
             ),
           ),
           Row(
-            children: List.generate(3, (index) {
-              final isSelected = selectedIndex == index;
-              return GestureDetector(
+            children: [
+              // 日・週・月ボタン
+              ...List.generate(3, (index) {
+                final isSelected = selectedIndex == index;
+                final views = [CalendarView.day, CalendarView.week, CalendarView.month];
+                return GestureDetector(
+                  onTap: () => setState(() {
+                    _showDashboard = false;
+                    _calendarView = views[index];
+                    _controller.view = views[index];
+                  }),
+                  child: Container(
+                    width: buttonWidth,
+                    height: buttonHeight,
+                    color: Colors.transparent,
+                    alignment: Alignment.center,
+                    child: Text(
+                      labels[index],
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                        color: isSelected ? AppColors.textMain : AppColors.textSub,
+                      ),
+                    ),
+                  ),
+                );
+              }),
+              // ダッシュボードボタン
+              GestureDetector(
                 onTap: () => setState(() {
-                  _calendarView = views[index];
-                  _controller.view = views[index];
+                  _showDashboard = true;
                 }),
                 child: Container(
-                  width: buttonWidth,
+                  width: dashboardButtonWidth,
                   height: buttonHeight,
                   color: Colors.transparent,
                   alignment: Alignment.center,
-                  child: Text(
-                    labels[index],
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
-                      color: isSelected ? AppColors.textMain : AppColors.textSub,
-                    ),
+                  child: Icon(
+                    Icons.dashboard_outlined,
+                    size: 18,
+                    color: selectedIndex == 3 ? AppColors.textMain : AppColors.textSub,
                   ),
                 ),
-              );
-            }),
+              ),
+            ],
           ),
         ],
       ),
@@ -1120,39 +1166,8 @@ Future<void> _saveDisplayDate(DateTime date) async {
   }
 
   Widget _buildViewSwitcher() {
-    String label = '';
-    switch (_calendarView) {
-      case CalendarView.month: label = '月'; break;
-      case CalendarView.week: label = '週'; break;
-      case CalendarView.day: label = '日'; break;
-      default: label = '週';
-    }
-    return PopupMenuButton<CalendarView>(
-      onSelected: (CalendarView value) => setState(() { _calendarView = value; _controller.view = value; }),
-      offset: const Offset(0, 40),
-      shape: RoundedRectangleBorder(borderRadius: AppStyles.radiusSmall),
-      itemBuilder: (BuildContext context) => [
-        const PopupMenuItem(value: CalendarView.day, child: Text('日')),
-        const PopupMenuItem(value: CalendarView.week, child: Text('週')),
-        const PopupMenuItem(value: CalendarView.month, child: Text('月')),
-      ],
-      child: Container(
-        height: 36,
-        padding: const EdgeInsets.symmetric(horizontal: 12),
-        decoration: BoxDecoration(
-          border: Border.all(color: Colors.grey.shade300),
-          borderRadius: AppStyles.radiusSmall,
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(label, style: const TextStyle(color: AppColors.textMain, fontWeight: FontWeight.w500)),
-            const SizedBox(width: 8),
-            const Icon(Icons.arrow_drop_down, color: AppColors.textSub, size: 20),
-          ],
-        ),
-      ),
-    );
+    // モバイル版と同じセグメントコントロール（日・週・月 + ダッシュボードアイコン）
+    return _buildSegmentedControl();
   }
 
   Widget _buildFilterCheckbox(String title, bool value, Function(bool) onChanged, Color color) {

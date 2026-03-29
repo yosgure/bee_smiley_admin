@@ -1,0 +1,137 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    function isStaff() {
+      return isAuthenticated() && request.auth.token.role == 'staff';
+    }
+    function isParent() {
+      return isAuthenticated() && request.auth.token.role == 'parent';
+    }
+    function uid() {
+      return request.auth.uid;
+    }
+    match /staffs/{staffId} {
+      allow read: if isAuthenticated();
+      allow update, delete: if isStaff();
+      allow create: if false;
+    }
+    match /families/{familyId} {
+      allow read: if isAuthenticated();
+      allow update: if isStaff()
+                    || (isParent() && resource.data.uid == uid());
+      allow create, delete: if false;
+      match /support_plans/{planId} {
+        allow read, write: if isStaff();
+      }
+    }
+    match /chat_rooms/{roomId} {
+      allow read: if isStaff()
+                  || (isAuthenticated() && uid() in resource.data.members);
+      allow create: if isAuthenticated();
+      allow delete: if isStaff();
+      allow update: if isStaff()
+                    || (isAuthenticated() && uid() in resource.data.members);
+      match /messages/{messageId} {
+        allow read, create: if isAuthenticated()
+                            && uid() in get(/databases/$(database)/documents/chat_rooms/$(roomId)).data.members;
+        allow update: if isAuthenticated()
+                      && uid() in get(/databases/$(database)/documents/chat_rooms/$(roomId)).data.members;
+        allow delete: if isAuthenticated()
+                      && uid() in get(/databases/$(database)/documents/chat_rooms/$(roomId)).data.members
+                      && resource.data.senderId == uid();
+      }
+    }
+    match /calendar_events/{eventId} {
+      allow read, write: if isStaff();
+    }
+    match /tasks/{taskId} {
+      allow read, write: if isStaff();
+    }
+    match /notifications/{notificationId} {
+      allow read: if isAuthenticated();
+      allow write: if isStaff();
+    }
+    match /events/{eventId} {
+      allow read: if isAuthenticated();
+      allow write: if isStaff();
+    }
+    match /assessments/{assessmentId} {
+      allow read: if isAuthenticated();
+      allow write: if isStaff();
+    }
+    match /support_plans/{planId} {
+      allow read, write: if isStaff();
+    }
+    match /ai_chat_sessions/{sessionId} {
+      allow read: if isStaff();
+      allow create: if isStaff();
+      allow update, delete: if isStaff() && resource.data.staffId == uid();
+      match /messages/{messageId} {
+        allow read, write: if isStaff()
+                           && get(/databases/$(database)/documents/ai_chat_sessions/$(sessionId)).data.staffId == uid();
+      }
+    }
+    match /plus_lessons/{docId} {
+      allow read, write: if isStaff();
+    }
+    match /plus_shifts/{docId} {
+      allow read, write: if isStaff();
+    }
+    match /plus_regular_schedule/{docId} {
+      allow read, write: if isStaff();
+    }
+    match /plus_tasks/{docId} {
+      allow read, write: if isStaff();
+    }
+    match /plus_cell_memos/{docId} {
+      allow read, write: if isStaff();
+    }
+    match /plus_student_notes/{docId} {
+      allow read, write: if isStaff();
+    }
+    match /plus_settings/{docId} {
+      allow read, write: if isStaff();
+    }
+    // ============================================
+    // bee_dashboard_* コレクション群（スタッフ専用）
+    // ============================================
+    match /bee_dashboard_courses/{docId} {
+      allow read, write: if isStaff();
+    }
+    match /bee_dashboard_schedule/{docId} {
+      allow read, write: if isStaff();
+    }
+    match /bee_dashboard_tasks/{docId} {
+      allow read, write: if isStaff();
+    }
+    // ============================================
+    // マスタデータ
+    // ============================================
+    match /classrooms/{docId} {
+      allow read: if isAuthenticated();
+      allow write: if isStaff();
+    }
+    match /tools/{docId} {
+      allow read: if isAuthenticated();
+      allow write: if isStaff();
+    }
+    match /non_cognitive_skills/{docId} {
+      allow read: if isAuthenticated();
+      allow write: if isStaff();
+    }
+    match /sensitive_periods/{docId} {
+      allow read: if isAuthenticated();
+      allow write: if isStaff();
+    }
+    match /attendance/{docId} {
+      allow read, write: if isStaff();
+    }
+    match /attendance_notifications/{docId} {
+      allow read, create: if isStaff();
+      allow update, delete: if false;
+    }
+  }
+}
