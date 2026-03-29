@@ -31,6 +31,9 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
   // 生徒リスト（familiesから取得、教室でフィルタ）
   List<Map<String, dynamic>> _allStudents = [];
 
+  // 全生徒の名前マップ（スペースなし→スペースあり、教室フィルタなし）
+  Map<String, String> _allStudentNameMap = {};
+
   // 講師リスト（staffsから取得、教室でフィルタ）
   List<Map<String, dynamic>> _staffList = [];
 
@@ -196,6 +199,7 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
           .get();
 
       final students = <Map<String, dynamic>>[];
+      final nameMap = <String, String>{};
       for (var doc in snapshot.docs) {
         final data = doc.data();
         final lastName = data['lastName'] as String? ?? '';
@@ -205,10 +209,16 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
         for (var child in children) {
           final firstName = child['firstName'] as String? ?? '';
           final classroom = child['classroom'] as String? ?? '';
+          final fullName = '$lastName $firstName'.trim();
+
+          // 全生徒の名前マップ（教室フィルタなし）
+          if (firstName.isNotEmpty) {
+            nameMap[fullName.replaceAll(' ', '')] = fullName;
+          }
 
           if (firstName.isNotEmpty && classroom.contains(_selectedClassroom)) {
             students.add({
-              'name': '$lastName $firstName'.trim(),
+              'name': fullName,
               'firstName': firstName,
               'lastName': lastName,
               'lastNameKana': lastNameKana,
@@ -218,6 +228,7 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
           }
         }
       }
+      _allStudentNameMap = nameMap;
 
       students.sort((a, b) {
         final kanaA = (a['lastNameKana'] as String?) ?? '';
@@ -845,7 +856,8 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
   Widget _buildPersonItem(String courseName, String day,
       Map<String, dynamic> person,
       {bool isTeacher = false}) {
-    final name = person['name'] as String;
+    final rawName = person['name'] as String;
+    final name = isTeacher ? rawName : _normalizeStudentName(rawName);
     final note = person['note'] as String? ?? '';
 
     return Padding(
@@ -1261,13 +1273,18 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
     );
   }
 
-  // 生徒名のスペースを統一（苗字と名前の間に半角スペース）
+  // 生徒名をfamiliesコレクションの正式名と照合して統一
   String _normalizeStudentName(String name) {
-    // すでにスペースありならそのまま
-    if (name.contains(' ') || name.contains('　')) {
-      return name.replaceAll('　', ' '); // 全角→半角
+    final normalized = name.replaceAll('　', ' ').trim();
+    final noSpace = normalized.replaceAll(' ', '');
+
+    // 全生徒名マップから照合
+    final matched = _allStudentNameMap[noSpace];
+    if (matched != null) {
+      return matched;
     }
-    return name;
+
+    return normalized;
   }
 
   // ===== 人物追加ダイアログ（講師/生徒切替あり） =====
