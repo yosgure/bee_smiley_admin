@@ -28,7 +28,7 @@ class _PlusDashboardContentState extends State<PlusDashboardContent> {
     '感覚統合': Colors.teal,
     '言語': Colors.purple,
     '就学支援': Colors.indigo,
-    '放デイ': Colors.deepOrange,
+    '放デイ': Colors.amber,
     '契約': AppColors.accent,
     '体験': Colors.green,
     '欠席': Colors.red,
@@ -2000,120 +2000,199 @@ if (studentTasks.isNotEmpty) {
       context: context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (dialogContext, setDialogState) {
-          return AlertDialog(
+          return Dialog(
             backgroundColor: Colors.white,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            title: Text(
-              isCustom ? 'タスクを編集' : '$studentName のタスクを編集',
-              style: const TextStyle(fontSize: 18),
-            ),
-            content: SizedBox(
-              width: 400,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            child: Container(
+              width: 420,
               child: Column(
                 mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  TextField(
-                    controller: titleController,
-                    decoration: InputDecoration(
-                      labelText: '内容',
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 12,
-                      ),
+                  // ヘッダー
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                    decoration: BoxDecoration(
+                      color: AppColors.primary.withValues(alpha: 0.08),
+                      borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.edit_note, color: AppColors.primary, size: 22),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            isCustom ? 'タスクを編集' : '$studentName のタスク',
+                            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        IconButton(
+                          onPressed: () => Navigator.pop(dialogContext),
+                          icon: Icon(Icons.close, color: Colors.grey.shade500, size: 20),
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                        ),
+                      ],
                     ),
                   ),
-                  // 期限日
-                  const SizedBox(height: 16),
-                  InkWell(
-                    onTap: () async {
-                      final date = await showDatePicker(
-                        context: dialogContext,
-                        initialDate: selectedDueDate ?? DateTime.now(),
-                        firstDate: DateTime.now().subtract(const Duration(days: 365)),
-                        lastDate: DateTime.now().add(const Duration(days: 365)),
-                      );
-                      if (date != null) {
-                        setDialogState(() => selectedDueDate = date);
-                      }
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-                      decoration: BoxDecoration(
-                        border: Border.all(color: Colors.grey.shade400),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.calendar_today, size: 20, color: AppColors.textSub),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Text(
-                              selectedDueDate != null
-                                  ? '${selectedDueDate!.month}/${selectedDueDate!.day}'
-                                  : '期限を設定',
-                              style: TextStyle(
-                                fontSize: 15,
-                                color: selectedDueDate != null
-                                    ? AppColors.textMain
-                                    : AppColors.textSub,
-                              ),
+                  // コンテンツ
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // タスク内容
+                        const Text('内容', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textSub)),
+                        const SizedBox(height: 6),
+                        TextField(
+                          controller: titleController,
+                          maxLines: null,
+                          minLines: 3,
+                          decoration: InputDecoration(
+                            hintText: 'タスクの内容を入力...',
+                            hintStyle: TextStyle(color: Colors.grey.shade400),
+                            filled: true,
+                            fillColor: Colors.grey.shade50,
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(10),
+                              borderSide: BorderSide(color: Colors.grey.shade200),
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(10),
+                              borderSide: BorderSide(color: Colors.grey.shade200),
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(10),
+                              borderSide: BorderSide(color: AppColors.primary, width: 1.5),
+                            ),
+                            contentPadding: const EdgeInsets.all(14),
+                          ),
+                          style: const TextStyle(fontSize: 14, height: 1.5),
+                        ),
+                        const SizedBox(height: 20),
+                        // 期限日
+                        const Text('期限日', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textSub)),
+                        const SizedBox(height: 6),
+                        InkWell(
+                          borderRadius: BorderRadius.circular(10),
+                          onTap: () async {
+                            final date = await showDatePicker(
+                              context: dialogContext,
+                              initialDate: selectedDueDate ?? DateTime.now(),
+                              firstDate: DateTime.now().subtract(const Duration(days: 365)),
+                              lastDate: DateTime.now().add(const Duration(days: 365)),
+                            );
+                            if (date != null) {
+                              setDialogState(() => selectedDueDate = date);
+                            }
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                            decoration: BoxDecoration(
+                              color: Colors.grey.shade50,
+                              border: Border.all(color: Colors.grey.shade200),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(Icons.calendar_today, size: 18, color: selectedDueDate != null ? AppColors.primary : AppColors.textSub),
+                                const SizedBox(width: 10),
+                                Text(
+                                  selectedDueDate != null ? DateFormat('yyyy年M月d日').format(selectedDueDate!) : '期限を設定...',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    color: selectedDueDate != null ? AppColors.textMain : Colors.grey.shade400,
+                                  ),
+                                ),
+                                const Spacer(),
+                                if (selectedDueDate != null)
+                                  GestureDetector(
+                                    onTap: () => setDialogState(() => selectedDueDate = null),
+                                    child: Icon(Icons.close, size: 18, color: Colors.grey.shade400),
+                                  ),
+                              ],
                             ),
                           ),
-                          if (selectedDueDate != null)
-                            GestureDetector(
-                              onTap: () => setDialogState(() => selectedDueDate = null),
-                              child: const Icon(Icons.close, size: 18, color: AppColors.textSub),
+                        ),
+                        // コメント欄（生徒タスクのみ）
+                        if (!isCustom) ...[
+                          const SizedBox(height: 20),
+                          const Text('コメント', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textSub)),
+                          const SizedBox(height: 6),
+                          TextField(
+                            controller: commentController,
+                            maxLines: null,
+                            minLines: 2,
+                            decoration: InputDecoration(
+                              hintText: 'コメントを入力...',
+                              hintStyle: TextStyle(color: Colors.grey.shade400),
+                              filled: true,
+                              fillColor: Colors.grey.shade50,
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(10),
+                                borderSide: BorderSide(color: Colors.grey.shade200),
+                              ),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(10),
+                                borderSide: BorderSide(color: Colors.grey.shade200),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(10),
+                                borderSide: BorderSide(color: AppColors.primary, width: 1.5),
+                              ),
+                              contentPadding: const EdgeInsets.all(14),
                             ),
+                            style: const TextStyle(fontSize: 14, height: 1.5),
+                          ),
                         ],
-                      ),
+                      ],
                     ),
                   ),
-                  // 生徒タスクの場合のみコメント欄を表示
-                  if (!isCustom) ...[
-                    const SizedBox(height: 16),
-                    TextField(
-                      controller: commentController,
-                      decoration: InputDecoration(
-                        labelText: 'コメント',
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
+                  // アクション
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+                    child: Row(
+                      children: [
+                        // 削除ボタン
+                        TextButton.icon(
+                          onPressed: () {
+                            Navigator.pop(dialogContext);
+                            _showDeleteTaskDialog(task);
+                          },
+                          icon: const Icon(Icons.delete_outline, size: 18),
+                          label: const Text('削除'),
+                          style: TextButton.styleFrom(
+                            foregroundColor: Colors.red.shade400,
+                          ),
                         ),
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 12,
+                        const Spacer(),
+                        // 保存ボタン
+                        ElevatedButton(
+                          onPressed: () {
+                            Navigator.pop(dialogContext);
+                            _updateTask(
+                              id,
+                              title: titleController.text,
+                              comment: isCustom ? '' : commentController.text,
+                              dueDate: selectedDueDate,
+                            );
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.primary,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 12),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                            elevation: 0,
+                          ),
+                          child: const Text('保存', style: TextStyle(fontWeight: FontWeight.w600)),
                         ),
-                      ),
-                      maxLines: 3,
+                      ],
                     ),
-                  ],
+                  ),
                 ],
               ),
             ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(dialogContext),
-                child: const Text('キャンセル'),
-              ),
-              ElevatedButton(
-                onPressed: () {
-                  Navigator.pop(dialogContext);
-                  _updateTask(
-                    id,
-                    title: titleController.text,
-                    comment: isCustom ? '' : commentController.text,
-                    dueDate: selectedDueDate,
-                  );
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primary,
-                  foregroundColor: Colors.white,
-                ),
-                child: const Text('保存'),
-              ),
-            ],
           );
         },
       ),
