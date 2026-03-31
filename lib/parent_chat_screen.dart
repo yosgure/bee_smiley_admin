@@ -11,6 +11,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 import 'package:gal/gal.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'app_theme.dart';
 import 'skeleton_loading.dart';
 
@@ -443,11 +444,12 @@ class _ChatMessageListState extends State<_ChatMessageList> {
             onTap: () => _showImagePreview(msg['url']),
             child: ClipRRect(
               borderRadius: BorderRadius.circular(12),
-              child: Image.network(
-                msg['url'],
+              child: CachedNetworkImage(
+                imageUrl: msg['url'],
                 width: 200,
                 fit: BoxFit.cover,
-                errorBuilder: (c, e, s) => const Icon(Icons.broken_image),
+                placeholder: (c, u) => Container(width: 200, height: 150, decoration: BoxDecoration(color: Colors.grey.shade200, borderRadius: BorderRadius.circular(12)), child: const Center(child: SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2)))),
+                errorWidget: (c, u, e) => const Icon(Icons.broken_image),
               ),
             ),
           ),
@@ -784,60 +786,58 @@ class _ChatMessageListState extends State<_ChatMessageList> {
   void _showImagePreview(String url) {
     showDialog(
       context: context,
+      barrierColor: Colors.black87,
       builder: (dialogContext) {
         bool isSaving = false;
         return StatefulBuilder(
           builder: (context, setDialogState) {
-            return Dialog(
-              backgroundColor: Colors.transparent,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(12),
-                    child: Image.network(url),
+            return Stack(
+              children: [
+                Center(
+                  child: InteractiveViewer(
+                    minScale: 0.5,
+                    maxScale: 4.0,
+                    child: CachedNetworkImage(
+                      imageUrl: url,
+                      fit: BoxFit.contain,
+                      placeholder: (c, u) => const Center(child: CircularProgressIndicator(color: Colors.white)),
+                      errorWidget: (c, u, e) => const Icon(Icons.broken_image, color: Colors.white, size: 48),
+                    ),
                   ),
-                  const SizedBox(height: 16),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      ElevatedButton.icon(
-                        onPressed: isSaving
-                            ? null
-                            : () async {
-                                setDialogState(() => isSaving = true);
-                                await _saveImageToGallery(url, dialogContext);
-                                setDialogState(() => isSaving = false);
-                              },
-                        icon: isSaving
-                            ? const SizedBox(
-                                width: 18,
-                                height: 18,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: Colors.white,
-                                ),
-                              )
-                            : const Icon(Icons.download),
-                        label: Text(isSaving ? '保存中...' : '保存'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.primary,
-                          foregroundColor: Colors.white,
-                        ),
+                ),
+                Positioned(
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  child: SafeArea(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          IconButton(
+                            icon: const Icon(Icons.close, color: Colors.white, size: 28),
+                            onPressed: () => Navigator.pop(dialogContext),
+                          ),
+                          IconButton(
+                            icon: isSaving
+                                ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                                : const Icon(Icons.download, color: Colors.white, size: 28),
+                            tooltip: '保存',
+                            onPressed: isSaving
+                                ? null
+                                : () async {
+                                    setDialogState(() => isSaving = true);
+                                    await _saveImageToGallery(url, dialogContext);
+                                    setDialogState(() => isSaving = false);
+                                  },
+                          ),
+                        ],
                       ),
-                      const SizedBox(width: 16),
-                      ElevatedButton(
-                        onPressed: () => Navigator.pop(dialogContext),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.grey.shade600,
-                          foregroundColor: Colors.white,
-                        ),
-                        child: const Text('閉じる'),
-                      ),
-                    ],
+                    ),
                   ),
-                ],
-              ),
+                ),
+              ],
             );
           },
         );

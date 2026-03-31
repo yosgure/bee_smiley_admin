@@ -75,68 +75,6 @@ class _PlusDashboardContentState extends State<PlusDashboardContent> {
   void initState() {
     super.initState();
     _loadData();
-    // ★一時的★ 4/6〜4/11のレッスンをレギュラースケジュールにコピー
-    _copyWeekToRegularSchedule();
-  }
-
-  /// ★一時的★ 4/6〜4/11のplus_lessonsをplus_regular_scheduleにコピー
-  Future<void> _copyWeekToRegularSchedule() async {
-    try {
-      final weekDays = ['月', '火', '水', '木', '金', '土'];
-      final timeSlots = ['9:30〜', '11:00〜', '14:00〜', '15:30〜'];
-      final weekStart = DateTime(2026, 4, 6);
-      final weekEnd = DateTime(2026, 4, 11, 23, 59, 59);
-
-      final snapshot = await FirebaseFirestore.instance
-          .collection('plus_lessons')
-          .where('date', isGreaterThanOrEqualTo: Timestamp.fromDate(weekStart))
-          .where('date', isLessThanOrEqualTo: Timestamp.fromDate(weekEnd))
-          .orderBy('date')
-          .get();
-
-      final schedule = <String, dynamic>{};
-      for (var day in weekDays) {
-        schedule[day] = <String, dynamic>{};
-        for (var slot in timeSlots) {
-          (schedule[day] as Map<String, dynamic>)[slot] = <Map<String, dynamic>>[];
-        }
-      }
-
-      for (var doc in snapshot.docs) {
-        final data = doc.data();
-        final dateField = data['date'];
-        if (dateField == null || dateField is! Timestamp) continue;
-        final date = dateField.toDate();
-        final dateOnly = DateTime(date.year, date.month, date.day);
-        final dayIndex = dateOnly.difference(weekStart).inDays;
-        final slotIndex = data['slotIndex'] as int? ?? 0;
-        if (dayIndex < 0 || dayIndex > 5 || slotIndex < 0 || slotIndex > 3) continue;
-        final day = weekDays[dayIndex];
-        final slot = timeSlots[slotIndex];
-        final entry = <String, dynamic>{
-          'name': data['studentName'] ?? '',
-          'course': data['course'] ?? '通常',
-          'note': data['note'] ?? '',
-        };
-        if (data['isCustomEvent'] == true) entry['isCustomEvent'] = true;
-        ((schedule[day] as Map<String, dynamic>)[slot] as List).add(entry);
-      }
-
-      await FirebaseFirestore.instance
-          .collection('plus_regular_schedule')
-          .doc('data')
-          .set({
-        'schedule': schedule,
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
-
-      debugPrint('✅ レギュラースケジュールにコピー完了: ${snapshot.docs.length}件');
-      // コピー後にスケジュール再読み込み
-      await _loadScheduleFromFirestore();
-      if (mounted) setState(() {});
-    } catch (e) {
-      debugPrint('❌ コピーエラー: $e');
-    }
   }
 
   Future<void> _loadData() async {

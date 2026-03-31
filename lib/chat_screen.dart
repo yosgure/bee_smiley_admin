@@ -10,6 +10,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter/gestures.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'app_theme.dart';
 
 // ==========================================
@@ -881,7 +882,7 @@ class _ChatDetailViewState extends State<ChatDetailView> {
                     }
                   }
                   return ListView.builder(
-                    controller: _scrollController, reverse: true, padding: const EdgeInsets.all(16), itemCount: docs.length,
+                    controller: _scrollController, reverse: true, padding: const EdgeInsets.all(16), itemCount: docs.length, cacheExtent: 5000,
                     itemBuilder: (context, index) {
                       final reversedIndex = docs.length - 1 - index;
                       final msg = docs[reversedIndex].data() as Map<String, dynamic>;
@@ -941,38 +942,74 @@ class _ChatDetailViewState extends State<ChatDetailView> {
 
     if (isWide) {
       return Container(
-        decoration: BoxDecoration(color: Colors.white, border: Border(top: BorderSide(color: Colors.grey.shade200))),
+        color: Colors.white,
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            if (_isUploading) const LinearProgressIndicator(),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
-              child: Focus(
-                onKeyEvent: (node, event) {
-                  if (_textController.value.composing.isValid) return KeyEventResult.ignored;
-                  if (event is KeyDownEvent && event.logicalKey == LogicalKeyboardKey.enter && !HardwareKeyboard.instance.isShiftPressed) { _sendMessage(); return KeyEventResult.handled; }
-                  return KeyEventResult.ignored;
-                },
-                child: TextField(
-                  controller: _textController, focusNode: _focusNode, maxLines: 5, minLines: 3, keyboardType: TextInputType.multiline,
-                  style: const TextStyle(fontSize: 15),
-                  decoration: InputDecoration(
-                    hintText: 'メッセージを入力してください。(Enterで送信 / Shift + Enterで改行)',
-                    hintStyle: TextStyle(fontSize: 13, color: Colors.grey.shade400),
-                    border: InputBorder.none, contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4), isDense: true,
-                  ),
-                ),
+            if (_isUploading) const Padding(padding: EdgeInsets.only(bottom: 8), child: LinearProgressIndicator()),
+            // 入力エリア全体を角丸コンテナで囲む
+            Container(
+              decoration: BoxDecoration(
+                color: Colors.grey.shade100,
+                borderRadius: BorderRadius.circular(16),
               ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
-              child: Row(
+              child: Column(
                 children: [
-                  IconButton(icon: Icon(Icons.attach_file, color: _isUploading ? Colors.grey.shade300 : Colors.grey.shade600, size: 22), constraints: const BoxConstraints(minWidth: 36, minHeight: 36), padding: EdgeInsets.zero, onPressed: _isUploading ? null : _pickAndUploadFile),
-                  IconButton(icon: Icon(Icons.image_outlined, color: _isUploading ? Colors.grey.shade300 : Colors.grey.shade600, size: 22), constraints: const BoxConstraints(minWidth: 36, minHeight: 36), padding: EdgeInsets.zero, onPressed: _isUploading ? null : _pickAndUploadImage),
-                  const Spacer(),
-                  GestureDetector(onTap: _sendMessage, child: Container(width: 36, height: 36, decoration: const BoxDecoration(color: AppColors.primary, shape: BoxShape.circle), child: const Icon(Icons.send, color: Colors.white, size: 18))),
+                  // テキスト入力エリア
+                  Focus(
+                    onKeyEvent: (node, event) {
+                      if (_textController.value.composing.isValid) return KeyEventResult.ignored;
+                      if (event is KeyDownEvent && event.logicalKey == LogicalKeyboardKey.enter && !HardwareKeyboard.instance.isShiftPressed) { _sendMessage(); return KeyEventResult.handled; }
+                      return KeyEventResult.ignored;
+                    },
+                    child: TextField(
+                      controller: _textController, focusNode: _focusNode,
+                      maxLines: 6, minLines: 3, keyboardType: TextInputType.multiline,
+                      style: const TextStyle(fontSize: 15, height: 1.5),
+                      decoration: InputDecoration(
+                        hintText: 'メッセージを入力してください。(Enterで送信 / Shift + Enterで改行)',
+                        hintStyle: TextStyle(fontSize: 14, color: Colors.grey.shade400),
+                        border: InputBorder.none,
+                        filled: true,
+                        fillColor: Colors.grey.shade100,
+                        hoverColor: Colors.transparent,
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                        isDense: true,
+                      ),
+                    ),
+                  ),
+                  // アイコンバー
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    child: Row(
+                      children: [
+                        IconButton(
+                          icon: Icon(Icons.attach_file, color: _isUploading ? Colors.grey.shade300 : Colors.grey.shade600, size: 22),
+                          constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+                          tooltip: 'ファイルを添付',
+                          onPressed: _isUploading ? null : _pickAndUploadFile,
+                        ),
+                        IconButton(
+                          icon: Icon(Icons.image_outlined, color: _isUploading ? Colors.grey.shade300 : Colors.grey.shade600, size: 22),
+                          constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+                          tooltip: '画像を送信',
+                          onPressed: _isUploading ? null : _pickAndUploadImage,
+                        ),
+                        const Spacer(),
+                        // 送信ボタン（青丸）
+                        GestureDetector(
+                          onTap: _sendMessage,
+                          child: Container(
+                            width: 36, height: 36,
+                            decoration: const BoxDecoration(color: AppColors.primary, shape: BoxShape.circle),
+                            child: const Icon(Icons.send, color: Colors.white, size: 18),
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                      ],
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -1057,7 +1094,7 @@ class _ChatDetailViewState extends State<ChatDetailView> {
     final bool isImageOnly = type == 'image' && text.isEmpty;
     if (type == 'image') {
       content = Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        GestureDetector(onTap: () => _showImagePreview(msg['url']), child: ClipRRect(borderRadius: BorderRadius.circular(12), child: Image.network(msg['url'], width: 200, fit: BoxFit.cover, errorBuilder: (c, e, s) => const Icon(Icons.broken_image)))),
+        GestureDetector(onTap: () => _showImagePreview(msg['url']), child: ClipRRect(borderRadius: BorderRadius.circular(12), child: CachedNetworkImage(imageUrl: msg['url'], width: 200, fit: BoxFit.cover, placeholder: (c, u) => Container(width: 200, height: 150, decoration: BoxDecoration(color: Colors.grey.shade200, borderRadius: BorderRadius.circular(12)), child: const Center(child: SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2)))), errorWidget: (c, u, e) => const Icon(Icons.broken_image)))),
         if (text.isNotEmpty) ...[const SizedBox(height: 8), SelectableText.rich(TextSpan(children: _buildTextSpansWithLinks(text)))]
       ]);
     } else if (type == 'file') {
@@ -1095,6 +1132,7 @@ class _ChatDetailViewState extends State<ChatDetailView> {
 
     return _HoverableMessageRow(
       isDesktop: isDesktop,
+      hasImage: type == 'image',
       onLongPress: () => _showActionSheet(msgId, isMe, type, text),
       builder: (isHovering) => Align(
         alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
@@ -1292,7 +1330,61 @@ class _ChatDetailViewState extends State<ChatDetailView> {
   }
 
   void _showImagePreview(String url) {
-    showDialog(context: context, builder: (_) => Dialog(child: Column(mainAxisSize: MainAxisSize.min, children: [Flexible(child: Image.network(url)), TextButton(onPressed: () => Navigator.pop(context), child: const Text('閉じる'))])));
+    showDialog(
+      context: context,
+      barrierColor: Colors.black87,
+      builder: (_) => Stack(
+        children: [
+          // 画像表示エリア
+          Center(
+            child: InteractiveViewer(
+              minScale: 0.5,
+              maxScale: 4.0,
+              child: CachedNetworkImage(
+                imageUrl: url,
+                fit: BoxFit.contain,
+                placeholder: (c, u) => const Center(child: CircularProgressIndicator(color: Colors.white)),
+                errorWidget: (c, u, e) => const Icon(Icons.broken_image, color: Colors.white, size: 48),
+              ),
+            ),
+          ),
+          // 上部バー（閉じる・ダウンロード）
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.close, color: Colors.white, size: 28),
+                      onPressed: () => Navigator.pop(context),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.download, color: Colors.white, size: 28),
+                      tooltip: 'ダウンロード',
+                      onPressed: () async {
+                        try {
+                          final uri = Uri.parse(url);
+                          if (await canLaunchUrl(uri)) {
+                            await launchUrl(uri, mode: LaunchMode.externalApplication);
+                          }
+                        } catch (e) {
+                          debugPrint('Download error: $e');
+                        }
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 
@@ -1304,22 +1396,28 @@ class _HoverableMessageRow extends StatefulWidget {
   final bool isDesktop;
   final VoidCallback onLongPress;
   final Widget Function(bool isHovering) builder;
+  final bool hasImage;
 
   const _HoverableMessageRow({
     required this.isDesktop,
     required this.onLongPress,
     required this.builder,
+    this.hasImage = false,
   });
 
   @override
   State<_HoverableMessageRow> createState() => _HoverableMessageRowState();
 }
 
-class _HoverableMessageRowState extends State<_HoverableMessageRow> {
+class _HoverableMessageRowState extends State<_HoverableMessageRow> with AutomaticKeepAliveClientMixin {
   bool _isHovering = false;
 
   @override
+  bool get wantKeepAlive => widget.hasImage;
+
+  @override
   Widget build(BuildContext context) {
+    super.build(context);
     // スマホの場合は長押しでメニュー
     if (!widget.isDesktop) {
       return GestureDetector(
