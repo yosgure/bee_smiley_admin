@@ -76,10 +76,12 @@ class _ParentMainScreenState extends State<ParentMainScreen> {
           break;
         }
       }
-      
+
       if (mounted) {
         setState(() => _hasUnreadChat = hasUnread);
       }
+      // アプリアイコンのバッジを未読状態で更新
+      NotificationService().setBadge(hasUnread ? 1 : 0);
     });
   }
 

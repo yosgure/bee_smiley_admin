@@ -75,7 +75,7 @@ class _AuthCheckWrapperState extends State<AuthCheckWrapper> with WidgetsBinding
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    NotificationService().clearBadge();
+    // バッジは各画面の未読リスナーが正確な未読数で管理する
     _setupAuthListener();
   }
 
@@ -89,7 +89,8 @@ class _AuthCheckWrapperState extends State<AuthCheckWrapper> with WidgetsBinding
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      NotificationService().clearBadge();
+      // バッジは各画面(AdminShell/ParentMainScreen)の未読リスナーが
+      // 正確な未読数で更新するため、ここでは全クリアしない
     }
   }
 
@@ -293,18 +294,19 @@ class _AdminShellState extends State<AdminShell> {
       sub.cancel();
     }
     _messageSubscriptions.clear();
-    
+
     if (roomDocs.isEmpty) {
       if (mounted) setState(() => _hasUnreadChat = false);
+      NotificationService().setBadge(0);
       return;
     }
-    
+
     final Map<String, bool> roomUnreadStatus = {};
-    
+
     for (var roomDoc in roomDocs) {
       final roomId = roomDoc.id;
       roomUnreadStatus[roomId] = false;
-      
+
       final sub = FirebaseFirestore.instance
           .collection('chat_rooms')
           .doc(roomId)
@@ -321,15 +323,18 @@ class _AdminShellState extends State<AdminShell> {
             break;
           }
         }
-        
+
         roomUnreadStatus[roomId] = hasUnread;
         final totalHasUnread = roomUnreadStatus.values.any((v) => v);
-        
+        final unreadCount = roomUnreadStatus.values.where((v) => v).length;
+
         if (mounted) {
           setState(() => _hasUnreadChat = totalHasUnread);
         }
+        // アプリアイコンのバッジを未読チャットルーム数で更新
+        NotificationService().setBadge(unreadCount);
       });
-      
+
       _messageSubscriptions[roomId] = sub;
     }
   }

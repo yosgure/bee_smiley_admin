@@ -102,8 +102,7 @@ class NotificationService {
         if (response.payload != null) {
            _navigationController.add(response.payload!);
         }
-        // 通知タップ時にバッジをクリア
-        clearBadge();
+        // バッジは各画面の未読リスナーが正確な未読数で管理する
       },
     );
 
@@ -131,9 +130,7 @@ class NotificationService {
 
   /// 通知タップ時の処理
   void _handleNotificationTap(RemoteMessage message) {
-    // バッジをクリア
-    clearBadge();
-    
+    // バッジは各画面の未読リスナーが正確な未読数で管理するため、ここではクリアしない
     final type = message.data['type'];
     if (type != null) {
       initialRoute = type;
