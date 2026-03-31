@@ -1,0 +1,64 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // デフォルト: 全拒否
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+
+    // chat_uploads: チャットファイル（認証ユーザーのみ）
+    match /chat_uploads/{roomId}/{fileName} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null
+                   && request.resource.size < 10 * 1024 * 1024;
+    }
+
+    // staff_photos: スタッフ写真（スタッフのみ書込）
+    match /staff_photos/{fileName} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null
+                   && request.auth.token.role == 'staff'
+                   && request.resource.size < 10 * 1024 * 1024;
+    }
+
+    // group_photos: グループ写真（スタッフのみ書込）
+    match /group_photos/{fileName} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null
+                   && request.auth.token.role == 'staff'
+                   && request.resource.size < 10 * 1024 * 1024;
+    }
+
+    // child_photos: 子ども写真（認証ユーザーのみ）
+    match /child_photos/{fileName} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null
+                   && request.resource.size < 10 * 1024 * 1024;
+    }
+
+    // assessment_photos: アセスメント写真（スタッフのみ書込）
+    match /assessment_photos/{fileName} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null
+                   && request.auth.token.role == 'staff'
+                   && request.resource.size < 10 * 1024 * 1024;
+    }
+
+    // event_photos: イベント写真（スタッフのみ書込）
+    match /event_photos/{fileName} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null
+                   && request.auth.token.role == 'staff'
+                   && request.resource.size < 10 * 1024 * 1024;
+    }
+
+    // tool_photos: ツール写真（スタッフのみ書込）
+    match /tool_photos/{fileName} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null
+                   && request.auth.token.role == 'staff'
+                   && request.resource.size < 10 * 1024 * 1024;
+    }
+  }
+}
