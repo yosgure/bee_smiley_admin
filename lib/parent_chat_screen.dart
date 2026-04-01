@@ -1,5 +1,8 @@
 import 'dart:typed_data';
 import 'dart:io';
+// ignore: avoid_web_libraries_in_flutter
+import 'dart:html' as html;
+import 'dart:ui_web' as ui_web;
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:firebase_auth/firebase_auth.dart';
@@ -455,41 +458,93 @@ class _ChatMessageListState extends State<_ChatMessageList> {
           ),
           if (text.isNotEmpty) ...[
             const SizedBox(height: 8),
-            Text(text, style: const TextStyle(fontSize: 15)),
+            Text(text, style: const TextStyle(fontSize: 15, height: 1.5, fontFamily: 'Hiragino Sans', fontFamilyFallback: ['Noto Sans JP', 'Roboto', 'sans-serif'])),
           ],
         ],
       );
     } else if (type == 'file') {
-      content = InkWell(
-        onTap: () async {
-          final Uri url = Uri.parse(msg['url']);
-          if (await canLaunchUrl(url)) await launchUrl(url);
-        },
-        child: Container(
-          padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            color: Colors.grey.shade100,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: Colors.grey.shade300),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.description, color: AppColors.primary),
-              const SizedBox(width: 8),
-              Flexible(
-                child: Text(
-                  msg['fileName'] ?? 'ファイル',
-                  style: const TextStyle(fontSize: 14, decoration: TextDecoration.underline),
-                  overflow: TextOverflow.ellipsis,
-                ),
+      final String fName = msg['fileName'] ?? 'ファイル';
+      final int? fSize = msg['fileSize'] is int ? msg['fileSize'] : null;
+      final String fUrl = msg['url'] ?? '';
+      final Timestamp? createdAt = msg['createdAt'] as Timestamp?;
+      String expiryText = '';
+      if (createdAt != null) {
+        final expiry = createdAt.toDate().add(const Duration(days: 365));
+        expiryText = '期間: ~${DateFormat('yyyy/MM/dd HH:mm').format(expiry)}';
+      }
+      final sizeText = _formatFileSize(fSize);
+      final fExt = fName.split('.').last.toLowerCase();
+      IconData fIcon;
+      Color fIconBg;
+      if (fExt == 'pdf') { fIcon = Icons.picture_as_pdf; fIconBg = Colors.red.shade400; }
+      else if (['doc', 'docx'].contains(fExt)) { fIcon = Icons.description; fIconBg = Colors.blue.shade600; }
+      else if (['xls', 'xlsx', 'csv'].contains(fExt)) { fIcon = Icons.table_chart; fIconBg = Colors.green.shade600; }
+      else if (['ppt', 'pptx'].contains(fExt)) { fIcon = Icons.slideshow; fIconBg = Colors.orange.shade600; }
+      else if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'].contains(fExt)) { fIcon = Icons.image; fIconBg = Colors.teal; }
+      else if (['zip', 'rar', '7z', 'tar', 'gz'].contains(fExt)) { fIcon = Icons.folder_zip; fIconBg = Colors.amber.shade700; }
+      else { fIcon = Icons.insert_drive_file; fIconBg = Colors.grey.shade600; }
+
+      content = ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 260),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            InkWell(
+              onTap: () => _showFilePreview(fUrl, fName),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: 40, height: 40,
+                    decoration: BoxDecoration(color: fIconBg, borderRadius: BorderRadius.circular(6)),
+                    child: Icon(fIcon, color: Colors.white, size: 24),
+                  ),
+                  const SizedBox(width: 10),
+                  Flexible(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(fName, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500), overflow: TextOverflow.ellipsis, maxLines: 2),
+                        if (expiryText.isNotEmpty) ...[
+                          const SizedBox(height: 2),
+                          Text(expiryText, style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
+                        ],
+                        if (sizeText.isNotEmpty) ...[
+                          const SizedBox(height: 2),
+                          Text('サイズ: $sizeText', style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
+                        ],
+                      ],
+                    ),
+                  ),
+                ],
               ),
-            ],
-          ),
+            ),
+            if (text.isNotEmpty) ...[const SizedBox(height: 8), Text(text, style: const TextStyle(fontSize: 15, height: 1.5, fontFamily: 'Hiragino Sans', fontFamilyFallback: ['Noto Sans JP', 'Roboto', 'sans-serif']))],
+            const SizedBox(height: 6),
+            Divider(height: 1, color: Colors.grey.shade300),
+            const SizedBox(height: 4),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                InkWell(
+                  onTap: () async {
+                    final uri = Uri.parse(fUrl);
+                    if (await canLaunchUrl(uri)) await launchUrl(uri, mode: LaunchMode.externalApplication);
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
+                    child: Text('保存', style: TextStyle(fontSize: 13, color: Colors.blue.shade700, fontWeight: FontWeight.w500)),
+                  ),
+                ),
+              ],
+            ),
+          ],
         ),
       );
     } else {
-      content = Text(text, style: const TextStyle(fontSize: 15));
+      content = Text(text, style: const TextStyle(fontSize: 15, height: 1.5, fontFamily: 'Hiragino Sans', fontFamilyFallback: ['Noto Sans JP', 'Roboto', 'sans-serif']));
     }
 
     return GestureDetector(
@@ -842,6 +897,96 @@ class _ChatMessageListState extends State<_ChatMessageList> {
           },
         );
       },
+    );
+  }
+
+  String _formatFileSize(int? bytes) {
+    if (bytes == null) return '';
+    if (bytes < 1024) return '$bytes B';
+    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(0)} KB';
+    return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+  }
+
+  void _showFilePreview(String url, String fileName) {
+    final ext = fileName.split('.').last.toLowerCase();
+    final isImage = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'].contains(ext);
+    final isPdf = ext == 'pdf';
+
+    if (!isImage && !isPdf) {
+      launchUrl(Uri.parse(url));
+      return;
+    }
+
+    if (isImage) {
+      _showImagePreview(url);
+      return;
+    }
+
+    // PDF: Google Docs ViewerのiframeでCORS回避して表示
+    final viewType = 'pdf-preview-${DateTime.now().millisecondsSinceEpoch}';
+    final encodedUrl = Uri.encodeComponent(url);
+    final viewerUrl = 'https://docs.google.com/gview?url=$encodedUrl&embedded=true';
+    ui_web.platformViewRegistry.registerViewFactory(viewType, (int viewId) {
+      final iframe = html.IFrameElement()
+        ..src = viewerUrl
+        ..style.border = 'none'
+        ..style.width = '100%'
+        ..style.height = '100%'
+        ..setAttribute('allow', 'fullscreen');
+      return iframe;
+    });
+
+    showDialog(
+      context: context,
+      barrierColor: Colors.black87,
+      builder: (_) => Center(
+        child: Container(
+          width: MediaQuery.of(context).size.width * 0.8,
+          height: MediaQuery.of(context).size.height * 0.9,
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: Column(
+            children: [
+              Container(
+                color: const Color(0xFF333333),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                child: Row(
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.close, color: Colors.white, size: 24),
+                      onPressed: () => Navigator.pop(context),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        fileName,
+                        style: const TextStyle(color: Colors.white, fontSize: 14),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.download, color: Colors.white, size: 24),
+                      tooltip: 'ダウンロード',
+                      onPressed: () async {
+                        final uri = Uri.parse(url);
+                        if (await canLaunchUrl(uri)) {
+                          await launchUrl(uri, mode: LaunchMode.externalApplication);
+                        }
+                      },
+                    ),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: HtmlElementView(viewType: viewType),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
