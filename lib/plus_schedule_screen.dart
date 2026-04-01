@@ -66,12 +66,13 @@ class _PlusScheduleContentState extends State<PlusScheduleContent> with Automati
     '契約': AppColors.accent,
     '体験': Colors.green,
     '欠席': Colors.red,
+    '策定会議': Colors.deepPurple,
   };
-  
+
   // カスタマイズ可能なコース色
   Map<String, Color> _courseColors = {};
-  
-  final List<String> _courseList = ['通常', 'モンテッソーリ', '感覚統合', '言語', '就学支援', '放デイ', '契約', '体験', '欠席'];
+
+  final List<String> _courseList = ['通常', 'モンテッソーリ', '感覚統合', '言語', '就学支援', '放デイ', '契約', '体験', '欠席', '策定会議'];
   
   // カラーパレット（選択可能な色）
   static const List<Color> _colorPalette = [
