@@ -458,7 +458,7 @@ class _ChatMessageListState extends State<_ChatMessageList> {
           ),
           if (text.isNotEmpty) ...[
             const SizedBox(height: 8),
-            Text(text, style: const TextStyle(fontSize: 15, height: 1.5, fontFamily: 'Hiragino Sans', fontFamilyFallback: ['Noto Sans JP', 'Roboto', 'sans-serif'])),
+            Text(text, style: const TextStyle(fontSize: 15, height: 1.5, fontFamily: 'NotoSansJP', fontFamilyFallback: ['Hiragino Sans', 'Roboto', 'sans-serif'])),
           ],
         ],
       );
@@ -521,7 +521,7 @@ class _ChatMessageListState extends State<_ChatMessageList> {
                 ],
               ),
             ),
-            if (text.isNotEmpty) ...[const SizedBox(height: 8), Text(text, style: const TextStyle(fontSize: 15, height: 1.5, fontFamily: 'Hiragino Sans', fontFamilyFallback: ['Noto Sans JP', 'Roboto', 'sans-serif']))],
+            if (text.isNotEmpty) ...[const SizedBox(height: 8), Text(text, style: const TextStyle(fontSize: 15, height: 1.5, fontFamily: 'NotoSansJP', fontFamilyFallback: ['Hiragino Sans', 'Roboto', 'sans-serif']))],
             const SizedBox(height: 6),
             Divider(height: 1, color: Colors.grey.shade300),
             const SizedBox(height: 4),
@@ -544,7 +544,7 @@ class _ChatMessageListState extends State<_ChatMessageList> {
         ),
       );
     } else {
-      content = Text(text, style: const TextStyle(fontSize: 15, height: 1.5, fontFamily: 'Hiragino Sans', fontFamilyFallback: ['Noto Sans JP', 'Roboto', 'sans-serif']));
+      content = Text(text, style: const TextStyle(fontSize: 15, height: 1.5, fontFamily: 'NotoSansJP', fontFamilyFallback: ['Hiragino Sans', 'Roboto', 'sans-serif']));
     }
 
     return GestureDetector(

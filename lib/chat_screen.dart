@@ -968,7 +968,7 @@ class _ChatDetailViewState extends State<ChatDetailView> {
                     child: TextField(
                       controller: _textController, focusNode: _focusNode,
                       maxLines: 6, minLines: 3, keyboardType: TextInputType.multiline,
-                      style: const TextStyle(fontSize: 15, height: 1.5, fontFamily: 'Hiragino Sans', fontFamilyFallback: ['Noto Sans JP', 'Roboto', 'sans-serif']),
+                      style: const TextStyle(fontSize: 15, height: 1.5, fontFamily: 'NotoSansJP', fontFamilyFallback: ['Hiragino Sans', 'Roboto', 'sans-serif']),
                       decoration: InputDecoration(
                         hintText: 'メッセージを入力してください。(Enterで送信 / Shift + Enterで改行)',
                         hintStyle: TextStyle(fontSize: 14, color: Colors.grey.shade400),
@@ -1049,7 +1049,7 @@ class _ChatDetailViewState extends State<ChatDetailView> {
                 },
                 child: TextField(
                   controller: _textController, focusNode: _focusNode, maxLines: null, minLines: 1, keyboardType: TextInputType.multiline,
-                  style: const TextStyle(fontSize: 15, height: 1.5, fontFamily: 'Hiragino Sans', fontFamilyFallback: ['Noto Sans JP', 'Roboto', 'sans-serif']),
+                  style: const TextStyle(fontSize: 15, height: 1.5, fontFamily: 'NotoSansJP', fontFamilyFallback: ['Hiragino Sans', 'Roboto', 'sans-serif']),
                   decoration: InputDecoration(hintText: 'メッセージを入力', filled: true, fillColor: Colors.grey.shade100, border: OutlineInputBorder(borderRadius: BorderRadius.circular(24), borderSide: BorderSide.none), contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10)),
                 ),
               ),
@@ -1065,8 +1065,8 @@ class _ChatDetailViewState extends State<ChatDetailView> {
     );
   }
 
-  static const _chatTextStyle = TextStyle(fontSize: 15, height: 1.5, color: Colors.black87, fontFamily: 'Hiragino Sans', fontFamilyFallback: ['Noto Sans JP', 'Roboto', 'sans-serif']);
-  static const _chatLinkStyle = TextStyle(fontSize: 15, height: 1.5, color: Colors.blue, decoration: TextDecoration.underline, decorationColor: Colors.blue, fontFamily: 'Hiragino Sans', fontFamilyFallback: ['Noto Sans JP', 'Roboto', 'sans-serif']);
+  static const _chatTextStyle = TextStyle(fontSize: 15, height: 1.5, color: Colors.black87, fontFamily: 'NotoSansJP', fontFamilyFallback: ['Hiragino Sans', 'Roboto', 'sans-serif']);
+  static const _chatLinkStyle = TextStyle(fontSize: 15, height: 1.5, color: Colors.blue, decoration: TextDecoration.underline, decorationColor: Colors.blue, fontFamily: 'NotoSansJP', fontFamilyFallback: ['Hiragino Sans', 'Roboto', 'sans-serif']);
 
   List<InlineSpan> _buildTextSpansWithLinks(String text) {
     final urlPattern = RegExp(r'https?://[^\s\u3000]+', caseSensitive: false);
