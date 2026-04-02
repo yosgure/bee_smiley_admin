@@ -5,7 +5,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:image/image.dart' as img;
-import 'package:package_info_plus/package_info_plus.dart';
 import 'app_theme.dart';
 
 class ParentSettingsScreen extends StatefulWidget {
@@ -30,20 +29,6 @@ class ParentSettingsScreen extends StatefulWidget {
 
 class _ParentSettingsScreenState extends State<ParentSettingsScreen> {
   bool _isUploading = false;
-  String _appVersion = '';
-
-  @override
-  void initState() {
-    super.initState();
-    _loadAppVersion();
-  }
-
-  Future<void> _loadAppVersion() async {
-    final info = await PackageInfo.fromPlatform();
-    if (mounted) {
-      setState(() => _appVersion = 'v${info.version}');
-    }
-  }
 
   // 現在選択中の子ども
   Map<String, dynamic>? get _currentChild {
@@ -117,14 +102,6 @@ class _ParentSettingsScreenState extends State<ParentSettingsScreen> {
               _buildLogoutButton(),
               
               const SizedBox(height: 32),
-              
-              // アプリ情報
-              Center(
-                child: Text(
-                  'Beesmiley $_appVersion',
-                  style: TextStyle(color: Colors.grey.shade400, fontSize: 12),
-                ),
-              ),
             ],
           ),
         ),
@@ -199,7 +176,7 @@ class _ParentSettingsScreenState extends State<ParentSettingsScreen> {
                         ? NetworkImage(child['photoUrl']) 
                         : null,
                     child: child['photoUrl'] == null
-                        ? Icon(Icons.child_care, color: isSelected ? AppColors.primary : Colors.grey)
+                        ? Icon(Icons.person, color: isSelected ? AppColors.primary : Colors.grey)
                         : null,
                   ),
                   title: Text(
@@ -226,7 +203,7 @@ class _ParentSettingsScreenState extends State<ParentSettingsScreen> {
                         ? NetworkImage(_currentChild!['photoUrl']) 
                         : null,
                     child: _currentChild?['photoUrl'] == null
-                        ? const Icon(Icons.child_care, size: 30, color: AppColors.primary)
+                        ? const Icon(Icons.person, size: 30, color: AppColors.primary)
                         : null,
                   ),
                   const SizedBox(width: 16),
@@ -278,7 +255,7 @@ class _ParentSettingsScreenState extends State<ParentSettingsScreen> {
                         ? NetworkImage(_currentChild!['photoUrl']) 
                         : null,
                     child: _currentChild?['photoUrl'] == null
-                        ? const Icon(Icons.child_care, size: 50, color: Colors.grey)
+                        ? const Icon(Icons.person, size: 50, color: Colors.grey)
                         : null,
                   ),
                   Positioned(
