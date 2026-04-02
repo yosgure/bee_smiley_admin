@@ -2116,6 +2116,18 @@ class _AiChatScreenState extends State<AiChatScreen> {
                             tooltip: 'ファイルを添付',
                             onTap: _isSending ? null : _pickFile,
                           ),
+                          // コマンドボタン
+                          if (_commands.isNotEmpty && !_elicitationMode)
+                            _buildToolbarButton(
+                              icon: Icons.code_rounded,
+                              tooltip: 'コマンド',
+                              onTap: _isSending ? null : () {
+                                setState(() {
+                                  _showSlashMenu = !_showSlashMenu;
+                                  _slashFilter = '';
+                                });
+                              },
+                            ),
                           const Spacer(),
                           // 送信ボタン（常に表示、入力があればアクティブ）
                           GestureDetector(
