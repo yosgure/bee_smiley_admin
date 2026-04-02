@@ -72,12 +72,9 @@ service cloud.firestore {
       allow read, write: if isStaff();
     }
     match /ai_chat_sessions/{sessionId} {
-      allow read: if isStaff();
-      allow create: if isStaff();
-      allow update, delete: if isStaff() && resource.data.staffId == uid();
+      allow read, create, update, delete: if isStaff();
       match /messages/{messageId} {
-        allow read, write: if isStaff()
-                           && get(/databases/$(database)/documents/ai_chat_sessions/$(sessionId)).data.staffId == uid();
+        allow read, write: if isStaff();
       }
     }
     match /plus_lessons/{docId} {

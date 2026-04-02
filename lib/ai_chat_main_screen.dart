@@ -124,10 +124,8 @@ class _AiChatMainScreenState extends State<AiChatMainScreen> {
 
   Future<void> _loadRecentSessions() async {
     try {
-      final uid = FirebaseAuth.instance.currentUser?.uid ?? '';
       final snapshot = await FirebaseFirestore.instance
           .collection('ai_chat_sessions')
-          .where('staffId', isEqualTo: uid)
           .orderBy('updatedAt', descending: true)
           .limit(30)
           .get();

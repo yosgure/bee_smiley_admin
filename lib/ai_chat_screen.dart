@@ -411,19 +411,18 @@ class _AiChatScreenState extends State<AiChatScreen> {
           }
         }
 
-        final mySessionsSnap = await FirebaseFirestore.instance
+        final allSessionsSnap = await FirebaseFirestore.instance
             .collection('ai_chat_sessions')
             .where('studentId', isEqualTo: widget.studentId)
-            .where('staffId', isEqualTo: myUid)
             .orderBy('createdAt', descending: true)
             .limit(10)
             .get();
 
-        final mySessions = mySessionsSnap.docs;
+        final allSessions = allSessionsSnap.docs;
 
-        if (mySessions.isNotEmpty) {
+        if (allSessions.isNotEmpty) {
           final summaries = <Map<String, String>>[];
-          for (final session in mySessions) {
+          for (final session in allSessions) {
             final data = session.data();
             final summary = data['summary'] as String?;
             if (summary != null && summary.isNotEmpty) {
@@ -438,7 +437,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
           }
           _pastSummaries = summaries;
 
-          final todaySessions = mySessions.where((doc) {
+          final todaySessions = allSessions.where((doc) {
             final createdAt = doc.data()['createdAt'] as Timestamp?;
             return createdAt != null && createdAt.toDate().isAfter(startOfDay);
           }).toList();
