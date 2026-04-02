@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 import 'package:gal/gal.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'app_theme.dart';
 import 'skeleton_loading.dart';
 
@@ -493,12 +494,16 @@ Widget _buildHeader({bool showBack = false}) {
                 onTap: () => _showImagePreview(photoUrl),
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(8),
-                  child: Image.network(
-                    photoUrl,
-                    height: 150,
+                  child: CachedNetworkImage(
+                    imageUrl: photoUrl,
                     width: double.infinity,
-                    fit: BoxFit.cover,
-                    errorBuilder: (c, e, s) => Container(
+                    fit: BoxFit.contain,
+                    placeholder: (c, u) => Container(
+                      height: 150,
+                      color: Colors.grey.shade100,
+                      child: const Center(child: SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2))),
+                    ),
+                    errorWidget: (c, u, e) => Container(
                       height: 100,
                       color: Colors.grey.shade200,
                       child: const Icon(Icons.broken_image),
