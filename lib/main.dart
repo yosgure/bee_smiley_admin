@@ -159,7 +159,7 @@ class _AuthCheckWrapperState extends State<AuthCheckWrapper> with WidgetsBinding
 
   @override
   Widget build(BuildContext context) {
-    if (_loading) return const _LoadingScreen();
+    if (_loading) return const Scaffold(backgroundColor: Colors.white, body: SizedBox.shrink());
     if (_status == null) return const LoginScreen();
     if (_status!.type == UserType.unknown) return const _ForceLogout();
     if (_status!.isInitialPassword) return const ForceChangePasswordScreen();
@@ -171,25 +171,6 @@ class _AuthCheckWrapperState extends State<AuthCheckWrapper> with WidgetsBinding
       return ParentMainScreen(key: ValueKey('parent_${_status!.uid}'));
     }
     return const LoginScreen();
-  }
-}
-
-class _LoadingScreen extends StatelessWidget {
-  const _LoadingScreen();
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.white,
-      body: Column(
-        children: [
-          LinearProgressIndicator(
-            color: AppColors.primary,
-            backgroundColor: Colors.grey.shade200,
-            minHeight: 3,
-          ),
-        ],
-      ),
-    );
   }
 }
 
@@ -603,7 +584,7 @@ class _AdminShellState extends State<AdminShell> {
     final isWebLayout = MediaQuery.of(context).size.width >= AppBreakpoints.tablet;
     
     if (_staffType == StaffType.loading) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      return const Scaffold(backgroundColor: Colors.white, body: SizedBox.shrink());
     }
     
     final safeIndex = _selectedIndex < _screenCount ? _selectedIndex : 0;
