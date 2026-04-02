@@ -1649,7 +1649,7 @@ exports.sendAiMessage = onCall(
       throw new HttpsError('unauthenticated', '認証が必要です');
     }
 
-    const { sessionId, message, context } = request.data;
+    const { sessionId, message, context, commandScript } = request.data;
 
     if (!sessionId || !message) {
       throw new HttpsError('invalid-argument', 'sessionIdとmessageが必要です');
@@ -1769,7 +1769,12 @@ exports.sendAiMessage = onCall(
       }
 
       // 7. システムプロンプト構築
-      const systemPrompt = buildSystemPrompt(context);
+      let systemPrompt = buildSystemPrompt(context);
+
+      // コマンドスクリプトがある場合、システムプロンプトに追加
+      if (commandScript) {
+        systemPrompt += `\n\n## 今回のリクエストに対する出力指示（最優先で従うこと）\n${commandScript}\n`;
+      }
 
       // 8. Gemini API呼び出し
       const model = genAI.getGenerativeModel({
