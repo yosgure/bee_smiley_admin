@@ -19,6 +19,7 @@ import 'family_csv_import_screen.dart';
 import 'tool_csv_import_screen.dart';
 import 'csv_export_screen.dart';
 import 'notification_settings_screen.dart';
+import 'ai_command_manage_screen.dart';
 import 'app_theme.dart';
 
 class AdminScreen extends StatefulWidget {
@@ -178,6 +179,13 @@ void _navigateTo(BuildContext context, Widget screen) {
                 color: AppColors.accent,
                 description: '月間サマリの評価項目',
                 destination: const NonCognitiveSkillMasterScreen(),
+              ),
+              _MenuData(
+                title: 'AI相談コマンド',
+                icon: Icons.auto_awesome,
+                color: const Color(0xFF7C3AED),
+                description: '/コマンドの追加・編集',
+                destination: const AiCommandManageScreen(),
               ),
             ],
           ),

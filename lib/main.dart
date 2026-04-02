@@ -194,6 +194,21 @@ class _ForceLogoutState extends State<_ForceLogout> {
 
 class AdminShell extends StatefulWidget {
   const AdminShell({super.key});
+
+  /// AI相談タブに遷移して生徒を選択
+  static void navigateToAiChat(BuildContext context, {
+    required String studentId,
+    required String studentName,
+    Map<String, dynamic>? studentInfo,
+  }) {
+    final state = context.findAncestorStateOfType<_AdminShellState>();
+    state?.navigateToAiChat(
+      studentId: studentId,
+      studentName: studentName,
+      studentInfo: studentInfo,
+    );
+  }
+
   @override
   State<AdminShell> createState() => _AdminShellState();
 }
@@ -208,6 +223,9 @@ class _AdminShellState extends State<AdminShell> {
   
   // Web版で右側に表示する管理詳細画面を保持する変数
   Widget? _adminDetailScreen;
+
+  // AI相談に生徒情報付きでジャンプする用
+  Map<String, dynamic>? _pendingAiChatStudent;
   
   StreamSubscription<QuerySnapshot>? _chatRoomsSubscription;
   final Map<String, StreamSubscription<QuerySnapshot>> _messageSubscriptions = {};
@@ -385,7 +403,7 @@ class _AdminShellState extends State<AdminShell> {
         switch (index) {
           case 0: return const CalendarScreen();
           case 1: return const PlusScheduleScreen();
-          case 2: return const AiChatMainScreen();
+          case 2: return _buildAiChatScreen();
           case 3: return const ChatListScreen();
           case 4: return const NotificationScreen();
           case 5: return buildAdminScreen();
@@ -395,7 +413,7 @@ class _AdminShellState extends State<AdminShell> {
         switch (index) {
           case 0: return const CalendarScreen();
           case 1: return const AssessmentScreen();
-          case 2: return const AiChatMainScreen();
+          case 2: return _buildAiChatScreen();
           case 3: return const ChatListScreen();
           case 4: return const NotificationScreen();
           case 5: return const EventScreen();
@@ -409,7 +427,7 @@ class _AdminShellState extends State<AdminShell> {
           case 0: return const CalendarScreen();
           case 1: return const PlusScheduleScreen();
           case 2: return const AssessmentScreen();
-          case 3: return const AiChatMainScreen();
+          case 3: return _buildAiChatScreen();
           case 4: return const ChatListScreen();
           case 5: return const NotificationScreen();
           case 6: return const EventScreen();
@@ -569,6 +587,43 @@ class _AdminShellState extends State<AdminShell> {
       });
       _saveIndex(newIndex); // 保存
     }
+  }
+
+  Widget _buildAiChatScreen() {
+    final student = _pendingAiChatStudent;
+    _pendingAiChatStudent = null; // 一度だけ使用
+    if (student != null) {
+      return AiChatMainScreen(initialStudent: student);
+    }
+    return const AiChatMainScreen();
+  }
+
+  int get _aiChatTabIndex {
+    switch (_staffType) {
+      case StaffType.plusOnly: return 2;
+      case StaffType.beesmiley: return 2;
+      case StaffType.both:
+      case StaffType.loading:
+      default: return 3;
+    }
+  }
+
+  /// AI相談タブに遷移し、指定の生徒を選択状態にする
+  void navigateToAiChat({
+    required String studentId,
+    required String studentName,
+    Map<String, dynamic>? studentInfo,
+  }) {
+    setState(() {
+      _pendingAiChatStudent = {
+        'studentId': studentId,
+        'studentName': studentName,
+        'studentInfo': studentInfo,
+      };
+      _selectedIndex = _aiChatTabIndex;
+      _adminDetailScreen = null;
+    });
+    _saveIndex(_selectedIndex);
   }
 
   Widget _buildBadgedIcon(IconData icon, bool showBadge) {
