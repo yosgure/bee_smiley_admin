@@ -167,7 +167,6 @@ class _AiChatScreenState extends State<AiChatScreen> {
     try {
       final snap = await FirebaseFirestore.instance
           .collection('ai_chat_commands')
-          .orderBy('order')
           .get();
 
       if (mounted) {
