@@ -139,5 +139,8 @@ service cloud.firestore {
       allow read, create: if isStaff();
       allow update, delete: if false;
     }
+    match /saved_ai_contents/{docId} {
+      allow read, write: if isStaff();
+    }
   }
 }

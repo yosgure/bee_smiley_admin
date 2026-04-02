@@ -790,6 +790,198 @@ class _AiChatScreenState extends State<AiChatScreen> {
     }
   }
 
+  /// AI生成コンテンツ保存ダイアログを表示
+  Future<void> _showSaveContentDialog(String content, {String? defaultCommandLabel}) async {
+    final textController = TextEditingController(text: content);
+    DateTime selectedDate = DateTime.now();
+    final currentUser = FirebaseAuth.instance.currentUser;
+    final staffName = _staffName ?? 'スタッフ';
+
+    // コマンド一覧からカテゴリを構築（「その他」を末尾に追加）
+    final commandLabels = _commands
+        .map((c) => c['label'] as String? ?? '')
+        .where((l) => l.isNotEmpty)
+        .toList();
+    if (!commandLabels.contains('その他')) {
+      commandLabels.add('その他');
+    }
+
+    // デフォルト選択: スラッシュコマンドで使ったラベル、なければ先頭
+    String selectedCategory = defaultCommandLabel ?? (commandLabels.isNotEmpty ? commandLabels.first : 'その他');
+    if (!commandLabels.contains(selectedCategory)) {
+      selectedCategory = commandLabels.isNotEmpty ? commandLabels.first : 'その他';
+    }
+
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setDialogState) {
+            return AlertDialog(
+              title: const Text('AIの回答を保存'),
+              content: SizedBox(
+                width: 500,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // カテゴリ選択
+                    Row(
+                      children: [
+                        const Text('カテゴリ: ',
+                            style: TextStyle(
+                                fontWeight: FontWeight.bold, fontSize: 14)),
+                        const SizedBox(width: 8),
+                        DropdownButton<String>(
+                          value: selectedCategory,
+                          underline: const SizedBox(),
+                          borderRadius: BorderRadius.circular(8),
+                          items: commandLabels.map((label) {
+                            return DropdownMenuItem(
+                                value: label, child: Text(label));
+                          }).toList(),
+                          onChanged: (v) {
+                            if (v != null) {
+                              setDialogState(() => selectedCategory = v);
+                            }
+                          },
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    // 生徒名（表示のみ）
+                    Row(
+                      children: [
+                        const Text('生徒名: ',
+                            style: TextStyle(
+                                fontWeight: FontWeight.bold, fontSize: 14)),
+                        Text(widget.studentName,
+                            style: const TextStyle(fontSize: 14)),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    // 記録者名（表示のみ）
+                    Row(
+                      children: [
+                        const Text('記録者: ',
+                            style: TextStyle(
+                                fontWeight: FontWeight.bold, fontSize: 14)),
+                        Text(staffName,
+                            style: const TextStyle(fontSize: 14)),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    // 日付（変更可能）
+                    Row(
+                      children: [
+                        const Text('日付: ',
+                            style: TextStyle(
+                                fontWeight: FontWeight.bold, fontSize: 14)),
+                        TextButton.icon(
+                          icon: const Icon(Icons.calendar_today, size: 18),
+                          label: Text(
+                            DateFormat('yyyy/MM/dd').format(selectedDate),
+                            style: const TextStyle(fontSize: 14),
+                          ),
+                          onPressed: () async {
+                            final picked = await showDatePicker(
+                              context: ctx,
+                              initialDate: selectedDate,
+                              firstDate: DateTime.now()
+                                  .subtract(const Duration(days: 30)),
+                              lastDate: DateTime.now(),
+                              locale: const Locale('ja'),
+                            );
+                            if (picked != null) {
+                              setDialogState(() {
+                                selectedDate = picked;
+                              });
+                            }
+                          },
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    // 内容（編集可能）
+                    const Text('内容:',
+                        style: TextStyle(
+                            fontWeight: FontWeight.bold, fontSize: 14)),
+                    const SizedBox(height: 6),
+                    SizedBox(
+                      height: 300,
+                      child: TextField(
+                        controller: textController,
+                        maxLines: null,
+                        expands: true,
+                        textAlignVertical: TextAlignVertical.top,
+                        decoration: InputDecoration(
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          contentPadding: const EdgeInsets.all(12),
+                        ),
+                        style: const TextStyle(fontSize: 13, height: 1.6),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx, false),
+                  child: const Text('キャンセル'),
+                ),
+                ElevatedButton(
+                  onPressed: () => Navigator.pop(ctx, true),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.green,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10)),
+                  ),
+                  child: const Text('保存'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    if (result == true && mounted) {
+      try {
+        await FirebaseFirestore.instance.collection('saved_ai_contents').add({
+          'category': selectedCategory,
+          'studentId': widget.studentId,
+          'studentName': widget.studentName,
+          'content': textController.text,
+          'date': Timestamp.fromDate(DateTime(
+              selectedDate.year, selectedDate.month, selectedDate.day)),
+          'recorderName': staffName,
+          'recorderId': currentUser?.uid ?? '',
+          'createdAt': FieldValue.serverTimestamp(),
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('$selectedCategoryを保存しました'),
+              backgroundColor: Colors.green,
+              duration: const Duration(seconds: 2),
+            ),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('保存に失敗しました: $e')),
+          );
+        }
+      }
+    }
+    textController.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     final isFreeChat = widget.studentId.startsWith('free_chat');
@@ -1069,7 +1261,19 @@ class _AiChatScreenState extends State<AiChatScreen> {
                 if (index == allMessages.length) {
                   return _buildTypingIndicator();
                 }
-                return _buildMessageItem(allMessages[index]);
+                // AIメッセージの直前のユーザーメッセージからコマンドを検出
+                String? usedCommandLabel;
+                if (allMessages[index]['role'] == 'assistant' && index > 0) {
+                  final prevMsg = allMessages[index - 1];
+                  if (prevMsg['role'] == 'user') {
+                    final prevContent = prevMsg['content'] as String? ?? '';
+                    if (prevContent.startsWith('/')) {
+                      final firstLine = prevContent.split('\n').first;
+                      usedCommandLabel = firstLine.substring(1).trim();
+                    }
+                  }
+                }
+                return _buildMessageItem(allMessages[index], usedCommandLabel: usedCommandLabel);
               },
             ),
           ),
@@ -1118,7 +1322,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
     );
   }
 
-  Widget _buildMessageItem(Map<String, dynamic> msg) {
+  Widget _buildMessageItem(Map<String, dynamic> msg, {String? usedCommandLabel}) {
     final isUser = msg['role'] == 'user';
     final content = msg['content'] ?? '';
     final status = msg['status'];
@@ -1136,7 +1340,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
       return _buildUserMessage(content, timeStr, isSending,
           attachments: attachments, pendingAttachments: pendingAttachments);
     } else {
-      return _buildAiMessage(content, timeStr);
+      return _buildAiMessage(content, timeStr, usedCommandLabel: usedCommandLabel);
     }
   }
 
@@ -1291,7 +1495,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
     );
   }
 
-  Widget _buildAiMessage(String content, String timeStr) {
+  Widget _buildAiMessage(String content, String timeStr, {String? usedCommandLabel}) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 20),
       child: Row(
@@ -1343,9 +1547,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
                     _AiMessageActionButton(
                       icon: Icons.bookmark_outline_rounded,
                       tooltip: '保存',
-                      onTap: () {
-                        // 保存機能は別途実装
-                      },
+                      onTap: () => _showSaveContentDialog(content, defaultCommandLabel: usedCommandLabel),
                     ),
                     const Spacer(),
                     if (timeStr.isNotEmpty)

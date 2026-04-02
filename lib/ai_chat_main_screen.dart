@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
 import 'ai_chat_screen.dart';
+import 'care_record_screen.dart';
 
 class AiChatMainScreen extends StatefulWidget {
   final Map<String, dynamic>? initialStudent;
@@ -274,6 +275,20 @@ class _AiChatMainScreenState extends State<AiChatMainScreen> {
                     const Text('AI相談',
                         style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
                     const Spacer(),
+                    // 保存コンテンツ一覧
+                    GestureDetector(
+                      onTap: () => showSavedContentsDialog(context),
+                      child: Container(
+                        width: 32,
+                        height: 32,
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade200,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Icon(Icons.description_outlined, size: 16, color: Colors.grey.shade600),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
                     // 新規フリーチャット
                     GestureDetector(
                       onTap: _openFreeChat,
