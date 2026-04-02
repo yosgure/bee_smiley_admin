@@ -64,7 +64,7 @@ ThemeData getAppTheme() {
       centerTitle: false,
       foregroundColor: AppColors.textMain,
       iconTheme: IconThemeData(color: AppColors.textMain),
-      titleTextStyle: TextStyle(fontSize: 18, fontWeight: FontWeight.normal, color: AppColors.textMain,fontFamily: 'Noto Sans JP', ),
+      titleTextStyle: TextStyle(fontSize: 18, fontWeight: FontWeight.normal, color: AppColors.textMain,fontFamily: 'NotoSansJP',),
     ),
     
     elevatedButtonTheme: ElevatedButtonThemeData(
