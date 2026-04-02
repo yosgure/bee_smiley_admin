@@ -1,8 +1,5 @@
 import 'dart:typed_data';
 import 'dart:io';
-// ignore: avoid_web_libraries_in_flutter
-import 'dart:html' as html;
-import 'dart:ui_web' as ui_web;
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:firebase_auth/firebase_auth.dart';
@@ -297,7 +294,7 @@ class _ParentChatScreenState extends State<ParentChatScreen> {
 
   Widget _buildHeader(String title) {
     return Container(
-      height: 40,
+      height: 48,
       padding: const EdgeInsets.symmetric(horizontal: 16),
       decoration: BoxDecoration(
         color: Colors.white,
@@ -380,14 +377,25 @@ class _ChatMessageListState extends State<_ChatMessageList> {
 
           _markAsRead(messages);
 
-          if (_isFirstLoad) {
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (_scrollController.hasClients) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (_scrollController.hasClients) {
+              if (_isFirstLoad) {
                 _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
+                _isFirstLoad = false;
+              } else {
+                // 新メッセージ: 下端付近にいる場合のみ自動スクロール
+                final maxScroll = _scrollController.position.maxScrollExtent;
+                final currentScroll = _scrollController.position.pixels;
+                if (maxScroll - currentScroll < 200) {
+                  _scrollController.animateTo(
+                    maxScroll,
+                    duration: const Duration(milliseconds: 200),
+                    curve: Curves.easeOut,
+                  );
+                }
               }
-              _isFirstLoad = false;
-            });
-          }
+            }
+          });
 
           return ListView.builder(
             controller: _scrollController,
@@ -405,14 +413,24 @@ class _ChatMessageListState extends State<_ChatMessageList> {
   }
 
   void _markAsRead(List<QueryDocumentSnapshot> messages) async {
-    for (final doc in messages) {
+    final unreadDocs = messages.where((doc) {
       final data = doc.data() as Map<String, dynamic>;
       final readBy = List<String>.from(data['readBy'] ?? []);
-      if (!readBy.contains(widget.myUid)) {
-        await doc.reference.update({
+      return !readBy.contains(widget.myUid);
+    }).toList();
+
+    if (unreadDocs.isEmpty) return;
+
+    // WriteBatchで一括更新（最大500件ずつ）
+    for (int i = 0; i < unreadDocs.length; i += 500) {
+      final batch = FirebaseFirestore.instance.batch();
+      final chunk = unreadDocs.skip(i).take(500);
+      for (final doc in chunk) {
+        batch.update(doc.reference, {
           'readBy': FieldValue.arrayUnion([widget.myUid]),
         });
       }
+      await batch.commit();
     }
   }
 
@@ -910,84 +928,14 @@ class _ChatMessageListState extends State<_ChatMessageList> {
   void _showFilePreview(String url, String fileName) {
     final ext = fileName.split('.').last.toLowerCase();
     final isImage = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'].contains(ext);
-    final isPdf = ext == 'pdf';
-
-    if (!isImage && !isPdf) {
-      launchUrl(Uri.parse(url));
-      return;
-    }
 
     if (isImage) {
       _showImagePreview(url);
       return;
     }
 
-    // PDF: Google Docs ViewerのiframeでCORS回避して表示
-    final viewType = 'pdf-preview-${DateTime.now().millisecondsSinceEpoch}';
-    final encodedUrl = Uri.encodeComponent(url);
-    final viewerUrl = 'https://docs.google.com/gview?url=$encodedUrl&embedded=true';
-    ui_web.platformViewRegistry.registerViewFactory(viewType, (int viewId) {
-      final iframe = html.IFrameElement()
-        ..src = viewerUrl
-        ..style.border = 'none'
-        ..style.width = '100%'
-        ..style.height = '100%'
-        ..setAttribute('allow', 'fullscreen');
-      return iframe;
-    });
-
-    showDialog(
-      context: context,
-      barrierColor: Colors.black87,
-      builder: (_) => Center(
-        child: Container(
-          width: MediaQuery.of(context).size.width * 0.8,
-          height: MediaQuery.of(context).size.height * 0.9,
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(8),
-          ),
-          clipBehavior: Clip.antiAlias,
-          child: Column(
-            children: [
-              Container(
-                color: const Color(0xFF333333),
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                child: Row(
-                  children: [
-                    IconButton(
-                      icon: const Icon(Icons.close, color: Colors.white, size: 24),
-                      onPressed: () => Navigator.pop(context),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        fileName,
-                        style: const TextStyle(color: Colors.white, fontSize: 14),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.download, color: Colors.white, size: 24),
-                      tooltip: 'ダウンロード',
-                      onPressed: () async {
-                        final uri = Uri.parse(url);
-                        if (await canLaunchUrl(uri)) {
-                          await launchUrl(uri, mode: LaunchMode.externalApplication);
-                        }
-                      },
-                    ),
-                  ],
-                ),
-              ),
-              Expanded(
-                child: HtmlElementView(viewType: viewType),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
+    // PDF・その他のファイルは外部ブラウザで開く
+    launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
   }
 
   Future<void> _saveImageToGallery(String url, BuildContext dialogContext) async {

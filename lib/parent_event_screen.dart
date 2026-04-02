@@ -33,7 +33,7 @@ class _ParentEventScreenState extends State<ParentEventScreen> {
 
   Widget _buildHeader(String title) {
     return Container(
-      height: 40,
+      height: 48,
       padding: const EdgeInsets.symmetric(horizontal: 16),
       decoration: BoxDecoration(
         color: Colors.white,
@@ -88,7 +88,26 @@ class _ParentEventScreenState extends State<ParentEventScreen> {
           );
         }
 
-        final docs = snapshot.data!.docs;
+        // classroomフィルタリング（classroomが指定されているイベントは該当クラスのみ表示）
+        final docs = snapshot.data!.docs.where((doc) {
+          final data = doc.data() as Map<String, dynamic>;
+          final eventClassroom = data['classroom'] as String?;
+          if (eventClassroom == null || eventClassroom.isEmpty) return true; // 全体イベント
+          return eventClassroom == widget.classroom; // 該当クラスのみ
+        }).toList();
+
+        if (docs.isEmpty) {
+          return const Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.event_busy, size: 64, color: Colors.grey),
+                SizedBox(height: 16),
+                Text('予定されているイベントはありません', style: TextStyle(color: Colors.grey)),
+              ],
+            ),
+          );
+        }
 
         return ListView.builder(
           padding: const EdgeInsets.all(16),

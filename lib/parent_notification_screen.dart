@@ -35,7 +35,7 @@ class _ParentNotificationScreenState extends State<ParentNotificationScreen> {
 
   Widget _buildHeader(String title, {bool showBack = false}) {
     return Container(
-      height: 40,
+      height: 48,
       padding: const EdgeInsets.symmetric(horizontal: 16),
       decoration: BoxDecoration(
         color: Colors.white,
