@@ -84,22 +84,6 @@ class _AiCommandManageScreenState extends State<AiCommandManageScreen> {
     }
   }
 
-  Future<void> _onReorder(int oldIndex, int newIndex) async {
-    if (newIndex > oldIndex) newIndex--;
-    final item = _commands.removeAt(oldIndex);
-    _commands.insert(newIndex, item);
-    setState(() {});
-
-    final batch = FirebaseFirestore.instance.batch();
-    for (int i = 0; i < _commands.length; i++) {
-      batch.update(
-        FirebaseFirestore.instance.collection('ai_chat_commands').doc(_commands[i]['docId']),
-        {'order': i},
-      );
-    }
-    await batch.commit();
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -144,10 +128,9 @@ class _AiCommandManageScreenState extends State<AiCommandManageScreen> {
                   alignment: Alignment.topCenter,
                   child: ConstrainedBox(
                     constraints: const BoxConstraints(maxWidth: 600),
-                    child: ReorderableListView.builder(
+                    child: ListView.builder(
                       padding: const EdgeInsets.all(16),
                       itemCount: _commands.length,
-                      onReorder: _onReorder,
                       itemBuilder: (context, index) {
                         final cmd = _commands[index];
                         final questions = cmd['questions'] as List<dynamic>? ?? [];
@@ -194,11 +177,6 @@ class _AiCommandManageScreenState extends State<AiCommandManageScreen> {
                                             ),
                                           ],
                                         ),
-                                        if ((cmd['description'] ?? '').isNotEmpty) ...[
-                                          const SizedBox(height: 6),
-                                          Text(cmd['description'],
-                                              style: TextStyle(fontSize: 13, color: Colors.grey.shade600)),
-                                        ],
                                       ],
                                     ),
                                   ),
@@ -206,7 +184,6 @@ class _AiCommandManageScreenState extends State<AiCommandManageScreen> {
                                     icon: Icon(Icons.delete_outline, size: 20, color: Colors.red.shade300),
                                     onPressed: () => _deleteCommand(cmd),
                                   ),
-                                  Icon(Icons.drag_handle_rounded, size: 20, color: Colors.grey.shade400),
                                 ],
                               ),
                             ),
@@ -375,8 +352,6 @@ class _CommandEditScreenState extends State<_CommandEditScreen> {
               const SizedBox(height: 12),
               _buildTextField('コマンド名', _labelController, 'ケア記録'),
               const SizedBox(height: 12),
-              _buildTextField('説明', _descController, 'ケア記録を作成'),
-              const SizedBox(height: 12),
               _buildTextField('スクリプト（AIへの指示）', _scriptController,
                   'このコマンドで集めた回答をもとにAIが処理する指示...',
                   maxLines: 4),
@@ -417,16 +392,10 @@ class _CommandEditScreenState extends State<_CommandEditScreen> {
                   ),
                 )
               else
-                ReorderableListView.builder(
+                ListView.builder(
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
                   itemCount: _questions.length,
-                  onReorder: (old, newIdx) {
-                    if (newIdx > old) newIdx--;
-                    final item = _questions.removeAt(old);
-                    _questions.insert(newIdx, item);
-                    setState(() {});
-                  },
                   itemBuilder: (context, index) {
                     final q = _questions[index];
                     final type = q['type'] as String? ?? 'text';
@@ -507,7 +476,6 @@ class _CommandEditScreenState extends State<_CommandEditScreen> {
                                 icon: Icon(Icons.delete_outline, size: 18, color: Colors.red.shade300),
                                 onPressed: () => _removeQuestion(index),
                               ),
-                              Icon(Icons.drag_handle_rounded, size: 18, color: Colors.grey.shade400),
                             ],
                           ),
                         ),

@@ -399,56 +399,10 @@ class _AiChatMainScreenState extends State<AiChatMainScreen> {
   Widget _buildStudentItem(Map<String, dynamic> student, bool isActive) {
     final name = student['name'] as String? ?? '';
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 2),
-      decoration: BoxDecoration(
-        color: isActive ? const Color(0xFF7C3AED).withOpacity(0.08) : Colors.transparent,
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: InkWell(
-        onTap: () => _openStudentChat(student),
-        borderRadius: BorderRadius.circular(10),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-          child: Row(
-            children: [
-              Container(
-                width: 30,
-                height: 30,
-                decoration: BoxDecoration(
-                  color: isActive
-                      ? const Color(0xFF7C3AED).withOpacity(0.15)
-                      : Colors.grey.shade200,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Center(
-                  child: Text(
-                    name.isNotEmpty ? name[0] : '?',
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.bold,
-                      color: isActive ? const Color(0xFF7C3AED) : Colors.grey.shade600,
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  name,
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: isActive ? FontWeight.w600 : FontWeight.normal,
-                    color: isActive ? const Color(0xFF7C3AED) : Colors.black87,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
+    return _HoverableStudentItem(
+      name: name,
+      isActive: isActive,
+      onTap: () => _openStudentChat(student),
     );
   }
 
@@ -588,6 +542,94 @@ class _AiChatMainScreenState extends State<AiChatMainScreen> {
           Text('左の生徒を選んで相談を始めましょう',
               style: TextStyle(fontSize: 14, color: Colors.grey.shade500)),
         ],
+      ),
+    );
+  }
+}
+
+class _HoverableStudentItem extends StatefulWidget {
+  final String name;
+  final bool isActive;
+  final VoidCallback onTap;
+
+  const _HoverableStudentItem({
+    required this.name,
+    required this.isActive,
+    required this.onTap,
+  });
+
+  @override
+  State<_HoverableStudentItem> createState() => _HoverableStudentItemState();
+}
+
+class _HoverableStudentItemState extends State<_HoverableStudentItem> {
+  bool _isHovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final isHighlighted = widget.isActive || _isHovered;
+
+    return MouseRegion(
+      onEnter: (_) => setState(() => _isHovered = true),
+      onExit: (_) => setState(() => _isHovered = false),
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: Container(
+          margin: const EdgeInsets.only(bottom: 2),
+          decoration: BoxDecoration(
+            color: widget.isActive
+                ? const Color(0xFF7C3AED).withOpacity(0.08)
+                : _isHovered
+                    ? Colors.grey.shade100
+                    : Colors.transparent,
+            borderRadius: BorderRadius.circular(10),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          child: Row(
+            children: [
+              Container(
+                width: 30,
+                height: 30,
+                decoration: BoxDecoration(
+                  color: widget.isActive
+                      ? const Color(0xFF7C3AED).withOpacity(0.15)
+                      : _isHovered
+                          ? Colors.grey.shade300
+                          : Colors.grey.shade200,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Center(
+                  child: Text(
+                    widget.name.isNotEmpty ? widget.name[0] : '?',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                      color: widget.isActive
+                          ? const Color(0xFF7C3AED)
+                          : Colors.grey.shade600,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  widget.name,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: isHighlighted ? FontWeight.w600 : FontWeight.normal,
+                    color: widget.isActive
+                        ? const Color(0xFF7C3AED)
+                        : Colors.black87,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

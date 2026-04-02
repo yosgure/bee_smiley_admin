@@ -1,4 +1,6 @@
 import 'dart:typed_data';
+import 'dart:html' as html;
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -76,12 +78,18 @@ class _AiChatScreenState extends State<AiChatScreen> {
   List<String> _elicitationAnswers = [];
   final _elicitationTextController = TextEditingController();
 
+  // ドラッグ&ドロップ用
+  StreamSubscription<html.Event>? _dragOverSub;
+  StreamSubscription<html.Event>? _dragLeaveSub;
+  StreamSubscription<html.Event>? _dropSub;
+
   @override
   void initState() {
     super.initState();
     _textController.addListener(_onTextChanged);
     _initSession();
     _loadCommands();
+    _setupHtmlDropListeners();
   }
 
   @override
@@ -92,7 +100,67 @@ class _AiChatScreenState extends State<AiChatScreen> {
     _elicitationTextController.dispose();
     _scrollController.dispose();
     _focusNode.dispose();
+    _dragOverSub?.cancel();
+    _dragLeaveSub?.cancel();
+    _dropSub?.cancel();
     super.dispose();
+  }
+
+  void _setupHtmlDropListeners() {
+    final body = html.document.body;
+    if (body == null) return;
+
+    _dragOverSub = body.onDragOver.listen((event) {
+      event.preventDefault();
+      event.stopPropagation();
+      if (!_isDragOver && mounted) {
+        setState(() => _isDragOver = true);
+      }
+    });
+
+    _dragLeaveSub = body.onDragLeave.listen((event) {
+      event.preventDefault();
+      event.stopPropagation();
+      // relatedTarget が null の場合、ブラウザ外にドラッグされた
+      if (event.relatedTarget == null && mounted) {
+        setState(() => _isDragOver = false);
+      }
+    });
+
+    _dropSub = body.onDrop.listen((event) {
+      event.preventDefault();
+      event.stopPropagation();
+      if (mounted) {
+        setState(() => _isDragOver = false);
+      }
+
+      final files = event.dataTransfer.files;
+      if (files == null || files.isEmpty) return;
+
+      for (final file in files) {
+        final reader = html.FileReader();
+        final fileName = file.name;
+        reader.onLoadEnd.listen((_) {
+          if (reader.result == null) return;
+          final bytes = Uint8List.fromList(
+            (reader.result as List<int>),
+          );
+          final ext = fileName.split('.').last.toLowerCase();
+          final isImage = ['jpg', 'jpeg', 'png', 'gif', 'webp'].contains(ext);
+          if (mounted) {
+            setState(() {
+              _attachedFiles.add(_AttachedFile(
+                name: fileName,
+                bytes: bytes,
+                type: isImage ? _FileType.image : _FileType.file,
+                fileSize: file.size,
+              ));
+            });
+          }
+        });
+        reader.readAsArrayBuffer(file);
+      }
+    });
   }
 
   Future<void> _loadCommands() async {
@@ -866,7 +934,6 @@ class _AiChatScreenState extends State<AiChatScreen> {
               // コマンド一覧をカードで表示（登録がある場合のみ）
               ...(_commands.map((cmd) {
                 final label = cmd['label'] as String? ?? '';
-                final desc = cmd['description'] as String? ?? '';
 
                 return Padding(
                   padding: const EdgeInsets.only(bottom: 8),
@@ -894,15 +961,8 @@ class _AiChatScreenState extends State<AiChatScreen> {
                             ),
                             const SizedBox(width: 14),
                             Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text('/$label',
-                                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
-                                  Text(desc,
-                                    style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
-                                ],
-                              ),
+                              child: Text('/$label',
+                                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
                             ),
                             Icon(Icons.chevron_right_rounded,
                                 size: 20, color: Colors.grey.shade400),
@@ -935,6 +995,13 @@ class _AiChatScreenState extends State<AiChatScreen> {
       builder: (context, snapshot) {
         if (snapshot.hasError) {
           return Center(child: Text('エラー: ${snapshot.error}'));
+        }
+
+        // まだデータが来ていない（初回読み込み中）
+        if (!snapshot.hasData && !snapshot.hasError) {
+          return const Center(
+            child: CircularProgressIndicator(color: Color(0xFF7C3AED)),
+          );
         }
 
         final docs = snapshot.data?.docs ?? [];
@@ -1254,14 +1321,40 @@ class _AiChatScreenState extends State<AiChatScreen> {
                     height: 1.6,
                   ),
                 ),
-                if (timeStr.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 6),
-                    child: Text(
-                      timeStr,
-                      style: TextStyle(fontSize: 11, color: Colors.grey.shade400),
+                const SizedBox(height: 6),
+                // アクションボタン（コピー・保存）
+                Row(
+                  children: [
+                    _AiMessageActionButton(
+                      icon: Icons.content_copy_rounded,
+                      tooltip: 'コピー',
+                      onTap: () {
+                        Clipboard.setData(ClipboardData(text: content));
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('コピーしました'),
+                            duration: Duration(seconds: 1),
+                            behavior: SnackBarBehavior.floating,
+                          ),
+                        );
+                      },
                     ),
-                  ),
+                    const SizedBox(width: 2),
+                    _AiMessageActionButton(
+                      icon: Icons.bookmark_outline_rounded,
+                      tooltip: '保存',
+                      onTap: () {
+                        // 保存機能は別途実装
+                      },
+                    ),
+                    const Spacer(),
+                    if (timeStr.isNotEmpty)
+                      Text(
+                        timeStr,
+                        style: TextStyle(fontSize: 11, color: Colors.grey.shade400),
+                      ),
+                  ],
+                ),
               ],
             ),
           ),
@@ -1640,7 +1733,6 @@ class _AiChatScreenState extends State<AiChatScreen> {
               ),
               ...commands.map((cmd) {
                 final label = cmd['label'] as String? ?? '';
-                final desc = cmd['description'] as String? ?? '';
 
                 return InkWell(
                   onTap: () => _selectSlashCommand(cmd),
@@ -1659,24 +1751,12 @@ class _AiChatScreenState extends State<AiChatScreen> {
                         ),
                         const SizedBox(width: 12),
                         Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                '/$label',
-                                style: const TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                              Text(
-                                desc,
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.grey.shade500,
-                                ),
-                              ),
-                            ],
+                          child: Text(
+                            '/$label',
+                            style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
                         ),
                       ],
@@ -1804,7 +1884,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
                             child: TextField(
                               controller: _textController,
                               focusNode: _focusNode,
-                              maxLines: null,
+                              maxLines: 8,
                               minLines: 1,
                               keyboardType: TextInputType.multiline,
                               enabled: !_isSending,
@@ -2364,4 +2444,51 @@ class _AttachedFile {
     required this.type,
     this.fileSize,
   });
+}
+
+// AI応答のアクションボタン
+class _AiMessageActionButton extends StatefulWidget {
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback onTap;
+
+  const _AiMessageActionButton({
+    required this.icon,
+    required this.tooltip,
+    required this.onTap,
+  });
+
+  @override
+  State<_AiMessageActionButton> createState() => _AiMessageActionButtonState();
+}
+
+class _AiMessageActionButtonState extends State<_AiMessageActionButton> {
+  bool _isHovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: widget.tooltip,
+      child: MouseRegion(
+        onEnter: (_) => setState(() => _isHovered = true),
+        onExit: (_) => setState(() => _isHovered = false),
+        child: GestureDetector(
+          onTap: widget.onTap,
+          child: Container(
+            width: 30,
+            height: 30,
+            decoration: BoxDecoration(
+              color: _isHovered ? Colors.grey.shade200 : Colors.transparent,
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Icon(
+              widget.icon,
+              size: 16,
+              color: Colors.grey.shade500,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
