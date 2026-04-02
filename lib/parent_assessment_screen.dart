@@ -99,7 +99,7 @@ Widget _buildHeader({bool showBack = false}) {
   final hasMultipleChildren = widget.allChildren.length > 1;
 
   return Container(
-    height: 40,
+    height: 48,
     padding: const EdgeInsets.symmetric(horizontal: 16),
     decoration: BoxDecoration(
       color: Colors.white,
@@ -461,9 +461,14 @@ Widget _buildHeader({bool showBack = false}) {
               ),
             
             // 評価と時間
-            Row(
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 6,
               children: [
                 Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), decoration: BoxDecoration(color: Colors.grey.shade100, borderRadius: BorderRadius.circular(8)), child: Text('評価: $rating', style: const TextStyle(fontSize: 12))),
+                if (duration.toString().isNotEmpty)
+                  Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), decoration: BoxDecoration(color: Colors.grey.shade100, borderRadius: BorderRadius.circular(8)), child: Row(mainAxisSize: MainAxisSize.min, children: [const Icon(Icons.timer_outlined, size: 14, color: Colors.grey), const SizedBox(width: 4), Text(duration.toString(), style: const TextStyle(fontSize: 12))])),
               ],
             ),
             
@@ -504,25 +509,6 @@ Widget _buildHeader({bool showBack = false}) {
             ],
           ],
         ),
-      ),
-    );
-  }
-
-  Widget _buildTag(IconData icon, String text) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border.all(color: Colors.grey.shade300),
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 14, color: Colors.grey),
-          const SizedBox(width: 4),
-          Text(text, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-        ],
       ),
     );
   }

@@ -53,23 +53,26 @@ class _ParentMainScreenState extends State<ParentMainScreen> {
     super.dispose();
   }
 
-  // チャット未読監視（Firestoreベース）
+  // チャット未読監視（Firestoreベース・最新50件のみ監視）
   void _setupChatUnreadListener() {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
 
     final familyRoomId = 'family_${user.uid}';
-    
+
     _messageSubscription = FirebaseFirestore.instance
         .collection('chat_rooms')
         .doc(familyRoomId)
         .collection('messages')
-        .where('senderId', isNotEqualTo: user.uid)
+        .orderBy('createdAt', descending: true)
+        .limit(50)
         .snapshots()
         .listen((msgSnapshot) {
       bool hasUnread = false;
       for (var doc in msgSnapshot.docs) {
         final data = doc.data();
+        final senderId = data['senderId'];
+        if (senderId == user.uid) continue;
         final readBy = List<String>.from(data['readBy'] ?? []);
         if (!readBy.contains(user.uid)) {
           hasUnread = true;
@@ -145,14 +148,12 @@ class _ParentMainScreenState extends State<ParentMainScreen> {
         break;
     }
 
-    if (newIndex != _selectedIndex) {
-      setState(() {
-        _selectedIndex = newIndex;
-        if (type == 'record' || type == 'assessment') _hasUnreadRecord = false;
-        if (type == 'info' || type == 'notification' || type == 'announcement') _hasUnreadInfo = false;
-        if (type == 'event') _hasUnreadEvent = false;
-      });
-    }
+    setState(() {
+      _selectedIndex = newIndex;
+      if (type == 'record' || type == 'assessment') _hasUnreadRecord = false;
+      if (type == 'info' || type == 'notification' || type == 'announcement') _hasUnreadInfo = false;
+      if (type == 'event') _hasUnreadEvent = false;
+    });
   }
 
   Future<void> _fetchFamilyData() async {

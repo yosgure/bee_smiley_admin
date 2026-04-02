@@ -5,6 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:image/image.dart' as img;
+import 'package:package_info_plus/package_info_plus.dart';
 import 'app_theme.dart';
 
 class ParentSettingsScreen extends StatefulWidget {
@@ -29,6 +30,20 @@ class ParentSettingsScreen extends StatefulWidget {
 
 class _ParentSettingsScreenState extends State<ParentSettingsScreen> {
   bool _isUploading = false;
+  String _appVersion = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadAppVersion();
+  }
+
+  Future<void> _loadAppVersion() async {
+    final info = await PackageInfo.fromPlatform();
+    if (mounted) {
+      setState(() => _appVersion = 'v${info.version}');
+    }
+  }
 
   // 現在選択中の子ども
   Map<String, dynamic>? get _currentChild {
@@ -106,7 +121,7 @@ class _ParentSettingsScreenState extends State<ParentSettingsScreen> {
               // アプリ情報
               Center(
                 child: Text(
-                  'Beesmiley v1.0.0',
+                  'Beesmiley $_appVersion',
                   style: TextStyle(color: Colors.grey.shade400, fontSize: 12),
                 ),
               ),
@@ -119,7 +134,7 @@ class _ParentSettingsScreenState extends State<ParentSettingsScreen> {
 
   Widget _buildHeader(String title) {
     return Container(
-      height: 40,
+      height: 48,
       padding: const EdgeInsets.symmetric(horizontal: 16),
       decoration: BoxDecoration(
         color: Colors.white,
