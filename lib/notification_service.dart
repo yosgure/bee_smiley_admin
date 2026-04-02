@@ -206,16 +206,19 @@ class NotificationService {
     }
   }
 
-  /// ユーザーのトークンを保存
+  /// ユーザーのトークンを保存（他ユーザーから同じトークンを削除してから保存）
   Future<void> _saveTokenForUser(String uid, String token) async {
     final firestore = FirebaseFirestore.instance;
-    
+
+    // 他のユーザーから同じトークンを削除（同一デバイスで別アカウントログイン時の重複防止）
+    await _removeTokenFromOtherUsers(uid, token);
+
     final staffSnap = await firestore
         .collection('staffs')
         .where('uid', isEqualTo: uid)
         .limit(1)
         .get();
-    
+
     if (staffSnap.docs.isNotEmpty) {
       await staffSnap.docs.first.reference.update({
         'fcmTokens': FieldValue.arrayUnion([token]),
@@ -223,19 +226,58 @@ class NotificationService {
       });
       return;
     }
-    
+
     final familySnap = await firestore
         .collection('families')
         .where('uid', isEqualTo: uid)
         .limit(1)
         .get();
-    
+
     if (familySnap.docs.isNotEmpty) {
       await familySnap.docs.first.reference.update({
         'fcmTokens': FieldValue.arrayUnion([token]),
         'lastTokenUpdate': FieldValue.serverTimestamp(),
       });
       return;
+    }
+  }
+
+  /// 他のユーザーのドキュメントから指定トークンを削除
+  Future<void> _removeTokenFromOtherUsers(String currentUid, String token) async {
+    final firestore = FirebaseFirestore.instance;
+
+    try {
+      // staffsコレクションから削除
+      final staffSnap = await firestore
+          .collection('staffs')
+          .where('fcmTokens', arrayContains: token)
+          .get();
+
+      for (final doc in staffSnap.docs) {
+        final docUid = doc.data()['uid'] as String?;
+        if (docUid != null && docUid != currentUid) {
+          await doc.reference.update({
+            'fcmTokens': FieldValue.arrayRemove([token]),
+          });
+        }
+      }
+
+      // familiesコレクションから削除
+      final familySnap = await firestore
+          .collection('families')
+          .where('fcmTokens', arrayContains: token)
+          .get();
+
+      for (final doc in familySnap.docs) {
+        final docUid = doc.data()['uid'] as String?;
+        if (docUid != null && docUid != currentUid) {
+          await doc.reference.update({
+            'fcmTokens': FieldValue.arrayRemove([token]),
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint('Error removing token from other users: $e');
     }
   }
 
