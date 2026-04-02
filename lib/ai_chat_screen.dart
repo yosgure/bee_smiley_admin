@@ -2116,7 +2116,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
                             onTap: _isSending ? null : _pickFile,
                           ),
                           // コマンドボタン
-                          if (_commands.isNotEmpty && !_elicitationMode)
+                          if (!_elicitationMode)
                             _buildToolbarButton(
                               icon: Icons.code_rounded,
                               tooltip: 'コマンド',
