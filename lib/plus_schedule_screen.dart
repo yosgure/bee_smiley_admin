@@ -9,6 +9,7 @@ import 'plus_dashboard_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/gestures.dart';
 import 'ai_chat_screen.dart';
+import 'main.dart';
 import 'student_detail_screen.dart';
 
 // 講師名・教室名クリック時に生徒編集ダイアログの発火を抑制するフラグ
@@ -7153,16 +7154,12 @@ await _loadLessonsForWeek(showLoading: false);
                                   'diagnosis': '',
                                 };
                                 final studentId = student['studentId'] ?? '${student['familyUid'] ?? ''}_$firstName';
-                                Navigator.push(
+                                // AI相談タブに遷移して生徒を選択
+                                AdminShell.navigateToAiChat(
                                   context,
-                                  MaterialPageRoute(
-                                    builder: (_) => AiChatScreen(
-                                      studentId: studentId,
-                                      studentName: studentName,
-                                      studentInfo: studentInfo,
-                                      supportPlan: null,
-                                    ),
-                                  ),
+                                  studentId: studentId,
+                                  studentName: studentName,
+                                  studentInfo: studentInfo,
                                 );
                               },
                               child: const Text('AIに相談'),

@@ -1,10 +1,12 @@
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:intl/intl.dart';
-import 'app_theme.dart';
 import 'ai_chat_history_screen.dart';
 
 class AiChatScreen extends StatefulWidget {
@@ -12,9 +14,10 @@ class AiChatScreen extends StatefulWidget {
   final String studentName;
   final Map<String, dynamic>? studentInfo;
   final Map<String, dynamic>? supportPlan;
-  final String? existingSessionId;  // 既存セッションを開く場合
-  final bool showBackButton;  // 戻るボタンを表示するか
-  final VoidCallback? onBackPressed;  // 戻るボタン押下時のコールバック
+  final String? existingSessionId;
+  final bool showBackButton;
+  final VoidCallback? onBackPressed;
+  final String? initialMessage;
 
   const AiChatScreen({
     super.key,
@@ -25,6 +28,7 @@ class AiChatScreen extends StatefulWidget {
     this.existingSessionId,
     this.showBackButton = true,
     this.onBackPressed,
+    this.initialMessage,
   });
 
   @override
@@ -44,42 +48,251 @@ class _AiChatScreenState extends State<AiChatScreen> {
   bool _isSending = false;
   String? _staffName;
 
-  // Optimistic UI用の一時メッセージ
   Map<String, dynamic>? _pendingUserMessage;
   bool _isWaitingForAiResponse = false;
 
-  // HUGアセスメント情報
   String? _hugAssessment;
-
-  // 過去セッションの要約（最新3件）
   List<Map<String, String>> _pastSummaries = [];
-
-  // 要約生成済みフラグ（二重実行防止）
   bool _isSummarizing = false;
 
-  // スクロール制御用
   int _previousMessageCount = 0;
-  String? _lastMessageRole;
+
+  // 添付ファイル
+  List<_AttachedFile> _attachedFiles = [];
+  bool _isUploading = false;
+
+  // 入力状態
+  bool _hasText = false;
+
+  // スラッシュコマンド
+  bool _showSlashMenu = false;
+  String _slashFilter = '';
+  List<Map<String, dynamic>> _commands = [];
+
+  // エリシテーション
+  bool _elicitationMode = false;
+  Map<String, dynamic>? _elicitationCommand;
+  int _elicitationStep = 0;
+  List<String> _elicitationAnswers = [];
+  final _elicitationTextController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
+    _textController.addListener(_onTextChanged);
     _initSession();
+    _loadCommands();
   }
 
   @override
   void dispose() {
-    // 画面を離れる時にセッションを要約（fire-and-forget）
     _summarizeCurrentSession();
+    _textController.removeListener(_onTextChanged);
     _textController.dispose();
+    _elicitationTextController.dispose();
     _scrollController.dispose();
     _focusNode.dispose();
     super.dispose();
   }
 
+  Future<void> _loadCommands() async {
+    try {
+      final snap = await FirebaseFirestore.instance
+          .collection('ai_chat_commands')
+          .orderBy('order')
+          .get();
+
+      if (mounted) {
+        setState(() {
+          _commands = snap.docs.map((d) => {'id': d.id, ...d.data()}).toList();
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading commands: $e');
+    }
+  }
+
+  void _onTextChanged() {
+    final text = _textController.text;
+    final newHasText = text.trim().isNotEmpty;
+    if (newHasText != _hasText) {
+      setState(() => _hasText = newHasText);
+    }
+
+    // スラッシュコマンド検出（エリシテーション中でない時のみ）
+    if (!_elicitationMode && text.startsWith('/')) {
+      final filter = text.substring(1).toLowerCase();
+      setState(() {
+        _showSlashMenu = true;
+        _slashFilter = filter;
+      });
+    } else if (_showSlashMenu) {
+      setState(() {
+        _showSlashMenu = false;
+        _slashFilter = '';
+      });
+    }
+  }
+
+  List<Map<String, dynamic>> get _filteredSlashCommands {
+    if (_slashFilter.isEmpty) return _commands;
+    return _commands
+        .where((c) =>
+            (c['label'] as String? ?? '').toLowerCase().contains(_slashFilter) ||
+            (c['id'] as String? ?? '').contains(_slashFilter))
+        .toList();
+  }
+
+  void _selectSlashCommand(Map<String, dynamic> cmd) {
+    final questions = cmd['questions'] as List<dynamic>? ?? [];
+
+    if (questions.isEmpty) {
+      // 質問がなければ普通のタグ方式
+      setState(() {
+        _showSlashMenu = false;
+        _slashFilter = '';
+      });
+      _textController.clear();
+      _focusNode.requestFocus();
+      return;
+    }
+
+    // エリシテーションモード開始
+    setState(() {
+      _showSlashMenu = false;
+      _slashFilter = '';
+      _elicitationMode = true;
+      _elicitationCommand = cmd;
+      _elicitationStep = 0;
+      _elicitationAnswers = List.filled(questions.length, '');
+    });
+    _textController.clear();
+    _elicitationTextController.clear();
+  }
+
+  void _cancelElicitation() {
+    setState(() {
+      _elicitationMode = false;
+      _elicitationCommand = null;
+      _elicitationStep = 0;
+      _elicitationAnswers = [];
+    });
+    _elicitationTextController.clear();
+  }
+
+  void _answerElicitation(String answer) {
+    final questions = _elicitationCommand!['questions'] as List<dynamic>;
+    setState(() {
+      _elicitationAnswers[_elicitationStep] = answer;
+    });
+
+    if (_elicitationStep < questions.length - 1) {
+      // 次の質問へ
+      setState(() {
+        _elicitationStep++;
+      });
+      _elicitationTextController.clear();
+    }
+    // 最後の質問なら送信ボタンで送信
+  }
+
+  void _goBackElicitation() {
+    if (_elicitationStep > 0) {
+      setState(() {
+        _elicitationStep--;
+      });
+      _elicitationTextController.text = _elicitationAnswers[_elicitationStep];
+    }
+  }
+
+  void _submitElicitation() {
+    final cmd = _elicitationCommand!;
+    final questions = cmd['questions'] as List<dynamic>;
+    final script = cmd['script'] as String? ?? '';
+    final label = cmd['label'] as String? ?? '';
+
+    // 回答をまとめてメッセージ化
+    final buffer = StringBuffer();
+    buffer.writeln('/$label');
+    buffer.writeln();
+    for (int i = 0; i < questions.length; i++) {
+      final q = questions[i] as Map<String, dynamic>;
+      final questionText = q['question'] as String? ?? '';
+      final answer = _elicitationAnswers[i];
+      if (answer.isNotEmpty) {
+        buffer.writeln('$questionText: $answer');
+      }
+    }
+
+    final message = buffer.toString().trim();
+
+    // エリシテーション終了
+    setState(() {
+      _elicitationMode = false;
+      _elicitationCommand = null;
+      _elicitationStep = 0;
+      _elicitationAnswers = [];
+    });
+    _elicitationTextController.clear();
+
+    // メッセージ送信
+    _textController.text = message;
+    _sendMessageWithScript(script);
+  }
+
+  Future<void> _sendMessageWithScript(String script) async {
+    final messageText = _textController.text.trim();
+    if (messageText.isEmpty || _isSending || _sessionId == null) return;
+
+    _textController.clear();
+    _focusNode.unfocus();
+
+    setState(() {
+      _isSending = true;
+      _pendingUserMessage = {
+        'role': 'user',
+        'content': messageText,
+        'createdAt': Timestamp.now(),
+        'status': 'sending',
+      };
+      _isWaitingForAiResponse = true;
+    });
+
+    _scrollToBottom();
+
+    try {
+      final callable = _functions.httpsCallable('sendAiMessage');
+      await callable.call({
+        'sessionId': _sessionId,
+        'message': messageText,
+        'context': _buildContext(),
+        if (script.isNotEmpty) 'commandScript': script,
+      });
+
+      if (mounted) {
+        setState(() {
+          _pendingUserMessage = null;
+          _isWaitingForAiResponse = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error sending message: $e');
+      if (mounted) {
+        setState(() {
+          _pendingUserMessage = null;
+          _isWaitingForAiResponse = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('メッセージの送信に失敗しました: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isSending = false);
+    }
+  }
+
   Future<void> _initSession() async {
     try {
-      // スタッフ名を取得
       if (currentUser != null) {
         final staffSnap = await FirebaseFirestore.instance
             .collection('staffs')
@@ -93,7 +306,6 @@ class _AiChatScreenState extends State<AiChatScreen> {
 
       final isFreeChat = widget.studentId.startsWith('free_chat');
 
-      // 既存セッションIDが指定されている場合はそのセッションを使用
       if (widget.existingSessionId != null) {
         final sessionDoc = await FirebaseFirestore.instance
             .collection('ai_chat_sessions')
@@ -112,13 +324,11 @@ class _AiChatScreenState extends State<AiChatScreen> {
         }
       }
 
-      // 生徒選択の場合のみ既存セッションを検索
       if (!isFreeChat) {
         final today = DateTime.now();
         final startOfDay = DateTime(today.year, today.month, today.day);
         final myUid = currentUser?.uid ?? '';
 
-        // HUGアセスメントを全スタッフ横断で最新のものから検索（最新10件に制限）
         final hugSnap = await FirebaseFirestore.instance
             .collection('ai_chat_sessions')
             .where('studentId', isEqualTo: widget.studentId)
@@ -134,7 +344,6 @@ class _AiChatScreenState extends State<AiChatScreen> {
           }
         }
 
-        // 自分のセッションのみ取得（要約・今日のセッション用、最新10件に制限）
         final mySessionsSnap = await FirebaseFirestore.instance
             .collection('ai_chat_sessions')
             .where('studentId', isEqualTo: widget.studentId)
@@ -146,7 +355,6 @@ class _AiChatScreenState extends State<AiChatScreen> {
         final mySessions = mySessionsSnap.docs;
 
         if (mySessions.isNotEmpty) {
-          // 自分の過去セッションからsummaryを最新3件取得
           final summaries = <Map<String, String>>[];
           for (final session in mySessions) {
             final data = session.data();
@@ -163,7 +371,6 @@ class _AiChatScreenState extends State<AiChatScreen> {
           }
           _pastSummaries = summaries;
 
-          // 今日の自分のセッションがあればそれを使用
           final todaySessions = mySessions.where((doc) {
             final createdAt = doc.data()['createdAt'] as Timestamp?;
             return createdAt != null && createdAt.toDate().isAfter(startOfDay);
@@ -176,12 +383,12 @@ class _AiChatScreenState extends State<AiChatScreen> {
                 _isLoading = false;
               });
             }
+            _sendInitialMessageIfNeeded();
             return;
           }
         }
       }
 
-      // 新規セッションを作成（過去のhugAssessment・要約を引き継ぐ）
       final sessionRef =
           FirebaseFirestore.instance.collection('ai_chat_sessions').doc();
       final sessionData = <String, dynamic>{
@@ -199,11 +406,9 @@ class _AiChatScreenState extends State<AiChatScreen> {
           'recentMonitorings': widget.supportPlan?['monitorings'] ?? [],
         },
       };
-      // 過去セッションからhugAssessmentがあれば新規セッションにも保存
       if (_hugAssessment != null && _hugAssessment!.isNotEmpty) {
         sessionData['hugAssessment'] = _hugAssessment;
       }
-      // 過去セッションの要約を新規セッションにも保存（参照用）
       if (_pastSummaries.isNotEmpty) {
         sessionData['pastSummaries'] = _pastSummaries;
       }
@@ -215,6 +420,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
           _isLoading = false;
         });
       }
+      _sendInitialMessageIfNeeded();
     } catch (e) {
       debugPrint('Error initializing session: $e');
       if (mounted) {
@@ -226,8 +432,16 @@ class _AiChatScreenState extends State<AiChatScreen> {
     }
   }
 
+  void _sendInitialMessageIfNeeded() {
+    if (widget.initialMessage != null && widget.initialMessage!.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _textController.text = widget.initialMessage!;
+        // 入力欄にセットするだけ。ユーザーが確認・編集してから送信する
+      });
+    }
+  }
+
   Map<String, dynamic> _buildContext() {
-    // studentIdが'free_chat'で始まる場合は自由チャットモード
     final isFreeChat = widget.studentId.startsWith('free_chat');
     return {
       'studentInfo': isFreeChat ? null : widget.studentInfo,
@@ -241,32 +455,78 @@ class _AiChatScreenState extends State<AiChatScreen> {
 
   Future<void> _sendMessage() async {
     final messageText = _textController.text.trim();
-    if (messageText.isEmpty || _isSending || _sessionId == null) return;
+    final hasAttachments = _attachedFiles.isNotEmpty;
+    if ((messageText.isEmpty && !hasAttachments) || _isSending || _sessionId == null) return;
 
     _textController.clear();
     _focusNode.unfocus();
 
+    final filesToUpload = List<_AttachedFile>.from(_attachedFiles);
+
+    final displayMessage = messageText.isNotEmpty
+        ? messageText
+        : (hasAttachments ? '添付ファイルを送信しました' : '');
+
     setState(() {
       _isSending = true;
+      _isUploading = hasAttachments;
+      _attachedFiles = [];
       _pendingUserMessage = {
         'role': 'user',
-        'content': messageText,
+        'content': displayMessage,
         'createdAt': Timestamp.now(),
         'status': 'sending',
+        if (hasAttachments)
+          'pendingAttachments': filesToUpload.map((f) => {
+            'name': f.name,
+            'type': f.type == _FileType.image ? 'image' : 'file',
+          }).toList(),
       };
       _isWaitingForAiResponse = true;
     });
 
-    // スクロール
     _scrollToBottom();
 
     try {
+      // ファイルをアップロード
+      List<Map<String, dynamic>> uploadedFiles = [];
+      if (filesToUpload.isNotEmpty) {
+        for (final file in filesToUpload) {
+          final fileName = '${DateTime.now().millisecondsSinceEpoch}_${file.name}';
+          final ref = FirebaseStorage.instance
+              .ref()
+              .child('ai_chat_uploads/$_sessionId/$fileName');
+
+          if (file.type == _FileType.image) {
+            await ref.putData(file.bytes, SettableMetadata(contentType: 'image/jpeg'));
+          } else {
+            await ref.putData(file.bytes);
+          }
+
+          final url = await ref.getDownloadURL();
+          uploadedFiles.add({
+            'url': url,
+            'name': file.name,
+            'type': file.type == _FileType.image ? 'image' : 'file',
+            'size': file.fileSize ?? file.bytes.length,
+          });
+        }
+        setState(() => _isUploading = false);
+      }
+
+      // メッセージにファイル情報を含めて送信
+      final fullMessage = messageText.isNotEmpty
+          ? messageText
+          : (uploadedFiles.isNotEmpty ? '添付ファイルを送信しました' : '');
+
       final callable = _functions.httpsCallable('sendAiMessage');
-      await callable.call({
+      final callData = <String, dynamic>{
         'sessionId': _sessionId,
-        'message': messageText,
+        'message': fullMessage,
         'context': _buildContext(),
-      });
+        if (uploadedFiles.isNotEmpty) 'attachments': uploadedFiles,
+      };
+      await callable.call(callData);
 
       if (mounted) {
         setState(() {
@@ -280,6 +540,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
         setState(() {
           _pendingUserMessage = null;
           _isWaitingForAiResponse = false;
+          _isUploading = false;
         });
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('メッセージの送信に失敗しました: $e')),
@@ -304,6 +565,35 @@ class _AiChatScreenState extends State<AiChatScreen> {
     });
   }
 
+  Future<void> _pickFile() async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.any,
+      withData: true,
+    );
+    if (result == null) return;
+
+    final file = result.files.first;
+    if (file.bytes == null) return;
+
+    final isImage = ['jpg', 'jpeg', 'png', 'gif', 'webp']
+        .contains(file.extension?.toLowerCase());
+
+    setState(() {
+      _attachedFiles.add(_AttachedFile(
+        name: file.name,
+        bytes: file.bytes!,
+        type: isImage ? _FileType.image : _FileType.file,
+        fileSize: file.size,
+      ));
+    });
+  }
+
+  void _removeAttachment(int index) {
+    setState(() {
+      _attachedFiles.removeAt(index);
+    });
+  }
+
   void _showChatHistory() {
     showModalBottomSheet(
       context: context,
@@ -313,294 +603,6 @@ class _AiChatScreenState extends State<AiChatScreen> {
     );
   }
 
-  Widget _buildHistoryBottomSheet(BuildContext ctx) {
-    return DraggableScrollableSheet(
-      initialChildSize: 0.7,
-      minChildSize: 0.4,
-      maxChildSize: 0.9,
-      builder: (context, scrollController) => Container(
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-        ),
-        child: Column(
-          children: [
-            // ハンドル
-            Container(
-              margin: const EdgeInsets.only(top: 8),
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: Colors.grey.shade300,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-            // タイトル
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    '${widget.studentName} - 相談履歴',
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.close),
-                    onPressed: () => Navigator.pop(ctx),
-                  ),
-                ],
-              ),
-            ),
-            const Divider(height: 1),
-            // セッション一覧
-            Expanded(
-              child: StreamBuilder<QuerySnapshot>(
-                stream: FirebaseFirestore.instance
-                    .collection('ai_chat_sessions')
-                    .where('studentId', isEqualTo: widget.studentId)
-                    .orderBy('createdAt', descending: true)
-                    .limit(30)
-                    .snapshots(),
-                builder: (context, snapshot) {
-                  if (snapshot.hasError) {
-                    return Center(
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: SelectableText(
-                          'エラーが発生しました:\n${snapshot.error}',
-                          style: const TextStyle(color: Colors.red, fontSize: 12),
-                        ),
-                      ),
-                    );
-                  }
-
-                  if (snapshot.connectionState == ConnectionState.waiting) {
-                    return const Center(child: CircularProgressIndicator());
-                  }
-
-                  final docs = snapshot.data?.docs ?? [];
-                  if (docs.isEmpty) {
-                    return Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.history, size: 48, color: Colors.grey.shade300),
-                          const SizedBox(height: 12),
-                          Text(
-                            'まだ相談履歴がありません',
-                            style: TextStyle(color: Colors.grey.shade600),
-                          ),
-                        ],
-                      ),
-                    );
-                  }
-
-                  final today = DateTime.now();
-                  final startOfDay = DateTime(today.year, today.month, today.day);
-
-                  return ListView.builder(
-                    controller: scrollController,
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    itemCount: docs.length,
-                    itemBuilder: (context, index) {
-                      final doc = docs[index];
-                      final data = doc.data() as Map<String, dynamic>;
-                      final isCurrentSession = doc.id == _sessionId;
-
-                      // 日付
-                      String dateStr = '';
-                      bool isToday = false;
-                      if (data['createdAt'] != null) {
-                        final ts = data['createdAt'] as Timestamp;
-                        final date = ts.toDate();
-                        isToday = date.isAfter(startOfDay);
-                        dateStr = isToday
-                            ? '今日 ${DateFormat('HH:mm').format(date)}'
-                            : DateFormat('yyyy/MM/dd HH:mm').format(date);
-                      }
-
-                      final staffName = data['staffName'] ?? 'スタッフ';
-                      final lastMessage = data['lastMessage'] ?? '';
-                      final summary = data['summary'] as String?;
-                      final messageCount = data['messageCount'] ?? 0;
-
-                      return Card(
-                        elevation: 0,
-                        margin: const EdgeInsets.only(bottom: 8),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          side: BorderSide(
-                            color: isCurrentSession
-                                ? Colors.purple.shade300
-                                : Colors.grey.shade200,
-                            width: isCurrentSession ? 2 : 1,
-                          ),
-                        ),
-                        color: isCurrentSession
-                            ? Colors.purple.shade50
-                            : Colors.white,
-                        child: InkWell(
-                          onTap: isCurrentSession
-                              ? () => Navigator.pop(ctx)
-                              : () {
-                                  Navigator.pop(ctx);
-                                  // 読み取り専用で過去セッションを閲覧
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (_) => AiChatSessionDetailScreen(
-                                        sessionId: doc.id,
-                                        studentName: widget.studentName,
-                                        sessionData: data,
-                                      ),
-                                    ),
-                                  );
-                                },
-                          borderRadius: BorderRadius.circular(12),
-                          child: Padding(
-                            padding: const EdgeInsets.all(12),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  children: [
-                                    Icon(
-                                      Icons.smart_toy,
-                                      size: 18,
-                                      color: isCurrentSession
-                                          ? Colors.purple.shade600
-                                          : Colors.purple.shade400,
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Text(
-                                      dateStr,
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 13,
-                                        color: isCurrentSession
-                                            ? Colors.purple.shade700
-                                            : Colors.black87,
-                                      ),
-                                    ),
-                                    if (isToday) ...[
-                                      const SizedBox(width: 8),
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(
-                                            horizontal: 6, vertical: 2),
-                                        decoration: BoxDecoration(
-                                          color: AppColors.accent.shade100,
-                                          borderRadius: BorderRadius.circular(4),
-                                        ),
-                                        child: Text(
-                                          '今日',
-                                          style: TextStyle(
-                                            fontSize: 10,
-                                            fontWeight: FontWeight.bold,
-                                            color: AppColors.accent.shade800,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                    if (isCurrentSession) ...[
-                                      const SizedBox(width: 8),
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(
-                                            horizontal: 6, vertical: 2),
-                                        decoration: BoxDecoration(
-                                          color: Colors.purple.shade100,
-                                          borderRadius: BorderRadius.circular(4),
-                                        ),
-                                        child: Text(
-                                          '現在',
-                                          style: TextStyle(
-                                            fontSize: 10,
-                                            fontWeight: FontWeight.bold,
-                                            color: Colors.purple.shade700,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                    const Spacer(),
-                                    Text(
-                                      '$messageCount件',
-                                      style: TextStyle(
-                                        fontSize: 11,
-                                        color: Colors.grey.shade600,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                // 要約があれば表示
-                                if (summary != null && summary.isNotEmpty) ...[
-                                  const SizedBox(height: 6),
-                                  Container(
-                                    padding: const EdgeInsets.all(8),
-                                    decoration: BoxDecoration(
-                                      color: Colors.blue.shade50,
-                                      borderRadius: BorderRadius.circular(6),
-                                    ),
-                                    child: Row(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Icon(Icons.summarize, size: 14,
-                                            color: Colors.blue.shade400),
-                                        const SizedBox(width: 6),
-                                        Expanded(
-                                          child: Text(
-                                            summary,
-                                            maxLines: 3,
-                                            overflow: TextOverflow.ellipsis,
-                                            style: TextStyle(
-                                              fontSize: 11,
-                                              color: Colors.blue.shade900,
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ] else if (lastMessage.isNotEmpty) ...[
-                                  const SizedBox(height: 6),
-                                  Text(
-                                    lastMessage,
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      color: Colors.grey.shade700,
-                                    ),
-                                  ),
-                                ],
-                                // スタッフ名
-                                const SizedBox(height: 4),
-                                Text(
-                                  staffName,
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    color: Colors.grey.shade500,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      );
-                    },
-                  );
-                },
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  /// 画面離脱時にセッションの会話を自動要約（Cloud Functions経由）
   Future<void> _summarizeCurrentSession() async {
     if (_sessionId == null || _isSummarizing) return;
     _isSummarizing = true;
@@ -618,7 +620,21 @@ class _AiChatScreenState extends State<AiChatScreen> {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('HUGアセスメント情報'),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: const Color(0xFF7C3AED).withOpacity(0.1),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(Icons.description, color: Color(0xFF7C3AED), size: 20),
+            ),
+            const SizedBox(width: 12),
+            const Text('HUGアセスメント情報', style: TextStyle(fontSize: 16)),
+          ],
+        ),
         content: SizedBox(
           width: double.maxFinite,
           child: Column(
@@ -638,8 +654,12 @@ class _AiChatScreenState extends State<AiChatScreen> {
                   filled: true,
                   fillColor: Colors.grey.shade50,
                   border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
+                    borderRadius: BorderRadius.circular(12),
                     borderSide: BorderSide(color: Colors.grey.shade300),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: const BorderSide(color: Color(0xFF7C3AED)),
                   ),
                 ),
               ),
@@ -649,7 +669,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('キャンセル'),
+            child: Text('キャンセル', style: TextStyle(color: Colors.grey.shade600)),
           ),
           ElevatedButton(
             onPressed: () async {
@@ -658,7 +678,8 @@ class _AiChatScreenState extends State<AiChatScreen> {
               await _saveHugAssessment(text.isEmpty ? null : text);
             },
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.purple.shade600,
+              backgroundColor: const Color(0xFF7C3AED),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
             ),
             child: const Text('保存', style: TextStyle(color: Colors.white)),
           ),
@@ -703,146 +724,195 @@ class _AiChatScreenState extends State<AiChatScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isFreeChat = widget.studentId.startsWith('free_chat');
+
     return Scaffold(
-      backgroundColor: const Color(0xFFF2F2F7),
+      backgroundColor: Colors.white,
       appBar: AppBar(
-        title: Text(widget.studentName),
-        centerTitle: true,
         backgroundColor: Colors.white,
         elevation: 0,
+        surfaceTintColor: Colors.transparent,
         automaticallyImplyLeading: false,
         leading: widget.showBackButton
             ? IconButton(
-                icon: const Icon(Icons.arrow_back_ios, color: Colors.black54),
+                icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
+                color: Colors.grey.shade700,
                 onPressed: widget.onBackPressed ?? () => Navigator.pop(context),
               )
             : null,
-        actions: [
-          // HUGアセスメント情報ボタン
-          IconButton(
-            icon: Icon(
-              _hugAssessment != null && _hugAssessment!.isNotEmpty
-                  ? Icons.description
-                  : Icons.description_outlined,
-              color: _hugAssessment != null && _hugAssessment!.isNotEmpty
-                  ? Colors.green
-                  : AppColors.primary,
+        title: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 28,
+              height: 28,
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFF7C3AED), Color(0xFFEC4899)],
+                ),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(Icons.auto_awesome, color: Colors.white, size: 16),
             ),
-            tooltip: 'HUGアセスメント情報',
-            onPressed: _showHugAssessmentDialog,
-          ),
-          // 履歴ボタン
+            const SizedBox(width: 10),
+            Text(
+              widget.studentName,
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+            ),
+          ],
+        ),
+        centerTitle: true,
+        actions: [
+          if (!isFreeChat)
+            IconButton(
+              icon: Icon(
+                _hugAssessment != null && _hugAssessment!.isNotEmpty
+                    ? Icons.description
+                    : Icons.description_outlined,
+                color: _hugAssessment != null && _hugAssessment!.isNotEmpty
+                    ? const Color(0xFF7C3AED)
+                    : Colors.grey.shade500,
+                size: 22,
+              ),
+              tooltip: 'HUGアセスメント',
+              onPressed: _showHugAssessmentDialog,
+            ),
           IconButton(
-            icon: const Icon(Icons.history, color: AppColors.primary),
+            icon: Icon(Icons.history_rounded, color: Colors.grey.shade500, size: 22),
             tooltip: '相談履歴',
             onPressed: _showChatHistory,
           ),
+          const SizedBox(width: 4),
         ],
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1),
-          child: Container(color: Colors.grey.shade300, height: 1),
+          child: Container(color: Colors.grey.shade200, height: 0.5),
         ),
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(
+              child: CircularProgressIndicator(color: Color(0xFF7C3AED)),
+            )
           : Column(
               children: [
                 Expanded(child: _buildMessageList()),
-                if (_isSending) const LinearProgressIndicator(),
-                _buildInputArea(),
+                if (_showSlashMenu && !_elicitationMode) _buildSlashMenu(),
+                if (_elicitationMode)
+                  _buildElicitationUI()
+                else
+                  _buildInputArea(),
               ],
             ),
     );
   }
 
-  Widget _buildStudentInfoCard() {
-    final info = widget.studentInfo;
-    if (info == null) return const SizedBox.shrink();
+  Widget _buildWelcomeView() {
+    final isFreeChat = widget.studentId.startsWith('free_chat');
 
-    return Container(
-      margin: const EdgeInsets.all(12),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Colors.purple.shade50,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.purple.shade100),
-      ),
-      child: Row(
-        children: [
-          const CircleAvatar(
-            radius: 16,
-            backgroundColor: Colors.white,
-            backgroundImage: AssetImage('assets/logo_beesmileymark.png'),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '${info['lastName'] ?? ''} ${info['firstName'] ?? ''} さんの相談',
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 14,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  '${info['age'] ?? ''}・${info['gender'] ?? ''}・${info['classroom'] ?? ''}',
-                  style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
-                ),
-                if (info['diagnosis'] != null &&
-                    info['diagnosis'].toString().isNotEmpty)
-                  Text(
-                    '診断: ${info['diagnosis']}',
-                    style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
-                  ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildHugAssessmentButton() {
-    final hasAssessment = _hugAssessment != null && _hugAssessment!.isNotEmpty;
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12),
-      child: InkWell(
-        onTap: _showHugAssessmentDialog,
-        borderRadius: BorderRadius.circular(8),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          decoration: BoxDecoration(
-            color: hasAssessment ? Colors.green.shade50 : Colors.grey.shade100,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(
-              color: hasAssessment ? Colors.green.shade200 : Colors.grey.shade300,
-            ),
-          ),
-          child: Row(
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 600),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(
-                hasAssessment ? Icons.check_circle : Icons.add_circle_outline,
-                size: 20,
-                color: hasAssessment ? Colors.green.shade600 : Colors.grey.shade600,
+              Container(
+                width: 72,
+                height: 72,
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [Color(0xFF7C3AED), Color(0xFFEC4899)],
+                  ),
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF7C3AED).withOpacity(0.3),
+                      blurRadius: 20,
+                      offset: const Offset(0, 8),
+                    ),
+                  ],
+                ),
+                child: const Icon(Icons.auto_awesome, color: Colors.white, size: 36),
               ),
-              const SizedBox(width: 8),
-              Text(
-                hasAssessment ? 'HUGアセスメント情報 (追加済み)' : 'HUGアセスメント情報を追加',
-                style: TextStyle(
-                  fontSize: 13,
-                  color: hasAssessment ? Colors.green.shade700 : Colors.grey.shade700,
+              const SizedBox(height: 24),
+              ShaderMask(
+                shaderCallback: (bounds) => const LinearGradient(
+                  colors: [Color(0xFF7C3AED), Color(0xFFEC4899)],
+                ).createShader(bounds),
+                child: Text(
+                  isFreeChat
+                      ? 'こんにちは！\n何でもお気軽にどうぞ'
+                      : '${widget.studentName}さんについて\nお手伝いします',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                    height: 1.4,
+                  ),
                 ),
               ),
-              const Spacer(),
-              Icon(
-                Icons.edit,
-                size: 16,
-                color: Colors.grey.shade500,
+              const SizedBox(height: 12),
+              Text(
+                _commands.isNotEmpty
+                    ? 'メッセージを入力するか、/ でコマンドを使ってみましょう'
+                    : 'メッセージを入力して相談してみましょう',
+                style: TextStyle(fontSize: 14, color: Colors.grey.shade500),
               ),
+              if (_commands.isNotEmpty) const SizedBox(height: 24),
+              // コマンド一覧をカードで表示（登録がある場合のみ）
+              ...(_commands.map((cmd) {
+                final label = cmd['label'] as String? ?? '';
+                final desc = cmd['description'] as String? ?? '';
+
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      onTap: () => _selectSlashCommand(cmd),
+                      borderRadius: BorderRadius.circular(12),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.grey.shade200),
+                        ),
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 36,
+                              height: 36,
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF7C3AED).withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: const Icon(Icons.tag_rounded, size: 18, color: Color(0xFF7C3AED)),
+                            ),
+                            const SizedBox(width: 14),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text('/$label',
+                                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+                                  Text(desc,
+                                    style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
+                                ],
+                              ),
+                            ),
+                            Icon(Icons.chevron_right_rounded,
+                                size: 20, color: Colors.grey.shade400),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              })),
             ],
           ),
         ),
@@ -869,9 +939,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
 
         final docs = snapshot.data?.docs ?? [];
 
-        // Optimistic UI: pending messageとwaiting indicatorを追加
         final allMessages = <Map<String, dynamic>>[];
-
         for (final doc in docs) {
           allMessages.add({
             ...doc.data() as Map<String, dynamic>,
@@ -879,7 +947,6 @@ class _AiChatScreenState extends State<AiChatScreen> {
           });
         }
 
-        // ペンディングのユーザーメッセージを追加（重複チェック）
         if (_pendingUserMessage != null) {
           final pendingContent = _pendingUserMessage!['content'];
           final isDuplicate = allMessages.any((m) =>
@@ -889,9 +956,9 @@ class _AiChatScreenState extends State<AiChatScreen> {
           }
         }
 
-        // 空の場合は何も表示しない
-        if (allMessages.isEmpty) {
-          return const SizedBox.shrink();
+        // 空の場合はウェルカム画面
+        if (allMessages.isEmpty && !_isSending) {
+          return _buildWelcomeView();
         }
 
         // スクロール制御
@@ -901,13 +968,10 @@ class _AiChatScreenState extends State<AiChatScreen> {
           final currentCount = allMessages.length;
           final lastRole = allMessages.isNotEmpty ? allMessages.last['role'] : null;
 
-          // 初回表示時は最下部にスクロール
           if (_previousMessageCount == 0 && currentCount > 0) {
             _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
           } else if (currentCount > _previousMessageCount) {
-            // 新しいメッセージが追加された
             if (lastRole == 'assistant') {
-              // AI応答: 最後から2番目のメッセージ（ユーザーの質問）の位置にスクロール
               final userMessageIndex = currentCount - 2;
               if (userMessageIndex >= 0) {
                 final targetPosition = userMessageIndex * 80.0;
@@ -918,63 +982,67 @@ class _AiChatScreenState extends State<AiChatScreen> {
                 );
               }
             } else if (lastRole == 'user') {
-              // ユーザーメッセージ: 一番下にスクロール
               _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
             }
           }
 
           _previousMessageCount = currentCount;
-          _lastMessageRole = lastRole;
+
         });
 
-        return ListView.builder(
-          controller: _scrollController,
-          padding: const EdgeInsets.all(16),
-          itemCount: allMessages.length,
-          itemBuilder: (context, index) {
-            return _buildMessageItem(allMessages[index]);
-          },
+        return Align(
+          alignment: Alignment.topCenter,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 700),
+            child: ListView.builder(
+              controller: _scrollController,
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+              itemCount: allMessages.length + (_isWaitingForAiResponse ? 1 : 0),
+              itemBuilder: (context, index) {
+                if (index == allMessages.length) {
+                  return _buildTypingIndicator();
+                }
+                return _buildMessageItem(allMessages[index]);
+              },
+            ),
+          ),
         );
       },
     );
   }
 
   Widget _buildTypingIndicator() {
-    return Align(
-      alignment: Alignment.centerLeft,
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
       child: Row(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.end,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const CircleAvatar(
-            radius: 16,
-            backgroundColor: Colors.white,
-            backgroundImage: AssetImage('assets/logo_beesmileymark.png'),
-          ),
-          const SizedBox(width: 8),
           Container(
-            margin: const EdgeInsets.only(bottom: 12),
+            width: 32,
+            height: 32,
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [Color(0xFF7C3AED), Color(0xFFEC4899)],
+              ),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: const Icon(Icons.auto_awesome, color: Colors.white, size: 16),
+          ),
+          const SizedBox(width: 12),
+          Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(12),
+              color: Colors.grey.shade100,
+              borderRadius: BorderRadius.circular(16),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: Colors.purple.shade400,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Text(
-                  'AIが考え中...',
-                  style: TextStyle(color: Colors.grey.shade600, fontSize: 14),
-                ),
+                _AnimatedDot(delay: 0),
+                const SizedBox(width: 4),
+                _AnimatedDot(delay: 150),
+                const SizedBox(width: 4),
+                _AnimatedDot(delay: 300),
               ],
             ),
           ),
@@ -988,6 +1056,8 @@ class _AiChatScreenState extends State<AiChatScreen> {
     final content = msg['content'] ?? '';
     final status = msg['status'];
     final isSending = status == 'sending';
+    final attachments = msg['attachments'] as List<dynamic>? ?? [];
+    final pendingAttachments = msg['pendingAttachments'] as List<dynamic>? ?? [];
 
     String timeStr = '';
     if (msg['createdAt'] != null) {
@@ -995,129 +1065,1216 @@ class _AiChatScreenState extends State<AiChatScreen> {
       timeStr = DateFormat('HH:mm').format(ts.toDate());
     }
 
-    return Align(
-      alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 12),
-        constraints:
-            BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.8),
-        child: Column(
-          crossAxisAlignment:
-              isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                if (!isUser) ...[
-                  const CircleAvatar(
-                    radius: 16,
-                    backgroundColor: Colors.white,
-                    backgroundImage: AssetImage('assets/logo_beesmileymark.png'),
-                  ),
-                  const SizedBox(width: 8),
-                ],
-                Flexible(
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 16, vertical: 12),
+    if (isUser) {
+      return _buildUserMessage(content, timeStr, isSending,
+          attachments: attachments, pendingAttachments: pendingAttachments);
+    } else {
+      return _buildAiMessage(content, timeStr);
+    }
+  }
+
+  Widget _buildUserMessage(String content, String timeStr, bool isSending, {
+    List<dynamic> attachments = const [],
+    List<dynamic> pendingAttachments = const [],
+  }) {
+    final allAttachments = attachments.isNotEmpty ? attachments : pendingAttachments;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          // 添付ファイル表示
+          if (allAttachments.isNotEmpty)
+            Container(
+              constraints: BoxConstraints(
+                maxWidth: MediaQuery.of(context).size.width * 0.75,
+              ),
+              margin: const EdgeInsets.only(bottom: 6),
+              child: Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                alignment: WrapAlignment.end,
+                children: allAttachments.map((att) {
+                  final a = att is Map<String, dynamic> ? att : <String, dynamic>{};
+                  final type = a['type'] ?? 'file';
+                  final url = a['url'] as String?;
+                  final name = a['name'] ?? 'ファイル';
+                  final isPending = attachments.isEmpty;
+
+                  if (type == 'image' && url != null) {
+                    return ClipRRect(
+                      borderRadius: BorderRadius.circular(12),
+                      child: Image.network(
+                        url,
+                        width: 200,
+                        height: 150,
+                        fit: BoxFit.cover,
+                        loadingBuilder: (context, child, progress) {
+                          if (progress == null) return child;
+                          return Container(
+                            width: 200,
+                            height: 150,
+                            decoration: BoxDecoration(
+                              color: Colors.grey.shade200,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: const Center(
+                              child: CircularProgressIndicator(
+                                color: Color(0xFF7C3AED),
+                                strokeWidth: 2,
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    );
+                  }
+
+                  // ファイル（非画像）or pending
+                  return Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     decoration: BoxDecoration(
-                      color: isUser
-                          ? AppColors.primary.withOpacity(0.2)
-                          : Colors.white,
+                      color: isPending ? Colors.grey.shade200 : const Color(0xFFF3F4F6),
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    child: SelectableText(
-                      content,
-                      style: TextStyle(
-                        fontSize: 15,
-                        color: isSending ? Colors.grey : Colors.black87,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          type == 'image' ? Icons.photo : Icons.insert_drive_file_rounded,
+                          size: 18,
+                          color: isPending ? Colors.grey.shade400 : const Color(0xFF7C3AED),
+                        ),
+                        const SizedBox(width: 6),
+                        Flexible(
+                          child: Text(
+                            name,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: isPending ? Colors.grey.shade500 : Colors.black87,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        if (isPending) ...[
+                          const SizedBox(width: 6),
+                          SizedBox(
+                            width: 12,
+                            height: 12,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 1.5,
+                              color: Colors.grey.shade400,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
+          // テキスト
+          if (content.isNotEmpty && content != '添付ファイルを送信しました')
+            Container(
+              constraints: BoxConstraints(
+                maxWidth: MediaQuery.of(context).size.width * 0.75,
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF3F4F6),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: SelectableText(
+                content,
+                style: TextStyle(
+                  fontSize: 15,
+                  color: isSending ? Colors.grey.shade400 : Colors.black87,
+                  height: 1.5,
+                ),
+              ),
+            ),
+          if (timeStr.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 4, right: 4),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (isSending) ...[
+                    SizedBox(
+                      width: 10,
+                      height: 10,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 1.5,
+                        color: Colors.grey.shade400,
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                  ],
+                  Text(
+                    timeStr,
+                    style: TextStyle(fontSize: 11, color: Colors.grey.shade400),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAiMessage(String content, String timeStr) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 20),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 32,
+            height: 32,
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [Color(0xFF7C3AED), Color(0xFFEC4899)],
+              ),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: const Icon(Icons.auto_awesome, color: Colors.white, size: 16),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SelectableText(
+                  content,
+                  style: const TextStyle(
+                    fontSize: 15,
+                    color: Colors.black87,
+                    height: 1.6,
+                  ),
+                ),
+                if (timeStr.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 6),
+                    child: Text(
+                      timeStr,
+                      style: TextStyle(fontSize: 11, color: Colors.grey.shade400),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildElicitationUI() {
+    final cmd = _elicitationCommand!;
+    final questions = cmd['questions'] as List<dynamic>;
+    final label = cmd['label'] as String? ?? '';
+    final currentQ = questions[_elicitationStep] as Map<String, dynamic>;
+    final questionText = currentQ['question'] as String? ?? '';
+    final type = currentQ['type'] as String? ?? 'text';
+    final options = (currentQ['options'] as List<dynamic>?)?.cast<String>() ?? [];
+    final isLast = _elicitationStep == questions.length - 1;
+    final isRequired = currentQ['required'] as bool? ?? false;
+    final currentAnswer = _elicitationAnswers[_elicitationStep];
+    final allAnswered = !_elicitationAnswers.any((a) {
+      final idx = _elicitationAnswers.indexOf(a);
+      final q = questions[idx] as Map<String, dynamic>;
+      final req = q['required'] as bool? ?? false;
+      return req && a.isEmpty;
+    });
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+      decoration: const BoxDecoration(color: Colors.white),
+      child: SafeArea(
+        top: false,
+        child: Align(
+          alignment: Alignment.topCenter,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 700),
+            child: Container(
+              decoration: BoxDecoration(
+                color: const Color(0xFFF9FAFB),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: const Color(0xFF7C3AED).withOpacity(0.3)),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.04),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // ヘッダー: コマンド名 + 進捗 + キャンセル
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 14, 8, 0),
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(
+                            gradient: const LinearGradient(
+                              colors: [Color(0xFF7C3AED), Color(0xFFEC4899)],
+                            ),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            '/$label',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Text(
+                          '${_elicitationStep + 1} / ${questions.length}',
+                          style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+                        ),
+                        const Spacer(),
+                        TextButton(
+                          onPressed: _cancelElicitation,
+                          child: Text('キャンセル',
+                              style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
+                        ),
+                      ],
+                    ),
+                  ),
+                  // プログレスバー
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(4),
+                      child: LinearProgressIndicator(
+                        value: (_elicitationStep + 1) / questions.length,
+                        backgroundColor: Colors.grey.shade200,
+                        valueColor: const AlwaysStoppedAnimation(Color(0xFF7C3AED)),
+                        minHeight: 3,
                       ),
                     ),
                   ),
-                ),
-                if (isUser) const SizedBox(width: 8),
-              ],
-            ),
-            const SizedBox(height: 4),
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (isSending)
-                  const SizedBox(
-                    width: 12,
-                    height: 12,
-                    child: CircularProgressIndicator(strokeWidth: 1.5),
+                  // 質問
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
+                    child: Text(
+                      questionText,
+                      style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                    ),
                   ),
-                if (timeStr.isNotEmpty)
-                  Text(
-                    timeStr,
-                    style: const TextStyle(fontSize: 10, color: Colors.grey),
+                  // 回答エリア
+                  if (type == 'select')
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+                      child: Wrap(
+                        spacing: 6,
+                        runSpacing: 6,
+                        children: options.map((opt) {
+                          final isSelected = currentAnswer == opt;
+                          return GestureDetector(
+                            onTap: () => _answerElicitation(opt),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                              decoration: BoxDecoration(
+                                color: isSelected
+                                    ? const Color(0xFF7C3AED)
+                                    : Colors.white,
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(
+                                  color: isSelected
+                                      ? const Color(0xFF7C3AED)
+                                      : Colors.grey.shade300,
+                                ),
+                              ),
+                              child: Text(
+                                opt,
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: isSelected ? Colors.white : Colors.black87,
+                                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                                ),
+                              ),
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                    )
+                  else if (type == 'select_or_text') ...[
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(12, 0, 12, 6),
+                      child: Wrap(
+                        spacing: 6,
+                        runSpacing: 6,
+                        children: options.map((opt) {
+                          final isSelected = currentAnswer == opt;
+                          return GestureDetector(
+                            onTap: () {
+                              _elicitationTextController.clear();
+                              _answerElicitation(opt);
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                              decoration: BoxDecoration(
+                                color: isSelected ? const Color(0xFF7C3AED) : Colors.white,
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(
+                                  color: isSelected ? const Color(0xFF7C3AED) : Colors.grey.shade300,
+                                ),
+                              ),
+                              child: Text(
+                                opt,
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: isSelected ? Colors.white : Colors.black87,
+                                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                                ),
+                              ),
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+                      child: TextField(
+                        controller: _elicitationTextController,
+                        style: const TextStyle(fontSize: 14),
+                        decoration: InputDecoration(
+                          hintText: 'その他（自由入力）',
+                          hintStyle: TextStyle(fontSize: 13, color: Colors.grey.shade400),
+                          filled: true,
+                          fillColor: Colors.white,
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(color: Colors.grey.shade300),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(color: Colors.grey.shade300),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(color: Color(0xFF7C3AED)),
+                          ),
+                        ),
+                        onChanged: (v) {
+                          if (v.trim().isNotEmpty) {
+                            setState(() {
+                              _elicitationAnswers[_elicitationStep] = v.trim();
+                            });
+                          }
+                        },
+                      ),
+                    ),
+                  ] else
+                    // text
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+                      child: TextField(
+                        controller: _elicitationTextController,
+                        maxLines: 3,
+                        minLines: 1,
+                        style: const TextStyle(fontSize: 14),
+                        decoration: InputDecoration(
+                          hintText: currentQ['placeholder'] as String? ?? '回答を入力...',
+                          hintStyle: TextStyle(fontSize: 13, color: Colors.grey.shade400),
+                          filled: true,
+                          fillColor: Colors.white,
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(color: Colors.grey.shade300),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(color: Colors.grey.shade300),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(color: Color(0xFF7C3AED)),
+                          ),
+                        ),
+                        onChanged: (v) {
+                          setState(() {
+                            _elicitationAnswers[_elicitationStep] = v.trim();
+                          });
+                        },
+                      ),
+                    ),
+                  // 下部ボタン
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+                    child: Row(
+                      children: [
+                        if (_elicitationStep > 0)
+                          TextButton.icon(
+                            onPressed: _goBackElicitation,
+                            icon: const Icon(Icons.arrow_back_rounded, size: 16),
+                            label: const Text('戻る', style: TextStyle(fontSize: 13)),
+                            style: TextButton.styleFrom(
+                              foregroundColor: Colors.grey.shade600,
+                            ),
+                          ),
+                        // 必須でなければスキップボタン
+                        if (!isRequired && !isLast && currentAnswer.isEmpty)
+                          TextButton(
+                            onPressed: () {
+                              setState(() => _elicitationStep++);
+                              _elicitationTextController.clear();
+                            },
+                            child: Text('スキップ',
+                                style: TextStyle(fontSize: 13, color: Colors.grey.shade500)),
+                          ),
+                        const Spacer(),
+                        // 次へ / 送信ボタン（上矢印）
+                        if (type == 'text' || type == 'select_or_text' || isLast) ...[
+                          if (!isLast)
+                            // 次へボタン
+                            GestureDetector(
+                              onTap: (currentAnswer.isNotEmpty || !isRequired)
+                                  ? () {
+                                      setState(() => _elicitationStep++);
+                                      _elicitationTextController.clear();
+                                    }
+                                  : null,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                                decoration: BoxDecoration(
+                                  color: (currentAnswer.isNotEmpty || !isRequired)
+                                      ? const Color(0xFF7C3AED)
+                                      : Colors.grey.shade300,
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Text('次へ',
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      color: (currentAnswer.isNotEmpty || !isRequired)
+                                          ? Colors.white
+                                          : Colors.grey.shade500,
+                                    )),
+                              ),
+                            )
+                          else
+                            // 送信ボタン（上矢印）
+                            GestureDetector(
+                              onTap: allAnswered ? _submitElicitation : null,
+                              child: Container(
+                                width: 36,
+                                height: 36,
+                                decoration: BoxDecoration(
+                                  gradient: allAnswered
+                                      ? const LinearGradient(
+                                          colors: [Color(0xFF7C3AED), Color(0xFFEC4899)],
+                                        )
+                                      : null,
+                                  color: allAnswered ? null : Colors.grey.shade300,
+                                  borderRadius: BorderRadius.circular(18),
+                                ),
+                                child: const Icon(
+                                  Icons.arrow_upward_rounded,
+                                  color: Colors.white,
+                                  size: 20,
+                                ),
+                              ),
+                            ),
+                        ],
+                      ],
+                    ),
                   ),
-              ],
+                ],
+              ),
             ),
-          ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildInputArea() {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      color: Colors.white,
-      child: SafeArea(
-        top: false,
-        child: Row(
-          children: [
-            Expanded(
-              child: Focus(
-                onKeyEvent: (node, event) {
-                  if (_textController.value.composing.isValid) {
-                    return KeyEventResult.ignored;
-                  }
-                  if (event is KeyDownEvent &&
-                      event.logicalKey == LogicalKeyboardKey.enter &&
-                      !HardwareKeyboard.instance.isShiftPressed) {
-                    _sendMessage();
-                    return KeyEventResult.handled;
-                  }
-                  return KeyEventResult.ignored;
-                },
-                child: TextField(
-                  controller: _textController,
-                  focusNode: _focusNode,
-                  maxLines: null,
-                  minLines: 1,
-                  keyboardType: TextInputType.multiline,
-                  enabled: !_isSending,
-                  decoration: InputDecoration(
-                    hintText: '相談...',
-                    filled: true,
-                    fillColor: Colors.grey.shade100,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(24),
-                      borderSide: BorderSide.none,
-                    ),
-                    contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 16, vertical: 10),
+  Widget _buildSlashMenu() {
+    final commands = _filteredSlashCommands;
+    if (commands.isEmpty) return const SizedBox.shrink();
+
+    return Align(
+      alignment: Alignment.bottomCenter,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 700),
+        child: Container(
+          margin: const EdgeInsets.symmetric(horizontal: 16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: Colors.grey.shade200),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.08),
+                blurRadius: 16,
+                offset: const Offset(0, -4),
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                child: Text(
+                  'コマンド',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.grey.shade500,
+                    letterSpacing: 0.5,
                   ),
                 ),
               ),
-            ),
-            const SizedBox(width: 8),
-            GestureDetector(
-              onTap: _isSending ? null : _sendMessage,
+              ...commands.map((cmd) {
+                final label = cmd['label'] as String? ?? '';
+                final desc = cmd['description'] as String? ?? '';
+
+                return InkWell(
+                  onTap: () => _selectSlashCommand(cmd),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 32,
+                          height: 32,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF7C3AED).withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: const Icon(Icons.tag_rounded, size: 16, color: Color(0xFF7C3AED)),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                '/$label',
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              Text(
+                                desc,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.grey.shade500,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }),
+              const SizedBox(height: 4),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  bool _isDragOver = false;
+
+  Widget _buildInputArea() {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+      decoration: const BoxDecoration(color: Colors.white),
+      child: SafeArea(
+        top: false,
+        child: Align(
+          alignment: Alignment.topCenter,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 700),
+            child: _buildDropTarget(
               child: Container(
-                width: 44,
-                height: 44,
                 decoration: BoxDecoration(
-                  color: _isSending
-                      ? Colors.grey.shade400
-                      : Colors.purple.shade600,
-                  shape: BoxShape.circle,
+                  color: _isDragOver
+                      ? const Color(0xFF7C3AED).withOpacity(0.06)
+                      : const Color(0xFFF9FAFB),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: _isDragOver
+                        ? const Color(0xFF7C3AED).withOpacity(0.5)
+                        : Colors.grey.shade300,
+                    width: _isDragOver ? 2 : 1,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.04),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
                 ),
-                child: const Icon(Icons.send, color: Colors.white, size: 20),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // 添付ファイルプレビュー（入力欄内の上部）
+                    if (_attachedFiles.isNotEmpty)
+                      Container(
+                        padding: const EdgeInsets.fromLTRB(14, 12, 14, 4),
+                        child: SizedBox(
+                          height: 72,
+                          child: ListView.separated(
+                            scrollDirection: Axis.horizontal,
+                            itemCount: _attachedFiles.length,
+                            separatorBuilder: (_, __) => const SizedBox(width: 8),
+                            itemBuilder: (context, index) {
+                              return _buildAttachmentPreview(_attachedFiles[index], index);
+                            },
+                          ),
+                        ),
+                      ),
+                    // アップロード中
+                    if (_isUploading)
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 6, 16, 0),
+                        child: Row(
+                          children: [
+                            SizedBox(
+                              width: 12,
+                              height: 12,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 1.5,
+                                color: const Color(0xFF7C3AED).withOpacity(0.6),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Text('アップロード中...',
+                                style: TextStyle(fontSize: 11, color: Colors.grey.shade500)),
+                          ],
+                        ),
+                      ),
+                    // ドラッグオーバー時のヒント
+                    if (_isDragOver)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.file_download_rounded,
+                                size: 20, color: const Color(0xFF7C3AED).withOpacity(0.6)),
+                            const SizedBox(width: 8),
+                            Text('ここにドロップして添付',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: const Color(0xFF7C3AED).withOpacity(0.8),
+                                  fontWeight: FontWeight.w500,
+                                )),
+                          ],
+                        ),
+                      ),
+                    // テキスト入力行
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Expanded(
+                          child: Focus(
+                            onKeyEvent: (node, event) {
+                              if (_textController.value.composing.isValid) {
+                                return KeyEventResult.ignored;
+                              }
+                              if (event is KeyDownEvent &&
+                                  event.logicalKey == LogicalKeyboardKey.enter &&
+                                  !HardwareKeyboard.instance.isShiftPressed) {
+                                _sendMessage();
+                                return KeyEventResult.handled;
+                              }
+                              return KeyEventResult.ignored;
+                            },
+                            child: TextField(
+                              controller: _textController,
+                              focusNode: _focusNode,
+                              maxLines: null,
+                              minLines: 1,
+                              keyboardType: TextInputType.multiline,
+                              enabled: !_isSending,
+                              style: const TextStyle(fontSize: 15),
+                              decoration: InputDecoration(
+                                hintText: 'メッセージを入力...',
+                                hintStyle: TextStyle(color: Colors.grey.shade400),
+                                filled: false,
+                                border: InputBorder.none,
+                                enabledBorder: InputBorder.none,
+                                focusedBorder: InputBorder.none,
+                                contentPadding: const EdgeInsets.fromLTRB(16, 14, 8, 14),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    // 下段ツールバー
+                    Container(
+                      padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+                      child: Row(
+                        children: [
+                          // ファイル添付ボタン
+                          _buildToolbarButton(
+                            icon: Icons.attach_file_rounded,
+                            tooltip: 'ファイルを添付',
+                            onTap: _isSending ? null : _pickFile,
+                          ),
+                          const Spacer(),
+                          // 送信ボタン（常に表示、入力があればアクティブ）
+                          GestureDetector(
+                            onTap: (_hasText || _attachedFiles.isNotEmpty) && !_isSending
+                                ? _sendMessage
+                                : null,
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 200),
+                              width: 36,
+                              height: 36,
+                              decoration: BoxDecoration(
+                                gradient: (_hasText || _attachedFiles.isNotEmpty) && !_isSending
+                                    ? const LinearGradient(
+                                        colors: [Color(0xFF7C3AED), Color(0xFFEC4899)],
+                                      )
+                                    : null,
+                                color: (_hasText || _attachedFiles.isNotEmpty) && !_isSending
+                                    ? null
+                                    : Colors.grey.shade300,
+                                borderRadius: BorderRadius.circular(18),
+                              ),
+                              child: const Icon(
+                                Icons.arrow_upward_rounded,
+                                color: Colors.white,
+                                size: 20,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildToolbarButton({
+    required IconData icon,
+    required String tooltip,
+    VoidCallback? onTap,
+  }) {
+    return Tooltip(
+      message: tooltip,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          width: 36,
+          height: 36,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Icon(icon, size: 20, color: Colors.grey.shade500),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDropTarget({required Widget child}) {
+    // Flutter Web のドラッグ&ドロップは DragTarget では外部ファイルを受け取れないため
+    // HTML の drag events を使う必要がある。
+    // ここでは dart:html を使わずに、シンプルな実装として
+    // Flutter の標準 DragTarget でアプリ内のドラッグに対応しつつ、
+    // 見た目のフィードバックだけ提供する。
+    // 外部ファイルのドロップは image_picker / file_picker で代替する。
+    return child;
+  }
+
+  Widget _buildAttachmentPreview(_AttachedFile file, int index) {
+    if (file.type == _FileType.image) {
+      return Stack(
+        clipBehavior: Clip.none,
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(10),
+            child: Image.memory(
+              file.bytes,
+              width: 72,
+              height: 72,
+              fit: BoxFit.cover,
+            ),
+          ),
+          Positioned(
+            top: -4,
+            right: -4,
+            child: _buildRemoveButton(index),
+          ),
+        ],
+      );
+    }
+
+    // ファイル
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        Container(
+          width: 140,
+          height: 72,
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: Colors.grey.shade300),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF7C3AED).withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(Icons.insert_drive_file_rounded,
+                    size: 18, color: Color(0xFF7C3AED)),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      file.name,
+                      style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    if (file.fileSize != null)
+                      Text(
+                        _formatFileSize(file.fileSize!),
+                        style: TextStyle(fontSize: 10, color: Colors.grey.shade500),
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        Positioned(
+          top: -4,
+          right: -4,
+          child: _buildRemoveButton(index),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildRemoveButton(int index) {
+    return GestureDetector(
+      onTap: () => _removeAttachment(index),
+      child: Container(
+        width: 20,
+        height: 20,
+        decoration: BoxDecoration(
+          color: Colors.grey.shade700,
+          shape: BoxShape.circle,
+        ),
+        child: const Icon(Icons.close_rounded, color: Colors.white, size: 12),
+      ),
+    );
+  }
+
+  String _formatFileSize(int bytes) {
+    if (bytes < 1024) return '$bytes B';
+    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(0)} KB';
+    return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+  }
+
+  Widget _buildHistoryBottomSheet(BuildContext ctx) {
+    return DraggableScrollableSheet(
+      initialChildSize: 0.7,
+      minChildSize: 0.4,
+      maxChildSize: 0.9,
+      builder: (context, scrollController) => Container(
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: Column(
+          children: [
+            Container(
+              margin: const EdgeInsets.only(top: 10),
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.grey.shade300,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(6),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF7C3AED).withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Icon(Icons.history_rounded, color: Color(0xFF7C3AED), size: 18),
+                      ),
+                      const SizedBox(width: 10),
+                      Text(
+                        '${widget.studentName} - 相談履歴',
+                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                      ),
+                    ],
+                  ),
+                  IconButton(
+                    icon: Icon(Icons.close_rounded, color: Colors.grey.shade500),
+                    onPressed: () => Navigator.pop(ctx),
+                  ),
+                ],
+              ),
+            ),
+            Divider(height: 1, color: Colors.grey.shade200),
+            Expanded(
+              child: StreamBuilder<QuerySnapshot>(
+                stream: FirebaseFirestore.instance
+                    .collection('ai_chat_sessions')
+                    .where('studentId', isEqualTo: widget.studentId)
+                    .orderBy('createdAt', descending: true)
+                    .limit(30)
+                    .snapshots(),
+                builder: (context, snapshot) {
+                  if (snapshot.hasError) {
+                    return Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: SelectableText(
+                          'エラーが発生しました:\n${snapshot.error}',
+                          style: const TextStyle(color: Colors.red, fontSize: 12),
+                        ),
+                      ),
+                    );
+                  }
+
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const Center(
+                      child: CircularProgressIndicator(color: Color(0xFF7C3AED)),
+                    );
+                  }
+
+                  final docs = snapshot.data?.docs ?? [];
+                  if (docs.isEmpty) {
+                    return Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.history_rounded, size: 48, color: Colors.grey.shade300),
+                          const SizedBox(height: 12),
+                          Text(
+                            'まだ相談履歴がありません',
+                            style: TextStyle(color: Colors.grey.shade500),
+                          ),
+                        ],
+                      ),
+                    );
+                  }
+
+                  final today = DateTime.now();
+                  final startOfDay = DateTime(today.year, today.month, today.day);
+
+                  return ListView.builder(
+                    controller: scrollController,
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    itemCount: docs.length,
+                    itemBuilder: (context, index) {
+                      final doc = docs[index];
+                      final data = doc.data() as Map<String, dynamic>;
+                      final isCurrentSession = doc.id == _sessionId;
+
+                      String dateStr = '';
+                      bool isToday = false;
+                      if (data['createdAt'] != null) {
+                        final ts = data['createdAt'] as Timestamp;
+                        final date = ts.toDate();
+                        isToday = date.isAfter(startOfDay);
+                        dateStr = isToday
+                            ? '今日 ${DateFormat('HH:mm').format(date)}'
+                            : DateFormat('yyyy/MM/dd HH:mm').format(date);
+                      }
+
+                      final staffName = data['staffName'] ?? 'スタッフ';
+                      final lastMessage = data['lastMessage'] ?? '';
+                      final summary = data['summary'] as String?;
+                      final messageCount = data['messageCount'] ?? 0;
+
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(
+                            color: isCurrentSession
+                                ? const Color(0xFF7C3AED).withOpacity(0.4)
+                                : Colors.grey.shade200,
+                            width: isCurrentSession ? 1.5 : 1,
+                          ),
+                          color: isCurrentSession
+                              ? const Color(0xFF7C3AED).withOpacity(0.04)
+                              : Colors.white,
+                        ),
+                        child: InkWell(
+                          onTap: isCurrentSession
+                              ? () => Navigator.pop(ctx)
+                              : () {
+                                  Navigator.pop(ctx);
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => AiChatSessionDetailScreen(
+                                        sessionId: doc.id,
+                                        studentName: widget.studentName,
+                                        sessionData: data,
+                                      ),
+                                    ),
+                                  );
+                                },
+                          borderRadius: BorderRadius.circular(14),
+                          child: Padding(
+                            padding: const EdgeInsets.all(14),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Icon(
+                                      Icons.auto_awesome,
+                                      size: 16,
+                                      color: isCurrentSession
+                                          ? const Color(0xFF7C3AED)
+                                          : Colors.grey.shade500,
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      dateStr,
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w600,
+                                        fontSize: 13,
+                                        color: isCurrentSession
+                                            ? const Color(0xFF7C3AED)
+                                            : Colors.black87,
+                                      ),
+                                    ),
+                                    if (isCurrentSession) ...[
+                                      const SizedBox(width: 8),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 8, vertical: 2),
+                                        decoration: BoxDecoration(
+                                          gradient: const LinearGradient(
+                                            colors: [Color(0xFF7C3AED), Color(0xFFEC4899)],
+                                          ),
+                                          borderRadius: BorderRadius.circular(10),
+                                        ),
+                                        child: const Text(
+                                          '現在',
+                                          style: TextStyle(
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.white,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                    const Spacer(),
+                                    Text(
+                                      '$messageCount件',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: Colors.grey.shade500,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                if (summary != null && summary.isNotEmpty) ...[
+                                  const SizedBox(height: 8),
+                                  Container(
+                                    padding: const EdgeInsets.all(10),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFF7C3AED).withOpacity(0.05),
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                    child: Row(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Icon(Icons.summarize_rounded, size: 14,
+                                            color: const Color(0xFF7C3AED).withOpacity(0.6)),
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          child: Text(
+                                            summary,
+                                            maxLines: 3,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              color: Colors.grey.shade700,
+                                              height: 1.4,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ] else if (lastMessage.isNotEmpty) ...[
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    lastMessage,
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.grey.shade600,
+                                    ),
+                                  ),
+                                ],
+                                const SizedBox(height: 4),
+                                Text(
+                                  staffName,
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: Colors.grey.shade400,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  );
+                },
               ),
             ),
           ],
@@ -1125,4 +2282,86 @@ class _AiChatScreenState extends State<AiChatScreen> {
       ),
     );
   }
+}
+
+// ドットアニメーション
+class _AnimatedDot extends StatefulWidget {
+  final int delay;
+
+  const _AnimatedDot({required this.delay});
+
+  @override
+  State<_AnimatedDot> createState() => _AnimatedDotState();
+}
+
+class _AnimatedDotState extends State<_AnimatedDot>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _animation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      duration: const Duration(milliseconds: 600),
+      vsync: this,
+    );
+    _animation = Tween<double>(begin: 0, end: 1).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
+    );
+
+    Future.delayed(Duration(milliseconds: widget.delay), () {
+      if (mounted) {
+        _controller.repeat(reverse: true);
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _animation,
+      builder: (context, child) {
+        return Transform.translate(
+          offset: Offset(0, -4 * _animation.value),
+          child: Container(
+            width: 8,
+            height: 8,
+            decoration: BoxDecoration(
+              color: Color.lerp(
+                Colors.grey.shade400,
+                const Color(0xFF7C3AED),
+                _animation.value,
+              ),
+              shape: BoxShape.circle,
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+// 添付ファイルの種類
+enum _FileType { image, file }
+
+// 添付ファイルデータ
+class _AttachedFile {
+  final String name;
+  final Uint8List bytes;
+  final _FileType type;
+  final int? fileSize;
+
+  const _AttachedFile({
+    required this.name,
+    required this.bytes,
+    required this.type,
+    this.fileSize,
+  });
 }

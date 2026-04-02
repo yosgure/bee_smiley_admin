@@ -65,6 +65,12 @@ service cloud.firestore {
     match /support_plans/{planId} {
       allow read, write: if isStaff();
     }
+    match /ai_chat_commands/{docId} {
+      allow read, write: if isStaff();
+    }
+    match /ai_chat_config/{docId} {
+      allow read, write: if isStaff();
+    }
     match /ai_chat_sessions/{sessionId} {
       allow read: if isStaff();
       allow create: if isStaff();
