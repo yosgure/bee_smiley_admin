@@ -131,7 +131,7 @@ Widget _buildHeader({bool showBack = false}) {
                     ? NetworkImage(widget.childPhotoUrl!)
                     : null,
                 child: widget.childPhotoUrl == null || widget.childPhotoUrl!.isEmpty
-                    ? const Icon(Icons.child_care, size: 20, color: AppColors.primary)
+                    ? const Icon(Icons.person, size: 20, color: AppColors.primary)
                     : null,
               ),
               const SizedBox(width: 10),
@@ -180,7 +180,7 @@ Widget _buildHeader({bool showBack = false}) {
                                   ? NetworkImage(photoUrl)
                                   : null,
                               child: photoUrl == null || photoUrl.isEmpty
-                                  ? const Icon(Icons.child_care, size: 14, color: AppColors.primary)
+                                  ? const Icon(Icons.person, size: 14, color: AppColors.primary)
                                   : null,
                             ),
                             const SizedBox(width: 10),
