@@ -641,59 +641,78 @@ Widget _buildHeader({bool showBack = false}) {
   void _showImagePreview(String url) {
     showDialog(
       context: context,
-      builder: (_) => Dialog(
-        backgroundColor: Colors.transparent,
-        insetPadding: const EdgeInsets.all(16),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // 画像
-            ClipRRect(
-              borderRadius: BorderRadius.circular(12),
-              child: Image.network(
-                url,
-                fit: BoxFit.contain,
-                errorBuilder: (c, e, s) => Container(
-                  height: 200,
-                  color: Colors.grey.shade800,
-                  child: const Icon(Icons.broken_image, color: Colors.white, size: 48),
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-            // ボタン
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
+      barrierColor: Colors.black87,
+      builder: (dialogContext) {
+        bool isSaving = false;
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return Stack(
               children: [
-                ElevatedButton.icon(
-                  onPressed: () => _downloadImage(url),
-                  icon: const Icon(Icons.download, size: 18),
-                  label: const Text('保存'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primary,
-                    foregroundColor: Colors.white,
+                // 画像（ピンチズーム対応）
+                Center(
+                  child: InteractiveViewer(
+                    minScale: 0.5,
+                    maxScale: 4.0,
+                    child: CachedNetworkImage(
+                      imageUrl: url,
+                      fit: BoxFit.contain,
+                      placeholder: (c, u) => const Center(
+                        child: CircularProgressIndicator(color: Colors.white),
+                      ),
+                      errorWidget: (c, u, e) => const Icon(
+                        Icons.broken_image, color: Colors.white, size: 48,
+                      ),
+                    ),
                   ),
                 ),
-                const SizedBox(width: 16),
-                ElevatedButton(
-                  onPressed: () => Navigator.pop(context),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.grey.shade600,
-                    foregroundColor: Colors.white,
+                // 上部バー（閉じる・保存）
+                Positioned(
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  child: SafeArea(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          IconButton(
+                            icon: const Icon(Icons.close, color: Colors.white, size: 28),
+                            onPressed: () => Navigator.pop(dialogContext),
+                          ),
+                          IconButton(
+                            icon: isSaving
+                                ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                                : const Icon(Icons.download, color: Colors.white, size: 28),
+                            tooltip: '保存',
+                            onPressed: isSaving
+                                ? null
+                                : () async {
+                                    setDialogState(() => isSaving = true);
+                                    await _downloadImage(url, dialogContext);
+                                    if (dialogContext.mounted) {
+                                      setDialogState(() => isSaving = false);
+                                    }
+                                  },
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
-                  child: const Text('閉じる'),
                 ),
               ],
-            ),
-          ],
-        ),
-      ),
+            );
+          },
+        );
+      },
     );
   }
 
-  Future<void> _downloadImage(String url) async {
+  Future<void> _downloadImage(String url, BuildContext dialogContext) async {
     if (kIsWeb) {
+      // Web: アンカー要素でダウンロード
       await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+      if (dialogContext.mounted) Navigator.pop(dialogContext);
       return;
     }
     try {
@@ -701,7 +720,8 @@ Widget _buildHeader({bool showBack = false}) {
       if (!hasAccess) {
         final granted = await Gal.requestAccess(toAlbum: true);
         if (!granted) {
-          if (mounted) {
+          if (dialogContext.mounted) {
+            Navigator.pop(dialogContext);
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(content: Text("写真へのアクセスが許可されていません")),
             );
@@ -717,16 +737,18 @@ Widget _buildHeader({bool showBack = false}) {
         await file.writeAsBytes(response.bodyBytes);
         await Gal.putImage(file.path, album: "Beesmiley");
         await file.delete();
-        if (mounted) {
+        if (dialogContext.mounted) {
+          Navigator.pop(dialogContext);
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text("写真を保存しました")),
+            const SnackBar(content: Text("写真を保存しました"), backgroundColor: Colors.green),
           );
         }
       }
     } catch (e) {
-      if (mounted) {
+      if (dialogContext.mounted) {
+        Navigator.pop(dialogContext);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("保存に失敗しました: $e")),
+          SnackBar(content: Text("保存に失敗しました: $e"), backgroundColor: Colors.red),
         );
       }
     }
