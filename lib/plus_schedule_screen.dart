@@ -949,6 +949,7 @@ Map<String, dynamic>? _getCellMemo(DateTime date, int slotIndex) {
           'note': data['note'] ?? '',
           'link': data['link'] ?? '',
           'date': date,
+          'isCustomEvent': data['isCustomEvent'] ?? false,
           'order': data['order'] ?? (data['createdAt'] as Timestamp?)?.millisecondsSinceEpoch ?? 0,
         });
       }
@@ -1021,6 +1022,7 @@ Map<String, dynamic>? _getCellMemo(DateTime date, int slotIndex) {
           'room': data['room'] ?? '',
           'course': data['course'] ?? '通常',
           'note': data['note'] ?? '',
+          'isCustomEvent': data['isCustomEvent'] ?? false,
           'order': data['order'] ?? 0,
         });
       }
@@ -2054,6 +2056,10 @@ void _goToPage(int page) {
     String selectedRoom = lesson['room'] ?? '';
     String selectedCourse = lesson['course'] ?? '通常';
 
+    // カスタムイベント名編集用
+    final mobileTitleController = TextEditingController(text: studentName);
+    bool isMobileEditingTitle = false;
+
     // 生徒メモ用コントローラー
     final therapyController = TextEditingController();
     final schoolVisitController = TextEditingController();
@@ -2132,13 +2138,60 @@ void _goToPage(int page) {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(
-                                displayName,
-                                style: const TextStyle(
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.bold,
+                              if (isCustomEvent && isMobileEditingTitle)
+                                TextField(
+                                  controller: mobileTitleController,
+                                  autofocus: true,
+                                  style: const TextStyle(
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                  decoration: InputDecoration(
+                                    border: UnderlineInputBorder(
+                                      borderSide: BorderSide(color: Colors.grey.shade300),
+                                    ),
+                                    focusedBorder: const UnderlineInputBorder(
+                                      borderSide: BorderSide(color: AppColors.primary, width: 2),
+                                    ),
+                                    isDense: true,
+                                    contentPadding: EdgeInsets.zero,
+                                    hintText: 'イベント名を入力',
+                                    suffixIcon: IconButton(
+                                      icon: const Icon(Icons.check, size: 18),
+                                      color: AppColors.primary,
+                                      onPressed: () => setSheetState(() => isMobileEditingTitle = false),
+                                    ),
+                                  ),
+                                  onSubmitted: (_) => setSheetState(() => isMobileEditingTitle = false),
+                                )
+                              else if (isCustomEvent)
+                                GestureDetector(
+                                  onTap: () => setSheetState(() => isMobileEditingTitle = true),
+                                  child: Row(
+                                    children: [
+                                      Flexible(
+                                        child: Text(
+                                          mobileTitleController.text.isEmpty ? 'イベント名を入力' : mobileTitleController.text,
+                                          style: TextStyle(
+                                            fontSize: 20,
+                                            fontWeight: FontWeight.bold,
+                                            color: mobileTitleController.text.isEmpty ? AppColors.textSub : null,
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Icon(Icons.edit, size: 16, color: AppColors.textSub),
+                                    ],
+                                  ),
+                                )
+                              else
+                                Text(
+                                  displayName,
+                                  style: const TextStyle(
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.bold,
+                                  ),
                                 ),
-                              ),
                               Text(
                                 '${DateFormat('M月d日 (E)', 'ja').format(date)}　${_timeSlots[slotIndex]}',
                                 style: const TextStyle(fontSize: 13, color: AppColors.textSub),
@@ -2556,15 +2609,20 @@ void _goToPage(int page) {
                               }
 
                               // レッスン情報を保存
-                              await FirebaseFirestore.instance
-                                  .collection('plus_lessons')
-                                  .doc(lessonId)
-                                  .update({
+                              final mobileUpdateData = <String, dynamic>{
                                 'teachers': selectedTeachers,
                                 'room': selectedRoom,
                                 'course': selectedCourse,
                                 'updatedAt': FieldValue.serverTimestamp(),
-                              });
+                              };
+                              // カスタムイベントの場合はタイトルも更新
+                              if (isCustomEvent) {
+                                mobileUpdateData['studentName'] = mobileTitleController.text.trim();
+                              }
+                              await FirebaseFirestore.instance
+                                  .collection('plus_lessons')
+                                  .doc(lessonId)
+                                  .update(mobileUpdateData);
 
                               // 生徒メモを保存
                               if (!isCustomEvent && studentName.isNotEmpty) {
@@ -6954,13 +7012,17 @@ await _loadLessonsForWeek(showLoading: false);
     List<String> selectedTeachers = List<String>.from(lesson['teachers'] ?? []);
     String selectedRoom = lesson['room'] ?? 'つき';
     String selectedCourse = lesson['course'] ?? '通常';
-    
+
+    // カスタムイベント名編集用
+    final titleController = TextEditingController(text: studentName);
+    bool isEditingTitle = false;
+
     // 生徒メモ用コントローラー
     final therapyController = TextEditingController();
     final schoolVisitController = TextEditingController();
     final consultationController = TextEditingController();
     final moveRequestController = TextEditingController();
-    
+
     // タスク用
     List<Map<String, dynamic>> studentTasks = [];
     final newTaskController = TextEditingController();
@@ -7068,11 +7130,60 @@ await _loadLessonsForWeek(showLoading: false);
                         ),
                         const SizedBox(width: 12),
                         Expanded(
-                          child: MouseRegion(
+                          child: isCustomEvent
+                            ? (isEditingTitle
+                              ? TextField(
+                                  controller: titleController,
+                                  autofocus: true,
+                                  style: const TextStyle(
+                                    fontSize: 22,
+                                    fontWeight: FontWeight.w400,
+                                    color: Color(0xFF333333),
+                                  ),
+                                  decoration: InputDecoration(
+                                    border: UnderlineInputBorder(
+                                      borderSide: BorderSide(color: Colors.grey.shade300),
+                                    ),
+                                    focusedBorder: const UnderlineInputBorder(
+                                      borderSide: BorderSide(color: AppColors.primary, width: 2),
+                                    ),
+                                    isDense: true,
+                                    contentPadding: const EdgeInsets.symmetric(vertical: 4),
+                                    hintText: 'イベント名を入力',
+                                    suffixIcon: IconButton(
+                                      icon: const Icon(Icons.check, size: 20),
+                                      color: AppColors.primary,
+                                      onPressed: () => setDialogState(() => isEditingTitle = false),
+                                    ),
+                                  ),
+                                  onSubmitted: (_) => setDialogState(() => isEditingTitle = false),
+                                )
+                              : MouseRegion(
+                                  cursor: SystemMouseCursors.click,
+                                  child: GestureDetector(
+                                    onTap: () => setDialogState(() => isEditingTitle = true),
+                                    child: Row(
+                                      children: [
+                                        Flexible(
+                                          child: Text(
+                                            titleController.text.isEmpty ? 'イベント名を入力' : titleController.text,
+                                            style: TextStyle(
+                                              fontSize: 22,
+                                              fontWeight: FontWeight.w400,
+                                              color: titleController.text.isEmpty ? AppColors.textSub : const Color(0xFF333333),
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Icon(Icons.edit, size: 18, color: AppColors.textSub),
+                                      ],
+                                    ),
+                                  ),
+                                ))
+                            : MouseRegion(
   cursor: SystemMouseCursors.click,
   child: GestureDetector(
     onTap: () async {
-      // _allStudentsから最新のprofileUrlを取得
       final student = _allStudents.firstWhere(
         (s) => s['name'] == studentName,
         orElse: () => <String, dynamic>{},
@@ -7585,16 +7696,21 @@ InkWell(
                               }
                               
                               // レッスン情報を保存
-                              await FirebaseFirestore.instance
-                                  .collection('plus_lessons')
-                                  .doc(lessonId)
-                                  .update({
+                              final updateData = <String, dynamic>{
                                 'teachers': selectedTeachers,
                                 'room': selectedRoom,
                                 'course': selectedCourse,
                                 'updatedAt': FieldValue.serverTimestamp(),
-                              });
-                              
+                              };
+                              // カスタムイベントの場合はタイトルも更新
+                              if (isCustomEvent) {
+                                updateData['studentName'] = titleController.text.trim();
+                              }
+                              await FirebaseFirestore.instance
+                                  .collection('plus_lessons')
+                                  .doc(lessonId)
+                                  .update(updateData);
+
                               // 生徒メモを保存（生徒モードの場合のみ）
                               if (!isCustomEvent && studentName.isNotEmpty) {
                                 await _saveStudentNotes(studentName, {
