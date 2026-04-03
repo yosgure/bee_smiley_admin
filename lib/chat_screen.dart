@@ -30,9 +30,10 @@ class ChatListScreen extends StatefulWidget {
 class _ChatListScreenState extends State<ChatListScreen> {
   String? _selectedRoomId;
   final currentUser = FirebaseAuth.instance.currentUser;
-  
+
   Stream<QuerySnapshot>? _roomsStream;
   String _myDisplayName = '';
+  final Map<String, String> _drafts = {};
 
   @override
   void initState() {
@@ -193,7 +194,12 @@ class _ChatListScreenState extends State<ChatListScreen> {
             preferredSize: const Size.fromHeight(40),
             child: _buildCommonHeader(roomName, actions: [_buildChatMenu(_selectedRoomId!, isGroup, memberNames, true)]),
           ),
-          body: ChatDetailView(roomId: _selectedRoomId!, roomName: roomName, isGroup: isGroup, memberNames: memberNames, showAppBar: false),
+          body: ChatDetailView(
+            key: ValueKey(_selectedRoomId),
+            roomId: _selectedRoomId!, roomName: roomName, isGroup: isGroup, memberNames: memberNames, showAppBar: false,
+            initialDraft: _drafts[_selectedRoomId!] ?? '',
+            onDraftChanged: (text) => _drafts[_selectedRoomId!] = text,
+          ),
         );
       },
     );
@@ -821,7 +827,9 @@ class ChatDetailView extends StatefulWidget {
   final bool showAppBar;
   final bool isGroup;
   final Map<String, dynamic> memberNames;
-  const ChatDetailView({super.key, required this.roomId, required this.roomName, required this.isGroup, required this.memberNames, this.showAppBar = true});
+  final String initialDraft;
+  final ValueChanged<String>? onDraftChanged;
+  const ChatDetailView({super.key, required this.roomId, required this.roomName, required this.isGroup, required this.memberNames, this.showAppBar = true, this.initialDraft = '', this.onDraftChanged});
   @override
   State<ChatDetailView> createState() => _ChatDetailViewState();
 }
@@ -837,9 +845,14 @@ class _ChatDetailViewState extends State<ChatDetailView> {
   @override
   void initState() {
     super.initState();
+    if (widget.initialDraft.isNotEmpty) {
+      _textController.text = widget.initialDraft;
+      _hasText = true;
+    }
     _textController.addListener(() {
       final hasText = _textController.text.trim().isNotEmpty;
       if (hasText != _hasText) setState(() => _hasText = hasText);
+      widget.onDraftChanged?.call(_textController.text);
     });
   }
 
@@ -959,28 +972,31 @@ class _ChatDetailViewState extends State<ChatDetailView> {
               child: Column(
                 children: [
                   // テキスト入力エリア
-                  Focus(
-                    onKeyEvent: (node, event) {
-                      if (_textController.value.composing.isValid) return KeyEventResult.ignored;
-                      if (event is KeyDownEvent && event.logicalKey == LogicalKeyboardKey.enter && !HardwareKeyboard.instance.isShiftPressed) { _sendMessage(); return KeyEventResult.handled; }
-                      return KeyEventResult.ignored;
-                    },
-                    child: TextField(
-                      controller: _textController, focusNode: _focusNode,
-                      maxLines: 6, minLines: 3, keyboardType: TextInputType.multiline,
-                      style: const TextStyle(fontSize: 15, height: 1.5, fontFamily: 'NotoSansJP', fontFamilyFallback: ['Hiragino Sans', 'Roboto', 'sans-serif']),
-                      decoration: InputDecoration(
-                        hintText: 'メッセージを入力してください。(Enterで送信 / Shift + Enterで改行)',
-                        hintStyle: TextStyle(fontSize: 14, color: Colors.grey.shade400),
-                        border: InputBorder.none,
-                        filled: true,
-                        fillColor: Colors.grey.shade100,
-                        hoverColor: Colors.transparent,
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                        isDense: true,
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxHeight: 200),
+                    child: Focus(
+                        onKeyEvent: (node, event) {
+                          if (_textController.value.composing.isValid) return KeyEventResult.ignored;
+                          if (event is KeyDownEvent && event.logicalKey == LogicalKeyboardKey.enter && !HardwareKeyboard.instance.isShiftPressed) { _sendMessage(); return KeyEventResult.handled; }
+                          return KeyEventResult.ignored;
+                        },
+                        child: TextField(
+                          controller: _textController, focusNode: _focusNode,
+                          maxLines: null, minLines: 3, keyboardType: TextInputType.multiline,
+                          style: const TextStyle(fontSize: 15, height: 1.5, fontFamily: 'NotoSansJP', fontFamilyFallback: ['Hiragino Sans', 'Roboto', 'sans-serif']),
+                          decoration: InputDecoration(
+                            hintText: 'メッセージを入力してください。(Enterで送信 / Shift + Enterで改行)',
+                            hintStyle: TextStyle(fontSize: 14, color: Colors.grey.shade400),
+                            border: InputBorder.none,
+                            filled: true,
+                            fillColor: Colors.grey.shade100,
+                            hoverColor: Colors.transparent,
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                            isDense: true,
+                          ),
+                        ),
                       ),
                     ),
-                  ),
                   // アイコンバー
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
