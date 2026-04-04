@@ -2192,9 +2192,23 @@ async function getChildRecordIds(cookies, date) {
  */
 async function getEditPageFields(cookies, rId, calDate, cId) {
   const url = `${HUG_BASE_URL}/contact_book.php?mode=edit&id=${rId}&cal_date=${calDate}&c_id=${cId}`;
+  console.log('[getEditPageFields] URL:', url);
   const res = await hugFetch(url, {}, cookies);
   const html = await res.text();
   const $ = cheerio.load(html);
+
+  // デバッグ: フォーム内の全フィールドを列挙
+  const allFieldNames = [];
+  $('form input').each((_, el) => {
+    allFieldNames.push(`input[${$(el).attr('type')}] name=${$(el).attr('name')}`);
+  });
+  $('form textarea').each((_, el) => {
+    allFieldNames.push(`textarea name=${$(el).attr('name')}`);
+  });
+  $('form select').each((_, el) => {
+    allFieldNames.push(`select name=${$(el).attr('name')}`);
+  });
+  console.log('[getEditPageFields] ALL form fields:', JSON.stringify(allFieldNames));
 
   const fields = {};
   $('form input[type="hidden"]').each((_, el) => {
@@ -2210,6 +2224,13 @@ async function getEditPageFields(cookies, rId, calDate, cId) {
     if (name && !fields[name]) fields[name] = selectedValue;
   });
 
+  // textareaの値も取得
+  $('form textarea').each((_, el) => {
+    const name = $(el).attr('name');
+    const value = $(el).text() || '';
+    if (name && !fields[name]) fields[name] = value;
+  });
+
   return fields;
 }
 
@@ -2217,6 +2238,9 @@ async function getEditPageFields(cookies, rId, calDate, cId) {
  * hugに記録を下書き保存
  */
 async function saveDraftToHug(cookies, formFields, recordStaffId, staffNote) {
+  console.log('[saveDraft] formFields keys:', Object.keys(formFields));
+  console.log('[saveDraft] formFields:', JSON.stringify(formFields));
+
   const postData = new URLSearchParams({
     ...formFields,
     mode: 'regist',
@@ -2226,11 +2250,17 @@ async function saveDraftToHug(cookies, formFields, recordStaffId, staffNote) {
     note: '',
   });
 
+  console.log('[saveDraft] POST body:', postData.toString().substring(0, 500));
+
   const res = await hugFetch(`${HUG_BASE_URL}/contact_book.php`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: postData.toString(),
   }, cookies);
+
+  const responseText = await res.text();
+  console.log('[saveDraft] response status:', res.status);
+  console.log('[saveDraft] response body (first 1000):', responseText.substring(0, 1000));
 
   // リダイレクト（302）または200が返れば成功
   return res.status === 302 || res.status === 200;
