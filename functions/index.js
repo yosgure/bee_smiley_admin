@@ -2035,12 +2035,15 @@ async function fetchWithCookies(url, options = {}, cookies = '', maxRedirects = 
     const res = await fetch(currentUrl, { ...options, headers, redirect: 'manual' });
     currentCookies = mergeCookies(currentCookies, parseCookies(res.headers.raw()['set-cookie']));
 
+    console.log(`fetchWithCookies[${i}]: ${options.method || 'GET'} ${currentUrl} → ${res.status}`);
+
     if (res.status === 301 || res.status === 302 || res.status === 303 || res.status === 307) {
       const location = res.headers.get('location');
       if (!location) break;
       currentUrl = location.startsWith('http')
         ? location
         : `https://www.hug-beesmiley.link${location.startsWith('/') ? '' : '/'}${location}`;
+      console.log(`fetchWithCookies[${i}]: redirect → ${currentUrl}`);
       // POST後のリダイレクトはGETに変更
       if (options.method === 'POST' && (res.status === 302 || res.status === 303)) {
         options = {};
