@@ -1995,15 +1995,40 @@ async function hugFetch(url, options = {}, cookies = '') {
 }
 
 /**
+ * Cookieをマージするヘルパー
+ */
+function mergeCookies(existing, newCookies) {
+  const cookieMap = {};
+  [existing, newCookies].forEach((cs) => {
+    if (!cs) return;
+    cs.split('; ').forEach((c) => {
+      const eqIdx = c.indexOf('=');
+      if (eqIdx > 0) {
+        const key = c.substring(0, eqIdx);
+        cookieMap[key] = c;
+      }
+    });
+  });
+  return Object.values(cookieMap).join('; ');
+}
+
+/**
  * hugにログインしてセッションCookieを取得
+ *
+ * hugログインフォーム構造（調査済み）:
+ *   action="/hug/wm/"  method="post"
+ *   hidden: mode=login_pass, mode_token=nomode, csrf_token_from_client=..., hug_page_url=index.php
+ *   text:   name="username"
+ *   password: name="password"
  */
 async function loginToHug() {
   const username = hugUsername.value();
   const password = hugPassword.value();
+  const HUG_ORIGIN = 'https://www.hug-beesmiley.link';
+  const loginUrl = `${HUG_ORIGIN}/hug/wm/`;
 
-  // 1. ログインページをGETしてフォーム構造を把握
-  const loginUrl = `${HUG_BASE_URL}/`;
-  const loginPageRes = await fetch(loginUrl, { redirect: 'manual' });
+  // 1. ログインページをGET（リダイレクトを追従してHTMLを取得）
+  const loginPageRes = await fetch(loginUrl);
   const loginHtml = await loginPageRes.text();
   const $ = cheerio.load(loginHtml);
 
@@ -2018,18 +2043,20 @@ async function loginToHug() {
     if (name) formData[name] = value;
   });
 
-  // ユーザー名・パスワードフィールド名を特定
-  const usernameField = $('form input[type="text"]').attr('name') || 'login_id';
-  const passwordField = $('form input[type="password"]').attr('name') || 'password';
+  // ユーザー名・パスワードを追加
+  formData['username'] = username;
+  formData['password'] = password;
 
-  formData[usernameField] = username;
-  formData[passwordField] = password;
+  // フォームaction URLを構築（action="/hug/wm/" → absolute URL）
+  const formAction = $('form').attr('action') || '/hug/wm/';
+  const actionUrl = formAction.startsWith('http')
+    ? formAction
+    : `${HUG_ORIGIN}${formAction.startsWith('/') ? '' : '/'}${formAction}`;
 
-  // ログインフォームのaction URLを取得
-  const formAction = $('form').attr('action') || loginUrl;
-  const actionUrl = formAction.startsWith('http') ? formAction : `${HUG_BASE_URL}/${formAction.replace(/^\//, '')}`;
+  console.log(`hug login POST to: ${actionUrl}`);
+  console.log(`hug form fields: ${Object.keys(formData).join(', ')}`);
 
-  // 2. ログインPOST
+  // 2. ログインPOST（redirect: manual でセッションCookieを取得）
   const loginRes = await hugFetch(actionUrl, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -2037,21 +2064,14 @@ async function loginToHug() {
   }, cookies);
 
   // レスポンスのCookieをマージ
-  const newCookies = parseCookies(loginRes.headers.raw()['set-cookie']);
-  if (newCookies) {
-    // 既存Cookieと新規Cookieをマージ
-    const cookieMap = {};
-    [cookies, newCookies].forEach((cs) => {
-      cs.split('; ').forEach((c) => {
-        const [key] = c.split('=');
-        if (key) cookieMap[key] = c;
-      });
-    });
-    cookies = Object.values(cookieMap).join('; ');
-  }
+  cookies = mergeCookies(cookies, parseCookies(loginRes.headers.raw()['set-cookie']));
 
-  // ログイン成功の確認（リダイレクト302 or 200）
+  console.log(`hug login response status: ${loginRes.status}`);
+
+  // ログイン成功の確認（302リダイレクト or 200）
   if (loginRes.status !== 302 && loginRes.status !== 200) {
+    const body = await loginRes.text();
+    console.error('hug login response body:', body.substring(0, 500));
     throw new Error(`hug login failed: status ${loginRes.status}`);
   }
 
@@ -2059,20 +2079,20 @@ async function loginToHug() {
   if (loginRes.status === 302) {
     const location = loginRes.headers.get('location');
     if (location) {
-      const redirectUrl = location.startsWith('http') ? location : `${HUG_BASE_URL}/${location.replace(/^\//, '')}`;
+      const redirectUrl = location.startsWith('http')
+        ? location
+        : `${HUG_ORIGIN}${location.startsWith('/') ? '' : '/'}${location}`;
+      console.log(`hug login redirect to: ${redirectUrl}`);
       const redirectRes = await hugFetch(redirectUrl, {}, cookies);
-      const redirectCookies = parseCookies(redirectRes.headers.raw()['set-cookie']);
-      if (redirectCookies) {
-        const cookieMap2 = {};
-        [cookies, redirectCookies].forEach((cs) => {
-          cs.split('; ').forEach((c) => {
-            const [key] = c.split('=');
-            if (key) cookieMap2[key] = c;
-          });
-        });
-        cookies = Object.values(cookieMap2).join('; ');
-      }
+      cookies = mergeCookies(cookies, parseCookies(redirectRes.headers.raw()['set-cookie']));
     }
+  }
+
+  // ログイン成功確認: ダッシュボードにアクセスしてログイン状態をチェック
+  const checkRes = await hugFetch(`${HUG_ORIGIN}/hug/wm/`, {}, cookies);
+  const checkHtml = await checkRes.text();
+  if (checkHtml.includes('ログインしていません') || checkHtml.includes('name="password"')) {
+    throw new Error('hug login failed: ログインに失敗しました。ID/パスワードを確認してください。');
   }
 
   console.log('hug login successful');
@@ -2081,6 +2101,11 @@ async function loginToHug() {
 
 /**
  * 記録一覧ページから児童名→r_id, c_idのマッピングを構築
+ *
+ * 一覧ページの構造（調査済み）:
+ *   - 編集ボタン: <button onclick="...mode=edit&id={r_id}&...&c_id={c_id}...">
+ *   - 児童名: 同じ<tr>の2番目<td>に「松崎晃大さん」のように表示
+ *   - 児童ドロップダウン: <select> に全児童の name→c_id マッピングあり
  */
 async function getChildRecordIds(cookies, date) {
   const url = `${HUG_BASE_URL}/contact_book.php?f_id=1&date=${date}&state=clear`;
@@ -2090,25 +2115,47 @@ async function getChildRecordIds(cookies, date) {
 
   const childMap = {}; // { 児童名: { rId, cId } }
 
-  // 一覧ページのHTMLから児童情報を抽出
-  // 編集リンクのURLパラメータからr_id, c_idを取得
-  $('a[href*="contact_book.php"][href*="mode=edit"]').each((_, el) => {
-    const href = $(el).attr('href') || '';
-    const params = new URLSearchParams(href.split('?')[1] || '');
-    const rId = params.get('id') || '';
-    const cId = params.get('c_id') || '';
-    const calDate = params.get('cal_date') || date;
+  // 編集ボタンのonclickからr_id, c_idを抽出
+  $('button').each((_, el) => {
+    const onclick = $(el).attr('onclick') || '';
+    const idMatch = onclick.match(/id=(\d+)/);
+    const cidMatch = onclick.match(/c_id=(\d+)/);
+    if (idMatch && cidMatch && onclick.includes('mode=edit')) {
+      const rId = idMatch[1];
+      const cId = cidMatch[1];
 
-    // 児童名はリンクのテキストまたは周辺要素から取得
-    const name = $(el).text().trim() ||
-      $(el).closest('tr').find('td').first().text().trim() ||
-      $(el).closest('.child-row').text().trim();
+      // 同じ行の児童名を取得（2番目のtd）
+      const row = $(el).closest('tr');
+      const nameCell = row.find('td').eq(1).text().trim();
+      // 「さん」を除去して名前を取得
+      const name = nameCell.replace(/さん.*$/, '').trim();
 
-    if (name && cId) {
-      childMap[name] = { rId, cId, calDate };
+      if (name && cId) {
+        childMap[name] = { rId, cId, calDate: date };
+      }
     }
   });
 
+  // プレビューリンクからも取得（バックアップ）
+  $('a[href*="mode=preview"]').each((_, el) => {
+    const href = $(el).attr('href') || '';
+    const idMatch = href.match(/id=(\d+)/);
+    const cidMatch = href.match(/c_id=(\d+)/);
+    if (idMatch && cidMatch) {
+      const rId = idMatch[1];
+      const cId = cidMatch[1];
+
+      const row = $(el).closest('tr');
+      const nameCell = row.find('td').eq(1).text().trim();
+      const name = nameCell.replace(/さん.*$/, '').trim();
+
+      if (name && cId && !childMap[name]) {
+        childMap[name] = { rId, cId, calDate: date };
+      }
+    }
+  });
+
+  console.log(`Found ${Object.keys(childMap).length} children on ${date}`);
   return childMap;
 }
 
@@ -2354,15 +2401,17 @@ exports.fetchHugMappings = onCall(
       const html = await res.text();
       const $ = cheerio.load(html);
 
-      // 児童情報を抽出
+      // 児童情報をドロップダウンselectから抽出（全児童が含まれる）
       const children = [];
-      $('a[href*="contact_book.php"][href*="c_id"]').each((_, el) => {
-        const href = $(el).attr('href') || '';
-        const params = new URLSearchParams(href.split('?')[1] || '');
-        const cId = params.get('c_id') || '';
-        const name = $(el).text().trim();
-        if (name && cId) {
-          children.push({ name, cId });
+      const seen = new Set();
+      $('select option').each((_, el) => {
+        const value = $(el).attr('value') || '';
+        const text = $(el).text().trim();
+        // 児童名のoption: valueが数字で、textが日本語名（五十音indexやラベルを除外）
+        if (value && /^\d+$/.test(value) && text && text !== '--' && text !== '----'
+            && text.length > 1 && !/^[ぁ-ん]$/.test(text) && !seen.has(value)) {
+          seen.add(value);
+          children.push({ name: text, cId: value });
         }
       });
 
