@@ -2445,6 +2445,17 @@ async function syncToHugCore(contentIds = null) {
       // 編集ページからフォーム情報取得
       const formFields = await getEditPageFields(cookies, recordInfo.rId, recordInfo.calDate || dateStr, recordInfo.cId || hugChildId);
 
+      // insert（新規作成）の場合、必須フィールドが空なので手動で埋める
+      if (recordInfo.rId === 'insert' || !formFields.c_id) {
+        formFields.c_id = recordInfo.cId || hugChildId;
+        formFields.cal_date = recordInfo.calDate || dateStr;
+        formFields.f_id = formFields.f_id || '1';
+        formFields.facility_id = formFields.facility_id || '1';
+        formFields.service_id = formFields.service_id || '2';
+        formFields.id = formFields.id || 'insert';
+        console.log(`[sync] Filled insert mode fields: c_id=${formFields.c_id}, cal_date=${formFields.cal_date}`);
+      }
+
       // 下書き保存
       const success = await saveDraftToHug(cookies, formFields, hugStaffId, content);
 
