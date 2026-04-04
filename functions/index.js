@@ -2252,6 +2252,28 @@ async function getHugMappings() {
 }
 
 /**
+ * スペース（半角・全角）を除去して名前を正規化
+ */
+function normalizeName(name) {
+  return (name || '').replace(/[\s\u3000]/g, '');
+}
+
+/**
+ * マッピングからスペースを無視して検索
+ * 例: "土持 諒人" → "土持諒人" でマッチ
+ */
+function findMapping(mapping, name) {
+  // 完全一致を先に試す
+  if (mapping[name] !== undefined) return mapping[name];
+  // スペース除去して比較
+  const normalized = normalizeName(name);
+  for (const [key, value] of Object.entries(mapping)) {
+    if (normalizeName(key) === normalized) return value;
+  }
+  return undefined;
+}
+
+/**
  * メイン同期処理（HTTPトリガーとスケジュールトリガーで共有）
  */
 async function syncToHugCore(contentIds = null) {
@@ -2310,14 +2332,14 @@ async function syncToHugCore(contentIds = null) {
         throw new Error('日付が不正です');
       }
 
-      // 児童名 → hug c_id のマッピング
-      const hugChildId = childMapping[studentName];
+      // 児童名 → hug c_id のマッピング（スペース無視で検索）
+      const hugChildId = findMapping(childMapping, studentName);
       if (!hugChildId) {
         throw new Error(`児童「${studentName}」のhugマッピングが未設定です。hug_settings/child_mappingに登録してください。`);
       }
 
-      // 記録者名 → hug record_staff ID のマッピング
-      const hugStaffId = staffMapping[recorderName];
+      // 記録者名 → hug record_staff ID のマッピング（スペース無視で検索）
+      const hugStaffId = findMapping(staffMapping, recorderName);
       if (!hugStaffId) {
         throw new Error(`記録者「${recorderName}」のhugマッピングが未設定です。hug_settings/staff_mappingに登録してください。`);
       }
