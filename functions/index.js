@@ -2379,11 +2379,13 @@ async function syncToHugCore(contentIds = null) {
       const content = docData.content || '';
       const recorderName = docData.recorderName || '';
 
-      // 日付をYYYY-MM-DD形式に変換
+      // 日付をYYYY-MM-DD形式に変換（JST = UTC+9）
       let dateStr;
       if (dateTs && dateTs.toDate) {
         const d = dateTs.toDate();
-        dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        // Cloud FunctionsはUTCで動くため、JSTに変換（+9時間）
+        const jst = new Date(d.getTime() + 9 * 60 * 60 * 1000);
+        dateStr = `${jst.getUTCFullYear()}-${String(jst.getUTCMonth() + 1).padStart(2, '0')}-${String(jst.getUTCDate()).padStart(2, '0')}`;
       } else if (typeof dateTs === 'string') {
         dateStr = dateTs;
       } else {
