@@ -1,8 +1,9 @@
 import 'dart:typed_data';
-import 'dart:html' as html;
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'web_helpers_stub.dart'
+    if (dart.library.html) 'web_helpers.dart' as web_helpers;
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -79,9 +80,9 @@ class _AiChatScreenState extends State<AiChatScreen> {
   final _elicitationTextController = TextEditingController();
 
   // ドラッグ&ドロップ用
-  StreamSubscription<html.Event>? _dragOverSub;
-  StreamSubscription<html.Event>? _dragLeaveSub;
-  StreamSubscription<html.Event>? _dropSub;
+  StreamSubscription? _dragOverSub;
+  StreamSubscription? _dragLeaveSub;
+  StreamSubscription? _dropSub;
 
   @override
   void initState() {
@@ -107,60 +108,34 @@ class _AiChatScreenState extends State<AiChatScreen> {
   }
 
   void _setupHtmlDropListeners() {
-    final body = html.document.body;
-    if (body == null) return;
-
-    _dragOverSub = body.onDragOver.listen((event) {
-      event.preventDefault();
-      event.stopPropagation();
-      if (!_isDragOver && mounted) {
-        setState(() => _isDragOver = true);
-      }
-    });
-
-    _dragLeaveSub = body.onDragLeave.listen((event) {
-      event.preventDefault();
-      event.stopPropagation();
-      // relatedTarget が null の場合、ブラウザ外にドラッグされた
-      if (event.relatedTarget == null && mounted) {
-        setState(() => _isDragOver = false);
-      }
-    });
-
-    _dropSub = body.onDrop.listen((event) {
-      event.preventDefault();
-      event.stopPropagation();
-      if (mounted) {
-        setState(() => _isDragOver = false);
-      }
-
-      final files = event.dataTransfer.files;
-      if (files == null || files.isEmpty) return;
-
-      for (final file in files) {
-        final reader = html.FileReader();
-        final fileName = file.name;
-        reader.onLoadEnd.listen((_) {
-          if (reader.result == null) return;
-          final bytes = Uint8List.fromList(
-            (reader.result as List<int>),
-          );
-          final ext = fileName.split('.').last.toLowerCase();
-          final isImage = ['jpg', 'jpeg', 'png', 'gif', 'webp'].contains(ext);
-          if (mounted) {
-            setState(() {
-              _attachedFiles.add(_AttachedFile(
-                name: fileName,
-                bytes: bytes,
-                type: isImage ? _FileType.image : _FileType.file,
-                fileSize: file.size,
-              ));
-            });
-          }
-        });
-        reader.readAsArrayBuffer(file);
-      }
-    });
+    final subs = <StreamSubscription?>[];
+    web_helpers.setupHtmlDropListeners(
+      onDragStateChanged: (isDrag) {
+        if (isDrag != _isDragOver && mounted) {
+          setState(() => _isDragOver = isDrag);
+        }
+      },
+      onFileDropped: (fileName, bytes, size) {
+        final ext = fileName.split('.').last.toLowerCase();
+        final isImage = ['jpg', 'jpeg', 'png', 'gif', 'webp'].contains(ext);
+        if (mounted) {
+          setState(() {
+            _attachedFiles.add(_AttachedFile(
+              name: fileName,
+              bytes: Uint8List.fromList(bytes),
+              type: isImage ? _FileType.image : _FileType.file,
+              fileSize: size,
+            ));
+          });
+        }
+      },
+      subscriptions: subs,
+    );
+    if (subs.length >= 3) {
+      _dragOverSub = subs[0];
+      _dragLeaveSub = subs[1];
+      _dropSub = subs[2];
+    }
   }
 
   Future<void> _loadCommands() async {

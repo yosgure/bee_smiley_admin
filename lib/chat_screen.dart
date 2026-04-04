@@ -1,17 +1,14 @@
 import 'dart:typed_data';
-// ignore: avoid_web_libraries_in_flutter
-import 'dart:html' as html;
-import 'dart:ui_web' as ui_web;
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:intl/intl.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter/gestures.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'app_theme.dart';
@@ -1493,7 +1490,7 @@ class _ChatDetailViewState extends State<ChatDetailView> {
     return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
   }
 
-  void _showFilePreview(String url, String fileName) {
+  void _showFilePreview(String url, String fileName) async {
     final ext = fileName.split('.').last.toLowerCase();
     final isImage = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'].contains(ext);
     final isPdf = ext == 'pdf';
@@ -1508,72 +1505,11 @@ class _ChatDetailViewState extends State<ChatDetailView> {
       return;
     }
 
-    // PDF: Google Docs ViewerのiframeでCORS回避して表示
-    final viewType = 'pdf-preview-${DateTime.now().millisecondsSinceEpoch}';
-    final encodedUrl = Uri.encodeComponent(url);
-    final viewerUrl = 'https://docs.google.com/gview?url=$encodedUrl&embedded=true';
-    ui_web.platformViewRegistry.registerViewFactory(viewType, (int viewId) {
-      final iframe = html.IFrameElement()
-        ..src = viewerUrl
-        ..style.border = 'none'
-        ..style.width = '100%'
-        ..style.height = '100%'
-        ..setAttribute('allow', 'fullscreen');
-      return iframe;
-    });
-
-    showDialog(
-      context: context,
-      barrierColor: Colors.black87,
-      builder: (_) => Center(
-        child: Container(
-          width: MediaQuery.of(context).size.width * 0.8,
-          height: MediaQuery.of(context).size.height * 0.9,
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(8),
-          ),
-          clipBehavior: Clip.antiAlias,
-          child: Column(
-            children: [
-              Container(
-                color: const Color(0xFF333333),
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                child: Row(
-                  children: [
-                    IconButton(
-                      icon: const Icon(Icons.close, color: Colors.white, size: 24),
-                      onPressed: () => Navigator.pop(context),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        fileName,
-                        style: const TextStyle(color: Colors.white, fontSize: 14),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.download, color: Colors.white, size: 24),
-                      tooltip: 'ダウンロード',
-                      onPressed: () async {
-                        final uri = Uri.parse(url);
-                        if (await canLaunchUrl(uri)) {
-                          await launchUrl(uri, mode: LaunchMode.externalApplication);
-                        }
-                      },
-                    ),
-                  ],
-                ),
-              ),
-              Expanded(
-                child: HtmlElementView(viewType: viewType),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
+    // PDFはブラウザで開く（Web/Android共通）
+    final uri = Uri.parse(url);
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
   }
 }
 
