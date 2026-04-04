@@ -2091,10 +2091,20 @@ async function loginToHug() {
   const responseHtml = postResult.html;
 
   console.log(`hug login POST response status: ${postResult.res.status}`);
+  console.log(`hug login POST cookies: ${cookies ? cookies.substring(0, 100) : 'none'}`);
+
+  // レスポンスHTMLのtitleを確認
+  const $post = cheerio.load(responseHtml);
+  const pageTitle = $post('title').text().trim();
+  console.log(`hug login POST page title: ${pageTitle}`);
+  console.log(`hug login POST html snippet: ${responseHtml.substring(0, 300).replace(/\s+/g, ' ')}`);
 
   // ログイン成功確認: レスポンスHTMLにログインフォームが含まれていないかチェック
   if (responseHtml.includes('name="password"') && responseHtml.includes('ログインID')) {
-    throw new Error('hug login failed: ログインに失敗しました。ID/パスワードを確認してください。');
+    // エラーメッセージがあるか確認
+    const errorMsg = $post('.error, .alert, .warning, #error').text().trim();
+    console.error(`hug login failed. Error on page: ${errorMsg || 'none'}`);
+    throw new Error(`hug login failed: ログインに失敗しました。ID/パスワードを確認してください。${errorMsg ? ' (' + errorMsg + ')' : ''}`);
   }
 
   console.log('hug login successful');
