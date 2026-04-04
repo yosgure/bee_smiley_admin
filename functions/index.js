@@ -2106,7 +2106,11 @@ async function loginToHug() {
   const $post = cheerio.load(responseHtml);
   const pageTitle = $post('title').text().trim();
   console.log(`hug login POST page title: ${pageTitle}`);
-  console.log(`hug login POST html snippet: ${responseHtml.substring(0, 300).replace(/\s+/g, ' ')}`);
+  // ログインフォーム周辺のHTMLを抽出（エラーメッセージを確認）
+  const loginFormIdx = responseHtml.indexOf('loginForm');
+  const bodyIdx = responseHtml.indexOf('<body');
+  const relevantStart = loginFormIdx > 0 ? loginFormIdx - 200 : (bodyIdx > 0 ? bodyIdx : 0);
+  console.log(`hug login POST html snippet: ${responseHtml.substring(relevantStart, relevantStart + 800).replace(/\s+/g, ' ')}`);
 
   // ログイン成功確認: レスポンスHTMLにログインフォームが含まれていないかチェック
   if (responseHtml.includes('name="password"') && responseHtml.includes('ログインID')) {
