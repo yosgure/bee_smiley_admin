@@ -2021,19 +2021,49 @@ function mergeCookies(existing, newCookies) {
  *   text:   name="username"
  *   password: name="password"
  */
+/**
+ * リダイレクトを手動で追従しながらcookieを確実に収集するヘルパー
+ */
+async function fetchWithCookies(url, options = {}, cookies = '', maxRedirects = 5) {
+  let currentUrl = url;
+  let currentCookies = cookies;
+
+  for (let i = 0; i < maxRedirects; i++) {
+    const headers = { ...(options.headers || {}) };
+    if (currentCookies) headers['Cookie'] = currentCookies;
+
+    const res = await fetch(currentUrl, { ...options, headers, redirect: 'manual' });
+    currentCookies = mergeCookies(currentCookies, parseCookies(res.headers.raw()['set-cookie']));
+
+    if (res.status === 301 || res.status === 302 || res.status === 303 || res.status === 307) {
+      const location = res.headers.get('location');
+      if (!location) break;
+      currentUrl = location.startsWith('http')
+        ? location
+        : `https://www.hug-beesmiley.link${location.startsWith('/') ? '' : '/'}${location}`;
+      // POST後のリダイレクトはGETに変更
+      if (options.method === 'POST' && (res.status === 302 || res.status === 303)) {
+        options = {};
+      }
+      continue;
+    }
+
+    return { res, cookies: currentCookies, html: await res.text() };
+  }
+  throw new Error('Too many redirects');
+}
+
 async function loginToHug() {
   const username = hugUsername.value();
   const password = hugPassword.value();
-  const HUG_ORIGIN = 'https://www.hug-beesmiley.link';
-  const loginUrl = `${HUG_ORIGIN}/hug/wm/`;
+  const loginUrl = 'https://www.hug-beesmiley.link/hug/wm/';
 
-  // 1. ログインページをGET（リダイレクトを追従してHTMLを取得）
-  const loginPageRes = await fetch(loginUrl);
-  const loginHtml = await loginPageRes.text();
-  const $ = cheerio.load(loginHtml);
+  // 1. ログインページをGET（リダイレクトを手動追従しcookieを確実に収集）
+  const getResult = await fetchWithCookies(loginUrl);
+  let cookies = getResult.cookies;
+  const $ = cheerio.load(getResult.html);
 
-  // 初回アクセスのCookieを取得
-  let cookies = parseCookies(loginPageRes.headers.raw()['set-cookie']);
+  console.log(`hug login page cookies: ${cookies ? 'obtained' : 'none'}`);
 
   // CSRFトークン等のhiddenフィールドを全て取得
   const formData = {};
@@ -2047,51 +2077,23 @@ async function loginToHug() {
   formData['username'] = username;
   formData['password'] = password;
 
-  // フォームaction URLを構築（action="/hug/wm/" → absolute URL）
-  const formAction = $('form').attr('action') || '/hug/wm/';
-  const actionUrl = formAction.startsWith('http')
-    ? formAction
-    : `${HUG_ORIGIN}${formAction.startsWith('/') ? '' : '/'}${formAction}`;
-
-  console.log(`hug login POST to: ${actionUrl}`);
   console.log(`hug form fields: ${Object.keys(formData).join(', ')}`);
+  console.log(`hug csrf token: ${formData['csrf_token_from_client'] ? 'present' : 'missing'}`);
 
-  // 2. ログインPOST（redirect: manual でセッションCookieを取得）
-  const loginRes = await hugFetch(actionUrl, {
+  // 2. ログインPOST（リダイレクトを手動追従）
+  const postResult = await fetchWithCookies(loginUrl, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams(formData).toString(),
   }, cookies);
 
-  // レスポンスのCookieをマージ
-  cookies = mergeCookies(cookies, parseCookies(loginRes.headers.raw()['set-cookie']));
+  cookies = postResult.cookies;
+  const responseHtml = postResult.html;
 
-  console.log(`hug login response status: ${loginRes.status}`);
+  console.log(`hug login POST response status: ${postResult.res.status}`);
 
-  // ログイン成功の確認（302リダイレクト or 200）
-  if (loginRes.status !== 302 && loginRes.status !== 200) {
-    const body = await loginRes.text();
-    console.error('hug login response body:', body.substring(0, 500));
-    throw new Error(`hug login failed: status ${loginRes.status}`);
-  }
-
-  // リダイレクト先にアクセスして最終Cookieを取得
-  if (loginRes.status === 302) {
-    const location = loginRes.headers.get('location');
-    if (location) {
-      const redirectUrl = location.startsWith('http')
-        ? location
-        : `${HUG_ORIGIN}${location.startsWith('/') ? '' : '/'}${location}`;
-      console.log(`hug login redirect to: ${redirectUrl}`);
-      const redirectRes = await hugFetch(redirectUrl, {}, cookies);
-      cookies = mergeCookies(cookies, parseCookies(redirectRes.headers.raw()['set-cookie']));
-    }
-  }
-
-  // ログイン成功確認: ダッシュボードにアクセスしてログイン状態をチェック
-  const checkRes = await hugFetch(`${HUG_ORIGIN}/hug/wm/`, {}, cookies);
-  const checkHtml = await checkRes.text();
-  if (checkHtml.includes('ログインしていません') || checkHtml.includes('name="password"')) {
+  // ログイン成功確認: レスポンスHTMLにログインフォームが含まれていないかチェック
+  if (responseHtml.includes('name="password"') && responseHtml.includes('ログインID')) {
     throw new Error('hug login failed: ログインに失敗しました。ID/パスワードを確認してください。');
   }
 
