@@ -2080,7 +2080,16 @@ async function loginToHug() {
   console.log(`hug form fields: ${Object.keys(formData).join(', ')}`);
   console.log(`hug csrf token: ${formData['csrf_token_from_client'] ? 'present' : 'missing'}`);
 
-  // 2. ログインPOST（リダイレクトを手動追従）
+  // 2. CSRFトークン検証（hugはsubmit前にajax_token.phpで検証が必要）
+  const csrfToken = formData['csrf_token_from_client'] || '';
+  const modeToken = formData['mode_token'] || 'nomode';
+  const hugPageUrl = formData['hug_page_url'] || 'index.php';
+  const tokenCheckUrl = `https://www.hug-beesmiley.link/hug/wm/ajax/ajax_token.php?token=${csrfToken}&mode=${modeToken}&hug_page_url=${hugPageUrl}`;
+  const tokenCheckResult = await fetchWithCookies(tokenCheckUrl, {}, cookies);
+  cookies = tokenCheckResult.cookies;
+  console.log(`hug csrf token check result: ${tokenCheckResult.html.trim()}`);
+
+  // 3. ログインPOST（リダイレクトを手動追従）
   const postResult = await fetchWithCookies(loginUrl, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
