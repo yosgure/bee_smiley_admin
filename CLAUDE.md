@@ -1,16 +1,19 @@
 # プロジェクトルール
 
-## デプロイ
+## デプロイ（専用セッションが実行）
 
-- `firebase deploy --only hosting` を実行する前に、必ず現在のブランチの変更をmainブランチにマージすること
-- mainブランチからビルド (`flutter build web`) してからデプロイすること
+1. `git fetch --all` で最新を取得
+2. `git branch -a --no-merged main` で未マージブランチを確認し、すべてmainにマージする
+3. `flutter pub get` → `flutter build web --no-tree-shake-icons` でビルド
+4. `firebase deploy --only hosting` でデプロイ
+5. Firestoreルール等に変更があれば `firebase deploy --only firestore:rules` も実行
+
 - 別ブランチからデプロイすると、他のセッションの変更が消える原因になる
 
 ## 開発
 
 - 作業開始前に `git pull` を実行すること（最新の変更を取り込む）
-- コミット後はmainにマージしてからデプロイする流れを守ること
-- PRは作成しないこと（コミットのみ行う）。マージとデプロイは専用セッションが行う
+- PRは作成しないこと（コミットしてpushするだけ）。mainへのマージとデプロイは専用セッションが行う
 
 ## 動作確認
 
