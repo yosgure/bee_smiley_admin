@@ -20,6 +20,7 @@ import 'tool_csv_import_screen.dart';
 import 'csv_export_screen.dart';
 import 'notification_settings_screen.dart';
 import 'ai_command_manage_screen.dart';
+import 'hug_mapping_screen.dart';
 import 'app_theme.dart';
 
 class AdminScreen extends StatefulWidget {
@@ -186,6 +187,13 @@ void _navigateTo(BuildContext context, Widget screen) {
                 color: const Color(0xFF7C3AED),
                 description: '/コマンドの追加・編集',
                 destination: const AiCommandManageScreen(),
+              ),
+              _MenuData(
+                title: 'hug連携設定',
+                icon: Icons.sync_alt,
+                color: const Color(0xFF0891B2),
+                description: '児童・スタッフのhug IDマッピング',
+                destination: const HugMappingScreen(),
               ),
             ],
           ),

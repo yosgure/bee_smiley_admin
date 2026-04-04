@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:intl/intl.dart';
 
 /// 旧データの英語キーを日本語に変換
@@ -31,6 +32,7 @@ class _SavedContentsDialog extends StatefulWidget {
 class _SavedContentsDialogState extends State<_SavedContentsDialog> {
   String _categoryFilter = 'all';
   List<String> _categories = [];
+  bool _isSyncingToHug = false;
 
   @override
   void initState() {
@@ -74,6 +76,19 @@ class _SavedContentsDialogState extends State<_SavedContentsDialog> {
                       style:
                           TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                   const Spacer(),
+                  // hugへ一括送信ボタン
+                  _isSyncingToHug
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2))
+                      : IconButton(
+                          icon: Icon(Icons.cloud_upload_outlined,
+                              size: 20, color: Colors.blue.shade600),
+                          tooltip: 'hugへ一括送信',
+                          onPressed: () => _syncAllToHug(context),
+                        ),
+                  const SizedBox(width: 4),
                   // カテゴリフィルター
                   DropdownButton<String>(
                     value: _categoryFilter,
@@ -211,9 +226,29 @@ class _SavedContentsDialogState extends State<_SavedContentsDialog> {
                   style:
                       TextStyle(fontSize: 12, color: Colors.grey.shade700)),
               const SizedBox(height: 4),
-              Text('記録者: $recorderName',
-                  style:
-                      TextStyle(fontSize: 10, color: Colors.grey.shade500)),
+              Row(
+                children: [
+                  Text('記録者: $recorderName',
+                      style:
+                          TextStyle(fontSize: 10, color: Colors.grey.shade500)),
+                  const Spacer(),
+                  InkWell(
+                    borderRadius: BorderRadius.circular(4),
+                    onTap: () => _syncOneToHug(context, docId, data),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.cloud_upload_outlined,
+                            size: 13, color: Colors.blue.shade400),
+                        const SizedBox(width: 2),
+                        Text('hug送信',
+                            style: TextStyle(
+                                fontSize: 10, color: Colors.blue.shade400)),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ],
           ),
         ),
@@ -454,5 +489,135 @@ class _SavedContentsDialogState extends State<_SavedContentsDialog> {
       }
     }
     textController.dispose();
+  }
+
+  /// hugへ一括送信
+  Future<void> _syncAllToHug(BuildContext context) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('hugへ一括送信'),
+        content: const Text('保存済みコンテンツをすべてhugに下書き登録します。\n送信が成功したコンテンツは自動的に削除されます。\n\n※ hug_settingsに児童・スタッフのマッピングが設定されている必要があります。'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('キャンセル')),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.blue,
+                foregroundColor: Colors.white),
+            child: const Text('送信'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true || !mounted) return;
+
+    setState(() => _isSyncingToHug = true);
+
+    try {
+      final callable = FirebaseFunctions.instanceFor(region: 'asia-northeast1')
+          .httpsCallable('syncToHug');
+      final result = await callable.call();
+      final data = result.data as Map<String, dynamic>;
+
+      if (mounted) {
+        final successCount = data['successCount'] ?? 0;
+        final failCount = data['failCount'] ?? 0;
+        final errors = (data['errors'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+
+        String message = 'hug送信完了: 成功 $successCount件';
+        if (failCount > 0) {
+          message += '、失敗 $failCount件';
+          if (errors.isNotEmpty) {
+            message += '\n${errors.map((e) => '${e['studentName']}: ${e['error']}').join('\n')}';
+          }
+        }
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(message),
+            backgroundColor: failCount > 0 ? Colors.orange : Colors.green,
+            duration: Duration(seconds: failCount > 0 ? 5 : 3),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('hug送信エラー: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isSyncingToHug = false);
+    }
+  }
+
+  /// 個別コンテンツをhugへ送信
+  Future<void> _syncOneToHug(BuildContext context, String docId, Map<String, dynamic> data) async {
+    final studentName = data['studentName'] ?? '';
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('hugへ送信'),
+        content: Text('「$studentName」の記録をhugに下書き登録しますか？\n成功した場合、このコンテンツは削除されます。'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('キャンセル')),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.blue,
+                foregroundColor: Colors.white),
+            child: const Text('送信'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true || !mounted) return;
+
+    try {
+      final callable = FirebaseFunctions.instanceFor(region: 'asia-northeast1')
+          .httpsCallable('syncToHug');
+      final result = await callable.call({'contentIds': [docId]});
+      final resultData = result.data as Map<String, dynamic>;
+
+      if (mounted) {
+        final successCount = resultData['successCount'] ?? 0;
+        if (successCount > 0) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('hugへの送信が完了しました'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        } else {
+          final errors = (resultData['errors'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+          final errorMsg = errors.isNotEmpty ? errors.first['error'] : '不明なエラー';
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('送信失敗: $errorMsg'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('hug送信エラー: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 }

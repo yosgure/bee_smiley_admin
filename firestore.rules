@@ -139,5 +139,8 @@ service cloud.firestore {
     match /saved_ai_contents/{docId} {
       allow read, write: if isStaff();
     }
+    match /hug_settings/{docId} {
+      allow read, write: if isStaff();
+    }
   }
 }

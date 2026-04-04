@@ -8,10 +8,15 @@ const { getFirestore, FieldValue } = require("firebase-admin/firestore");
 const { getMessaging } = require("firebase-admin/messaging");
 const { getAuth } = require("firebase-admin/auth");
 const { GoogleGenerativeAI } = require("@google/generative-ai");
+const fetch = require("node-fetch");
+const cheerio = require("cheerio");
+const { CookieJar, Cookie } = require("tough-cookie");
 
 // Secret Manager でAPIキー・初期パスワードを管理
 const geminiApiKey = defineSecret("GEMINI_API_KEY");
 const initialPassword = defineSecret("INITIAL_PASSWORD");
+const hugUsername = defineSecret("HUG_USERNAME");
+const hugPassword = defineSecret("HUG_PASSWORD");
 
 initializeApp();
 
@@ -1960,4 +1965,451 @@ exports.migrateCustomClaims = onCall({ region: 'asia-northeast1' }, async (reque
   console.log(`Custom Claims migration completed: ${staffCount} staff, ${familyCount} families`);
   return { success: true, staffCount, familyCount };
 });
+
+// ==========================================
+// hug連携: 保存済みコンテンツをhugに下書き登録
+// ==========================================
+
+const HUG_BASE_URL = 'https://www.hug-beesmiley.link/hug/wm';
+
+/**
+ * Cookie文字列をヘッダー用に整形するヘルパー
+ */
+function parseCookies(setCookieHeaders) {
+  if (!setCookieHeaders) return '';
+  const headers = Array.isArray(setCookieHeaders) ? setCookieHeaders : [setCookieHeaders];
+  return headers
+    .map((h) => h.split(';')[0])
+    .join('; ');
+}
+
+/**
+ * fetch wrapper: Cookie付きリクエストを送る
+ */
+async function hugFetch(url, options = {}, cookies = '') {
+  const headers = { ...(options.headers || {}) };
+  if (cookies) {
+    headers['Cookie'] = cookies;
+  }
+  return fetch(url, { ...options, headers, redirect: 'manual' });
+}
+
+/**
+ * hugにログインしてセッションCookieを取得
+ */
+async function loginToHug() {
+  const username = hugUsername.value();
+  const password = hugPassword.value();
+
+  // 1. ログインページをGETしてフォーム構造を把握
+  const loginUrl = `${HUG_BASE_URL}/`;
+  const loginPageRes = await fetch(loginUrl, { redirect: 'manual' });
+  const loginHtml = await loginPageRes.text();
+  const $ = cheerio.load(loginHtml);
+
+  // 初回アクセスのCookieを取得
+  let cookies = parseCookies(loginPageRes.headers.raw()['set-cookie']);
+
+  // CSRFトークン等のhiddenフィールドを全て取得
+  const formData = {};
+  $('form input[type="hidden"]').each((_, el) => {
+    const name = $(el).attr('name');
+    const value = $(el).attr('value') || '';
+    if (name) formData[name] = value;
+  });
+
+  // ユーザー名・パスワードフィールド名を特定
+  const usernameField = $('form input[type="text"]').attr('name') || 'login_id';
+  const passwordField = $('form input[type="password"]').attr('name') || 'password';
+
+  formData[usernameField] = username;
+  formData[passwordField] = password;
+
+  // ログインフォームのaction URLを取得
+  const formAction = $('form').attr('action') || loginUrl;
+  const actionUrl = formAction.startsWith('http') ? formAction : `${HUG_BASE_URL}/${formAction.replace(/^\//, '')}`;
+
+  // 2. ログインPOST
+  const loginRes = await hugFetch(actionUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams(formData).toString(),
+  }, cookies);
+
+  // レスポンスのCookieをマージ
+  const newCookies = parseCookies(loginRes.headers.raw()['set-cookie']);
+  if (newCookies) {
+    // 既存Cookieと新規Cookieをマージ
+    const cookieMap = {};
+    [cookies, newCookies].forEach((cs) => {
+      cs.split('; ').forEach((c) => {
+        const [key] = c.split('=');
+        if (key) cookieMap[key] = c;
+      });
+    });
+    cookies = Object.values(cookieMap).join('; ');
+  }
+
+  // ログイン成功の確認（リダイレクト302 or 200）
+  if (loginRes.status !== 302 && loginRes.status !== 200) {
+    throw new Error(`hug login failed: status ${loginRes.status}`);
+  }
+
+  // リダイレクト先にアクセスして最終Cookieを取得
+  if (loginRes.status === 302) {
+    const location = loginRes.headers.get('location');
+    if (location) {
+      const redirectUrl = location.startsWith('http') ? location : `${HUG_BASE_URL}/${location.replace(/^\//, '')}`;
+      const redirectRes = await hugFetch(redirectUrl, {}, cookies);
+      const redirectCookies = parseCookies(redirectRes.headers.raw()['set-cookie']);
+      if (redirectCookies) {
+        const cookieMap2 = {};
+        [cookies, redirectCookies].forEach((cs) => {
+          cs.split('; ').forEach((c) => {
+            const [key] = c.split('=');
+            if (key) cookieMap2[key] = c;
+          });
+        });
+        cookies = Object.values(cookieMap2).join('; ');
+      }
+    }
+  }
+
+  console.log('hug login successful');
+  return cookies;
+}
+
+/**
+ * 記録一覧ページから児童名→r_id, c_idのマッピングを構築
+ */
+async function getChildRecordIds(cookies, date) {
+  const url = `${HUG_BASE_URL}/contact_book.php?f_id=1&date=${date}&state=clear`;
+  const res = await hugFetch(url, {}, cookies);
+  const html = await res.text();
+  const $ = cheerio.load(html);
+
+  const childMap = {}; // { 児童名: { rId, cId } }
+
+  // 一覧ページのHTMLから児童情報を抽出
+  // 編集リンクのURLパラメータからr_id, c_idを取得
+  $('a[href*="contact_book.php"][href*="mode=edit"]').each((_, el) => {
+    const href = $(el).attr('href') || '';
+    const params = new URLSearchParams(href.split('?')[1] || '');
+    const rId = params.get('id') || '';
+    const cId = params.get('c_id') || '';
+    const calDate = params.get('cal_date') || date;
+
+    // 児童名はリンクのテキストまたは周辺要素から取得
+    const name = $(el).text().trim() ||
+      $(el).closest('tr').find('td').first().text().trim() ||
+      $(el).closest('.child-row').text().trim();
+
+    if (name && cId) {
+      childMap[name] = { rId, cId, calDate };
+    }
+  });
+
+  return childMap;
+}
+
+/**
+ * 児童の編集ページからフォームhiddenフィールドを全取得
+ */
+async function getEditPageFields(cookies, rId, calDate, cId) {
+  const url = `${HUG_BASE_URL}/contact_book.php?mode=edit&id=${rId}&cal_date=${calDate}&c_id=${cId}`;
+  const res = await hugFetch(url, {}, cookies);
+  const html = await res.text();
+  const $ = cheerio.load(html);
+
+  const fields = {};
+  $('form input[type="hidden"]').each((_, el) => {
+    const name = $(el).attr('name');
+    const value = $(el).attr('value') || '';
+    if (name) fields[name] = value;
+  });
+
+  // selectのデフォルト値も取得
+  $('form select').each((_, el) => {
+    const name = $(el).attr('name');
+    const selectedValue = $(el).find('option[selected]').attr('value') || $(el).find('option').first().attr('value') || '';
+    if (name && !fields[name]) fields[name] = selectedValue;
+  });
+
+  return fields;
+}
+
+/**
+ * hugに記録を下書き保存
+ */
+async function saveDraftToHug(cookies, formFields, recordStaffId, staffNote) {
+  const postData = new URLSearchParams({
+    ...formFields,
+    mode: 'regist',
+    state: '1', // 1=下書き
+    record_staff: recordStaffId,
+    staff_note: staffNote,
+    note: '',
+  });
+
+  const res = await hugFetch(`${HUG_BASE_URL}/contact_book.php`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: postData.toString(),
+  }, cookies);
+
+  // リダイレクト（302）または200が返れば成功
+  return res.status === 302 || res.status === 200;
+}
+
+/**
+ * Firestoreのhugマッピング設定を取得
+ * hug_settings/child_mapping: { "児童名": "hugのc_id" }
+ * hug_settings/staff_mapping: { "記録者名": "hugのrecord_staff ID" }
+ */
+async function getHugMappings() {
+  const childDoc = await db.collection('hug_settings').doc('child_mapping').get();
+  const staffDoc = await db.collection('hug_settings').doc('staff_mapping').get();
+
+  return {
+    childMapping: childDoc.exists ? childDoc.data() : {},
+    staffMapping: staffDoc.exists ? staffDoc.data() : {},
+  };
+}
+
+/**
+ * メイン同期処理（HTTPトリガーとスケジュールトリガーで共有）
+ */
+async function syncToHugCore(contentIds = null) {
+  // 1. Firestoreから保存済みコンテンツを取得
+  let query = db.collection('saved_ai_contents');
+
+  let snapshot;
+  if (contentIds && contentIds.length > 0) {
+    // 指定されたドキュメントIDだけを処理
+    const docs = await Promise.all(
+      contentIds.map((id) => db.collection('saved_ai_contents').doc(id).get())
+    );
+    snapshot = docs.filter((d) => d.exists);
+  } else {
+    // 全件取得
+    const result = await query.get();
+    snapshot = result.docs;
+  }
+
+  if (snapshot.length === 0) {
+    return { success: true, message: '処理対象なし', successCount: 0, failCount: 0, errors: [] };
+  }
+
+  // 2. hugのマッピング設定を取得
+  const { childMapping, staffMapping } = await getHugMappings();
+
+  // 3. hugにログイン
+  const cookies = await loginToHug();
+
+  // 4. 日付ごとに一覧ページを取得してr_idマップを構築（キャッシュ）
+  const dateRecordCache = {}; // { 'YYYY-MM-DD': childMap }
+
+  let successCount = 0;
+  let failCount = 0;
+  const errors = [];
+
+  for (const doc of snapshot) {
+    const docData = doc.data ? doc.data() : doc.data;
+    const docRef = doc.ref || doc;
+    const docId = doc.id;
+
+    try {
+      const studentName = docData.studentName || '';
+      const dateTs = docData.date;
+      const content = docData.content || '';
+      const recorderName = docData.recorderName || '';
+
+      // 日付をYYYY-MM-DD形式に変換
+      let dateStr;
+      if (dateTs && dateTs.toDate) {
+        const d = dateTs.toDate();
+        dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      } else if (typeof dateTs === 'string') {
+        dateStr = dateTs;
+      } else {
+        throw new Error('日付が不正です');
+      }
+
+      // 児童名 → hug c_id のマッピング
+      const hugChildId = childMapping[studentName];
+      if (!hugChildId) {
+        throw new Error(`児童「${studentName}」のhugマッピングが未設定です。hug_settings/child_mappingに登録してください。`);
+      }
+
+      // 記録者名 → hug record_staff ID のマッピング
+      const hugStaffId = staffMapping[recorderName];
+      if (!hugStaffId) {
+        throw new Error(`記録者「${recorderName}」のhugマッピングが未設定です。hug_settings/staff_mappingに登録してください。`);
+      }
+
+      // 一覧ページから該当日のr_idを取得（キャッシュ）
+      if (!dateRecordCache[dateStr]) {
+        dateRecordCache[dateStr] = await getChildRecordIds(cookies, dateStr);
+      }
+      const childRecords = dateRecordCache[dateStr];
+
+      // 児童名またはc_idでr_idを検索
+      let recordInfo = childRecords[studentName];
+      if (!recordInfo) {
+        // 名前で見つからない場合、c_idで探す
+        for (const [, info] of Object.entries(childRecords)) {
+          if (info.cId === hugChildId) {
+            recordInfo = info;
+            break;
+          }
+        }
+      }
+
+      if (!recordInfo) {
+        // 一覧に出ない場合は新規作成として直接編集ページにアクセス
+        recordInfo = { rId: 'insert', cId: hugChildId, calDate: dateStr };
+      }
+
+      // 編集ページからフォーム情報取得
+      const formFields = await getEditPageFields(cookies, recordInfo.rId, recordInfo.calDate || dateStr, recordInfo.cId || hugChildId);
+
+      // 下書き保存
+      const success = await saveDraftToHug(cookies, formFields, hugStaffId, content);
+
+      if (success) {
+        // Firestoreから該当ドキュメントを削除
+        await (docRef.delete ? docRef.delete() : db.collection('saved_ai_contents').doc(docId).delete());
+        successCount++;
+        console.log(`Successfully synced: ${studentName} (${dateStr})`);
+      } else {
+        failCount++;
+        errors.push({ docId, studentName, error: 'hugへの保存に失敗しました' });
+      }
+    } catch (error) {
+      console.error(`Error processing ${docId}:`, error.message);
+      failCount++;
+      errors.push({ docId, studentName: docData.studentName || '', error: error.message });
+    }
+  }
+
+  return { success: true, successCount, failCount, errors };
+}
+
+/**
+ * HTTPトリガー: 管理画面の「hugへ送信」ボタンから呼び出し
+ */
+exports.syncToHug = onCall(
+  {
+    region: 'asia-northeast1',
+    memory: '256MiB',
+    timeoutSeconds: 120,
+    secrets: [hugUsername, hugPassword],
+  },
+  async (request) => {
+    // スタッフ認証チェック
+    if (!request.auth) {
+      throw new HttpsError('unauthenticated', '認証が必要です');
+    }
+
+    // contentIds が指定されていれば、その分だけ処理（UI側から選択送信対応）
+    const contentIds = request.data?.contentIds || null;
+
+    try {
+      const result = await syncToHugCore(contentIds);
+      return result;
+    } catch (error) {
+      console.error('syncToHug error:', error);
+      throw new HttpsError('internal', `hug同期エラー: ${error.message}`);
+    }
+  }
+);
+
+/**
+ * スケジュールトリガー: 毎日18時に自動実行
+ */
+/**
+ * hugマッピング設定を管理するCloud Function
+ * hug一覧ページをスクレイピングして児童名・スタッフ名とIDの対応を自動取得
+ */
+exports.fetchHugMappings = onCall(
+  {
+    region: 'asia-northeast1',
+    memory: '256MiB',
+    timeoutSeconds: 60,
+    secrets: [hugUsername, hugPassword],
+  },
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError('unauthenticated', '認証が必要です');
+    }
+
+    try {
+      const cookies = await loginToHug();
+
+      // 今日の日付で一覧ページを取得
+      const today = new Date();
+      const dateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+      const url = `${HUG_BASE_URL}/contact_book.php?f_id=1&date=${dateStr}&state=clear`;
+      const res = await hugFetch(url, {}, cookies);
+      const html = await res.text();
+      const $ = cheerio.load(html);
+
+      // 児童情報を抽出
+      const children = [];
+      $('a[href*="contact_book.php"][href*="c_id"]').each((_, el) => {
+        const href = $(el).attr('href') || '';
+        const params = new URLSearchParams(href.split('?')[1] || '');
+        const cId = params.get('c_id') || '';
+        const name = $(el).text().trim();
+        if (name && cId) {
+          children.push({ name, cId });
+        }
+      });
+
+      // 編集ページからスタッフ情報を取得（最初の児童の編集ページを使用）
+      const staffList = [];
+      if (children.length > 0) {
+        const firstChild = children[0];
+        const editUrl = `${HUG_BASE_URL}/contact_book.php?mode=edit&id=insert&cal_date=${dateStr}&c_id=${firstChild.cId}`;
+        const editRes = await hugFetch(editUrl, {}, cookies);
+        const editHtml = await editRes.text();
+        const $edit = cheerio.load(editHtml);
+
+        $edit('select[name="record_staff"] option').each((_, el) => {
+          const value = $edit(el).attr('value') || '';
+          const text = $edit(el).text().trim();
+          if (value && text) {
+            staffList.push({ name: text, staffId: value });
+          }
+        });
+      }
+
+      return { success: true, children, staffList };
+    } catch (error) {
+      console.error('fetchHugMappings error:', error);
+      throw new HttpsError('internal', `hugマッピング取得エラー: ${error.message}`);
+    }
+  }
+);
+
+const { onSchedule } = require("firebase-functions/v2/scheduler");
+
+exports.syncToHugScheduled = onSchedule(
+  {
+    schedule: '0 18 * * *',
+    timeZone: 'Asia/Tokyo',
+    region: 'asia-northeast1',
+    memory: '256MiB',
+    timeoutSeconds: 120,
+    secrets: [hugUsername, hugPassword],
+  },
+  async () => {
+    try {
+      const result = await syncToHugCore();
+      console.log('Scheduled sync result:', JSON.stringify(result));
+    } catch (error) {
+      console.error('Scheduled syncToHug error:', error);
+    }
+  }
+);
 
