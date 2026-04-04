@@ -1987,7 +1987,12 @@ function parseCookies(setCookieHeaders) {
  * fetch wrapper: Cookie付きリクエストを送る
  */
 async function hugFetch(url, options = {}, cookies = '') {
-  const headers = { ...(options.headers || {}) };
+  // FormDataの場合、getHeaders()でContent-Typeにboundaryが含まれるため
+  // headersのマージを慎重に行う
+  const optHeaders = options.headers || {};
+  const headers = (typeof optHeaders.getHeaders === 'function')
+    ? { ...optHeaders }  // FormData.getHeaders()の結果はそのまま使う
+    : { ...optHeaders };
   if (cookies) {
     headers['Cookie'] = cookies;
   }
@@ -2237,30 +2242,53 @@ async function getEditPageFields(cookies, rId, calDate, cId) {
 /**
  * hugに記録を下書き保存
  */
-async function saveDraftToHug(cookies, formFields, recordStaffId, staffNote) {
+async function saveDraftToHug(cookies, formFields, recordStaffId, noteText) {
   console.log('[saveDraft] formFields keys:', Object.keys(formFields));
-  console.log('[saveDraft] formFields:', JSON.stringify(formFields));
 
-  const postData = new URLSearchParams({
-    ...formFields,
-    mode: 'regist',
-    state: '1', // 1=下書き
-    record_staff: recordStaffId,
-    note: staffNote,       // コメント欄（保護者に公開される方）
-    staff_note: '',        // ケア記録・生活記録欄（職員共有欄）
-  });
+  // hugのフォームはmultipart/form-dataで送信される
+  // note（コメント欄）とnote_hide（hidden）の両方にセットする必要がある
+  // staff_note（ケア記録）とstaff_note_hide（hidden）も同様
+  const FormData = require('form-data');
+  const formData = new FormData();
 
-  console.log('[saveDraft] POST body:', postData.toString().substring(0, 500));
+  // 既存のhiddenフィールドをセット
+  for (const [key, value] of Object.entries(formFields)) {
+    // note/note_hide/staff_note/staff_note_hide は後で上書きするのでスキップ
+    if (['note', 'note_hide', 'staff_note', 'staff_note_hide', 'mode', 'state', 'record_staff'].includes(key)) continue;
+    formData.append(key, value);
+  }
 
-  const res = await hugFetch(`${HUG_BASE_URL}/contact_book.php`, {
+  // 必須フィールド
+  formData.append('mode', 'regist');
+  formData.append('state', '1'); // 1=下書き
+  formData.append('record_staff', recordStaffId);
+
+  // コメント欄: noteとnote_hideの両方にAIテキストをセット
+  formData.append('note', noteText);
+  formData.append('note_hide', noteText);
+
+  // ケア記録欄: 空
+  formData.append('staff_note', '');
+  formData.append('staff_note_hide', '');
+
+  console.log('[saveDraft] sending multipart/form-data POST');
+
+  // formData.getHeaders()でContent-Type（boundary含む）を取得し、Cookieとマージ
+  const postHeaders = {
+    ...formData.getHeaders(),
+    'Cookie': cookies,
+  };
+
+  const res = await fetch(`${HUG_BASE_URL}/contact_book.php`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: postData.toString(),
-  }, cookies);
+    headers: postHeaders,
+    body: formData,
+    redirect: 'manual',
+  });
 
   const responseText = await res.text();
   console.log('[saveDraft] response status:', res.status);
-  console.log('[saveDraft] response body (first 1000):', responseText.substring(0, 1000));
+  console.log('[saveDraft] response body (first 500):', responseText.substring(0, 500));
 
   // リダイレクト（302）または200が返れば成功
   return res.status === 302 || res.status === 200;
