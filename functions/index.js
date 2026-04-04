@@ -2246,8 +2246,8 @@ async function saveDraftToHug(cookies, formFields, recordStaffId, staffNote) {
     mode: 'regist',
     state: '1', // 1=下書き
     record_staff: recordStaffId,
-    staff_note: staffNote,
-    note: '',
+    note: staffNote,       // コメント欄（保護者に公開される方）
+    staff_note: '',        // ケア記録・生活記録欄（職員共有欄）
   });
 
   console.log('[saveDraft] POST body:', postData.toString().substring(0, 500));
