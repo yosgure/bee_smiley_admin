@@ -2407,14 +2407,28 @@ async function syncToHugCore(contentIds = null) {
         dateRecordCache[dateStr] = await getChildRecordIds(cookies, dateStr);
       }
       const childRecords = dateRecordCache[dateStr];
+      console.log(`[sync] Looking for "${studentName}" (c_id=${hugChildId}) in ${Object.keys(childRecords).length} records on ${dateStr}`);
+      console.log(`[sync] Available children:`, JSON.stringify(Object.entries(childRecords).map(([k, v]) => `${k}(c_id=${v.cId},r_id=${v.rId})`)));
 
-      // 児童名またはc_idでr_idを検索
+      // 児童名でr_idを検索（スペース無視で照合）
       let recordInfo = childRecords[studentName];
       if (!recordInfo) {
-        // 名前で見つからない場合、c_idで探す
-        for (const [, info] of Object.entries(childRecords)) {
-          if (info.cId === hugChildId) {
+        // スペース無視で名前照合
+        const normalizedStudent = normalizeName(studentName);
+        for (const [name, info] of Object.entries(childRecords)) {
+          if (normalizeName(name) === normalizedStudent) {
             recordInfo = info;
+            console.log(`[sync] Name matched (normalized): "${name}" → rId=${info.rId}`);
+            break;
+          }
+        }
+      }
+      if (!recordInfo) {
+        // c_idで照合（文字列として比較）
+        for (const [name, info] of Object.entries(childRecords)) {
+          if (String(info.cId) === String(hugChildId)) {
+            recordInfo = info;
+            console.log(`[sync] Matched by c_id: "${name}" (c_id=${info.cId}) → rId=${info.rId}`);
             break;
           }
         }
@@ -2422,8 +2436,11 @@ async function syncToHugCore(contentIds = null) {
 
       if (!recordInfo) {
         // 一覧に出ない場合は新規作成として直接編集ページにアクセス
+        console.log(`[sync] No record found in list, using insert mode for c_id=${hugChildId}`);
         recordInfo = { rId: 'insert', cId: hugChildId, calDate: dateStr };
       }
+
+      console.log(`[sync] Using recordInfo: rId=${recordInfo.rId}, cId=${recordInfo.cId}, calDate=${recordInfo.calDate || dateStr}`);
 
       // 編集ページからフォーム情報取得
       const formFields = await getEditPageFields(cookies, recordInfo.rId, recordInfo.calDate || dateStr, recordInfo.cId || hugChildId);
