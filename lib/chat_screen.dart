@@ -837,18 +837,20 @@ class _ChatDetailViewState extends State<ChatDetailView> {
   final FocusNode _focusNode = FocusNode();
   final currentUser = FirebaseAuth.instance.currentUser;
   bool _isUploading = false;
-  bool _hasText = false;
+  // デフォルトで＋（折りたたみ）。タップすると展開して添付アイコンが出る
+  bool _iconsExpanded = false;
 
   @override
   void initState() {
     super.initState();
     if (widget.initialDraft.isNotEmpty) {
       _textController.text = widget.initialDraft;
-      _hasText = true;
     }
     _textController.addListener(() {
-      final hasText = _textController.text.trim().isNotEmpty;
-      if (hasText != _hasText) setState(() => _hasText = hasText);
+      // 文字を入力し始めたらアイコン群を自動で折りたたむ
+      if (_iconsExpanded && _textController.text.isNotEmpty) {
+        setState(() => _iconsExpanded = false);
+      }
       widget.onDraftChanged?.call(_textController.text);
     });
   }
@@ -1038,19 +1040,29 @@ class _ChatDetailViewState extends State<ChatDetailView> {
       child: SafeArea(
         top: false,
         child: Row(
+          crossAxisAlignment: CrossAxisAlignment.end,
           children: [
-            if (_hasText)
-              GestureDetector(
-                onTap: () => setState(() => _hasText = false),
-                child: Container(
-                  width: 28, height: 28, margin: const EdgeInsets.only(right: 4),
-                  decoration: BoxDecoration(color: Colors.grey.shade200, shape: BoxShape.circle),
-                  child: const Icon(Icons.add, color: Colors.grey, size: 18),
+            if (!_iconsExpanded)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: GestureDetector(
+                  onTap: () => setState(() => _iconsExpanded = true),
+                  child: Container(
+                    width: 28, height: 28, margin: const EdgeInsets.only(right: 4),
+                    decoration: BoxDecoration(color: Colors.grey.shade200, shape: BoxShape.circle),
+                    child: const Icon(Icons.add, color: Colors.grey, size: 18),
+                  ),
                 ),
               )
             else ...[
-              IconButton(icon: const Icon(Icons.attach_file, color: Colors.grey, size: 20), constraints: const BoxConstraints(minWidth: 28, minHeight: 28), padding: EdgeInsets.zero, onPressed: _isUploading ? null : _pickAndUploadFile),
-              IconButton(icon: const Icon(Icons.image, color: Colors.grey, size: 20), constraints: const BoxConstraints(minWidth: 28, minHeight: 28), padding: EdgeInsets.zero, onPressed: _isUploading ? null : _pickAndUploadImage),
+              Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: IconButton(icon: const Icon(Icons.attach_file, color: Colors.grey, size: 20), constraints: const BoxConstraints(minWidth: 28, minHeight: 28), padding: EdgeInsets.zero, onPressed: _isUploading ? null : _pickAndUploadFile),
+              ),
+              Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: IconButton(icon: const Icon(Icons.image, color: Colors.grey, size: 20), constraints: const BoxConstraints(minWidth: 28, minHeight: 28), padding: EdgeInsets.zero, onPressed: _isUploading ? null : _pickAndUploadImage),
+              ),
             ],
             const SizedBox(width: 4),
             Expanded(
@@ -1114,7 +1126,7 @@ class _ChatDetailViewState extends State<ChatDetailView> {
     if (type == 'image') {
       content = Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         GestureDetector(onTap: () => _showImagePreview(msg['url']), child: ClipRRect(borderRadius: BorderRadius.circular(12), child: CachedNetworkImage(imageUrl: msg['url'], width: 200, fit: BoxFit.cover, placeholder: (c, u) => Container(width: 200, height: 150, decoration: BoxDecoration(color: Colors.grey.shade200, borderRadius: BorderRadius.circular(12)), child: const Center(child: SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2)))), errorWidget: (c, u, e) => const Icon(Icons.broken_image)))),
-        if (text.isNotEmpty) ...[const SizedBox(height: 8), SelectableText.rich(TextSpan(children: _buildTextSpansWithLinks(text)))]
+        if (text.isNotEmpty) ...[const SizedBox(height: 8), Text.rich(TextSpan(children: _buildTextSpansWithLinks(text)))]
       ]);
     } else if (type == 'file') {
       final String fName = msg['fileName'] ?? 'ファイル';
@@ -1176,7 +1188,7 @@ class _ChatDetailViewState extends State<ChatDetailView> {
                 ],
               ),
             ),
-            if (text.isNotEmpty) ...[const SizedBox(height: 8), SelectableText.rich(TextSpan(children: _buildTextSpansWithLinks(text)))],
+            if (text.isNotEmpty) ...[const SizedBox(height: 8), Text.rich(TextSpan(children: _buildTextSpansWithLinks(text)))],
             const SizedBox(height: 6),
             Divider(height: 1, color: Colors.grey.shade300),
             const SizedBox(height: 4),
@@ -1198,7 +1210,7 @@ class _ChatDetailViewState extends State<ChatDetailView> {
           ],
         ),
       );
-    } else { content = SelectableText.rich(TextSpan(children: _buildTextSpansWithLinks(text))); }
+    } else { content = Text.rich(TextSpan(children: _buildTextSpansWithLinks(text))); }
 
     String readText = '';
     if (isMe && isRead) {
@@ -1298,6 +1310,18 @@ class _ChatDetailViewState extends State<ChatDetailView> {
             mainAxisSize: MainAxisSize.min,
             children: [
               ListTile(leading: const Icon(Icons.emoji_emotions_outlined), title: const Text("スタンプを追加"), onTap: () { Navigator.pop(sheetContext); _showEmojiPicker(msgId); }),
+              if (type == 'text' && text.isNotEmpty)
+                ListTile(
+                  leading: const Icon(Icons.copy),
+                  title: const Text("コピー"),
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    Clipboard.setData(ClipboardData(text: text));
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('コピーしました'), duration: Duration(seconds: 1)),
+                    );
+                  },
+                ),
               ListTile(leading: const Icon(Icons.reply), title: const Text("返信"), onTap: () { Navigator.pop(sheetContext); String preview = type == 'image' ? '📷 画像' : (type == 'file' ? '📎 ファイル' : text); _textController.text = '> $preview\n'; }),
               if (isMe && type == "text") ListTile(leading: const Icon(Icons.edit), title: const Text("編集"), onTap: () { Navigator.pop(sheetContext); _showEditDialog(msgId, text); }),
               if (isMe) ListTile(leading: const Icon(Icons.delete, color: Colors.red), title: const Text("削除", style: TextStyle(color: Colors.red)), onTap: () { Navigator.pop(sheetContext); _deleteMessage(msgId); }),

@@ -159,7 +159,18 @@ class _AuthCheckWrapperState extends State<AuthCheckWrapper> with WidgetsBinding
 
   @override
   Widget build(BuildContext context) {
-    if (_loading) return const Scaffold(backgroundColor: Colors.white, body: SizedBox.shrink());
+    if (_loading) {
+      return Scaffold(
+        backgroundColor: Colors.white,
+        body: Center(
+          child: Image.asset(
+            'assets/logo_beesmiley.png',
+            height: 120,
+            fit: BoxFit.contain,
+          ),
+        ),
+      );
+    }
     if (_status == null) return const LoginScreen();
     if (_status!.type == UserType.unknown) return const _ForceLogout();
     if (_status!.isInitialPassword) return const ForceChangePasswordScreen();

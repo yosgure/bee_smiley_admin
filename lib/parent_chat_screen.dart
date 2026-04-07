@@ -2,6 +2,7 @@ import 'dart:typed_data';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
@@ -673,6 +674,18 @@ class _ChatMessageListState extends State<_ChatMessageList> {
                   _showEmojiPicker(msgId);
                 },
               ),
+              if (type == 'text' && text.isNotEmpty)
+                ListTile(
+                  leading: const Icon(Icons.copy),
+                  title: const Text("コピー"),
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    Clipboard.setData(ClipboardData(text: text));
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('コピーしました'), duration: Duration(seconds: 1)),
+                    );
+                  },
+                ),
               if (isMe && type == "text")
                 ListTile(
                   leading: const Icon(Icons.edit),

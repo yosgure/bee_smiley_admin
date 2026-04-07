@@ -471,7 +471,7 @@ Future<void> _saveDisplayDate(DateTime date) async {
                           height: 24,
                           decoration: BoxDecoration(
                             border: Border.all(color: Colors.grey.shade400, width: 1.5),
-                            borderRadius: BorderRadius.circular(4),
+                            borderRadius: BorderRadius.circular(2),
                           ),
                           alignment: Alignment.center,
                           child: Text(
@@ -719,7 +719,7 @@ Future<void> _saveDisplayDate(DateTime date) async {
                                       margin: const EdgeInsets.symmetric(vertical: 1),
                                       decoration: BoxDecoration(
                                         color: AppColors.surface,
-                                        borderRadius: BorderRadius.circular(4),
+                                        borderRadius: BorderRadius.circular(2),
                                         border: Border.all(color: AppColors.error.withOpacity(0.5)),
                                       ),
                                       padding: const EdgeInsets.symmetric(horizontal: 2),
@@ -753,7 +753,7 @@ Future<void> _saveDisplayDate(DateTime date) async {
                                       margin: const EdgeInsets.symmetric(vertical: 1),
                                       decoration: BoxDecoration(
                                         color: AppColors.secondary, 
-                                        borderRadius: BorderRadius.circular(4),
+                                        borderRadius: BorderRadius.circular(2),
                                       ),
                                       padding: const EdgeInsets.symmetric(horizontal: 2),
                                       alignment: Alignment.centerLeft,
@@ -787,7 +787,7 @@ Future<void> _saveDisplayDate(DateTime date) async {
                                       margin: const EdgeInsets.symmetric(vertical: 1),
                                       decoration: BoxDecoration(
                                         color: Colors.pink.shade300,
-                                        borderRadius: BorderRadius.circular(4),
+                                        borderRadius: BorderRadius.circular(2),
                                       ),
                                       padding: const EdgeInsets.symmetric(horizontal: 2),
                                       alignment: Alignment.centerLeft,
@@ -810,7 +810,7 @@ Future<void> _saveDisplayDate(DateTime date) async {
                                     margin: const EdgeInsets.symmetric(vertical: 1),
                                     decoration: BoxDecoration(
                                       color: appointment.color,
-                                      borderRadius: BorderRadius.circular(4),
+                                      borderRadius: BorderRadius.circular(2),
                                     ),
                                     alignment: isMonthView ? Alignment.centerLeft : Alignment.topLeft,
                                     padding: isMonthView 
@@ -1756,7 +1756,7 @@ Future<void> _saveDisplayDate(DateTime date) async {
     return Container(
       margin: const EdgeInsets.only(right: 4),
       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-      decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(4), border: Border.all(color: color.withOpacity(0.5))),
+      decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(2), border: Border.all(color: color.withOpacity(0.5))),
       child: Text(text, style: TextStyle(fontSize: 10, color: color)),
     );
   }

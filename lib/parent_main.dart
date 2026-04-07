@@ -219,9 +219,15 @@ class _ParentMainScreenState extends State<ParentMainScreen> {
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
-      return const Scaffold(
+      return Scaffold(
         backgroundColor: Colors.white,
-        body: SizedBox.shrink(),
+        body: Center(
+          child: Image.asset(
+            'assets/logo_beesmiley.png',
+            height: 120,
+            fit: BoxFit.contain,
+          ),
+        ),
       );
     }
 

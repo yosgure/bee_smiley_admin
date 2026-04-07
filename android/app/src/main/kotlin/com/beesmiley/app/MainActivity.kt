@@ -1,4 +1,4 @@
-package com.example.bee_smiley_admin
+package com.beesmiley.app
 
 import io.flutter.embedding.android.FlutterActivity
 
