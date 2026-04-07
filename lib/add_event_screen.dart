@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'app_theme.dart';
+import 'time_list_picker.dart';
 
 class AddEventDialog extends StatefulWidget {
   final DateTime? initialStartDate;
@@ -63,6 +64,18 @@ class _AddEventDialogState extends State<AddEventDialog> {
   final Set<String> _absentStudentIds = {};
 
   late DateTime _taskDate;
+
+  // 編集時の元データ（変更検知用）
+  String? _originalSubject;
+  DateTime? _originalStart;
+  DateTime? _originalEnd;
+  String? _originalCategory;
+  String? _originalLocation;
+  String? _originalNotes;
+  String? _originalRecurrenceType;
+  bool? _originalIsAllDay;
+  Set<String> _originalStudentIds = {};
+  Set<String> _originalStaffIds = {};
 
   // 曜日コード（RRULE用）
   static const List<String> _weekDayCodes = ['MO', 'TU', 'WE', 'TH', 'FR', 'SA', 'SU'];
@@ -183,6 +196,96 @@ class _AddEventDialogState extends State<AddEventDialog> {
       if (value is Timestamp) _studentTransferDates[key] = value.toDate();
     });
     _absentStudentIds.addAll(List<String>.from(data['absentStudentIds'] ?? []));
+
+    // 元データを保存（変更検知用）
+    _originalSubject = _subjectController.text;
+    _originalStart = _startDate;
+    _originalEnd = _endDate;
+    _originalCategory = _selectedCategory;
+    _originalLocation = _locationController.text;
+    _originalNotes = _notesController.text;
+    _originalRecurrenceType = _recurrenceType;
+    _originalIsAllDay = _isAllDay;
+    _originalStudentIds = Set<String>.from(_selectedStudentIds);
+    _originalStaffIds = Set<String>.from(_selectedStaffIds);
+  }
+
+  /// 繰り返しスコープを問う必要のある変更が発生しているか
+  bool _hasNonInstanceChanges() {
+    if (_originalSubject == null) return false;
+    if (_subjectController.text != _originalSubject) return true;
+    if (_startDate != _originalStart) return true;
+    if (_endDate != _originalEnd) return true;
+    if (_selectedCategory != _originalCategory) return true;
+    if (_locationController.text != _originalLocation) return true;
+    if (_notesController.text != _originalNotes) return true;
+    if (_recurrenceType != _originalRecurrenceType) return true;
+    if (_isAllDay != _originalIsAllDay) return true;
+    if (!_setEquals(_selectedStudentIds, _originalStudentIds)) return true;
+    if (!_setEquals(_selectedStaffIds, _originalStaffIds)) return true;
+    return false;
+  }
+
+  bool _setEquals(Set<String> a, Set<String> b) {
+    if (a.length != b.length) return false;
+    for (final v in a) {
+      if (!b.contains(v)) return false;
+    }
+    return true;
+  }
+
+  /// 繰り返し編集スコープのピッカー（ワンタップで確定）
+  Future<String?> _askRecurringEditScope() async {
+    return showDialog<String>(
+      context: context,
+      builder: (ctx) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        insetPadding: const EdgeInsets.symmetric(horizontal: 40, vertical: 24),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 320),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Padding(
+                padding: EdgeInsets.fromLTRB(24, 20, 24, 12),
+                child: Text(
+                  '定期的な予定を更新します',
+                  style: TextStyle(fontSize: 14, color: AppColors.textSub),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+              const Divider(height: 1),
+              _scopeOption(ctx, 'この予定', 'this'),
+              const Divider(height: 1),
+              _scopeOption(ctx, 'これ以降のすべての予定', 'future'),
+              const Divider(height: 1),
+              _scopeOption(ctx, 'すべての予定', 'all'),
+              const Divider(height: 1),
+              _scopeOption(ctx, 'キャンセル', null, isCancel: true),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _scopeOption(BuildContext ctx, String label, String? value, {bool isCancel = false}) {
+    return InkWell(
+      onTap: () => Navigator.pop(ctx, value),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        child: Text(
+          label,
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontSize: 16,
+            color: AppColors.primary,
+            fontWeight: isCancel ? FontWeight.w600 : FontWeight.w500,
+          ),
+        ),
+      ),
+    );
   }
 
   /// RRULEを解析して表示用の文字列に変換
@@ -275,8 +378,29 @@ class _AddEventDialogState extends State<AddEventDialog> {
     return _selectedClassroom;
   }
 
+  // 編集フロー中に決まる繰り返し編集スコープ（widget.editScope より優先）
+  String? _resolvedEditScope;
+
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
+
+    // 繰り返し予定の編集で、スコープ確認が必要な場合のみ最後にダイアログを出す
+    if (_isEditing && !_isTaskMode && widget.appointment != null && widget.editScope == null) {
+      final originalData = widget.appointment!.data() as Map<String, dynamic>;
+      final origRule = originalData['recurrenceRule'] as String?;
+      final origGroupId = originalData['recurrenceGroupId'] as String?;
+      final isRecurring = (origRule != null && origRule.isNotEmpty) ||
+          (origGroupId != null && origGroupId.isNotEmpty);
+      if (isRecurring && _hasNonInstanceChanges()) {
+        final scope = await _askRecurringEditScope();
+        if (scope == null) return; // キャンセル
+        _resolvedEditScope = scope;
+      } else {
+        // この予定のみ（個別欠席・振替の編集など）
+        _resolvedEditScope = 'this';
+      }
+    }
+
     setState(() => _isLoading = true);
     try {
       if (_isTaskMode) {
@@ -400,7 +524,8 @@ class _AddEventDialogState extends State<AddEventDialog> {
   eventData['recurrenceType'] = _recurrenceType;
 
   // editScopeに応じて処理を分岐
-  switch (widget.editScope) {
+  final effectiveScope = _resolvedEditScope ?? widget.editScope;
+  switch (effectiveScope) {
     case 'future':
       if (originalRecurrenceGroupId != null) {
         await _updateFutureEvents(originalRecurrenceGroupId, originalStartTime, eventData, recurrenceTypeChanged);
@@ -409,7 +534,7 @@ class _AddEventDialogState extends State<AddEventDialog> {
         await widget.appointment!.reference.update(eventData);
       }
       break;
-      
+
     case 'all':
       if (originalRecurrenceGroupId != null) {
         await _updateAllEvents(originalRecurrenceGroupId, eventData, recurrenceTypeChanged);
@@ -418,9 +543,9 @@ class _AddEventDialogState extends State<AddEventDialog> {
         await widget.appointment!.reference.update(eventData);
       }
       break;
-      
+
     default:
-      if (widget.editScope == 'this' && originalRecurrenceGroupId != null) {
+      if (effectiveScope == 'this' && originalRecurrenceGroupId != null) {
         eventData['recurrenceGroupId'] = null;
         eventData['recurrenceType'] = null;
         eventData['recurrenceRule'] = null;
@@ -1057,12 +1182,13 @@ Future<void> _deleteRecurrenceGroup(String recurrenceGroupId) async {
                   child: Wrap(
                     spacing: 8,
                     runSpacing: 8,
-                    children: _selectedStaffIds.map((id) => Chip(
-                      label: Text(_staffNamesMap[id] ?? '不明', style: const TextStyle(fontSize: 12)),
-                      deleteIcon: const Icon(Icons.close, size: 16),
-                      onDeleted: () => setState(() => _selectedStaffIds.remove(id)),
-                      backgroundColor: Colors.grey.shade100,
-                      side: BorderSide.none,
+                    children: _selectedStaffIds.map((id) => GestureDetector(
+                      onTap: () => _showStaffActionSheet(id),
+                      child: Chip(
+                        label: Text(_staffNamesMap[id] ?? '不明', style: const TextStyle(fontSize: 12)),
+                        backgroundColor: Colors.grey.shade100,
+                        side: BorderSide.none,
+                      ),
                     )).toList(),
                   ),
                 ),
@@ -1119,12 +1245,6 @@ Future<void> _deleteRecurrenceGroup(String recurrenceGroupId) async {
                                 decoration: isAbsent ? TextDecoration.lineThrough : null,
                               ),
                             ),
-                            deleteIcon: const Icon(Icons.close, size: 16),
-                            onDeleted: () => setState(() {
-                              _selectedStudentIds.remove(id);
-                              _studentTransferDates.remove(id);
-                              _absentStudentIds.remove(id);
-                            }),
                             backgroundColor: isAbsent ? Colors.grey.shade200 : Colors.grey.shade100,
                             side: BorderSide.none,
                           ),
@@ -1226,11 +1346,11 @@ Future<void> _deleteRecurrenceGroup(String recurrenceGroupId) async {
 
   Future<void> _pickTime({required bool isStart}) async {
     final initialDate = isStart ? _startDate : _endDate;
-    final time = await showTimePicker(
+    final time = await showTimeListPicker(
       context: context,
       initialTime: TimeOfDay.fromDateTime(initialDate),
     );
-    
+
     if (time != null && mounted) {
       setState(() {
         if (isStart) {
@@ -1360,62 +1480,128 @@ Future<void> _deleteRecurrenceGroup(String recurrenceGroupId) async {
     }
   }
 
-  void _showStudentActionSheet(String studentId) {
-    showModalBottomSheet(
+  /// 共通のアクションメニューダイアログ
+  Future<void> _showActionMenu({
+    required String title,
+    required List<_ActionItem> actions,
+  }) {
+    return showDialog(
       context: context,
-      builder: (ctx) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.event_busy),
-              title: Text(_absentStudentIds.contains(studentId) ? '欠席を取り消す' : '欠席にする'),
-              onTap: () {
-                Navigator.pop(ctx);
-                setState(() {
-                  if (_absentStudentIds.contains(studentId)) {
-                    _absentStudentIds.remove(studentId);
-                  } else {
-                    _absentStudentIds.add(studentId);
-                    _studentTransferDates.remove(studentId);
-                  }
-                });
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.swap_horiz),
-              title: const Text('振替元の日付を設定'),
-              onTap: () async {
-                Navigator.pop(ctx);
-                final picked = await showDatePicker(
-                  context: context,
-                  initialDate: _studentTransferDates[studentId] ?? DateTime.now(),
-                  firstDate: DateTime(2023),
-                  lastDate: DateTime(2030),
-                );
-                if (picked != null) {
-                  setState(() {
-                    _studentTransferDates[studentId] = picked;
-                    _absentStudentIds.remove(studentId);
-                  });
-                }
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.delete_outline, color: Colors.red),
-              title: const Text('削除', style: TextStyle(color: Colors.red)),
-              onTap: () {
-                Navigator.pop(ctx);
-                setState(() {
-                  _selectedStudentIds.remove(studentId);
-                  _studentTransferDates.remove(studentId);
-                  _absentStudentIds.remove(studentId);
-                });
-              },
-            ),
-          ],
+      builder: (ctx) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        insetPadding: const EdgeInsets.symmetric(horizontal: 40, vertical: 24),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 320),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(24, 20, 24, 16),
+                child: Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textMain,
+                  ),
+                ),
+              ),
+              const Divider(height: 1),
+              ...actions.map((a) => InkWell(
+                    onTap: () {
+                      Navigator.pop(ctx);
+                      a.onTap();
+                    },
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                      child: Row(
+                        children: [
+                          Icon(a.icon, size: 20, color: a.color ?? AppColors.textMain),
+                          const SizedBox(width: 16),
+                          Text(
+                            a.label,
+                            style: TextStyle(
+                              fontSize: 15,
+                              color: a.color ?? AppColors.textMain,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  )),
+            ],
+          ),
         ),
       ),
+    );
+  }
+
+  void _showStaffActionSheet(String staffId) {
+    final name = _staffNamesMap[staffId] ?? '担当者';
+    _showActionMenu(
+      title: name,
+      actions: [
+        _ActionItem(
+          icon: Icons.delete_outline,
+          label: '削除',
+          color: Colors.red,
+          onTap: () => setState(() => _selectedStaffIds.remove(staffId)),
+        ),
+      ],
+    );
+  }
+
+  void _showStudentActionSheet(String studentId) {
+    final name = _studentNamesMap[studentId] ?? '生徒';
+    final isAbsent = _absentStudentIds.contains(studentId);
+    _showActionMenu(
+      title: name,
+      actions: [
+        _ActionItem(
+          icon: Icons.event_busy,
+          label: isAbsent ? '欠席を取り消す' : '欠席にする',
+          onTap: () {
+            setState(() {
+              if (isAbsent) {
+                _absentStudentIds.remove(studentId);
+              } else {
+                _absentStudentIds.add(studentId);
+                _studentTransferDates.remove(studentId);
+              }
+            });
+          },
+        ),
+        _ActionItem(
+          icon: Icons.swap_horiz,
+          label: '振替元の日付を設定',
+          onTap: () async {
+            final picked = await showDatePicker(
+              context: context,
+              initialDate: _studentTransferDates[studentId] ?? DateTime.now(),
+              firstDate: DateTime(2023),
+              lastDate: DateTime(2030),
+            );
+            if (picked != null) {
+              setState(() {
+                _studentTransferDates[studentId] = picked;
+                _absentStudentIds.remove(studentId);
+              });
+            }
+          },
+        ),
+        _ActionItem(
+          icon: Icons.delete_outline,
+          label: '削除',
+          color: Colors.red,
+          onTap: () => setState(() {
+            _selectedStudentIds.remove(studentId);
+            _studentTransferDates.remove(studentId);
+            _absentStudentIds.remove(studentId);
+          }),
+        ),
+      ],
     );
   }
 
@@ -1831,4 +2017,17 @@ class _PersonSelectSheetState extends State<_PersonSelectSheet> {
       ),
     );
   }
+}
+
+class _ActionItem {
+  final IconData icon;
+  final String label;
+  final Color? color;
+  final VoidCallback onTap;
+  _ActionItem({
+    required this.icon,
+    required this.label,
+    this.color,
+    required this.onTap,
+  });
 }

@@ -67,6 +67,10 @@ class _AiChatScreenState extends State<AiChatScreen> {
   // 入力状態
   bool _hasText = false;
 
+  // hug送信失敗バナー（セッション内のみ保持）
+  // 各要素: {category, content, date(DateTime), studentId, studentName, recorderName, recorderId, error}
+  final List<Map<String, dynamic>> _failedHugSends = [];
+
   // スラッシュコマンド
   bool _showSlashMenu = false;
   String _slashFilter = '';
@@ -236,6 +240,33 @@ class _AiChatScreenState extends State<AiChatScreen> {
       _elicitationTextController.clear();
     }
     // 最後の質問なら送信ボタンで送信
+  }
+
+  /// Enterキーで「次へ」ボタンと同じ動作（最終ステップなら送信）
+  void _advanceElicitationFromKey() {
+    if (_elicitationCommand == null) return;
+    final questions = _elicitationCommand!['questions'] as List<dynamic>;
+    if (_elicitationStep >= questions.length) return;
+
+    final currentQ = questions[_elicitationStep] as Map<String, dynamic>;
+    final isRequired = currentQ['required'] == true;
+    final currentAnswer = _elicitationTextController.text.trim();
+    final isLast = _elicitationStep == questions.length - 1;
+
+    // 必須で未入力なら何もしない
+    if (isRequired && currentAnswer.isEmpty) return;
+
+    // 現在の入力を保存
+    setState(() {
+      _elicitationAnswers[_elicitationStep] = currentAnswer;
+    });
+
+    if (isLast) {
+      _submitElicitation();
+    } else {
+      setState(() => _elicitationStep++);
+      _elicitationTextController.clear();
+    }
   }
 
   void _goBackElicitation() {
@@ -763,7 +794,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
     }
   }
 
-  /// AI生成コンテンツ保存ダイアログを表示
+  /// AI生成コンテンツをhugに送信するダイアログを表示
   Future<void> _showSaveContentDialog(String content, {String? defaultCommandLabel}) async {
     final textController = TextEditingController(text: content);
     DateTime selectedDate = DateTime.now();
@@ -791,7 +822,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
         return StatefulBuilder(
           builder: (ctx, setDialogState) {
             return AlertDialog(
-              title: const Text('AIの回答を保存'),
+              title: const Text('hugへ送信'),
               content: SizedBox(
                 width: 500,
                 child: Column(
@@ -904,15 +935,16 @@ class _AiChatScreenState extends State<AiChatScreen> {
                   onPressed: () => Navigator.pop(ctx, false),
                   child: const Text('キャンセル'),
                 ),
-                ElevatedButton(
+                ElevatedButton.icon(
                   onPressed: () => Navigator.pop(ctx, true),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.green,
+                    backgroundColor: Colors.blue,
                     foregroundColor: Colors.white,
                     shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(10)),
                   ),
-                  child: const Text('保存'),
+                  icon: const Icon(Icons.cloud_upload_outlined, size: 18),
+                  label: const Text('hugへ送信'),
                 ),
               ],
             );
@@ -922,37 +954,106 @@ class _AiChatScreenState extends State<AiChatScreen> {
     );
 
     if (result == true && mounted) {
-      try {
-        await FirebaseFirestore.instance.collection('saved_ai_contents').add({
-          'category': selectedCategory,
-          'studentId': widget.studentId,
-          'studentName': widget.studentName,
-          'content': textController.text,
-          'date': Timestamp.fromDate(DateTime(
-              selectedDate.year, selectedDate.month, selectedDate.day)),
-          'recorderName': staffName,
-          'recorderId': currentUser?.uid ?? '',
-          'createdAt': FieldValue.serverTimestamp(),
-          'updatedAt': FieldValue.serverTimestamp(),
-        });
+      final payload = <String, dynamic>{
+        'category': selectedCategory,
+        'studentId': widget.studentId,
+        'studentName': widget.studentName,
+        'content': textController.text,
+        'date': Timestamp.fromDate(DateTime(
+            selectedDate.year, selectedDate.month, selectedDate.day)),
+        'recorderName': staffName,
+        'recorderId': currentUser?.uid ?? '',
+      };
+      await _sendToHugDirect(payload);
+    }
+    textController.dispose();
+  }
+
+  /// hugへ直接送信（B案: 保存→送信→削除を内部で透過実行）
+  /// 失敗時はセッション内のリトライバナーに積む
+  Future<void> _sendToHugDirect(Map<String, dynamic> payload) async {
+    // 一時的に saved_ai_contents に保存
+    String? tempDocId;
+    try {
+      final docRef = await FirebaseFirestore.instance
+          .collection('saved_ai_contents')
+          .add({
+        ...payload,
+        'createdAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+      tempDocId = docRef.id;
+
+      // syncToHug Cloud Function を呼び出し
+      final callable = _functions.httpsCallable('syncToHug');
+      final result = await callable.call({'contentIds': [tempDocId]});
+      final resultData = result.data as Map<String, dynamic>;
+      final successCount = resultData['successCount'] ?? 0;
+
+      if (successCount > 0) {
+        // 成功: 一時保存も既に削除されているはず（syncToHugが成功時に削除）
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('$selectedCategoryを保存しました'),
+              content: Text('${payload['category']}をhugに送信しました'),
               backgroundColor: Colors.green,
               duration: const Duration(seconds: 2),
             ),
           );
         }
-      } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('保存に失敗しました: $e')),
-          );
-        }
+      } else {
+        // 失敗: エラー情報取得
+        final errors = (resultData['errors'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+        final errorMsg = errors.isNotEmpty ? (errors.first['error'] ?? '不明なエラー') : '不明なエラー';
+        // 一時保存ドキュメントを削除（バナー側で再送するときに新規作成し直す）
+        await FirebaseFirestore.instance
+            .collection('saved_ai_contents')
+            .doc(tempDocId)
+            .delete()
+            .catchError((_) {});
+        _addToFailedBanner(payload, errorMsg.toString());
       }
+    } catch (e) {
+      // 通信エラー等: 一時保存があれば削除
+      if (tempDocId != null) {
+        await FirebaseFirestore.instance
+            .collection('saved_ai_contents')
+            .doc(tempDocId)
+            .delete()
+            .catchError((_) {});
+      }
+      _addToFailedBanner(payload, e.toString());
     }
-    textController.dispose();
+  }
+
+  void _addToFailedBanner(Map<String, dynamic> payload, String error) {
+    if (!mounted) return;
+    setState(() {
+      _failedHugSends.add({
+        ...payload,
+        'error': error,
+      });
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('hug送信に失敗しました: $error'),
+        backgroundColor: Colors.red,
+        duration: const Duration(seconds: 3),
+      ),
+    );
+  }
+
+  Future<void> _retryFailedHugSend(int index) async {
+    if (index < 0 || index >= _failedHugSends.length) return;
+    final item = Map<String, dynamic>.from(_failedHugSends[index]);
+    item.remove('error');
+    setState(() => _failedHugSends.removeAt(index));
+    await _sendToHugDirect(item);
+  }
+
+  void _discardFailedHugSend(int index) {
+    if (index < 0 || index >= _failedHugSends.length) return;
+    setState(() => _failedHugSends.removeAt(index));
   }
 
   @override
@@ -1028,6 +1129,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
             )
           : Column(
               children: [
+                if (_failedHugSends.isNotEmpty) _buildFailedHugBanner(),
                 Expanded(child: _buildMessageList()),
                 if (_showSlashMenu && !_elicitationMode) _buildSlashMenu(),
                 if (_elicitationMode)
@@ -1036,6 +1138,74 @@ class _AiChatScreenState extends State<AiChatScreen> {
                   _buildInputArea(),
               ],
             ),
+    );
+  }
+
+  Widget _buildFailedHugBanner() {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.red.shade50,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Colors.red.shade200),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.warning_amber_rounded,
+                  color: Colors.red.shade700, size: 20),
+              const SizedBox(width: 8),
+              Text(
+                'hug送信失敗 (${_failedHugSends.length}件)',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.red.shade700,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          ...List.generate(_failedHugSends.length, (i) {
+            final item = _failedHugSends[i];
+            return Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      '${item['category']} / ${item['studentName']}',
+                      style: const TextStyle(fontSize: 12),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: () => _retryFailedHugSend(i),
+                    style: TextButton.styleFrom(
+                      minimumSize: const Size(0, 28),
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      foregroundColor: Colors.blue,
+                    ),
+                    child: const Text('再送', style: TextStyle(fontSize: 12)),
+                  ),
+                  TextButton(
+                    onPressed: () => _discardFailedHugSend(i),
+                    style: TextButton.styleFrom(
+                      minimumSize: const Size(0, 28),
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      foregroundColor: Colors.grey,
+                    ),
+                    child: const Text('破棄', style: TextStyle(fontSize: 12)),
+                  ),
+                ],
+              ),
+            );
+          }),
+        ],
+      ),
     );
   }
 
@@ -1713,70 +1883,99 @@ class _AiChatScreenState extends State<AiChatScreen> {
                     ),
                     Padding(
                       padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-                      child: TextField(
-                        controller: _elicitationTextController,
-                        style: const TextStyle(fontSize: 14),
-                        decoration: InputDecoration(
-                          hintText: 'その他（自由入力）',
-                          hintStyle: TextStyle(fontSize: 13, color: Colors.grey.shade400),
-                          filled: true,
-                          fillColor: Colors.white,
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: BorderSide(color: Colors.grey.shade300),
-                          ),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: BorderSide(color: Colors.grey.shade300),
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: const BorderSide(color: Color(0xFF7C3AED)),
-                          ),
-                        ),
-                        onChanged: (v) {
-                          if (v.trim().isNotEmpty) {
-                            setState(() {
-                              _elicitationAnswers[_elicitationStep] = v.trim();
-                            });
+                      child: Focus(
+                        onKeyEvent: (node, event) {
+                          if (_elicitationTextController.value.composing.isValid) {
+                            return KeyEventResult.ignored;
                           }
+                          if (event is KeyDownEvent &&
+                              event.logicalKey == LogicalKeyboardKey.enter &&
+                              !HardwareKeyboard.instance.isShiftPressed) {
+                            _advanceElicitationFromKey();
+                            return KeyEventResult.handled;
+                          }
+                          return KeyEventResult.ignored;
                         },
+                        child: TextField(
+                          controller: _elicitationTextController,
+                          style: const TextStyle(fontSize: 14),
+                          decoration: InputDecoration(
+                            hintText: 'その他（自由入力）',
+                            hintStyle: TextStyle(fontSize: 13, color: Colors.grey.shade400),
+                            filled: true,
+                            fillColor: Colors.white,
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: BorderSide(color: Colors.grey.shade300),
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: BorderSide(color: Colors.grey.shade300),
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: const BorderSide(color: Color(0xFF7C3AED)),
+                            ),
+                          ),
+                          onChanged: (v) {
+                            if (v.trim().isNotEmpty) {
+                              setState(() {
+                                _elicitationAnswers[_elicitationStep] = v.trim();
+                              });
+                            }
+                          },
+                        ),
                       ),
                     ),
                   ] else
                     // text
                     Padding(
                       padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-                      child: TextField(
-                        controller: _elicitationTextController,
-                        maxLines: 3,
-                        minLines: 1,
-                        style: const TextStyle(fontSize: 14),
-                        decoration: InputDecoration(
-                          hintText: currentQ['placeholder'] as String? ?? '回答を入力...',
-                          hintStyle: TextStyle(fontSize: 13, color: Colors.grey.shade400),
-                          filled: true,
-                          fillColor: Colors.white,
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: BorderSide(color: Colors.grey.shade300),
-                          ),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: BorderSide(color: Colors.grey.shade300),
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: const BorderSide(color: Color(0xFF7C3AED)),
-                          ),
-                        ),
-                        onChanged: (v) {
-                          setState(() {
-                            _elicitationAnswers[_elicitationStep] = v.trim();
-                          });
+                      child: Focus(
+                        onKeyEvent: (node, event) {
+                          if (_elicitationTextController.value.composing.isValid) {
+                            return KeyEventResult.ignored;
+                          }
+                          if (event is KeyDownEvent &&
+                              event.logicalKey == LogicalKeyboardKey.enter &&
+                              !HardwareKeyboard.instance.isShiftPressed) {
+                            _advanceElicitationFromKey();
+                            return KeyEventResult.handled;
+                          }
+                          return KeyEventResult.ignored;
                         },
+                        child: TextField(
+                          controller: _elicitationTextController,
+                          maxLines: 3,
+                          minLines: 1,
+                          keyboardType: TextInputType.multiline,
+                          style: const TextStyle(fontSize: 14),
+                          decoration: InputDecoration(
+                            hintText: currentQ['placeholder'] as String? ?? '回答を入力...',
+                            hintStyle: TextStyle(fontSize: 13, color: Colors.grey.shade400),
+                            filled: true,
+                            fillColor: Colors.white,
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: BorderSide(color: Colors.grey.shade300),
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: BorderSide(color: Colors.grey.shade300),
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: const BorderSide(color: Color(0xFF7C3AED)),
+                            ),
+                          ),
+                          onChanged: (v) {
+                            setState(() {
+                              _elicitationAnswers[_elicitationStep] = v.trim();
+                            });
+                          },
+                        ),
                       ),
                     ),
                   // 下部ボタン

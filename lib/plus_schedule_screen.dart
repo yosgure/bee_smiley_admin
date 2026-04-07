@@ -41,11 +41,13 @@ class _PlusScheduleContentState extends State<PlusScheduleContent> with Automati
 
   final List<String> _timeSlots = ['9:30〜', '11:00〜', '14:00〜', '15:30〜'];
 
-  // シフトデータ（月単位でキャッシュ）
+  // シフトデータ（フル日付キー yyyy-MM-dd でキャッシュ）
+  // 週が月をまたぐ場合に両月のデータを正しく持つため、dayKeyではなくdateKeyで管理
   Map<String, List<Map<String, dynamic>>> _shiftData = {};
-  String _loadedShiftMonth = '';
-  
-  // 休み設定（日付のセット）
+  // ロード済みの月（yyyy-MM）
+  final Set<String> _loadedShiftMonths = {};
+
+  // 休み設定（フル日付キー yyyy-MM-dd のセット）
   Set<String> _holidays = {};
   
   // 週単位コピー用のシフトデータ
@@ -1138,6 +1140,7 @@ void _goToThisWeek() {
   'defaultShiftStart': defaultShift?['start'] ?? '9:00',
   'defaultShiftEnd': defaultShift?['end'] ?? '18:00',
   'showInSchedule': data['showInSchedule'] ?? true,  // ← 追加
+  'dailySlotTarget': data['dailySlotTarget'] ?? data['workDaysPerWeek'],  // 1日あたりの目標コマ数（旧workDaysPerWeekをフォールバック）
 };
           }).toList();
         });
@@ -1148,56 +1151,71 @@ void _goToThisWeek() {
   }
 
   Future<void> _loadShiftData() async {
-    final monthKey = DateFormat('yyyy-MM').format(_weekStart);
-    
-    // 既にロード済みならスキップ
-    if (_loadedShiftMonth == monthKey) return;
-    
+    // 表示中の週がまたぐ全ての月をロードする（月曜〜土曜の6日間）
+    final monthsToLoad = <String>{};
+    for (int i = 0; i < 6; i++) {
+      final d = _weekStart.add(Duration(days: i));
+      monthsToLoad.add(DateFormat('yyyy-MM').format(d));
+    }
+    // 未ロードの月のみ取得
+    final missing = monthsToLoad.difference(_loadedShiftMonths);
+    if (missing.isEmpty) return;
+
     try {
-      final docRef = FirebaseFirestore.instance
-          .collection('plus_shifts')
-          .doc(monthKey);
-      
-      final doc = await docRef.get();
-      
-      if (mounted) {
-        setState(() {
-          if (doc.exists) {
-            final data = doc.data()!;
-            final days = data['days'] as Map<String, dynamic>? ?? {};
-            _shiftData = days.map((key, value) {
-              return MapEntry(key, List<Map<String, dynamic>>.from(
-                (value as List).map((e) => Map<String, dynamic>.from(e))
-              ));
-            });
-            // 休み情報を読み込み
-            final holidays = data['holidays'] as List<dynamic>? ?? [];
-            _holidays = holidays.map((e) => e.toString()).toSet();
-          } else {
-            _shiftData = {};
-            _holidays = {};
-          }
-          _loadedShiftMonth = monthKey;
-        });
+      // 各月docを取得
+      final loaded = <String, Map<String, dynamic>>{};
+      for (final mk in missing) {
+        final doc = await FirebaseFirestore.instance
+            .collection('plus_shifts')
+            .doc(mk)
+            .get();
+        if (doc.exists) loaded[mk] = doc.data()!;
       }
+
+      if (!mounted) return;
+      setState(() {
+        for (final mk in missing) {
+          // 該当月のキャッシュを一旦クリア（同じ月内のキー）
+          _shiftData.removeWhere((k, _) => k.startsWith('$mk-'));
+          _holidays.removeWhere((k) => k.startsWith('$mk-'));
+
+          final data = loaded[mk];
+          if (data != null) {
+            final days = data['days'] as Map<String, dynamic>? ?? {};
+            days.forEach((dayKey, value) {
+              if (value is List) {
+                final dateKey = '$mk-${dayKey.padLeft(2, '0')}';
+                _shiftData[dateKey] = List<Map<String, dynamic>>.from(
+                  value.map((e) => Map<String, dynamic>.from(e as Map)),
+                );
+              }
+            });
+            final holidays = data['holidays'] as List<dynamic>? ?? [];
+            for (final h in holidays) {
+              _holidays.add('$mk-${h.toString().padLeft(2, '0')}');
+            }
+          }
+          _loadedShiftMonths.add(mk);
+        }
+      });
     } catch (e) {
       debugPrint('Error loading shift data: $e');
     }
   }
 
+  String _dateKey(DateTime date) => DateFormat('yyyy-MM-dd').format(date);
+
   // 指定日が休みかどうか判定（月曜日 or 手動設定）
   bool _isHoliday(DateTime date) {
     // 月曜日は自動的に休み
     if (date.weekday == DateTime.monday) return true;
-    
+
     // 手動設定の休み
-    final dayKey = date.day.toString();
-    return _holidays.contains(dayKey);
+    return _holidays.contains(_dateKey(date));
   }
 
   List<Map<String, dynamic>> _getShiftsForDate(DateTime date) {
-    final dayKey = date.day.toString();
-    return _shiftData[dayKey] ?? [];
+    return _shiftData[_dateKey(date)] ?? [];
   }
 
   @override
@@ -3248,48 +3266,158 @@ final plusStaff = _staffList.where((s) =>
   }
 
   void _showStatsDialog() async {
-    // 対象スタッフと勤務日数
-    final targetStaff = <String, int>{
+    // 対象スタッフ（フルネーム）と1日あたりの目標コマ数のデフォルト
+    final defaultTargets = <String, int>{
       '安保 さゆり': 3,
       '石川 真利': 2,
       '栗林 志織': 3,
       '松永 智栄': 3,
     };
 
-    // Firestoreに保存された勤務日数があれば上書き
-    for (final staff in _staffList) {
-      final name = staff['name'] as String? ?? '';
-      if (targetStaff.containsKey(name) && staff['workDaysPerWeek'] != null) {
-        targetStaff[name] = staff['workDaysPerWeek'] as int;
-      }
+    // _staffList から対象スタッフのidを引く（名前マッチング）
+    // staffIdベースで集計する（plus_shiftsのname表記揺れに依存しないため）
+    final targetStaff = <String, Map<String, dynamic>>{}; // staffId -> {name, slotTarget}
+    for (final entry in defaultTargets.entries) {
+      final fullName = entry.key;
+      // _staffListから一致するスタッフを検索（前後空白・全半角空白を許容）
+      final normalized = fullName.replaceAll(RegExp(r'[\s\u3000]'), '');
+      final staff = _staffList.firstWhere(
+        (s) {
+          final n = (s['name'] as String? ?? '').replaceAll(RegExp(r'[\s\u3000]'), '');
+          return n == normalized;
+        },
+        orElse: () => <String, dynamic>{},
+      );
+      if (staff.isEmpty) continue;
+      final staffId = staff['id'] as String;
+      final slotTarget = (staff['dailySlotTarget'] as int?) ?? entry.value;
+      targetStaff[staffId] = {
+        'name': fullName,
+        'furigana': staff['furigana'] ?? fullName,
+        'slotTarget': slotTarget,
+      };
     }
 
-    // 2026年4月1日から集計開始
-    final startDate = DateTime(2026, 4, 1);
+    // 集計期間: 2026年3月31日 〜 昨日（今日の分はまだ確定していないので除外）
+    final startDate = DateTime(2026, 3, 31);
     final now = DateTime.now();
-    final snapshot = await FirebaseFirestore.instance
+    final today = DateTime(now.year, now.month, now.day);
+    final endDate = today.subtract(const Duration(days: 1)); // 昨日
+
+    // 期間内のplus_lessonsを取得
+    final lessonsSnap = await FirebaseFirestore.instance
         .collection('plus_lessons')
         .where('date', isGreaterThanOrEqualTo: Timestamp.fromDate(startDate))
-        .where('date', isLessThanOrEqualTo: Timestamp.fromDate(now))
+        .where('date', isLessThan: Timestamp.fromDate(today))
         .get();
 
-    // スタッフごとの実施コマ数を集計（欠席除外）
-    final actualCounts = <String, int>{};
-    for (final doc in snapshot.docs) {
+    // 日付ごとのコマ（teachers配列）を集計（欠席除外）
+    // teachersは name の配列なので、後で照合用にフルネームで持つ
+    final lessonsByDate = <String, List<List<String>>>{};
+    for (final doc in lessonsSnap.docs) {
       final data = doc.data();
       final course = data['course'] as String? ?? '';
       if (course == '欠席') continue;
-      final teachers = data['teachers'] as List<dynamic>? ?? [];
-      for (final teacher in teachers) {
-        final name = teacher.toString();
-        if (name.isNotEmpty && name != '全員') {
-          actualCounts[name] = (actualCounts[name] ?? 0) + 1;
-        }
+      final ts = data['date'] as Timestamp?;
+      if (ts == null) continue;
+      final dt = ts.toDate();
+      final key = DateFormat('yyyy-MM-dd').format(dt);
+      final teachers = (data['teachers'] as List<dynamic>? ?? [])
+          .map((e) => e.toString().replaceAll(RegExp(r'[\s\u3000]'), ''))
+          .toList();
+      lessonsByDate.putIfAbsent(key, () => []).add(teachers);
+    }
+
+    // 期間内のplus_shiftsを月単位で取得
+    final shiftsByMonth = <String, Map<String, dynamic>>{};
+    {
+      var cursor = DateTime(startDate.year, startDate.month, 1);
+      while (!cursor.isAfter(endDate)) {
+        final mk = DateFormat('yyyy-MM').format(cursor);
+        try {
+          final doc = await FirebaseFirestore.instance
+              .collection('plus_shifts')
+              .doc(mk)
+              .get();
+          if (doc.exists) shiftsByMonth[mk] = doc.data()!;
+        } catch (_) {}
+        cursor = DateTime(cursor.year, cursor.month + 1, 1);
       }
     }
 
-    // 開始日から現在までの週数を計算（開始前なら0）
-    final totalWeeks = now.isBefore(startDate) ? 0.0 : now.difference(startDate).inDays / 7;
+    // スタッフ(staffId)ごとの実施/目標を集計
+    final actualCounts = <String, int>{for (final id in targetStaff.keys) id: 0};
+    final targetCounts = <String, int>{for (final id in targetStaff.keys) id: 0};
+
+    var d = startDate;
+    while (!d.isAfter(endDate)) {
+      // 日曜・月曜は全体休み
+      if (d.weekday == DateTime.sunday || d.weekday == DateTime.monday) {
+        d = d.add(const Duration(days: 1));
+        continue;
+      }
+      final monthKey = DateFormat('yyyy-MM').format(d);
+      final dayKey = d.day.toString();
+      final monthDoc = shiftsByMonth[monthKey];
+
+      // 月全体で設定されている手動休みならスキップ
+      final holidays = ((monthDoc?['holidays'] as List<dynamic>?) ?? [])
+          .map((e) => e.toString())
+          .toSet();
+      if (holidays.contains(dayKey)) {
+        d = d.add(const Duration(days: 1));
+        continue;
+      }
+
+      final days = monthDoc?['days'] as Map<String, dynamic>?;
+      final daySlots = (days?[dayKey] as List<dynamic>?) ?? [];
+
+      final dateKey = DateFormat('yyyy-MM-dd').format(d);
+      final dayLessons = lessonsByDate[dateKey] ?? const <List<String>>[];
+
+      for (final staffId in targetStaff.keys) {
+        final info = targetStaff[staffId]!;
+        final fullName = info['name'] as String;
+        final fullNameNormalized = fullName.replaceAll(RegExp(r'[\s\u3000]'), '');
+        final slotTarget = info['slotTarget'] as int;
+
+        // シフトエントリを探す（staffIdで照合）
+        Map<String, dynamic>? entry;
+        for (final slot in daySlots) {
+          if (slot is Map) {
+            final m = Map<String, dynamic>.from(slot);
+            if (m['staffId'] == staffId) {
+              entry = m;
+              break;
+            }
+          }
+        }
+
+        // シフトエントリが無い場合は「未設定 = 出勤予定」とみなす
+        // 明示的に isWorking == false の場合のみ休みとしてスキップ
+        if (entry != null && entry['isWorking'] == false) continue;
+
+        targetCounts[staffId] = targetCounts[staffId]! + slotTarget;
+
+        int actual = 0;
+        for (final teachers in dayLessons) {
+          if (teachers.contains(fullNameNormalized)) actual++;
+        }
+        actualCounts[staffId] = actualCounts[staffId]! + actual;
+      }
+
+      d = d.add(const Duration(days: 1));
+    }
+
+    // 最大差分（一番働いている人）を基準に「不足コマ数」を算出
+    int? maxDiffNullable;
+    for (final staffId in targetStaff.keys) {
+      final diff = actualCounts[staffId]! - targetCounts[staffId]!;
+      if (maxDiffNullable == null || diff > maxDiffNullable) {
+        maxDiffNullable = diff;
+      }
+    }
+    final maxDiff = maxDiffNullable ?? 0;
 
     if (!mounted) return;
 
@@ -3298,14 +3426,11 @@ final plusStaff = _staffList.where((s) =>
       builder: (ctx) {
         return StatefulBuilder(
           builder: (ctx, setDialogState) {
-            // 対象スタッフのみ、ふりがな順でソート
-            final sortedStaff = _staffList.where((s) {
-              final name = s['name'] as String? ?? '';
-              return targetStaff.containsKey(name);
-            }).toList()
+            // 対象スタッフ（staffIdベース）をふりがな順でソート
+            final sortedStaffIds = targetStaff.keys.toList()
               ..sort((a, b) {
-                final fa = a['furigana'] as String? ?? a['name'] as String? ?? '';
-                final fb = b['furigana'] as String? ?? b['name'] as String? ?? '';
+                final fa = (targetStaff[a]!['furigana'] as String?) ?? '';
+                final fb = (targetStaff[b]!['furigana'] as String?) ?? '';
                 return fa.compareTo(fb);
               });
 
@@ -3318,14 +3443,14 @@ final plusStaff = _staffList.where((s) =>
                 ],
               ),
               content: SizedBox(
-                width: 500,
+                width: 560,
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      '2026年4月1日〜 累計',
-                      style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+                      '2026年3月31日〜 累計（括弧内は1日あたりの目標コマ数）',
+                      style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
                     ),
                     const SizedBox(height: 16),
                     // ヘッダー
@@ -3337,22 +3462,25 @@ final plusStaff = _staffList.where((s) =>
                       ),
                       child: const Row(
                         children: [
-                          Expanded(flex: 3, child: Text('スタッフ', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13))),
+                          Expanded(flex: 4, child: Text('スタッフ', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13))),
                           Expanded(flex: 2, child: Text('実施', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13), textAlign: TextAlign.center)),
-                          Expanded(flex: 2, child: Text('理想', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13), textAlign: TextAlign.center)),
+                          Expanded(flex: 2, child: Text('目標', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13), textAlign: TextAlign.center)),
                           Expanded(flex: 2, child: Text('差分', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13), textAlign: TextAlign.center)),
+                          Expanded(flex: 3, child: Text('不足', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13), textAlign: TextAlign.center)),
                         ],
                       ),
                     ),
                     const Divider(height: 1),
                     // データ行
-                    ...sortedStaff.map((staff) {
-                      final name = staff['name'] as String? ?? '';
+                    ...sortedStaffIds.map((staffId) {
+                      final info = targetStaff[staffId]!;
+                      final name = info['name'] as String;
                       final lastName = name.split(' ').first;
-                      final workDays = targetStaff[name] ?? 3;
-                      final actual = actualCounts[name] ?? 0;
-                      final ideal = (workDays * totalWeeks).round();
-                      final diff = actual - ideal;
+                      final slotTarget = info['slotTarget'] as int;
+                      final actual = actualCounts[staffId] ?? 0;
+                      final target = targetCounts[staffId] ?? 0;
+                      final diff = actual - target;
+                      final catchUp = maxDiff - diff;
 
                       return Container(
                         padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
@@ -3362,26 +3490,26 @@ final plusStaff = _staffList.where((s) =>
                         child: Row(
                           children: [
                             Expanded(
-                              flex: 3,
+                              flex: 4,
                               child: Row(
                                 children: [
                                   Text(lastName, style: const TextStyle(fontSize: 14)),
                                   const SizedBox(width: 4),
                                   GestureDetector(
                                     onTap: () {
-                                      // 勤務日数を変更するポップアップ
+                                      // 1日あたりの目標コマ数を変更するポップアップ
                                       showDialog(
                                         context: ctx,
                                         builder: (editCtx) {
-                                          int editDays = workDays;
+                                          int editTarget = slotTarget;
                                           return StatefulBuilder(
                                             builder: (editCtx, setEditState) => AlertDialog(
-                                              title: Text('$lastName の勤務日数/週'),
+                                              title: Text('$lastName の1日あたり目標コマ数'),
                                               content: DropdownButton<int>(
-                                                value: editDays,
-                                                items: [1, 2, 3, 4, 5, 6].map((d) => DropdownMenuItem(value: d, child: Text('$d日/週'))).toList(),
+                                                value: editTarget,
+                                                items: [1, 2, 3, 4, 5, 6].map((d) => DropdownMenuItem(value: d, child: Text('$dコマ/日'))).toList(),
                                                 onChanged: (v) {
-                                                  if (v != null) setEditState(() => editDays = v);
+                                                  if (v != null) setEditState(() => editTarget = v);
                                                 },
                                               ),
                                               actions: [
@@ -3389,15 +3517,11 @@ final plusStaff = _staffList.where((s) =>
                                                 ElevatedButton(
                                                   onPressed: () async {
                                                     // Firestoreのスタッフ情報を更新
-                                                    final staffDoc = _staffList.firstWhere((s) => s['name'] == name, orElse: () => {});
-                                                    final staffId = staffDoc['id'] as String?;
-                                                    if (staffId != null) {
-                                                      await FirebaseFirestore.instance.collection('staffs').doc(staffId).update({'workDaysPerWeek': editDays});
-                                                      targetStaff[name] = editDays;
-                                                      // ローカルも更新
-                                                      final idx = _staffList.indexWhere((s) => s['name'] == name);
-                                                      if (idx != -1) _staffList[idx]['workDaysPerWeek'] = editDays;
-                                                    }
+                                                    await FirebaseFirestore.instance.collection('staffs').doc(staffId).update({'dailySlotTarget': editTarget});
+                                                    info['slotTarget'] = editTarget;
+                                                    // ローカルも更新
+                                                    final idx = _staffList.indexWhere((s) => s['id'] == staffId);
+                                                    if (idx != -1) _staffList[idx]['dailySlotTarget'] = editTarget;
                                                     Navigator.pop(editCtx);
                                                     setDialogState(() {});
                                                   },
@@ -3411,7 +3535,7 @@ final plusStaff = _staffList.where((s) =>
                                       );
                                     },
                                     child: Text(
-                                      '($workDays)',
+                                      '($slotTarget)',
                                       style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
                                     ),
                                   ),
@@ -3419,7 +3543,7 @@ final plusStaff = _staffList.where((s) =>
                               ),
                             ),
                             Expanded(flex: 2, child: Text('$actual', style: const TextStyle(fontSize: 14), textAlign: TextAlign.center)),
-                            Expanded(flex: 2, child: Text('$ideal', style: const TextStyle(fontSize: 14), textAlign: TextAlign.center)),
+                            Expanded(flex: 2, child: Text('$target', style: const TextStyle(fontSize: 14), textAlign: TextAlign.center)),
                             Expanded(
                               flex: 2,
                               child: Text(
@@ -3428,6 +3552,18 @@ final plusStaff = _staffList.where((s) =>
                                   fontSize: 14,
                                   fontWeight: FontWeight.bold,
                                   color: diff >= 0 ? Colors.blue : Colors.red,
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                            ),
+                            Expanded(
+                              flex: 3,
+                              child: Text(
+                                catchUp == 0 ? '—' : '+$catchUp',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.bold,
+                                  color: catchUp == 0 ? Colors.grey.shade500 : Colors.orange.shade700,
                                 ),
                                 textAlign: TextAlign.center,
                               ),
@@ -5066,16 +5202,15 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
   }
 
 void _showShiftDialog(DateTime date) {
-    final dayKey = date.day.toString();
-    final monthKey = DateFormat('yyyy-MM').format(date);
+    final dateKey = _dateKey(date);
     final isMonday = date.weekday == DateTime.monday;
-    final isHolidayDate = _holidays.contains(dayKey);
-    
+    final isHolidayDate = _holidays.contains(dateKey);
+
     // 全スタッフのシフト状態を管理
     Map<String, Map<String, dynamic>> staffShifts = {};
-    
+
     // 既存のシフトデータを読み込み
-    final existingShifts = _shiftData[dayKey] ?? [];
+    final existingShifts = _shiftData[dateKey] ?? [];
     
     // 全スタッフを初期化（showInSchedule=trueのみ）
 for (var staff in _staffList.where((s) => s['showInSchedule'] != false)) {
@@ -5394,7 +5529,7 @@ for (var staff in _staffList.where((s) => s['showInSchedule'] != false)) {
       'isWorking': isWorking,  // ← 追加：休みかどうかを保存
     });
   }
-  await _saveShiftsAndHoliday(monthKey, dayKey, shiftsToSave, isHolidayLocal);
+  await _saveShiftsAndHoliday(date, shiftsToSave, isHolidayLocal);
   if (dialogContext.mounted) Navigator.pop(dialogContext);
 },
                 style: ElevatedButton.styleFrom(
@@ -5410,25 +5545,29 @@ for (var staff in _staffList.where((s) => s['showInSchedule'] != false)) {
     );
   }
 
-  Future<void> _saveShiftsAndHoliday(String monthKey, String dayKey, List<Map<String, dynamic>> shifts, bool isHoliday) async {
+  Future<void> _saveShiftsAndHoliday(DateTime date, List<Map<String, dynamic>> shifts, bool isHoliday) async {
     try {
+      final monthKey = DateFormat('yyyy-MM').format(date);
+      final dayKey = date.day.toString();
+      final dateKey = _dateKey(date);
+
       final docRef = FirebaseFirestore.instance
           .collection('plus_shifts')
           .doc(monthKey);
-      
+
       // 既存データを取得
       final doc = await docRef.get();
       Map<String, dynamic> allDays = {};
       List<String> holidays = [];
-      
+
       if (doc.exists) {
         allDays = Map<String, dynamic>.from(doc.data()?['days'] ?? {});
         holidays = List<String>.from(doc.data()?['holidays'] ?? []);
       }
-      
+
       // この日のシフトを更新
       allDays[dayKey] = shifts;
-      
+
       // 休み設定を更新
       if (isHoliday) {
         if (!holidays.contains(dayKey)) {
@@ -5437,7 +5576,7 @@ for (var staff in _staffList.where((s) => s['showInSchedule'] != false)) {
       } else {
         holidays.remove(dayKey);
       }
-      
+
       // 保存
       await docRef.set({
         'classroom': 'ビースマイリープラス湘南藤沢',
@@ -5445,11 +5584,15 @@ for (var staff in _staffList.where((s) => s['showInSchedule'] != false)) {
         'holidays': holidays,
         'updatedAt': FieldValue.serverTimestamp(),
       });
-      
-      // ローカルデータを更新
+
+      // ローカルデータを更新（該当月分のみ）
       setState(() {
-        _shiftData[dayKey] = shifts;
-        _holidays = holidays.toSet();
+        _shiftData[dateKey] = shifts;
+        // 該当月の_holidaysを再構築
+        _holidays.removeWhere((k) => k.startsWith('$monthKey-'));
+        for (final h in holidays) {
+          _holidays.add('$monthKey-${h.padLeft(2, '0')}');
+        }
       });
       
       if (mounted) {
@@ -5613,62 +5756,66 @@ for (var staff in _staffList.where((s) => s['showInSchedule'] != false)) {
   // 先週のスケジュールを今週にコピー
   Future<void> _copyFromPreviousWeek() async {
     final previousWeekStart = _weekStart.subtract(const Duration(days: 7));
-    final previousMonthKey = DateFormat('yyyy-MM').format(previousWeekStart);
-    final currentMonthKey = DateFormat('yyyy-MM').format(_weekStart);
-    
+
     try {
-      // 1. 先週のシフトを取得
-      final previousShiftDoc = await FirebaseFirestore.instance
-          .collection('plus_shifts')
-          .doc(previousMonthKey)
-          .get();
-      
-      final previousShiftData = previousShiftDoc.exists 
-          ? Map<String, dynamic>.from(previousShiftDoc.data()?['days'] ?? {})
-          : <String, dynamic>{};
-      
+      // 1. 先週のシフトに必要な月docを全て取得
+      final previousMonthKeys = <String>{};
+      for (int i = 0; i < 6; i++) {
+        previousMonthKeys.add(DateFormat('yyyy-MM').format(previousWeekStart.add(Duration(days: i))));
+      }
+      final previousMonthDocs = <String, Map<String, dynamic>>{};
+      for (final mk in previousMonthKeys) {
+        final d = await FirebaseFirestore.instance.collection('plus_shifts').doc(mk).get();
+        if (d.exists) previousMonthDocs[mk] = Map<String, dynamic>.from(d.data()?['days'] ?? {});
+      }
+
       // 2. 先週のレッスンを取得（dateフィールドで週をフィルタリング）
       final previousWeekStartDate = DateTime(previousWeekStart.year, previousWeekStart.month, previousWeekStart.day);
       final previousWeekEndDate = previousWeekStartDate.add(const Duration(days: 5, hours: 23, minutes: 59, seconds: 59));
-      
+
       final previousLessonsSnapshot = await FirebaseFirestore.instance
           .collection('plus_lessons')
           .where('date', isGreaterThanOrEqualTo: Timestamp.fromDate(previousWeekStartDate))
           .where('date', isLessThanOrEqualTo: Timestamp.fromDate(previousWeekEndDate))
           .get();
-      
+
       debugPrint('先週のレッスン数: ${previousLessonsSnapshot.docs.length}');
-      
-      // 3. 先週のシフトを今週にコピー
-      final shiftUpdates = <String, List<Map<String, dynamic>>>{};
+
+      // 3. 先週のシフトを今週にコピー（月またぎ対応：targetMonthKey -> dayKey -> shifts）
+      final shiftUpdatesByMonth = <String, Map<String, List<Map<String, dynamic>>>>{};
+      // ローカルキャッシュ更新用
+      final localUpdates = <String, List<Map<String, dynamic>>>{};
       for (int dayIndex = 0; dayIndex < 6; dayIndex++) {
         final previousDate = previousWeekStart.add(Duration(days: dayIndex));
         final currentDate = _weekStart.add(Duration(days: dayIndex));
-        final previousDayKey = previousDate.day.toString();
-        final currentDayKey = currentDate.day.toString();
-        
-        if (previousShiftData.containsKey(previousDayKey)) {
-          final shifts = previousShiftData[previousDayKey];
+        final prevMk = DateFormat('yyyy-MM').format(previousDate);
+        final prevDayKey = previousDate.day.toString();
+        final curMk = DateFormat('yyyy-MM').format(currentDate);
+        final curDayKey = currentDate.day.toString();
+
+        final prevDays = previousMonthDocs[prevMk];
+        if (prevDays != null && prevDays.containsKey(prevDayKey)) {
+          final shifts = prevDays[prevDayKey];
           if (shifts is List) {
-            shiftUpdates[currentDayKey] = shifts.map((s) => Map<String, dynamic>.from(s)).toList();
+            final copied = shifts.map((s) => Map<String, dynamic>.from(s as Map)).toList();
+            shiftUpdatesByMonth.putIfAbsent(curMk, () => {})[curDayKey] = copied;
+            localUpdates[_dateKey(currentDate)] = copied;
           }
         }
       }
-      
-      // シフトをFirestoreに保存
-      if (shiftUpdates.isNotEmpty) {
-        final shiftDocRef = FirebaseFirestore.instance
-            .collection('plus_shifts')
-            .doc(currentMonthKey);
-        
+
+      // シフトをFirestoreに保存（月ごとに分けて）
+      for (final entry in shiftUpdatesByMonth.entries) {
+        final mk = entry.key;
+        final updates = entry.value;
+        final shiftDocRef = FirebaseFirestore.instance.collection('plus_shifts').doc(mk);
         final shiftDoc = await shiftDocRef.get();
-        
+
         if (shiftDoc.exists) {
           final existingDays = Map<String, dynamic>.from(shiftDoc.data()?['days'] ?? {});
-          shiftUpdates.forEach((key, value) {
+          updates.forEach((key, value) {
             existingDays[key] = value;
           });
-          
           await shiftDocRef.update({
             'days': existingDays,
             'updatedAt': FieldValue.serverTimestamp(),
@@ -5676,14 +5823,15 @@ for (var staff in _staffList.where((s) => s['showInSchedule'] != false)) {
         } else {
           await shiftDocRef.set({
             'classroom': 'ビースマイリープラス湘南藤沢',
-            'days': shiftUpdates,
+            'days': updates,
             'updatedAt': FieldValue.serverTimestamp(),
           });
         }
-        
-        // ローカルデータを更新
+      }
+
+      if (localUpdates.isNotEmpty) {
         setState(() {
-          shiftUpdates.forEach((key, value) {
+          localUpdates.forEach((key, value) {
             _shiftData[key] = value;
           });
         });
@@ -5750,12 +5898,11 @@ for (var staff in _staffList.where((s) => s['showInSchedule'] != false)) {
   // 現在の週のシフトとレッスンをコピー
   void _copyCurrentWeekShifts() {
     final copiedShifts = <int, List<Map<String, dynamic>>>{};
-    
+
     for (int dayIndex = 0; dayIndex < 6; dayIndex++) {
       final date = _weekStart.add(Duration(days: dayIndex));
-      final dayKey = date.day.toString();
-      final shifts = _shiftData[dayKey] ?? [];
-      
+      final shifts = _shiftData[_dateKey(date)] ?? [];
+
       if (shifts.isNotEmpty) {
         copiedShifts[dayIndex] = shifts.map((s) => Map<String, dynamic>.from(s)).toList();
       }
@@ -5778,52 +5925,55 @@ for (var staff in _staffList.where((s) => s['showInSchedule'] != false)) {
   // コピーしたシフトとレッスンを現在の週に貼り付け
   Future<void> _pasteWeekShifts() async {
     if (_copiedWeekShifts == null && _copiedWeekLessons == null) return;
-    
+
     try {
-      final monthKey = DateFormat('yyyy-MM').format(_weekStart);
       final weekKey = DateFormat('yyyy-MM-dd').format(_weekStart);
-      
-      // シフトの貼り付け
+
+      // シフトの貼り付け（月またぎ対応：targetMonthKey -> dayKey -> shifts）
       if (_copiedWeekShifts != null) {
-        final updates = <String, List<Map<String, dynamic>>>{};
-        
+        final updatesByMonth = <String, Map<String, List<Map<String, dynamic>>>>{};
+        final localUpdates = <String, List<Map<String, dynamic>>>{};
+
         for (int dayIndex = 0; dayIndex < 6; dayIndex++) {
           final date = _weekStart.add(Duration(days: dayIndex));
+          final mk = DateFormat('yyyy-MM').format(date);
           final dayKey = date.day.toString();
-          
+
           if (_copiedWeekShifts!.containsKey(dayIndex)) {
-            updates[dayKey] = _copiedWeekShifts![dayIndex]!;
+            final shifts = _copiedWeekShifts![dayIndex]!;
+            updatesByMonth.putIfAbsent(mk, () => {})[dayKey] = shifts;
+            localUpdates[_dateKey(date)] = shifts;
           }
         }
-        
-        // Firestoreに保存
-        final docRef = FirebaseFirestore.instance
-            .collection('plus_shifts')
-            .doc(monthKey);
-        
-        final doc = await docRef.get();
-        
-        if (doc.exists) {
-          final existingDays = Map<String, dynamic>.from(doc.data()?['days'] ?? {});
-          updates.forEach((key, value) {
-            existingDays[key] = value;
-          });
-          
-          await docRef.update({
-            'days': existingDays,
-            'updatedAt': FieldValue.serverTimestamp(),
-          });
-        } else {
-          await docRef.set({
-            'classroom': 'ビースマイリープラス湘南藤沢',
-            'days': updates,
-            'updatedAt': FieldValue.serverTimestamp(),
-          });
+
+        // 月ごとにFirestoreに保存
+        for (final entry in updatesByMonth.entries) {
+          final mk = entry.key;
+          final updates = entry.value;
+          final docRef = FirebaseFirestore.instance.collection('plus_shifts').doc(mk);
+          final doc = await docRef.get();
+
+          if (doc.exists) {
+            final existingDays = Map<String, dynamic>.from(doc.data()?['days'] ?? {});
+            updates.forEach((key, value) {
+              existingDays[key] = value;
+            });
+            await docRef.update({
+              'days': existingDays,
+              'updatedAt': FieldValue.serverTimestamp(),
+            });
+          } else {
+            await docRef.set({
+              'classroom': 'ビースマイリープラス湘南藤沢',
+              'days': updates,
+              'updatedAt': FieldValue.serverTimestamp(),
+            });
+          }
         }
-        
+
         // ローカルデータを更新
         setState(() {
-          updates.forEach((key, value) {
+          localUpdates.forEach((key, value) {
             _shiftData[key] = value;
           });
         });
@@ -5905,14 +6055,21 @@ for (var staff in _staffList.where((s) => s['showInSchedule'] != false)) {
             'updatedAt': FieldValue.serverTimestamp(),
           });
       
-      // ローカルデータを更新
+      // ローカルデータを更新（toMonth の dateKey で書き込む）
       setState(() {
-        _shiftData = fromDays.map((key, value) {
-          return MapEntry(key, List<Map<String, dynamic>>.from(
-            (value as List).map((e) => Map<String, dynamic>.from(e))
-          ));
+        // toMonth の既存キャッシュをクリア
+        _shiftData.removeWhere((k, _) => k.startsWith('$toMonth-'));
+        _holidays.removeWhere((k) => k.startsWith('$toMonth-'));
+
+        fromDays.forEach((dayKey, value) {
+          if (value is List) {
+            final dateKey = '$toMonth-${dayKey.padLeft(2, '0')}';
+            _shiftData[dateKey] = List<Map<String, dynamic>>.from(
+              value.map((e) => Map<String, dynamic>.from(e as Map)),
+            );
+          }
         });
-        _loadedShiftMonth = toMonth;
+        _loadedShiftMonths.add(toMonth);
       });
       
       if (mounted) {
