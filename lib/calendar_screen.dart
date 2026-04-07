@@ -1331,6 +1331,7 @@ Future<void> _saveDisplayDate(DateTime date) async {
   }
 
   void _showPendingTasksListDialog() {
+    double? initialContentHeight;
     showDialog(
       context: context,
       builder: (context) {
@@ -1366,9 +1367,12 @@ Future<void> _saveDisplayDate(DateTime date) async {
                 return d1.compareTo(d2);
               });
 
-              final contentHeight = pendingDocs.isEmpty 
-                ? 100.0 
+              final computedHeight = pendingDocs.isEmpty
+                ? 100.0
                 : (pendingDocs.length * 72.0).clamp(100.0, 400.0);
+              // 初回表示時の高さを保持し、チェックで削除してもDialogが縮まない（位置ずれ防止）
+              initialContentHeight ??= computedHeight;
+              final contentHeight = initialContentHeight!;
 
               return SizedBox(
                 width: 450,
