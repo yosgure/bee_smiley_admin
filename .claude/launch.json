@@ -1,0 +1,23 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "web-preview",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["-m", "http.server", "8080", "--directory", "build/web"],
+      "port": 8080
+    },
+    {
+      "name": "icon-preview",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["http-server", "-p", "8090", "-c-1"],
+      "port": 8090
+    },
+    {
+      "name": "flutter-dev",
+      "runtimeExecutable": "/opt/homebrew/bin/flutter",
+      "runtimeArgs": ["run", "-d", "chrome", "--web-port=8083"],
+      "port": 8083
+    }
+  ]
+}

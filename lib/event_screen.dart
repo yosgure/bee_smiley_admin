@@ -9,6 +9,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:intl/intl.dart';
 import 'package:image/image.dart' as img;
 import 'app_theme.dart';
+import 'time_list_picker.dart';
 
 class EventScreen extends StatefulWidget {
   const EventScreen({super.key});
@@ -461,15 +462,9 @@ class _EventCreateScreenState extends State<EventCreateScreen> {
 
   Future<void> _pickTime(bool isStartTime) async {
     final initialTime = isStartTime ? _startTime : _endTime;
-    final picked = await showTimePicker(
+    final picked = await showTimeListPicker(
       context: context,
       initialTime: initialTime ?? TimeOfDay.now(),
-      builder: (BuildContext context, Widget? child) {
-        return MediaQuery(
-          data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: true),
-          child: child!,
-        );
-      },
     );
     if (picked != null) {
       setState(() {

@@ -661,7 +661,8 @@ Future<void> _saveDisplayDate(DateTime date) async {
                               child: SfCalendarTheme(
                               data: SfCalendarThemeData(
                                 selectionBorderColor: Colors.transparent,
-                                todayHighlightColor: AppColors.primary,
+                                // 現在時刻ライン色（Google風の赤）。今日の日付ハイライトもこの色になる
+                                todayHighlightColor: const Color(0xFFEA4335),
                                 cellBorderColor: Colors.grey.shade400,
                               ),
                               child: MouseRegion(
@@ -684,15 +685,15 @@ Future<void> _saveDisplayDate(DateTime date) async {
                                 backgroundColor: AppColors.surface,
                                 cellBorderColor: Colors.grey.shade400,
                                 headerHeight: 0,
-                                viewHeaderHeight: 70,
+                                viewHeaderHeight: 60,
                                 allowViewNavigation: false,
                                 selectionDecoration: const BoxDecoration(
                                   color: Colors.transparent,
                                   border: null,
                                 ),
                                 viewHeaderStyle: const ViewHeaderStyle(
-                                  dayTextStyle: TextStyle(fontSize: 11, color: AppColors.textSub, fontWeight: FontWeight.bold),
-                                  dateTextStyle: TextStyle(fontSize: 20, color: AppColors.textMain, fontWeight: FontWeight.w400),
+                                  dayTextStyle: TextStyle(fontSize: 11, color: AppColors.textSub, fontWeight: FontWeight.w500, letterSpacing: 0.5),
+                                  dateTextStyle: TextStyle(fontSize: 18, color: AppColors.textMain, fontWeight: FontWeight.w400),
                                 ),
                                 monthViewSettings: const MonthViewSettings(
                                   appointmentDisplayMode: MonthAppointmentDisplayMode.appointment,
@@ -806,31 +807,94 @@ Future<void> _saveDisplayDate(DateTime date) async {
                                   
                                   // 通常イベント
                                   final isMonthView = _calendarView == CalendarView.month;
+                                  // 時間テキスト（Google風: 午前9時, 午後12時30分）
+                                  String fmtJpHour(DateTime t) {
+                                    final h = t.hour;
+                                    final m = t.minute;
+                                    final isAm = h < 12;
+                                    final h12 = h == 0 ? 12 : (h <= 12 ? h : h - 12);
+                                    final base = '${isAm ? '午前' : '午後'}$h12時';
+                                    return m == 0 ? base : '$base$m分';
+                                  }
+                                  final timeText =
+                                      '${fmtJpHour(appointment.startTime)}〜${fmtJpHour(appointment.endTime)}';
+                                  final tileHeight = calendarAppointmentDetails.bounds.height;
+                                  // 高さが小さい時は1行でまとめる（Googleカレンダー風: 「タイトル、時間」）
+                                  final isCompact = tileHeight < 36;
+
                                   return Container(
-                                    margin: const EdgeInsets.symmetric(vertical: 1),
+                                    margin: isMonthView
+                                        ? const EdgeInsets.symmetric(vertical: 1)
+                                        : const EdgeInsets.only(top: 1, bottom: 1, right: 6),
                                     decoration: BoxDecoration(
                                       color: appointment.color,
-                                      borderRadius: BorderRadius.circular(2),
+                                      borderRadius: BorderRadius.circular(6),
                                     ),
                                     alignment: isMonthView ? Alignment.centerLeft : Alignment.topLeft,
-                                    padding: isMonthView 
-                                      ? const EdgeInsets.symmetric(horizontal: 2)
-                                      : const EdgeInsets.only(left: 4, top: 2, right: 2),
-                                    child: Text(
-                                      appointment.subject,
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 12,
-                                        height: 1.0,
-                                      ),
-                                      maxLines: isMonthView ? 1 : 3,
-                                      overflow: TextOverflow.clip,
-                                    ),
+                                    padding: isMonthView
+                                        ? const EdgeInsets.symmetric(horizontal: 4)
+                                        : (isCompact
+                                            ? const EdgeInsets.fromLTRB(8, 4, 8, 4)
+                                            : const EdgeInsets.fromLTRB(8, 6, 8, 6)),
+                                    child: isMonthView
+                                        ? Text(
+                                            appointment.subject,
+                                            style: const TextStyle(
+                                              color: Colors.white,
+                                              fontSize: 12,
+                                              height: 1.0,
+                                            ),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.clip,
+                                          )
+                                        : isCompact
+                                            ? Text(
+                                                '${appointment.subject}、$timeText',
+                                                style: const TextStyle(
+                                                  color: Colors.white,
+                                                  fontSize: 12,
+                                                  fontWeight: FontWeight.w400,
+                                                  height: 1.2,
+                                                ),
+                                                maxLines: 1,
+                                                overflow: TextOverflow.clip,
+                                              )
+                                            : Column(
+                                                crossAxisAlignment: CrossAxisAlignment.start,
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  Text(
+                                                    appointment.subject,
+                                                    style: const TextStyle(
+                                                      color: Colors.white,
+                                                      fontSize: 12,
+                                                      fontWeight: FontWeight.w400,
+                                                      height: 1.2,
+                                                    ),
+                                                    maxLines: 1,
+                                                    overflow: TextOverflow.ellipsis,
+                                                  ),
+                                                  const SizedBox(height: 2),
+                                                  Text(
+                                                    timeText,
+                                                    style: TextStyle(
+                                                      color: Colors.white.withOpacity(0.9),
+                                                      fontSize: 11,
+                                                      fontWeight: FontWeight.w400,
+                                                      height: 1.2,
+                                                    ),
+                                                    maxLines: 1,
+                                                    overflow: TextOverflow.clip,
+                                                  ),
+                                                ],
+                                              ),
                                   );
                                 },
                                 timeSlotViewSettings: const TimeSlotViewSettings(
                                   timeIntervalHeight: 60,
-                                  timeFormat: 'H:mm',
+                                  timeRulerSize: 64,
+                                  // Google風の時間表記（例: 午前9時, 午後12時）
+                                  timeFormat: 'a h時',
                                   // 時間グリッドは1時間単位
                                   timeInterval: Duration(minutes: 60),
                                   timeTextStyle: TextStyle(color: AppColors.textSub, fontSize: 11),
@@ -1634,47 +1698,68 @@ Future<void> _saveDisplayDate(DateTime date) async {
             final absentIds = List<String>.from(data['absentStudentIds'] ?? []);
             final transferMap = data['studentTransferDates'] as Map<String, dynamic>? ?? {};
 
-            return AlertDialog(
-              shape: RoundedRectangleBorder(borderRadius: AppStyles.radius),
-              contentPadding: EdgeInsets.zero,
-              titlePadding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
-              
-              title: Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  Container(
-                    width: 16, height: 16,
-                    decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(4)),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(subject, 
-                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.textMain),
-                      overflow: TextOverflow.ellipsis,
+            return Dialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              insetPadding: const EdgeInsets.symmetric(horizontal: 40, vertical: 24),
+              elevation: 6,
+              child: SizedBox(
+                width: 460,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // 上部ツールバー（Googleカレンダー風）
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(4, 4, 4, 0),
+                      child: Row(
+                        children: [
+                          IconButton(
+                            icon: const Icon(Icons.close, size: 22, color: Colors.black54),
+                            tooltip: '閉じる',
+                            onPressed: () => Navigator.pop(context),
+                          ),
+                          const Spacer(),
+                          IconButton(
+                            icon: const Icon(Icons.edit_outlined, size: 22, color: Colors.black54),
+                            tooltip: '編集',
+                            onPressed: () => _confirmEdit(doc),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.delete_outline, size: 22, color: Colors.black54),
+                            tooltip: '削除',
+                            onPressed: () => _confirmDelete(doc),
+                          ),
+                          const SizedBox(width: 4),
+                        ],
+                      ),
                     ),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.edit, size: 20, color: Colors.grey),
-                    onPressed: () => _confirmEdit(doc),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.delete_outline, size: 20, color: Colors.grey),
-                    onPressed: () => _confirmDelete(doc),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.close, size: 20, color: Colors.grey),
-                    onPressed: () => Navigator.pop(context),
-                  ),
-                ],
-              ),
-              content: SizedBox(
-                width: 450,
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.all(24.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _buildDetailRow(Icons.access_time, 
+                    // タイトル部分
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(24, 4, 24, 16),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          Container(
+                            width: 14, height: 14,
+                            decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(4)),
+                          ),
+                          const SizedBox(width: 14),
+                          Expanded(
+                            child: Text(
+                              subject,
+                              style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w500, color: AppColors.textMain, height: 1.2),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Flexible(
+                      child: SingleChildScrollView(
+                        padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                      _buildDetailRow(Icons.access_time,
                         '${DateFormat('M月d日 (E)', 'ja').format(start)}\n'
                         '${DateFormat('H:mm').format(start)} – ${DateFormat('H:mm').format(end)}'
                       ),
@@ -1745,8 +1830,11 @@ Future<void> _saveDisplayDate(DateTime date) async {
                         const SizedBox(height: 16),
                         _buildDetailRow(Icons.notes, notes),
                       ],
-                    ],
-                  ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             );
@@ -1755,7 +1843,7 @@ Future<void> _saveDisplayDate(DateTime date) async {
       },
     );
   }
-  
+
   Widget _buildStatusBadge(String text, Color color) {
     return Container(
       margin: const EdgeInsets.only(right: 4),
@@ -1910,165 +1998,52 @@ Future<void> _saveDisplayDate(DateTime date) async {
   }
 
   void _confirmEdit(DocumentSnapshot doc) {
-    final data = doc.data() as Map<String, dynamic>;
-    final startTime = (data['startTime'] as Timestamp).toDate();
-    final recurrenceGroupId = data['recurrenceGroupId'];
-    final recurrenceRule = data['recurrenceRule'];
-    
-    final isRecurring = (recurrenceRule != null && recurrenceRule.toString().isNotEmpty) ||
-                        (recurrenceGroupId != null && recurrenceGroupId.toString().isNotEmpty);
-    
-    if (isRecurring) {
-      _showRecurringEditDialog(doc, data, startTime);
-    } else {
-      Navigator.pop(context);
-      final bool showSidebar = MediaQuery.of(context).size.width >= AppBreakpoints.desktop;
-      if (showSidebar) {
-        showDialog(
-          context: context,
-          barrierDismissible: true,
-          builder: (context) => Dialog(
-            backgroundColor: Colors.white,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-            insetPadding: const EdgeInsets.symmetric(horizontal: 40, vertical: 24),
-            child: SizedBox(
-              width: 500,
-              height: MediaQuery.of(context).size.height * 0.85,
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(16),
-                child: AddEventDialog(appointment: doc),
-              ),
-            ),
-          ),
-        );
-      } else {
-        showModalBottomSheet(
-          context: context,
-          isScrollControlled: true,
-          backgroundColor: Colors.transparent,
-          builder: (context) => Container(
-            height: MediaQuery.of(context).size.height * 0.9,
-            decoration: const BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.only(
-                topLeft: Radius.circular(20),
-                topRight: Radius.circular(20),
-              ),
-            ),
+    // 編集ボタン押下時は確認ダイアログを出さず、直接編集画面を開く。
+    // 繰り返し予定の場合、保存時に変更内容に応じてスコープを確認する。
+    Navigator.pop(context);
+    final bool showSidebar = MediaQuery.of(context).size.width >= AppBreakpoints.desktop;
+    if (showSidebar) {
+      showDialog(
+        context: context,
+        barrierDismissible: true,
+        builder: (context) => Dialog(
+          backgroundColor: Colors.white,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          insetPadding: const EdgeInsets.symmetric(horizontal: 40, vertical: 24),
+          child: SizedBox(
+            width: 500,
+            height: MediaQuery.of(context).size.height * 0.85,
             child: ClipRRect(
-              borderRadius: const BorderRadius.only(
-                topLeft: Radius.circular(20),
-                topRight: Radius.circular(20),
-              ),
+              borderRadius: BorderRadius.circular(16),
               child: AddEventDialog(appointment: doc),
             ),
           ),
-        );
-      }
-    }
-  }
-
-  void _showRecurringEditDialog(DocumentSnapshot doc, Map<String, dynamic> data, DateTime startTime) {
-    String selectedOption = 'this';
-    
-    showDialog(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: const Text('定期的な予定の編集'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              RadioListTile<String>(
-                title: const Text('この予定'),
-                value: 'this',
-                groupValue: selectedOption,
-                onChanged: (v) => setDialogState(() => selectedOption = v!),
-                activeColor: AppColors.primary,
-                contentPadding: EdgeInsets.zero,
-              ),
-              RadioListTile<String>(
-                title: const Text('これ以降のすべての予定'),
-                value: 'future',
-                groupValue: selectedOption,
-                onChanged: (v) => setDialogState(() => selectedOption = v!),
-                activeColor: AppColors.primary,
-                contentPadding: EdgeInsets.zero,
-              ),
-              RadioListTile<String>(
-                title: const Text('すべての予定'),
-                value: 'all',
-                groupValue: selectedOption,
-                onChanged: (v) => setDialogState(() => selectedOption = v!),
-                activeColor: AppColors.primary,
-                contentPadding: EdgeInsets.zero,
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('キャンセル')),
-            ElevatedButton(
-              onPressed: () {
-                Navigator.pop(ctx);
-                Navigator.pop(context);
-                final bool showSidebar = MediaQuery.of(context).size.width >= AppBreakpoints.desktop;
-                if (showSidebar) {
-                  showDialog(
-                    context: context,
-                    barrierDismissible: true,
-                    builder: (context) => Dialog(
-                      backgroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                      insetPadding: const EdgeInsets.symmetric(horizontal: 40, vertical: 24),
-                      child: SizedBox(
-                        width: 500,
-                        height: MediaQuery.of(context).size.height * 0.85,
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(16),
-                          child: AddEventDialog(
-                            appointment: doc,
-                            editScope: selectedOption,
-                          ),
-                        ),
-                      ),
-                    ),
-                  );
-                } else {
-                  showModalBottomSheet(
-                    context: context,
-                    isScrollControlled: true,
-                    backgroundColor: Colors.transparent,
-                    builder: (context) => Container(
-                      height: MediaQuery.of(context).size.height * 0.9,
-                      decoration: const BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.only(
-                          topLeft: Radius.circular(20),
-                          topRight: Radius.circular(20),
-                        ),
-                      ),
-                      child: ClipRRect(
-                        borderRadius: const BorderRadius.only(
-                          topLeft: Radius.circular(20),
-                          topRight: Radius.circular(20),
-                        ),
-                        child: AddEventDialog(
-                          appointment: doc,
-                          editScope: selectedOption,
-                        ),
-                      ),
-                    ),
-                  );
-                }
-              },
-              style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
-              child: const Text('OK', style: TextStyle(color: Colors.white)),
-            ),
-          ],
         ),
-      ),
-    );
+      );
+    } else {
+      showModalBottomSheet(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: Colors.transparent,
+        builder: (context) => Container(
+          height: MediaQuery.of(context).size.height * 0.9,
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.only(
+              topLeft: Radius.circular(20),
+              topRight: Radius.circular(20),
+            ),
+          ),
+          child: ClipRRect(
+            borderRadius: const BorderRadius.only(
+              topLeft: Radius.circular(20),
+              topRight: Radius.circular(20),
+            ),
+            child: AddEventDialog(appointment: doc),
+          ),
+        ),
+      );
+    }
   }
 
   Widget _buildDetailList(IconData icon, List<String> items) {

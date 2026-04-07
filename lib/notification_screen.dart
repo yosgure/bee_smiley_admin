@@ -17,15 +17,19 @@ class _NotificationScreenState extends State<NotificationScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF2F2F7),
+      backgroundColor: AppColors.background,
       appBar: AppBar(
         title: const Text('お知らせ'),
         centerTitle: true,
         backgroundColor: Colors.white,
         elevation: 0,
-        foregroundColor: Colors.black,
+        foregroundColor: AppColors.textMain,
       ),
-      body: StreamBuilder<QuerySnapshot>(
+      body: Align(
+        alignment: Alignment.topCenter,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 600),
+          child: StreamBuilder<QuerySnapshot>(
         stream: _notificationsRef.orderBy('createdAt', descending: true).snapshots(),
         builder: (context, snapshot) {
           if (snapshot.hasError) {
@@ -38,7 +42,12 @@ class _NotificationScreenState extends State<NotificationScreen> {
           final docs = snapshot.data!.docs;
 
           if (docs.isEmpty) {
-            return const Center(child: Text('お知らせはありません'));
+            return const Center(
+              child: Text(
+                'お知らせはありません',
+                style: TextStyle(color: AppColors.textSub),
+              ),
+            );
           }
 
           return ListView.builder(
@@ -64,13 +73,23 @@ class _NotificationScreenState extends State<NotificationScreen> {
                 }
               }
 
-              return Card(
-                margin: const EdgeInsets.only(bottom: 12),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                elevation: 1,
+              return Container(
+                margin: const EdgeInsets.only(bottom: 20),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.grey.shade200),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.04),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                clipBehavior: Clip.antiAlias,
                 child: InkWell(
                   onTap: () => _openEditScreen(doc),
-                  borderRadius: BorderRadius.circular(12),
                   child: Padding(
                     padding: const EdgeInsets.all(16.0),
                     child: Column(
@@ -82,51 +101,53 @@ class _NotificationScreenState extends State<NotificationScreen> {
                             Expanded(
                               child: Text(
                                 data['title'] ?? '(タイトルなし)',
-                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                                style: const TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                  color: AppColors.textMain,
+                                ),
                                 overflow: TextOverflow.ellipsis,
                               ),
                             ),
-                            const SizedBox(width: 8),
-                            Text(dateStr, style: const TextStyle(color: Colors.grey, fontSize: 12)),
+                            IconButton(
+                              icon: Icon(Icons.delete_outline, color: Colors.grey.shade400, size: 20),
+                              onPressed: () => _deleteNotification(doc.id),
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(),
+                            ),
                           ],
                         ),
-                        const SizedBox(height: 4),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: Colors.blue.shade50,
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Text(
-                            '対象: $targetStr',
-                            style: TextStyle(fontSize: 11, color: Colors.blue.shade800),
-                            overflow: TextOverflow.ellipsis,
-                          ),
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            const Icon(Icons.schedule, size: 16, color: AppColors.textSub),
+                            const SizedBox(width: 6),
+                            Text(
+                              dateStr,
+                              style: const TextStyle(color: AppColors.textSub, fontSize: 13),
+                            ),
+                          ],
                         ),
-                        const SizedBox(height: 8),
+                        const SizedBox(height: 6),
+                        Row(
+                          children: [
+                            const Icon(Icons.groups_outlined, size: 16, color: AppColors.textSub),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: Text(
+                                '対象: $targetStr',
+                                style: const TextStyle(color: AppColors.textSub, fontSize: 13),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 10),
                         Text(
                           data['body'] ?? data['detail'] ?? '',
                           maxLines: 3,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(color: Colors.black87),
-                        ),
-                        const SizedBox(height: 8),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.end,
-                          children: [
-                            TextButton.icon(
-                              icon: const Icon(Icons.edit, size: 18),
-                              label: const Text('編集'),
-                              onPressed: () => _openEditScreen(doc),
-                              style: TextButton.styleFrom(foregroundColor: Colors.blue),
-                            ),
-                            TextButton.icon(
-                              icon: const Icon(Icons.delete, size: 18),
-                              label: const Text('削除'),
-                              onPressed: () => _deleteNotification(doc.id),
-                              style: TextButton.styleFrom(foregroundColor: Colors.red),
-                            ),
-                          ],
+                          style: const TextStyle(color: AppColors.textMain, fontSize: 14, height: 1.5),
                         ),
                       ],
                     ),
@@ -136,6 +157,8 @@ class _NotificationScreenState extends State<NotificationScreen> {
             },
           );
         },
+          ),
+        ),
       ),
       // ★修正: イベント画面と同じFABデザイン
       floatingActionButton: FloatingActionButton(

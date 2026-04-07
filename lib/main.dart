@@ -101,20 +101,15 @@ class _AuthCheckWrapperState extends State<AuthCheckWrapper> with WidgetsBinding
       
       if (user != null) {
         final status = await _checkUserStatus(user.uid);
-        if (status.type != UserType.unknown) {
-          try {
-            final notificationService = NotificationService();
-            await notificationService.initialize().timeout(const Duration(seconds: 5));
-            await notificationService.saveTokenToFirestore().timeout(const Duration(seconds: 5));
-          } catch (e) {
-            debugPrint('Notification init skipped: $e');
-          }
-        }
         if (mounted) {
           setState(() {
             _status = status;
             _loading = false;
           });
+        }
+        // 通知初期化はバックグラウンドで実行（UIをブロックしない）
+        if (status.type != UserType.unknown) {
+          unawaited(_initNotificationsInBackground());
         }
       } else {
         if (mounted) {
@@ -125,6 +120,16 @@ class _AuthCheckWrapperState extends State<AuthCheckWrapper> with WidgetsBinding
         }
       }
     });
+  }
+
+  Future<void> _initNotificationsInBackground() async {
+    try {
+      final notificationService = NotificationService();
+      await notificationService.initialize().timeout(const Duration(seconds: 10));
+      await notificationService.saveTokenToFirestore().timeout(const Duration(seconds: 10));
+    } catch (e) {
+      debugPrint('Notification init skipped: $e');
+    }
   }
 
   Future<UserStatus> _checkUserStatus(String uid) async {
