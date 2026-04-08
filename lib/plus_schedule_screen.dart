@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'app_theme.dart';
 import 'plus_dashboard_screen.dart';
+import 'plus_shift_request_dialog.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/gestures.dart';
 import 'ai_chat_screen.dart';
@@ -3168,7 +3169,61 @@ final plusStaff = _staffList.where((s) =>
               ],
             ),
           ),
+          const SizedBox(width: 8),
+          // シフト希望入力アイコン
+          _buildShiftRequestIconButton(),
         ],
+      ),
+    );
+  }
+
+  // シフト希望入力のアイコンボタン（右上のビュー切替の横に配置）
+  Widget _buildShiftRequestIconButton() {
+    final target = resolveShiftRequestTargetMonth();
+    final deadline = DateTime(target.year, target.month - 1, 10);
+    final today = DateTime.now();
+    final t = DateTime(today.year, today.month, today.day);
+    final d = DateTime(deadline.year, deadline.month, deadline.day);
+    final daysLeft = d.difference(t).inDays;
+
+    // 色分け: 通常=オレンジ / 3日以内=赤 / 超過=濃い赤
+    late final Color color;
+    if (daysLeft < 0) {
+      color = Colors.red.shade700;
+    } else if (daysLeft <= 3) {
+      color = Colors.red.shade400;
+    } else {
+      color = Colors.orange.shade600;
+    }
+
+    final tooltipText =
+        '${target.year}年${target.month}月のシフト希望を入力\n締切: ${DateFormat('M/d', 'ja').format(deadline)}'
+        '${daysLeft < 0 ? '（超過 ${-daysLeft}日）' : '（あと$daysLeft日）'}';
+
+    return Tooltip(
+      message: '$tooltipText\n（長押しでシフト決定ビューを開く）',
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(8),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(8),
+          onTap: () {
+            showPlusShiftRequestDialog(context, target);
+          },
+          onLongPress: () async {
+            final saved =
+                await showPlusShiftDecisionDialog(context, target);
+            if (saved == true && mounted) {
+              await _loadShiftData();
+              setState(() {});
+            }
+          },
+          child: SizedBox(
+            width: 36,
+            height: 36,
+            child: Icon(Icons.how_to_vote_outlined, color: color, size: 20),
+          ),
+        ),
       ),
     );
   }
@@ -5733,6 +5788,92 @@ for (var staff in _staffList.where((s) => s['showInSchedule'] != false)) {
                         const SizedBox(height: 8),
                         const Text(
                           '※前月のシフトデータを今月にコピーします',
+                          style: TextStyle(fontSize: 11, color: AppColors.textSub),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  // シフト希望の取り込み
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.green.shade50,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(Icons.how_to_vote, size: 18, color: Colors.green.shade700),
+                            const SizedBox(width: 8),
+                            const Text(
+                              'シフト希望の取り込み',
+                              style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          '対象月: ${DateFormat('yyyy年M月', 'ja').format(_weekStart)}',
+                          style: const TextStyle(fontSize: 14),
+                        ),
+                        const SizedBox(height: 6),
+                        FutureBuilder<DocumentSnapshot>(
+                          future: FirebaseFirestore.instance
+                              .collection('plus_shift_requests')
+                              .doc(currentMonth)
+                              .get(),
+                          builder: (context, snapshot) {
+                            if (snapshot.connectionState == ConnectionState.waiting) {
+                              return const Text('提出状況を確認中...',
+                                  style: TextStyle(fontSize: 12, color: AppColors.textSub));
+                            }
+                            int count = 0;
+                            if (snapshot.hasData && snapshot.data!.exists) {
+                              final staffs = Map<String, dynamic>.from(
+                                  snapshot.data!.data() as Map? ?? {});
+                              final staffsMap =
+                                  Map<String, dynamic>.from(staffs['staffs'] ?? {});
+                              count = staffsMap.length;
+                            }
+                            return Text(
+                              '$count人が提出済み',
+                              style: TextStyle(
+                                  fontSize: 12,
+                                  color: count > 0 ? Colors.green.shade800 : AppColors.textSub,
+                                  fontWeight: count > 0 ? FontWeight.bold : FontWeight.normal),
+                            );
+                          },
+                        ),
+                        const SizedBox(height: 12),
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton.icon(
+                            onPressed: () async {
+                              Navigator.pop(dialogContext);
+                              final saved = await showPlusShiftDecisionDialog(
+                                context,
+                                DateTime(_weekStart.year, _weekStart.month, 1),
+                              );
+                              if (saved == true && mounted) {
+                                await _loadShiftData();
+                                setState(() {});
+                              }
+                            },
+                            icon: const Icon(Icons.edit_calendar, size: 18),
+                            label: const Text('シフトを決定する'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.green.shade700,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 10),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        const Text(
+                          '※希望をカレンダー上で確認しながら決定し、そのまま実シフトに反映できます',
                           style: TextStyle(fontSize: 11, color: AppColors.textSub),
                         ),
                       ],

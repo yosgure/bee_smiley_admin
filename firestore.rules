@@ -95,6 +95,9 @@ service cloud.firestore {
     match /plus_student_notes/{docId} {
       allow read, write: if isStaff();
     }
+    match /plus_shift_requests/{docId} {
+      allow read, write: if isStaff();
+    }
     match /plus_settings/{docId} {
       allow read, write: if isStaff();
     }
