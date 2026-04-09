@@ -5,6 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'app_theme.dart';
 import 'plus_dashboard_screen.dart';
 import 'plus_shift_request_dialog.dart';
+import 'plus_birthday_banner.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/gestures.dart';
 import 'ai_chat_screen.dart';
@@ -871,6 +872,7 @@ Map<String, dynamic>? _getCellMemo(DateTime date, int slotIndex) {
             'meetingUrls': child['meetingUrls'] ?? [],
             'familyUid': familyUid,
             'studentId': studentId,
+            'birthDate': child['birthDate'] ?? '',
           });
           }
         }
@@ -1235,6 +1237,8 @@ void _goToThisWeek() {
       children: [
         // トップバー（常に表示）
         _buildHeader(),
+        // 近日の誕生日バナー（プラス在籍生徒 / 2週間先まで）
+        PlusBirthdayBanner(students: _allStudents),
         // サイドメニュー + メインコンテンツ
         Expanded(
           child: Row(
@@ -3449,10 +3453,24 @@ final plusStaff = _staffList.where((s) =>
         }
 
         // シフトエントリが無い場合は「未設定 = 出勤予定」とみなす
-        // 明示的に isWorking == false の場合のみ休みとしてスキップ
-        if (entry != null && entry['isWorking'] == false) continue;
+        // status: 'full' | 'half' | 'off'（後方互換で無ければ isWorking から導出）
+        String entryStatus = 'full';
+        if (entry != null) {
+          final rawStatus = entry['shiftStatus'] as String?;
+          if (rawStatus != null) {
+            entryStatus = rawStatus;
+          } else if (entry['isWorking'] == false) {
+            entryStatus = 'off';
+          }
+        }
+        if (entryStatus == 'off') continue;
 
-        targetCounts[staffId] = targetCounts[staffId]! + slotTarget;
+        // 半休は目標を1減らす（安保=3 → 半休日は2）
+        final dayTarget =
+            entryStatus == 'half' ? (slotTarget - 1) : slotTarget;
+        if (dayTarget > 0) {
+          targetCounts[staffId] = targetCounts[staffId]! + dayTarget;
+        }
 
         int actual = 0;
         for (final teachers in dayLessons) {
@@ -5256,6 +5274,56 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
         .join('\n');
   }
 
+// 勤怠の3状態セグメント（出勤 / 半休 / 休）
+Widget _buildStatusSegment({
+  required String status,
+  required bool enabled,
+  required ValueChanged<String> onChanged,
+}) {
+  final items = <({String value, String label, Color color})>[
+    (value: 'full', label: '出勤', color: AppColors.primary),
+    (value: 'half', label: '半休', color: Colors.orange.shade700),
+    (value: 'off', label: '休', color: Colors.grey.shade500),
+  ];
+  return Container(
+    height: 28,
+    decoration: BoxDecoration(
+      color: Colors.grey.shade100,
+      borderRadius: BorderRadius.circular(6),
+      border: Border.all(color: Colors.grey.shade300),
+    ),
+    padding: const EdgeInsets.all(2),
+    child: Row(
+      children: items.map((item) {
+        final selected = status == item.value;
+        return Expanded(
+          child: GestureDetector(
+            onTap: enabled ? () => onChanged(item.value) : null,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 120),
+              decoration: BoxDecoration(
+                color: selected ? item.color : Colors.transparent,
+                borderRadius: BorderRadius.circular(4),
+              ),
+              alignment: Alignment.center,
+              child: Text(
+                item.label,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                  color: selected
+                      ? Colors.white
+                      : (enabled ? Colors.grey.shade700 : Colors.grey.shade400),
+                ),
+              ),
+            ),
+          ),
+        );
+      }).toList(),
+    ),
+  );
+}
+
 void _showShiftDialog(DateTime date) {
     final dateKey = _dateKey(date);
     final isMonday = date.weekday == DateTime.monday;
@@ -5278,13 +5346,18 @@ for (var staff in _staffList.where((s) => s['showInSchedule'] != false)) {
       );
       
       if (existingShift.isNotEmpty) {
+        // status は 'full' | 'half' | 'off'。後方互換で無ければ isWorking から変換
+        final rawStatus = existingShift['shiftStatus'] as String?;
+        final wasWorking = existingShift['isWorking'] ?? true;
+        final status = rawStatus ??
+            ((wasWorking == true) ? 'full' : 'off');
   staffShifts[staffId] = {
     'name': staff['name'],
     'staffType': staffType,
     'start': existingShift['start'] ?? '',
     'end': existingShift['end'] ?? '',
     'note': existingShift['note'] ?? '',
-    'isWorking': existingShift['isWorking'] ?? true,  // ← 保存されたisWorkingを読み込む
+    'shiftStatus': status,
   };
 } else {
         if (staffType == 'fulltime') {
@@ -5294,7 +5367,7 @@ for (var staff in _staffList.where((s) => s['showInSchedule'] != false)) {
             'start': staff['defaultShiftStart'] ?? '9:00',
             'end': staff['defaultShiftEnd'] ?? '18:00',
             'note': '',
-            'isWorking': !isMonday && !isHolidayDate,
+            'shiftStatus': (!isMonday && !isHolidayDate) ? 'full' : 'off',
           };
         } else {
           staffShifts[staffId] = {
@@ -5303,7 +5376,7 @@ for (var staff in _staffList.where((s) => s['showInSchedule'] != false)) {
             'start': '9:30',
             'end': '14:00',
             'note': '',
-            'isWorking': false,
+            'shiftStatus': 'off',
           };
         }
       }
@@ -5376,7 +5449,7 @@ for (var staff in _staffList.where((s) => s['showInSchedule'] != false)) {
             ),
             titlePadding: const EdgeInsets.fromLTRB(20, 16, 8, 0),
             content: SizedBox(
-              width: 520,
+              width: 600,
               height: 500,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -5396,7 +5469,7 @@ for (var staff in _staffList.where((s) => s['showInSchedule'] != false)) {
                         const SizedBox(width: 8),
                         Expanded(child: Text('備考', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.grey.shade700))),
                         const SizedBox(width: 8),
-                        SizedBox(width: 70, child: Text('出勤', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.grey.shade700), textAlign: TextAlign.center)),
+                        SizedBox(width: 140, child: Text('勤怠', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.grey.shade700), textAlign: TextAlign.center)),
                       ],
                     ),
                   ),
@@ -5407,8 +5480,10 @@ for (var staff in _staffList.where((s) => s['showInSchedule'] != false)) {
                       itemBuilder: (context, index) {
                         final staffId = sortedStaffIds[index];
                         final data = staffShifts[staffId]!;
-                        final isWorking = data['isWorking'] as bool;
-                        
+                        final status = data['shiftStatus'] as String? ?? 'full';
+                        // 半休時は時刻フィールドを隠して「半休」ラベルを表示
+                        final isWorking = status == 'full';
+
                         return Container(
                           padding: const EdgeInsets.symmetric(vertical: 10),
                           decoration: BoxDecoration(
@@ -5449,8 +5524,16 @@ for (var staff in _staffList.where((s) => s['showInSchedule'] != false)) {
                                       )
                                     : Center(
                                         child: Text(
-                                          '休み',
-                                          style: TextStyle(fontSize: 14, color: Colors.grey.shade500),
+                                          status == 'half' ? '半休' : '休み',
+                                          style: TextStyle(
+                                            fontSize: 14,
+                                            color: status == 'half'
+                                                ? Colors.orange.shade700
+                                                : Colors.grey.shade500,
+                                            fontWeight: status == 'half'
+                                                ? FontWeight.bold
+                                                : FontWeight.normal,
+                                          ),
                                         ),
                                       ),
                               ),
@@ -5495,23 +5578,17 @@ for (var staff in _staffList.where((s) => s['showInSchedule'] != false)) {
                                     : const SizedBox.shrink(),
                               ),
                               const SizedBox(width: 8),
-                              // 出勤トグル
+                              // 勤怠セグメント（出勤 / 半休 / 休）
                               SizedBox(
-                                width: 70,
-                                child: Transform.scale(
-                                  scale: 0.8,
-                                  child: Switch(
-                                    value: isWorking,
-                                    onChanged: isHolidayLocal ? null : (value) {
-                                      setDialogState(() {
-                                        data['isWorking'] = value;
-                                      });
-                                    },
-                                    activeColor: AppColors.primary,
-                                    activeTrackColor: AppColors.primary.withValues(alpha: 0.3),
-                                    inactiveThumbColor: Colors.grey.shade400,
-                                    inactiveTrackColor: Colors.grey.shade300,
-                                  ),
+                                width: 140,
+                                child: _buildStatusSegment(
+                                  status: status,
+                                  enabled: !isHolidayLocal,
+                                  onChanged: (newStatus) {
+                                    setDialogState(() {
+                                      data['shiftStatus'] = newStatus;
+                                    });
+                                  },
                                 ),
                               ),
                             ],
@@ -5544,7 +5621,7 @@ for (var staff in _staffList.where((s) => s['showInSchedule'] != false)) {
                                   isHolidayLocal = value;
                                   if (value) {
                                     for (var id in staffShifts.keys) {
-                                      staffShifts[id]!['isWorking'] = false;
+                                      staffShifts[id]!['shiftStatus'] = 'off';
                                     }
                                   }
                                 });
@@ -5568,20 +5645,26 @@ for (var staff in _staffList.where((s) => s['showInSchedule'] != false)) {
               ElevatedButton(
                 onPressed: () async {
   // ★★★ controllerから値を取得して保存 ★★★
-  // 休みのスタッフも含めて全員分保存する（isWorkingフラグ付き）
+  // 休みのスタッフも含めて全員分保存する
+  // shiftStatus: 'full' | 'half' | 'off'
+  // isWorking は後方互換用: full=true, half=true, off=false
   final shiftsToSave = <Map<String, dynamic>>[];
   for (var entry in staffShifts.entries) {
     final staffId = entry.key;
     final data = entry.value;
-    final isWorking = data['isWorking'] == true;
+    final status = (data['shiftStatus'] as String?) ?? 'full';
+    final isWorking = status != 'off';
+    // 時刻フィールドは 'full' のときのみ入力可
+    final hasTime = status == 'full';
     shiftsToSave.add({
       'staffId': staffId,
       'name': data['name'],
       'staffType': data['staffType'],
-      'start': isWorking ? (startControllers[staffId]?.text ?? '') : '',
-      'end': isWorking ? (endControllers[staffId]?.text ?? '') : '',
-      'note': isWorking ? (noteControllers[staffId]?.text ?? '') : '',
-      'isWorking': isWorking,  // ← 追加：休みかどうかを保存
+      'start': hasTime ? (startControllers[staffId]?.text ?? '') : '',
+      'end': hasTime ? (endControllers[staffId]?.text ?? '') : '',
+      'note': hasTime ? (noteControllers[staffId]?.text ?? '') : '',
+      'isWorking': isWorking,
+      'shiftStatus': status,
     });
   }
   await _saveShiftsAndHoliday(date, shiftsToSave, isHolidayLocal);

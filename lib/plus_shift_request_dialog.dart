@@ -25,7 +25,11 @@ class _PlusShiftRequestDialogState extends State<PlusShiftRequestDialog> {
   String? _myStaffName;
 
   // 自分の入力
+  // _myNgDays: 通常の休み希望
+  // _myNgStrongDays: どうしても休みたい（強い希望）
+  // ※ _myNgStrongDays ⊆ _myNgDays の関係を保つ
   final Set<int> _myNgDays = <int>{};
+  final Set<int> _myNgStrongDays = <int>{};
 
   String get _monthKey => DateFormat('yyyy-MM').format(widget.targetMonth);
   int get _daysInMonth =>
@@ -80,6 +84,8 @@ class _PlusShiftRequestDialogState extends State<PlusShiftRequestDialog> {
             final mine = Map<String, dynamic>.from(staffs[_myStaffId] as Map);
             final ngDays = (mine['ngDays'] as List?) ?? [];
             _myNgDays.addAll(ngDays.map((e) => (e as num).toInt()));
+            final ngStrong = (mine['ngDaysStrong'] as List?) ?? [];
+            _myNgStrongDays.addAll(ngStrong.map((e) => (e as num).toInt()));
           }
         }
       }
@@ -105,9 +111,13 @@ class _PlusShiftRequestDialogState extends State<PlusShiftRequestDialog> {
       final snapshot = await docRef.get();
 
       final ngList = _myNgDays.toList()..sort();
+      // 強希望は通常希望の部分集合として保存
+      final ngStrongList =
+          _myNgStrongDays.where(_myNgDays.contains).toList()..sort();
       final myEntry = <String, dynamic>{
         'staffName': _myStaffName ?? '',
         'ngDays': ngList,
+        'ngDaysStrong': ngStrongList,
         'updatedAt': FieldValue.serverTimestamp(),
       };
 
@@ -191,6 +201,24 @@ class _PlusShiftRequestDialogState extends State<PlusShiftRequestDialog> {
     );
   }
 
+  Widget _stateLegend(Color color, String label) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 14,
+          height: 14,
+          decoration: BoxDecoration(
+            color: color,
+            borderRadius: BorderRadius.circular(3),
+          ),
+        ),
+        const SizedBox(width: 4),
+        Text(label, style: const TextStyle(fontSize: 11)),
+      ],
+    );
+  }
+
   Widget _buildCalendar() {
     final firstDay =
         DateTime(widget.targetMonth.year, widget.targetMonth.month, 1);
@@ -238,6 +266,7 @@ class _PlusShiftRequestDialogState extends State<PlusShiftRequestDialog> {
                 return const Expanded(child: SizedBox(height: 44));
               }
               final isNg = _myNgDays.contains(day);
+              final isStrong = _myNgStrongDays.contains(day);
               final dow = DateTime(
                 widget.targetMonth.year,
                 widget.targetMonth.month,
@@ -248,25 +277,38 @@ class _PlusShiftRequestDialogState extends State<PlusShiftRequestDialog> {
                   : dow == 6
                       ? Colors.blue
                       : Colors.black87;
+              // 3状態: なし → 休 → 絶対休 → なし
+              final Color bgColor;
+              if (isStrong) {
+                bgColor = Colors.red.shade800;
+              } else if (isNg) {
+                bgColor = Colors.red.shade400;
+              } else {
+                bgColor = Colors.grey.shade50;
+              }
               return Expanded(
                 child: Padding(
                   padding: const EdgeInsets.all(2),
                   child: Material(
-                    color: isNg ? Colors.red.shade400 : Colors.grey.shade50,
+                    color: bgColor,
                     borderRadius: BorderRadius.circular(6),
                     child: InkWell(
                       borderRadius: BorderRadius.circular(6),
                       onTap: () {
                         setState(() {
-                          if (isNg) {
-                            _myNgDays.remove(day);
-                          } else {
+                          // なし → 休 → 絶対休 → なし の順に循環
+                          if (!isNg) {
                             _myNgDays.add(day);
+                          } else if (!isStrong) {
+                            _myNgStrongDays.add(day);
+                          } else {
+                            _myNgDays.remove(day);
+                            _myNgStrongDays.remove(day);
                           }
                         });
                       },
                       child: SizedBox(
-                        height: 44,
+                        height: 48,
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
@@ -278,7 +320,16 @@ class _PlusShiftRequestDialogState extends State<PlusShiftRequestDialog> {
                                 color: isNg ? Colors.white : dayColor,
                               ),
                             ),
-                            if (isNg)
+                            if (isStrong)
+                              const Text(
+                                '絶対休',
+                                style: TextStyle(
+                                  fontSize: 9,
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              )
+                            else if (isNg)
                               const Text(
                                 '休',
                                 style: TextStyle(
@@ -380,7 +431,7 @@ class _PlusShiftRequestDialogState extends State<PlusShiftRequestDialog> {
                                 const SizedBox(width: 6),
                                 const Expanded(
                                   child: Text(
-                                    '日付をタップして休み希望日を選択してください',
+                                    '日付をタップ: 1回目「休み希望」→ 2回目「絶対休」→ 3回目 解除',
                                     style: TextStyle(fontSize: 12),
                                   ),
                                 ),
@@ -390,6 +441,15 @@ class _PlusShiftRequestDialogState extends State<PlusShiftRequestDialog> {
                           const SizedBox(height: 12),
                           // カレンダー
                           _buildCalendar(),
+                          const SizedBox(height: 8),
+                          // 凡例
+                          Row(
+                            children: [
+                              _stateLegend(Colors.red.shade400, '休み希望'),
+                              const SizedBox(width: 12),
+                              _stateLegend(Colors.red.shade800, '絶対休'),
+                            ],
+                          ),
                           const SizedBox(height: 8),
                         ],
                       ),
@@ -485,6 +545,8 @@ class _PlusShiftDecisionDialogState extends State<PlusShiftDecisionDialog> {
 
   // 提出データ（希望） staffId → Set<int days>
   final Map<String, Set<int>> _requestedOffDays = {};
+  // 提出データ（強希望: 絶対休） staffId → Set<int days>
+  final Map<String, Set<int>> _requestedStrongOffDays = {};
 
   // 現在の決定状態: day(int) → Set<staffId>
   // 初期値: 希望データ + 既存 plus_shifts の isWorking:false を統合
@@ -538,6 +600,10 @@ class _PlusShiftDecisionDialogState extends State<PlusShiftDecisionDialog> {
                 .map((e) => (e as num).toInt())
                 .toSet();
             _requestedOffDays[staffId] = days;
+            final strongDays = ((entry['ngDaysStrong'] as List?) ?? [])
+                .map((e) => (e as num).toInt())
+                .toSet();
+            _requestedStrongOffDays[staffId] = strongDays;
             for (final d in days) {
               _offDays.putIfAbsent(d, () => <String>{}).add(staffId);
             }
@@ -719,7 +785,25 @@ class _PlusShiftDecisionDialogState extends State<PlusShiftDecisionDialog> {
                                 style: const TextStyle(fontSize: 13),
                               ),
                             ),
-                            if ((_requestedOffDays[staff['id']] ?? {})
+                            if ((_requestedStrongOffDays[staff['id']] ?? {})
+                                .contains(day))
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: Colors.red.shade800,
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: const Text(
+                                  '絶対休',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              )
+                            else if ((_requestedOffDays[staff['id']] ?? {})
                                 .contains(day))
                               Container(
                                 padding: const EdgeInsets.symmetric(
@@ -875,10 +959,12 @@ class _PlusShiftDecisionDialogState extends State<PlusShiftDecisionDialog> {
                     child: Row(
                       children: [
                         _legendSwatch(Colors.red.shade400, '休み確定'),
-                        const SizedBox(width: 16),
+                        const SizedBox(width: 12),
                         _legendSwatch(
                             Colors.orange.shade100, '希望（未確定）',
                             borderColor: Colors.orange.shade400),
+                        const SizedBox(width: 12),
+                        _legendSwatch(Colors.red.shade800, '絶対休'),
                         const Spacer(),
                         Text(
                           '※「シフトに反映」を押すと実シフトに書き込まれます',
@@ -1040,25 +1126,53 @@ class _PlusShiftDecisionDialogState extends State<PlusShiftDecisionDialog> {
       );
       final isRequested =
           (_requestedOffDays[staffId] ?? {}).contains(day);
+      final isStrong =
+          (_requestedStrongOffDays[staffId] ?? {}).contains(day);
+      final Color chipBg;
+      final Color chipFg;
+      Border? chipBorder;
+      if (isStrong) {
+        chipBg = Colors.red.shade800;
+        chipFg = Colors.white;
+      } else if (isRequested) {
+        chipBg = Colors.orange.shade100;
+        chipFg = Colors.orange.shade900;
+        chipBorder = Border.all(color: Colors.orange.shade400);
+      } else {
+        chipBg = Colors.red.shade400;
+        chipFg = Colors.white;
+      }
       chips.add(
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
           decoration: BoxDecoration(
-            color: isRequested
-                ? Colors.orange.shade100
-                : Colors.red.shade400,
+            color: chipBg,
             borderRadius: BorderRadius.circular(4),
-            border: isRequested
-                ? Border.all(color: Colors.orange.shade400)
-                : null,
+            border: chipBorder,
           ),
-          child: Text(
-            staff['name'] as String,
-            style: TextStyle(
-              fontSize: 10,
-              color: isRequested ? Colors.orange.shade900 : Colors.white,
-              fontWeight: FontWeight.bold,
-            ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (isStrong) ...[
+                const Text(
+                  '!',
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(width: 2),
+              ],
+              Text(
+                staff['name'] as String,
+                style: TextStyle(
+                  fontSize: 10,
+                  color: chipFg,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
           ),
         ),
       );
