@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'dart:typed_data';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart';
@@ -11,7 +13,9 @@ import 'package:image_picker/image_picker.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/gestures.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:video_player/video_player.dart';
 import 'app_theme.dart';
+import 'notification_service.dart';
 
 // ==========================================
 // 1. メイン画面 (ChatListScreen)
@@ -32,10 +36,100 @@ class _ChatListScreenState extends State<ChatListScreen> {
   String _myDisplayName = '';
   final Map<String, String> _drafts = {};
 
+  StreamSubscription<String>? _pendingChatRoomSub;
+
   @override
   void initState() {
     super.initState();
     _initStream();
+    _setupPendingChatRoomListener();
+  }
+
+  @override
+  void dispose() {
+    _pendingChatRoomSub?.cancel();
+    super.dispose();
+  }
+
+  void _setupPendingChatRoomListener() {
+    final service = NotificationService();
+    // 既に保留の roomId があれば即座に開く
+    final pending = service.pendingChatRoomId;
+    if (pending != null && pending.isNotEmpty) {
+      service.pendingChatRoomId = null;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _openRoomFromNotification(pending);
+      });
+    }
+    _pendingChatRoomSub = service.pendingChatRoomStream.listen((roomId) {
+      if (!mounted) return;
+      service.pendingChatRoomId = null;
+      _openRoomFromNotification(roomId);
+    });
+  }
+
+  Future<void> _openRoomFromNotification(String roomId) async {
+    try {
+      final doc = await FirebaseFirestore.instance
+          .collection('chat_rooms')
+          .doc(roomId)
+          .get();
+      if (!mounted || !doc.exists) return;
+
+      final isWide =
+          MediaQuery.of(context).size.width >= AppBreakpoints.desktop;
+      if (isWide) {
+        setState(() => _selectedRoomId = roomId);
+        return;
+      }
+
+      // ナロー: チャット詳細画面を直接 push
+      final data = doc.data() as Map<String, dynamic>;
+      String roomName = (data['groupName'] ?? '').toString().trim();
+      final memberNames =
+          Map<String, dynamic>.from(data['names'] ?? {});
+      if (roomName.isEmpty) {
+        final others = memberNames.entries
+            .where((e) => e.key != currentUser?.uid)
+            .map((e) => e.value.toString().trim())
+            .toList();
+        if (others.isNotEmpty) roomName = others.join(', ');
+      }
+      if (roomName.isEmpty) roomName = '名称未設定';
+      final isGroup = ((data['members'] as List?) ?? []).length > 2 ||
+          (data['groupName'] != null &&
+              (data['groupName'] as String).isNotEmpty);
+
+      if (!mounted) return;
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => Scaffold(
+            appBar: PreferredSize(
+              preferredSize: const Size.fromHeight(40),
+              child: SafeArea(
+                child: _buildCommonHeader(
+                  roomName,
+                  showBackButton: true,
+                  actions: [
+                    _buildChatMenu(roomId, isGroup, memberNames, false),
+                  ],
+                ),
+              ),
+            ),
+            body: ChatDetailView(
+              roomId: roomId,
+              roomName: roomName,
+              isGroup: isGroup,
+              memberNames: memberNames,
+              showAppBar: false,
+            ),
+          ),
+        ),
+      );
+    } catch (e) {
+      debugPrint('通知からのチャット遷移失敗: $e');
+    }
   }
 
   void _initStream() {
@@ -840,6 +934,44 @@ class _ChatDetailViewState extends State<ChatDetailView> {
   // デフォルトで＋（折りたたみ）。タップすると展開して添付アイコンが出る
   bool _iconsExpanded = false;
 
+  // 返信対象: {messageId, senderName, preview, type}
+  Map<String, dynamic>? _replyTo;
+
+  void _startReply(String msgId, String type, String text) {
+    final senderId = _lastMessageCache[msgId]?['senderId'] as String?;
+    final senderName = senderId == currentUser?.uid
+        ? (_myNameCache ?? '自分')
+        : (widget.memberNames[senderId] ?? '相手').toString();
+    String preview;
+    if (type == 'image') {
+      preview = '📷 画像';
+    } else if (type == 'file') {
+      preview = '📎 ファイル';
+    } else if (type == 'video') {
+      preview = '🎬 動画';
+    } else {
+      preview = text;
+    }
+    setState(() {
+      _replyTo = {
+        'messageId': msgId,
+        'senderName': senderName,
+        'preview': preview,
+        'type': type,
+      };
+    });
+    // 入力欄にフォーカス
+    FocusScope.of(context).requestFocus(_focusNode);
+  }
+
+  void _cancelReply() {
+    setState(() => _replyTo = null);
+  }
+
+  // 返信時の senderName 特定のためのキャッシュ
+  final Map<String, Map<String, dynamic>> _lastMessageCache = {};
+  String? _myNameCache;
+
   @override
   void initState() {
     super.initState();
@@ -962,6 +1094,7 @@ class _ChatDetailViewState extends State<ChatDetailView> {
           mainAxisSize: MainAxisSize.min,
           children: [
             if (_isUploading) const Padding(padding: EdgeInsets.only(bottom: 8), child: LinearProgressIndicator()),
+            if (_replyTo != null) _buildReplyPreviewBar(),
             // 入力エリア全体を角丸コンテナで囲む
             Container(
               decoration: BoxDecoration(
@@ -1013,6 +1146,12 @@ class _ChatDetailViewState extends State<ChatDetailView> {
                           tooltip: '画像を送信',
                           onPressed: _isUploading ? null : _pickAndUploadImage,
                         ),
+                        IconButton(
+                          icon: Icon(Icons.videocam_outlined, color: _isUploading ? Colors.grey.shade300 : Colors.grey.shade600, size: 22),
+                          constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+                          tooltip: '動画を送信',
+                          onPressed: _isUploading ? null : _pickAndUploadVideo,
+                        ),
                         const Spacer(),
                         // 送信ボタン（青丸）
                         GestureDetector(
@@ -1039,9 +1178,17 @@ class _ChatDetailViewState extends State<ChatDetailView> {
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8), color: Colors.white,
       child: SafeArea(
         top: false,
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.end,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
+            if (_replyTo != null)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: _buildReplyPreviewBar(),
+              ),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
             if (!_iconsExpanded)
               Padding(
                 padding: const EdgeInsets.only(bottom: 6),
@@ -1062,6 +1209,10 @@ class _ChatDetailViewState extends State<ChatDetailView> {
               Padding(
                 padding: const EdgeInsets.only(bottom: 4),
                 child: IconButton(icon: const Icon(Icons.image, color: Colors.grey, size: 20), constraints: const BoxConstraints(minWidth: 28, minHeight: 28), padding: EdgeInsets.zero, onPressed: _isUploading ? null : _pickAndUploadImage),
+              ),
+              Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: IconButton(icon: const Icon(Icons.videocam, color: Colors.grey, size: 20), constraints: const BoxConstraints(minWidth: 28, minHeight: 28), padding: EdgeInsets.zero, onPressed: _isUploading ? null : _pickAndUploadVideo),
               ),
             ],
             const SizedBox(width: 4),
@@ -1086,6 +1237,62 @@ class _ChatDetailViewState extends State<ChatDetailView> {
             ),
           ],
         ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildReplyPreviewBar() {
+    final senderName = (_replyTo?['senderName'] ?? '') as String;
+    final preview = (_replyTo?['preview'] ?? '') as String;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 6),
+      padding: const EdgeInsets.fromLTRB(10, 6, 6, 6),
+      decoration: BoxDecoration(
+        color: Colors.blue.shade50,
+        borderRadius: BorderRadius.circular(8),
+        border: const Border(
+          left: BorderSide(color: AppColors.primary, width: 3),
+        ),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.reply, size: 14, color: AppColors.primary),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  '$senderName への返信',
+                  style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.primary,
+                  ),
+                ),
+                const SizedBox(height: 1),
+                Text(
+                  preview,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 12, color: Colors.black54),
+                ),
+              ],
+            ),
+          ),
+          InkWell(
+            onTap: _cancelReply,
+            borderRadius: BorderRadius.circular(12),
+            child: const Padding(
+              padding: EdgeInsets.all(4),
+              child: Icon(Icons.close, size: 16, color: Colors.grey),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -1107,8 +1314,51 @@ class _ChatDetailViewState extends State<ChatDetailView> {
     return spans;
   }
 
+  Widget _buildReplyQuote(Map<String, dynamic> replyTo, bool isMe) {
+    final senderName = (replyTo['senderName'] ?? '') as String;
+    final preview = (replyTo['preview'] ?? '') as String;
+    final bgColor =
+        isMe ? Colors.white.withOpacity(0.5) : Colors.white.withOpacity(0.7);
+    final accentColor = isMe ? AppColors.primary : Colors.grey.shade600;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 6),
+      padding: const EdgeInsets.fromLTRB(8, 4, 8, 5),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(6),
+        border: Border(left: BorderSide(color: accentColor, width: 3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            senderName,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.bold,
+              color: accentColor,
+            ),
+          ),
+          const SizedBox(height: 1),
+          Text(
+            preview,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontSize: 12, color: Colors.black54),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildMessageItem(Map<String, dynamic> msg, String msgId) {
+    // キャッシュ（返信時の senderName 取得用）
+    _lastMessageCache[msgId] = msg;
     final isMe = msg['senderId'] == currentUser?.uid;
+    if (isMe && _myNameCache == null) {
+      _myNameCache = widget.memberNames[currentUser?.uid] as String?;
+    }
     final String text = msg['text'] ?? '';
     final String type = msg['type'] ?? 'text';
     final stamps = Map<String, dynamic>.from(msg['stamps'] ?? {});
@@ -1120,12 +1370,41 @@ class _ChatDetailViewState extends State<ChatDetailView> {
     if (msg['createdAt'] != null) { final ts = msg['createdAt'] as Timestamp; timeStr = DateFormat('HH:mm').format(ts.toDate()); }
     String senderName = '';
     if (widget.isGroup && !isMe) senderName = widget.memberNames[msg['senderId']] ?? '不明';
+    final Map<String, dynamic>? replyTo =
+        msg['replyTo'] is Map ? Map<String, dynamic>.from(msg['replyTo']) : null;
 
     Widget content;
-    final bool isImageOnly = type == 'image' && text.isEmpty;
+    final bool isImageOnly = (type == 'image' || type == 'video') && text.isEmpty;
     if (type == 'image') {
       content = Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         GestureDetector(onTap: () => _showImagePreview(msg['url']), child: ClipRRect(borderRadius: BorderRadius.circular(12), child: CachedNetworkImage(imageUrl: msg['url'], width: 200, fit: BoxFit.cover, placeholder: (c, u) => Container(width: 200, height: 150, decoration: BoxDecoration(color: Colors.grey.shade200, borderRadius: BorderRadius.circular(12)), child: const Center(child: SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2)))), errorWidget: (c, u, e) => const Icon(Icons.broken_image)))),
+        if (text.isNotEmpty) ...[const SizedBox(height: 8), Text.rich(TextSpan(children: _buildTextSpansWithLinks(text)))]
+      ]);
+    } else if (type == 'video') {
+      final vUrl = (msg['url'] ?? '') as String;
+      content = Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        GestureDetector(
+          onTap: () => _showVideoPlayer(vUrl),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: Container(
+              width: 220,
+              height: 140,
+              color: Colors.black,
+              child: const Stack(
+                alignment: Alignment.center,
+                children: [
+                  Icon(Icons.videocam, color: Colors.white24, size: 56),
+                  CircleAvatar(
+                    radius: 24,
+                    backgroundColor: Colors.white70,
+                    child: Icon(Icons.play_arrow, color: Colors.black, size: 32),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
         if (text.isNotEmpty) ...[const SizedBox(height: 8), Text.rich(TextSpan(children: _buildTextSpansWithLinks(text)))]
       ]);
     } else if (type == 'file') {
@@ -1260,7 +1539,7 @@ class _ChatDetailViewState extends State<ChatDetailView> {
                     Column(crossAxisAlignment: CrossAxisAlignment.end, children: [if (readText.isNotEmpty) Text(readText, style: const TextStyle(fontSize: 10, color: Colors.grey)), Text(timeStr, style: const TextStyle(fontSize: 10, color: Colors.grey))]),
                     const SizedBox(width: 8),
                   ],
-                  Flexible(child: isImageOnly ? content : Container(padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12), decoration: BoxDecoration(color: isMe ? const Color(0xFFD6EEFF) : const Color(0xFFF0F0F0), borderRadius: BorderRadius.circular(12)), child: content)),
+                  Flexible(child: isImageOnly && replyTo == null ? content : Container(padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9), decoration: BoxDecoration(color: isMe ? const Color(0xFFD6EEFF) : const Color(0xFFF0F0F0), borderRadius: BorderRadius.circular(12)), child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [if (replyTo != null) _buildReplyQuote(replyTo, isMe), content]))),
                   if (!isMe) ...[
                     const SizedBox(width: 8),
                     Text(timeStr, style: const TextStyle(fontSize: 10, color: Colors.grey)),
@@ -1293,7 +1572,7 @@ class _ChatDetailViewState extends State<ChatDetailView> {
       if (value == null) return;
       switch (value) {
         case 'stamp': _showEmojiPicker(msgId); break;
-        case 'reply': String preview = type == 'image' ? '📷 画像' : (type == 'file' ? '📎 ファイル' : text); _textController.text = '> $preview\n'; break;
+        case 'reply': _startReply(msgId, type, text); break;
         case 'edit': _showEditDialog(msgId, text); break;
         case 'delete': _deleteMessage(msgId); break;
       }
@@ -1301,34 +1580,132 @@ class _ChatDetailViewState extends State<ChatDetailView> {
   }
 
   void _showActionSheet(String msgId, bool isMe, String type, String text) {
-    showModalBottomSheet(
-      context: context, backgroundColor: Colors.white, shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
-      builder: (sheetContext) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ListTile(leading: const Icon(Icons.emoji_emotions_outlined), title: const Text("スタンプを追加"), onTap: () { Navigator.pop(sheetContext); _showEmojiPicker(msgId); }),
-              if (type == 'text' && text.isNotEmpty)
-                ListTile(
-                  leading: const Icon(Icons.copy),
-                  title: const Text("コピー"),
-                  onTap: () {
-                    Navigator.pop(sheetContext);
-                    Clipboard.setData(ClipboardData(text: text));
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('コピーしました'), duration: Duration(seconds: 1)),
-                    );
-                  },
-                ),
-              ListTile(leading: const Icon(Icons.reply), title: const Text("返信"), onTap: () { Navigator.pop(sheetContext); String preview = type == 'image' ? '📷 画像' : (type == 'file' ? '📎 ファイル' : text); _textController.text = '> $preview\n'; }),
-              if (isMe && type == "text") ListTile(leading: const Icon(Icons.edit), title: const Text("編集"), onTap: () { Navigator.pop(sheetContext); _showEditDialog(msgId, text); }),
-              if (isMe) ListTile(leading: const Icon(Icons.delete, color: Colors.red), title: const Text("削除", style: TextStyle(color: Colors.red)), onTap: () { Navigator.pop(sheetContext); _deleteMessage(msgId); }),
-              ListTile(leading: const Icon(Icons.close), title: const Text("キャンセル"), onTap: () => Navigator.pop(sheetContext)),
-            ],
+    showCupertinoModalPopup(
+      context: context,
+      builder: (sheetContext) => CupertinoActionSheet(
+        message: _buildQuickReactionBar(sheetContext, msgId),
+        actions: [
+          if (type == 'text' && text.isNotEmpty)
+            CupertinoActionSheetAction(
+              onPressed: () {
+                Navigator.pop(sheetContext);
+                Clipboard.setData(ClipboardData(text: text));
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                      content: Text('コピーしました'),
+                      duration: Duration(seconds: 1)),
+                );
+              },
+              child: const Text('コピー'),
+            ),
+          if (type == 'text' && text.isNotEmpty)
+            CupertinoActionSheetAction(
+              onPressed: () {
+                Navigator.pop(sheetContext);
+                _showPartialCopyDialog(text);
+              },
+              child: const Text('部分コピー'),
+            ),
+          CupertinoActionSheetAction(
+            onPressed: () {
+              Navigator.pop(sheetContext);
+              _startReply(msgId, type, text);
+            },
+            child: const Text('返信'),
+          ),
+          CupertinoActionSheetAction(
+            onPressed: () {
+              Navigator.pop(sheetContext);
+              _showEmojiPicker(msgId);
+            },
+            child: const Text('他のスタンプ…'),
+          ),
+          if (isMe && type == 'text')
+            CupertinoActionSheetAction(
+              onPressed: () {
+                Navigator.pop(sheetContext);
+                _showEditDialog(msgId, text);
+              },
+              child: const Text('編集'),
+            ),
+          if (isMe)
+            CupertinoActionSheetAction(
+              isDestructiveAction: true,
+              onPressed: () {
+                Navigator.pop(sheetContext);
+                _deleteMessage(msgId);
+              },
+              child: const Text('削除'),
+            ),
+        ],
+        cancelButton: CupertinoActionSheetAction(
+          onPressed: () => Navigator.pop(sheetContext),
+          child: const Text('キャンセル'),
+        ),
+      ),
+    );
+  }
+
+  // クイックスタンプバー: よく使うスタンプをワンタップで送信
+  Widget _buildQuickReactionBar(BuildContext sheetContext, String msgId) {
+    const quickEmojis = ['👍', '❤️', '😄', '🎉', '🙏', '🆗'];
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        children: [
+          for (final e in quickEmojis)
+            GestureDetector(
+              onTap: () {
+                Navigator.pop(sheetContext);
+                _toggleReaction(msgId, e);
+              },
+              behavior: HitTestBehavior.opaque,
+              child: Container(
+                width: 40,
+                height: 40,
+                alignment: Alignment.center,
+                child: Text(e, style: const TextStyle(fontSize: 26)),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  // 部分コピー: SelectableText で範囲選択させてネイティブのコピー操作を使わせる
+  void _showPartialCopyDialog(String text) {
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        title: const Text('部分コピー', style: TextStyle(fontSize: 16)),
+        content: SizedBox(
+          width: 360,
+          child: SingleChildScrollView(
+            child: SelectableText(
+              text,
+              style: const TextStyle(
+                fontSize: 15,
+                height: 1.5,
+                fontFamily: 'NotoSansJP',
+                fontFamilyFallback: ['Hiragino Sans', 'Roboto', 'sans-serif'],
+              ),
+              contextMenuBuilder: (context, editableTextState) {
+                return AdaptiveTextSelectionToolbar.editableText(
+                  editableTextState: editableTextState,
+                );
+              },
+            ),
           ),
         ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('閉じる'),
+          ),
+        ],
       ),
     );
   }
@@ -1361,6 +1738,54 @@ class _ChatDetailViewState extends State<ChatDetailView> {
     finally { setState(() => _isUploading = false); }
   }
 
+  Future<void> _pickAndUploadVideo() async {
+    _dismissKeyboard();
+    final picker = ImagePicker();
+    final XFile? video = await picker.pickVideo(
+      source: ImageSource.gallery,
+      maxDuration: const Duration(minutes: 10),
+    );
+    if (video == null) return;
+    setState(() => _isUploading = true);
+    try {
+      final Uint8List bytes = await video.readAsBytes();
+      // 50MB 制限
+      if (bytes.length > 50 * 1024 * 1024) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('動画サイズが大きすぎます (50MBまで)')),
+          );
+        }
+        return;
+      }
+      final String ext = video.name.split('.').last.toLowerCase();
+      final String contentType =
+          ext == 'mov' ? 'video/quicktime' : 'video/mp4';
+      final String fileName =
+          '${DateTime.now().millisecondsSinceEpoch}_${video.name}';
+      final ref = FirebaseStorage.instance
+          .ref()
+          .child('chat_uploads/${widget.roomId}/$fileName');
+      await ref.putData(bytes, SettableMetadata(contentType: contentType));
+      final url = await ref.getDownloadURL();
+      await _sendMessage(
+        type: 'video',
+        url: url,
+        fileName: video.name,
+        text: _textController.text,
+        fileSize: bytes.length,
+      );
+      _textController.clear();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('動画アップロード失敗: $e')));
+      }
+    } finally {
+      if (mounted) setState(() => _isUploading = false);
+    }
+  }
+
   Future<void> _pickAndUploadFile() async {
     _dismissKeyboard();
     final result = await FilePicker.platform.pickFiles(type: FileType.any, withData: true);
@@ -1380,17 +1805,34 @@ class _ChatDetailViewState extends State<ChatDetailView> {
     finally { setState(() => _isUploading = false); }
   }
 
-  Future<void> _sendMessage({String type = 'text', String? url, String? fileName, String? text, int? fileSize}) async {
+  Future<void> _sendMessage({String type = 'text', String? url, String? fileName, String? text, int? fileSize, String? thumbnailUrl, int? durationMs}) async {
     final msgText = text ?? _textController.text;
     if (msgText.trim().isEmpty && type == 'text') return;
     _dismissKeyboard();
     if (type == 'text') _textController.clear();
     final roomRef = FirebaseFirestore.instance.collection('chat_rooms').doc(widget.roomId);
-    await roomRef.collection('messages').add({'senderId': currentUser!.uid, 'text': msgText, 'type': type, 'url': url, 'fileName': fileName, 'fileSize': fileSize, 'stamps': {}, 'createdAt': FieldValue.serverTimestamp(), 'readBy': [currentUser!.uid]});
+    final data = <String, dynamic>{
+      'senderId': currentUser!.uid,
+      'text': msgText,
+      'type': type,
+      'url': url,
+      'fileName': fileName,
+      'fileSize': fileSize,
+      'stamps': {},
+      'createdAt': FieldValue.serverTimestamp(),
+      'readBy': [currentUser!.uid],
+    };
+    if (thumbnailUrl != null) data['thumbnailUrl'] = thumbnailUrl;
+    if (durationMs != null) data['durationMs'] = durationMs;
+    if (_replyTo != null) data['replyTo'] = _replyTo;
+    await roomRef.collection('messages').add(data);
     String lastMsg = msgText;
     if (type == 'image') lastMsg = '画像を送信しました';
     if (type == 'file') lastMsg = 'ファイルを送信しました';
+    if (type == 'video') lastMsg = '動画を送信しました';
     await roomRef.update({'lastMessage': lastMsg, 'lastMessageTime': FieldValue.serverTimestamp()});
+    // 返信状態をクリア
+    if (_replyTo != null) setState(() => _replyTo = null);
   }
 
   Future<void> _toggleReaction(String msgId, String emoji) async {
@@ -1431,6 +1873,7 @@ class _ChatDetailViewState extends State<ChatDetailView> {
           String lastMsg = d['text'] ?? '';
           if (d['type'] == 'image') lastMsg = '画像を送信しました';
           if (d['type'] == 'file') lastMsg = 'ファイルを送信しました';
+          if (d['type'] == 'video') lastMsg = '動画を送信しました';
           await roomRef.update({'lastMessage': lastMsg, 'lastMessageTime': d['createdAt']});
         } else {
           await roomRef.update({'lastMessage': '', 'lastMessageTime': FieldValue.serverTimestamp()});
@@ -1514,6 +1957,15 @@ class _ChatDetailViewState extends State<ChatDetailView> {
     return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
   }
 
+  void _showVideoPlayer(String url) {
+    if (url.isEmpty) return;
+    showDialog(
+      context: context,
+      barrierColor: Colors.black,
+      builder: (_) => VideoPlayerDialog(url: url),
+    );
+  }
+
   void _showFilePreview(String url, String fileName) async {
     final ext = fileName.split('.').last.toLowerCase();
     final isImage = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'].contains(ext);
@@ -1580,6 +2032,179 @@ class _HoverableMessageRowState extends State<_HoverableMessageRow> with Automat
       onEnter: (_) => setState(() => _isHovering = true),
       onExit: (_) => setState(() => _isHovering = false),
       child: widget.builder(_isHovering),
+    );
+  }
+}
+
+// ==========================================
+// 動画再生ダイアログ
+// ==========================================
+class VideoPlayerDialog extends StatefulWidget {
+  final String url;
+  const VideoPlayerDialog({super.key, required this.url});
+
+  @override
+  State<VideoPlayerDialog> createState() => _VideoPlayerDialogState();
+}
+
+class _VideoPlayerDialogState extends State<VideoPlayerDialog> {
+  VideoPlayerController? _controller;
+  bool _initialized = false;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _init();
+  }
+
+  Future<void> _init() async {
+    try {
+      final c = VideoPlayerController.networkUrl(Uri.parse(widget.url));
+      await c.initialize();
+      if (!mounted) {
+        c.dispose();
+        return;
+      }
+      setState(() {
+        _controller = c;
+        _initialized = true;
+      });
+      c.play();
+    } catch (e) {
+      if (mounted) setState(() => _error = '$e');
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller?.dispose();
+    super.dispose();
+  }
+
+  String _fmtDuration(Duration d) {
+    final m = d.inMinutes.toString().padLeft(2, '0');
+    final s = (d.inSeconds % 60).toString().padLeft(2, '0');
+    return '$m:$s';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: Colors.black,
+      insetPadding: const EdgeInsets.all(12),
+      child: Stack(
+        children: [
+          Center(
+            child: _error != null
+                ? Text('再生できません: $_error',
+                    style: const TextStyle(color: Colors.white))
+                : !_initialized || _controller == null
+                    ? const CircularProgressIndicator(color: Colors.white)
+                    : AspectRatio(
+                        aspectRatio: _controller!.value.aspectRatio,
+                        child: Stack(
+                          alignment: Alignment.bottomCenter,
+                          children: [
+                            GestureDetector(
+                              onTap: () {
+                                setState(() {
+                                  if (_controller!.value.isPlaying) {
+                                    _controller!.pause();
+                                  } else {
+                                    _controller!.play();
+                                  }
+                                });
+                              },
+                              child: VideoPlayer(_controller!),
+                            ),
+                            // コントロール
+                            Container(
+                              color: Colors.black45,
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 12, vertical: 6),
+                              child: Row(
+                                children: [
+                                  IconButton(
+                                    onPressed: () {
+                                      setState(() {
+                                        if (_controller!.value.isPlaying) {
+                                          _controller!.pause();
+                                        } else {
+                                          _controller!.play();
+                                        }
+                                      });
+                                    },
+                                    icon: Icon(
+                                      _controller!.value.isPlaying
+                                          ? Icons.pause
+                                          : Icons.play_arrow,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                  Expanded(
+                                    child: ValueListenableBuilder<
+                                        VideoPlayerValue>(
+                                      valueListenable: _controller!,
+                                      builder: (_, value, __) {
+                                        final total = value.duration;
+                                        final pos = value.position;
+                                        return Row(
+                                          children: [
+                                            Text(
+                                              _fmtDuration(pos),
+                                              style: const TextStyle(
+                                                  color: Colors.white,
+                                                  fontSize: 12),
+                                            ),
+                                            Expanded(
+                                              child: Slider(
+                                                value: pos.inMilliseconds
+                                                    .toDouble()
+                                                    .clamp(
+                                                        0,
+                                                        total.inMilliseconds
+                                                            .toDouble()),
+                                                max: total.inMilliseconds
+                                                    .toDouble()
+                                                    .clamp(1, double.infinity),
+                                                onChanged: (v) {
+                                                  _controller!.seekTo(Duration(
+                                                      milliseconds:
+                                                          v.toInt()));
+                                                },
+                                                activeColor: Colors.white,
+                                                inactiveColor: Colors.white24,
+                                              ),
+                                            ),
+                                            Text(
+                                              _fmtDuration(total),
+                                              style: const TextStyle(
+                                                  color: Colors.white,
+                                                  fontSize: 12),
+                                            ),
+                                          ],
+                                        );
+                                      },
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+          ),
+          Positioned(
+            top: 8,
+            right: 8,
+            child: IconButton(
+              icon: const Icon(Icons.close, color: Colors.white),
+              onPressed: () => Navigator.of(context).pop(),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

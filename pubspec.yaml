@@ -42,6 +42,9 @@ dependencies:
   file_picker: ^10.3.6
   csv: ^6.0.0
 
+  # Video
+  video_player: ^2.9.2
+
   # Share & HTTP
   share_plus: ^10.1.4
   http: ^1.2.0
