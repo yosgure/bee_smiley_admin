@@ -200,7 +200,13 @@ exports.onChatMessageCreated = onDocumentCreated(
         tokens: uniqueTokens,
         notification: {
           title: `${senderName}`,
-          body: message.type === "image" ? "画像を送信しました" : message.text,
+          body: message.type === "image"
+            ? "画像を送信しました"
+            : message.type === "video"
+            ? "動画を送信しました"
+            : message.type === "file"
+            ? "ファイルを送信しました"
+            : message.text,
         },
         data: {
           type: "chat",

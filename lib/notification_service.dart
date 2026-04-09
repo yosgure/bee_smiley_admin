@@ -31,8 +31,16 @@ class NotificationService {
   final _navigationController = StreamController<String>.broadcast();
   Stream<String> get navigationStream => _navigationController.stream;
 
+  // チャット通知タップ時に「どのルームを開くか」を送るための専用ストリーム
+  final _pendingChatRoomController = StreamController<String>.broadcast();
+  Stream<String> get pendingChatRoomStream =>
+      _pendingChatRoomController.stream;
+
   // アプリ起動時に「どの画面を開くか」を一時保存する変数
   String? initialRoute;
+
+  // アプリ起動直後にチャット画面が開くまでに一時保存する roomId
+  String? pendingChatRoomId;
 
   /// 通知サービスの初期化
   Future<void> initialize() async {
@@ -134,7 +142,23 @@ class NotificationService {
     final type = message.data['type'];
     if (type != null) {
       initialRoute = type;
+      // chat 通知の場合は chatId を取り出して pendingChatRoomId に保存
+      if (type == 'chat') {
+        final chatId = message.data['chatId'];
+        if (chatId is String && chatId.isNotEmpty) {
+          pendingChatRoomId = chatId;
+        }
+      }
       _navigationController.add(type);
+      // pending roomId があればストリームにも流す（タブ遷移より後に届けるため次フレームで）
+      if (pendingChatRoomId != null) {
+        final id = pendingChatRoomId!;
+        Future.microtask(() {
+          if (!_pendingChatRoomController.isClosed) {
+            _pendingChatRoomController.add(id);
+          }
+        });
+      }
     }
   }
 

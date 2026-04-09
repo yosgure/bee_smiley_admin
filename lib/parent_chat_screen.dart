@@ -13,8 +13,10 @@ import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 import 'package:gal/gal.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter/cupertino.dart';
 import 'app_theme.dart';
 import 'skeleton_loading.dart';
+import 'chat_screen.dart' show VideoPlayerDialog;
 
 class ParentChatScreen extends StatefulWidget {
   final Map<String, dynamic>? familyData;
@@ -442,6 +444,8 @@ class _ChatMessageListState extends State<_ChatMessageList> {
     final readBy = List<String>.from(msg['readBy'] ?? []);
     final isRead = isMe && readBy.any((uid) => uid != widget.myUid);
     final stamps = Map<String, dynamic>.from(msg['stamps'] ?? {});
+    final Map<String, dynamic>? replyTo =
+        msg['replyTo'] is Map ? Map<String, dynamic>.from(msg['replyTo']) : null;
 
     String timeStr = '';
     if (msg['createdAt'] != null) {
@@ -456,7 +460,8 @@ class _ChatMessageListState extends State<_ChatMessageList> {
     }
 
     Widget content;
-    final bool isImageOnly = type == 'image' && text.isEmpty;
+    final bool isImageOnly =
+        (type == 'image' || type == 'video') && text.isEmpty;
 
     if (type == 'image') {
       content = Column(
@@ -472,6 +477,47 @@ class _ChatMessageListState extends State<_ChatMessageList> {
                 fit: BoxFit.cover,
                 placeholder: (c, u) => Container(width: 200, height: 150, decoration: BoxDecoration(color: Colors.grey.shade200, borderRadius: BorderRadius.circular(12)), child: const Center(child: SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2)))),
                 errorWidget: (c, u, e) => const Icon(Icons.broken_image),
+              ),
+            ),
+          ),
+          if (text.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text(text, style: const TextStyle(fontSize: 15, height: 1.5, fontFamily: 'NotoSansJP', fontFamilyFallback: ['Hiragino Sans', 'Roboto', 'sans-serif'])),
+          ],
+        ],
+      );
+    } else if (type == 'video') {
+      final vUrl = (msg['url'] ?? '') as String;
+      content = Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          GestureDetector(
+            onTap: () {
+              if (vUrl.isNotEmpty) {
+                showDialog(
+                  context: context,
+                  barrierColor: Colors.black,
+                  builder: (_) => VideoPlayerDialog(url: vUrl),
+                );
+              }
+            },
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: Container(
+                width: 220,
+                height: 140,
+                color: Colors.black,
+                child: const Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    Icon(Icons.videocam, color: Colors.white24, size: 56),
+                    CircleAvatar(
+                      radius: 24,
+                      backgroundColor: Colors.white70,
+                      child: Icon(Icons.play_arrow, color: Colors.black, size: 32),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
@@ -571,7 +617,7 @@ class _ChatMessageListState extends State<_ChatMessageList> {
       child: Align(
         alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
         child: Container(
-          margin: const EdgeInsets.only(bottom: 8),
+          margin: const EdgeInsets.only(bottom: 6),
           constraints: const BoxConstraints(maxWidth: 280),
           child: Column(
             crossAxisAlignment: isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
@@ -596,15 +642,22 @@ class _ChatMessageListState extends State<_ChatMessageList> {
                     const SizedBox(width: 8),
                   ],
                   Flexible(
-                    child: isImageOnly
+                    child: isImageOnly && replyTo == null
                         ? content
                         : Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
                             decoration: BoxDecoration(
                               color: isMe ? AppColors.primary.withOpacity(0.2) : Colors.white,
                               borderRadius: BorderRadius.circular(16),
                             ),
-                            child: content,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                if (replyTo != null) _buildReplyQuote(replyTo, isMe),
+                                content,
+                              ],
+                            ),
                           ),
                   ),
                   if (!isMe) ...[
@@ -624,6 +677,44 @@ class _ChatMessageListState extends State<_ChatMessageList> {
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildReplyQuote(Map<String, dynamic> replyTo, bool isMe) {
+    final senderName = (replyTo['senderName'] ?? '') as String;
+    final preview = (replyTo['preview'] ?? '') as String;
+    final bgColor =
+        isMe ? Colors.white.withOpacity(0.5) : Colors.grey.shade100;
+    final accentColor = isMe ? AppColors.primary : Colors.grey.shade600;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 6),
+      padding: const EdgeInsets.fromLTRB(8, 4, 8, 5),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(6),
+        border: Border(left: BorderSide(color: accentColor, width: 3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            senderName,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.bold,
+              color: accentColor,
+            ),
+          ),
+          const SizedBox(height: 1),
+          Text(
+            preview,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontSize: 12, color: Colors.black54),
+          ),
+        ],
       ),
     );
   }
@@ -654,64 +745,118 @@ class _ChatMessageListState extends State<_ChatMessageList> {
   }
 
   void _showActionSheet(String msgId, bool isMe, String type, String text) {
-    showModalBottomSheet(
+    showCupertinoModalPopup(
       context: context,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      builder: (sheetContext) => CupertinoActionSheet(
+        message: _buildQuickReactionBar(sheetContext, msgId),
+        actions: [
+          if (type == 'text' && text.isNotEmpty)
+            CupertinoActionSheetAction(
+              onPressed: () {
+                Navigator.pop(sheetContext);
+                Clipboard.setData(ClipboardData(text: text));
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                      content: Text('コピーしました'),
+                      duration: Duration(seconds: 1)),
+                );
+              },
+              child: const Text('コピー'),
+            ),
+          if (type == 'text' && text.isNotEmpty)
+            CupertinoActionSheetAction(
+              onPressed: () {
+                Navigator.pop(sheetContext);
+                _showPartialCopyDialog(text);
+              },
+              child: const Text('部分コピー'),
+            ),
+          CupertinoActionSheetAction(
+            onPressed: () {
+              Navigator.pop(sheetContext);
+              _showEmojiPicker(msgId);
+            },
+            child: const Text('他のスタンプ…'),
+          ),
+          if (isMe && type == 'text')
+            CupertinoActionSheetAction(
+              onPressed: () {
+                Navigator.pop(sheetContext);
+                _showEditDialog(msgId, text);
+              },
+              child: const Text('編集'),
+            ),
+          if (isMe)
+            CupertinoActionSheetAction(
+              isDestructiveAction: true,
+              onPressed: () {
+                Navigator.pop(sheetContext);
+                _deleteMessage(msgId);
+              },
+              child: const Text('削除'),
+            ),
+        ],
+        cancelButton: CupertinoActionSheetAction(
+          onPressed: () => Navigator.pop(sheetContext),
+          child: const Text('キャンセル'),
+        ),
       ),
-      builder: (sheetContext) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ListTile(
-                leading: const Icon(Icons.emoji_emotions_outlined),
-                title: const Text("スタンプを追加"),
-                onTap: () {
-                  Navigator.pop(sheetContext);
-                  _showEmojiPicker(msgId);
-                },
+    );
+  }
+
+  Widget _buildQuickReactionBar(BuildContext sheetContext, String msgId) {
+    const quickEmojis = ['👍', '❤️', '😄', '🎉', '🙏', '🆗'];
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        children: [
+          for (final e in quickEmojis)
+            GestureDetector(
+              onTap: () {
+                Navigator.pop(sheetContext);
+                _toggleStamp(msgId, e);
+              },
+              behavior: HitTestBehavior.opaque,
+              child: Container(
+                width: 40,
+                height: 40,
+                alignment: Alignment.center,
+                child: Text(e, style: const TextStyle(fontSize: 26)),
               ),
-              if (type == 'text' && text.isNotEmpty)
-                ListTile(
-                  leading: const Icon(Icons.copy),
-                  title: const Text("コピー"),
-                  onTap: () {
-                    Navigator.pop(sheetContext);
-                    Clipboard.setData(ClipboardData(text: text));
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('コピーしました'), duration: Duration(seconds: 1)),
-                    );
-                  },
-                ),
-              if (isMe && type == "text")
-                ListTile(
-                  leading: const Icon(Icons.edit),
-                  title: const Text("編集"),
-                  onTap: () {
-                    Navigator.pop(sheetContext);
-                    _showEditDialog(msgId, text);
-                  },
-                ),
-              if (isMe)
-                ListTile(
-                  leading: const Icon(Icons.delete, color: Colors.red),
-                  title: const Text("削除", style: TextStyle(color: Colors.red)),
-                  onTap: () {
-                    Navigator.pop(sheetContext);
-                    _deleteMessage(msgId);
-                  },
-                ),
-              ListTile(
-                leading: const Icon(Icons.close),
-                title: const Text("キャンセル"),
-                onTap: () => Navigator.pop(sheetContext),
+            ),
+        ],
+      ),
+    );
+  }
+
+  void _showPartialCopyDialog(String text) {
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        title: const Text('部分コピー', style: TextStyle(fontSize: 16)),
+        content: SizedBox(
+          width: 360,
+          child: SingleChildScrollView(
+            child: SelectableText(
+              text,
+              style: const TextStyle(
+                fontSize: 15,
+                height: 1.5,
+                fontFamily: 'NotoSansJP',
+                fontFamilyFallback: ['Hiragino Sans', 'Roboto', 'sans-serif'],
               ),
-            ],
+            ),
           ),
         ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('閉じる'),
+          ),
+        ],
       ),
     );
   }
@@ -1073,6 +1218,18 @@ class _ChatInputAreaState extends State<_ChatInputArea> {
                   ),
                 ),
                 const SizedBox(width: 8),
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: GestureDetector(
+                    onTap: _isUploading ? null : _pickAndUploadVideo,
+                    child: Icon(
+                      Icons.videocam,
+                      color: _isUploading ? Colors.grey.shade400 : Colors.grey.shade600,
+                      size: 28,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
                 Expanded(
                   child: Container(
                     decoration: BoxDecoration(
@@ -1143,10 +1300,52 @@ class _ChatInputAreaState extends State<_ChatInputArea> {
     String lastMsg = text;
     if (type == 'image') lastMsg = '画像を送信しました';
     if (type == 'file') lastMsg = 'ファイルを送信しました';
+    if (type == 'video') lastMsg = '動画を送信しました';
     await roomRef.update({
       'lastMessage': lastMsg,
       'lastMessageTime': FieldValue.serverTimestamp(),
     });
+  }
+
+  Future<void> _pickAndUploadVideo() async {
+    _focusNode.unfocus();
+    final picker = ImagePicker();
+    final XFile? video = await picker.pickVideo(
+      source: ImageSource.gallery,
+      maxDuration: const Duration(minutes: 10),
+    );
+    if (video == null) return;
+
+    setState(() => _isUploading = true);
+    try {
+      final Uint8List bytes = await video.readAsBytes();
+      if (bytes.length > 50 * 1024 * 1024) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('動画サイズが大きすぎます (50MBまで)')),
+          );
+        }
+        return;
+      }
+      final ext = video.name.split('.').last.toLowerCase();
+      final contentType = ext == 'mov' ? 'video/quicktime' : 'video/mp4';
+      final String fileName =
+          '${DateTime.now().millisecondsSinceEpoch}_${video.name}';
+      final ref = FirebaseStorage.instance
+          .ref()
+          .child('chat_uploads/${widget.roomId}/$fileName');
+      await ref.putData(bytes, SettableMetadata(contentType: contentType));
+      final url = await ref.getDownloadURL();
+      await _sendMessage(type: 'video', url: url, fileName: video.name);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('動画アップロード失敗: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isUploading = false);
+    }
   }
 
   Future<void> _pickAndUploadImage() async {
