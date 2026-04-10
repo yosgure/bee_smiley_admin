@@ -172,7 +172,7 @@ class _AiCommandManageScreenState extends State<AiCommandManageScreen> {
                                             ),
                                             const SizedBox(width: 8),
                                             Text(
-                                              '${questions.length}問',
+                                              cmd['freeform'] == true ? '自由記述' : '${questions.length}問',
                                               style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
                                             ),
                                           ],
@@ -216,6 +216,7 @@ class _CommandEditScreenState extends State<_CommandEditScreen> {
   late TextEditingController _scriptController;
   List<Map<String, dynamic>> _questions = [];
   bool _isSaving = false;
+  bool _freeform = false;
 
   bool get _isNew => widget.existing == null;
 
@@ -225,6 +226,7 @@ class _CommandEditScreenState extends State<_CommandEditScreen> {
     _labelController = TextEditingController(text: widget.existing?['label'] ?? '');
     _descController = TextEditingController(text: widget.existing?['description'] ?? '');
     _scriptController = TextEditingController(text: widget.existing?['script'] ?? '');
+    _freeform = widget.existing?['freeform'] == true;
 
     final existingQuestions = widget.existing?['questions'] as List<dynamic>? ?? [];
     _questions = existingQuestions
@@ -283,7 +285,8 @@ class _CommandEditScreenState extends State<_CommandEditScreen> {
         'label': label,
         'description': _descController.text.trim(),
         'script': _scriptController.text.trim(),
-        'questions': _questions,
+        'questions': _freeform ? <Map<String, dynamic>>[] : _questions,
+        'freeform': _freeform,
       };
 
       if (_isNew) {
@@ -352,10 +355,60 @@ class _CommandEditScreenState extends State<_CommandEditScreen> {
               const SizedBox(height: 12),
               _buildTextField('コマンド名', _labelController, 'ケア記録'),
               const SizedBox(height: 12),
+              _buildTextField('説明', _descController, 'コマンドの説明（自由記述モード時に表示）'),
+              const SizedBox(height: 12),
               _buildTextField('スクリプト（AIへの指示）', _scriptController,
                   'このコマンドで集めた回答をもとにAIが処理する指示...',
                   maxLines: 4),
 
+              const SizedBox(height: 20),
+              // 自由記述モード切替
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                decoration: BoxDecoration(
+                  color: _freeform ? const Color(0xFF7C3AED).withOpacity(0.06) : Colors.grey.shade50,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: _freeform ? const Color(0xFF7C3AED).withOpacity(0.3) : Colors.grey.shade200,
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.edit_note_rounded,
+                      size: 20,
+                      color: _freeform ? const Color(0xFF7C3AED) : Colors.grey.shade500,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '自由記述モード',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: _freeform ? const Color(0xFF7C3AED) : Colors.grey.shade700,
+                            ),
+                          ),
+                          Text(
+                            'ONにすると、質問形式ではなく自由記述で入力し、AIが整形する',
+                            style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Switch(
+                      value: _freeform,
+                      activeColor: const Color(0xFF7C3AED),
+                      onChanged: (v) => setState(() => _freeform = v),
+                    ),
+                  ],
+                ),
+              ),
+
+              if (!_freeform) ...[
               const SizedBox(height: 32),
               // 質問設定
               Row(
@@ -483,6 +536,7 @@ class _CommandEditScreenState extends State<_CommandEditScreen> {
                     );
                   },
                 ),
+              ], // if (!_freeform)
             ],
           ),
         ),

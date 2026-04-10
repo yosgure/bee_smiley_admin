@@ -1793,11 +1793,40 @@ exports.sendAiMessage = onCall(
         systemInstruction: systemPrompt,
       });
 
-      // 履歴から最後のユーザーメッセージを除いてチャット開始
-      const historyForChat = chatHistory.slice(0, -1);
-      const chat = model.startChat({ history: historyForChat });
-      const result = await chat.sendMessage(message);
-      let aiResponse = result.response.text();
+      // リトライ付きAPI呼び出し（503エラー対策）
+      const callWithRetry = async (fn, maxRetries = 3) => {
+        for (let attempt = 0; attempt <= maxRetries; attempt++) {
+          try {
+            return await fn();
+          } catch (err) {
+            const status = err?.status || err?.httpStatusCode || 0;
+            const msg = err?.message || '';
+            const isRetryable = status === 503 || status === 429 || msg.includes('503') || msg.includes('429') || msg.includes('overloaded');
+            if (isRetryable && attempt < maxRetries) {
+              const delay = Math.pow(2, attempt) * 2000 + Math.random() * 1000;
+              console.log(`Gemini API retry ${attempt + 1}/${maxRetries} after ${Math.round(delay)}ms`);
+              await new Promise(r => setTimeout(r, delay));
+              continue;
+            }
+            throw err;
+          }
+        }
+      };
+
+      // コマンドスクリプトがある場合、チャット履歴を使わず単発リクエストにする
+      // 出力指示をユーザーメッセージに直接埋め込む（システムプロンプトだけだと無視されるため）
+      let aiResponse;
+      if (commandScript) {
+        const augmentedMessage = `${message}\n\n---\n【出力指示】以下の指示に厳密に従って出力してください。会話形式や補足説明は不要です。指定されたフォーマットのみを出力してください。\n${commandScript}`;
+        const result = await callWithRetry(() => model.generateContent(augmentedMessage));
+        aiResponse = result.response.text();
+      } else {
+        // 履歴から最後のユーザーメッセージを除いてチャット開始
+        const historyForChat = chatHistory.slice(0, -1);
+        const chat = model.startChat({ history: historyForChat });
+        const result = await callWithRetry(() => chat.sendMessage(message));
+        aiResponse = result.response.text();
+      }
 
       // マークダウン記法を除去
       aiResponse = aiResponse

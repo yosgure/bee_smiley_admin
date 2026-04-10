@@ -83,6 +83,11 @@ class _AiChatScreenState extends State<AiChatScreen> {
   List<String> _elicitationAnswers = [];
   final _elicitationTextController = TextEditingController();
 
+  // フリーフォーム（自由記述）モード
+  bool _freeformMode = false;
+  Map<String, dynamic>? _freeformCommand;
+  final _freeformTextController = TextEditingController();
+
   // ドラッグ&ドロップ用
   StreamSubscription? _dragOverSub;
   StreamSubscription? _dragLeaveSub;
@@ -191,6 +196,20 @@ class _AiChatScreenState extends State<AiChatScreen> {
 
   void _selectSlashCommand(Map<String, dynamic> cmd) {
     final questions = cmd['questions'] as List<dynamic>? ?? [];
+    final isFreeform = cmd['freeform'] == true;
+
+    if (isFreeform) {
+      // フリーフォーム（自由記述）モード開始
+      setState(() {
+        _showSlashMenu = false;
+        _slashFilter = '';
+        _freeformMode = true;
+        _freeformCommand = cmd;
+      });
+      _textController.clear();
+      _freeformTextController.clear();
+      return;
+    }
 
     if (questions.isEmpty) {
       // 質問がなければ普通のタグ方式
@@ -224,6 +243,67 @@ class _AiChatScreenState extends State<AiChatScreen> {
       _elicitationAnswers = [];
     });
     _elicitationTextController.clear();
+  }
+
+  void _cancelFreeform() {
+    setState(() {
+      _freeformMode = false;
+      _freeformCommand = null;
+    });
+    _freeformTextController.clear();
+  }
+
+  static const _defaultCareRecordScript = '''以下の自由記述をもとに、この児童の個別支援計画を参考にしながら、ケア記録を生成してください。
+
+【出力形式】以下の体裁で出力すること。デスマス調ではなく言い切りの形（である調・体言止め）で記述すること。
+
+1. 来所時の様子
+（来所時の表情・体調・気分・入室の様子を記載）
+
+2. 本日の活動内容
+（実施した活動の内容を具体的に記載）
+
+3. 個別支援計画との関連
+（本日の活動が個別支援計画のどの目標に対応しているかを記載）
+
+4. 取り組みの様子・できたこと
+（活動中の児童の反応、成長が見られた点、できたことを記載）
+
+5. 支援内容・配慮
+（スタッフが行った支援や環境調整、配慮事項を記載）
+
+6. 課題と継続したい支援
+（今後の課題、次回以降も継続すべき支援を記載）
+
+【注意事項】
+- 自由記述に書かれていない情報を捏造しないこと
+- 個別支援計画の目標と活動内容の関連づけは、無理に結びつけず、関連がある場合のみ記載すること
+- 記述が少ない項目は、入力内容から読み取れる範囲で簡潔に記載すること
+- 各項目は1〜3文程度で簡潔にまとめること''';
+
+  void _submitFreeform() {
+    final cmd = _freeformCommand!;
+    var script = cmd['script'] as String? ?? '';
+    final label = cmd['label'] as String? ?? '';
+    final text = _freeformTextController.text.trim();
+    if (text.isEmpty) return;
+
+    // スクリプトが空の場合はデフォルトのケア記録スクリプトを使用
+    if (script.isEmpty) {
+      script = _defaultCareRecordScript;
+    }
+
+    // フォーマット指示をメッセージ自体に埋め込む
+    final message = '/$label\n\n【スタッフの記録】\n$text\n\n【出力指示】\n$script';
+
+    setState(() {
+      _freeformMode = false;
+      _freeformCommand = null;
+    });
+    _freeformTextController.clear();
+
+    _textController.text = message;
+    _sendMessageWithScript(script);
   }
 
   void _answerElicitation(String answer) {
@@ -1131,8 +1211,10 @@ class _AiChatScreenState extends State<AiChatScreen> {
               children: [
                 if (_failedHugSends.isNotEmpty) _buildFailedHugBanner(),
                 Expanded(child: _buildMessageList()),
-                if (_showSlashMenu && !_elicitationMode) _buildSlashMenu(),
-                if (_elicitationMode)
+                if (_showSlashMenu && !_elicitationMode && !_freeformMode) _buildSlashMenu(),
+                if (_freeformMode)
+                  _buildFreeformUI()
+                else if (_elicitationMode)
                   _buildElicitationUI()
                 else
                   _buildInputArea(),
@@ -1467,7 +1549,13 @@ class _AiChatScreenState extends State<AiChatScreen> {
 
   Widget _buildMessageItem(Map<String, dynamic> msg, {String? usedCommandLabel}) {
     final isUser = msg['role'] == 'user';
-    final content = msg['content'] ?? '';
+    var content = msg['content'] ?? '';
+    // フリーフォームの出力指示部分を表示から除外
+    if (isUser && content.contains('【出力指示】')) {
+      content = content.split('【出力指示】')[0].trim();
+    }
+    // 【スタッフの記録】ラベルも除外
+    content = content.replaceAll('【スタッフの記録】\n', '');
     final status = msg['status'];
     final isSending = status == 'sending';
     final attachments = msg['attachments'] as List<dynamic>? ?? [];
@@ -1704,6 +1792,153 @@ class _AiChatScreenState extends State<AiChatScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildFreeformUI() {
+    final cmd = _freeformCommand!;
+    final label = cmd['label'] as String? ?? '';
+    final description = cmd['description'] as String? ?? '';
+    final hasText = _freeformTextController.text.trim().isNotEmpty;
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+      decoration: const BoxDecoration(color: Colors.white),
+      child: SafeArea(
+        top: false,
+        child: Align(
+          alignment: Alignment.topCenter,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 700),
+            child: Container(
+              decoration: BoxDecoration(
+                color: const Color(0xFFF9FAFB),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: const Color(0xFF7C3AED).withOpacity(0.3)),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.04),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // ヘッダー
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 14, 8, 0),
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(
+                            gradient: const LinearGradient(
+                              colors: [Color(0xFF7C3AED), Color(0xFFEC4899)],
+                            ),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            '/$label',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Text(
+                          '自由記述',
+                          style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+                        ),
+                        const Spacer(),
+                        TextButton(
+                          onPressed: _cancelFreeform,
+                          child: Text('キャンセル',
+                              style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
+                        ),
+                      ],
+                    ),
+                  ),
+                  // 説明文
+                  if (description.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                      child: Text(
+                        description,
+                        style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                      ),
+                    ),
+                  // テキスト入力エリア
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
+                    child: TextField(
+                      controller: _freeformTextController,
+                      maxLines: 6,
+                      minLines: 4,
+                      keyboardType: TextInputType.multiline,
+                      style: const TextStyle(fontSize: 14),
+                      decoration: InputDecoration(
+                        hintText: '今日の様子を自由に記入してください...',
+                        hintStyle: TextStyle(fontSize: 13, color: Colors.grey.shade400),
+                        filled: true,
+                        fillColor: Colors.white,
+                        contentPadding: const EdgeInsets.all(14),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(color: Colors.grey.shade300),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(color: Colors.grey.shade300),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: const BorderSide(color: Color(0xFF7C3AED)),
+                        ),
+                      ),
+                      onChanged: (_) => setState(() {}),
+                    ),
+                  ),
+                  // 送信ボタン
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+                    child: Row(
+                      children: [
+                        const Spacer(),
+                        GestureDetector(
+                          onTap: hasText ? _submitFreeform : null,
+                          child: Container(
+                            width: 36,
+                            height: 36,
+                            decoration: BoxDecoration(
+                              gradient: hasText
+                                  ? const LinearGradient(
+                                      colors: [Color(0xFF7C3AED), Color(0xFFEC4899)],
+                                    )
+                                  : null,
+                              color: hasText ? null : Colors.grey.shade300,
+                              borderRadius: BorderRadius.circular(18),
+                            ),
+                            child: const Icon(
+                              Icons.arrow_upward_rounded,
+                              color: Colors.white,
+                              size: 20,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }
