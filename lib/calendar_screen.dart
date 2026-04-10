@@ -42,6 +42,10 @@ class _CalendarScreenState extends State<CalendarScreen> {
   // フィルタ
   bool _showMySchedule = true;
   bool _showMyTasks = true;
+
+  // Syncfusionの月表示でappointmentBuilderが同じイベントを2回呼ぶバグ対策
+  final Set<String> _birthdayRenderedThisFrame = {};
+  bool _birthdayFrameResetScheduled = false;
   bool _showBirthdays = true;
   final Map<String, bool> _classroomFilters = {};
 
@@ -233,7 +237,10 @@ Future<void> _saveDisplayDate(DateTime date) async {
     if (appointment.id is! DocumentSnapshot) return;
     
     final doc = appointment.id as DocumentSnapshot;
-    final duration = appointment.endTime.difference(appointment.startTime);
+    final docData = doc.data() as Map<String, dynamic>;
+    final originalStart = (docData['startTime'] as Timestamp).toDate();
+    final originalEnd = (docData['endTime'] as Timestamp).toDate();
+    final duration = originalEnd.difference(originalStart);
     final droppedTime = details.droppingTime!;
     
     // 15分単位に丸める
@@ -262,12 +269,14 @@ Future<void> _saveDisplayDate(DateTime date) async {
         adjustedMinute
       );
     } else {
+      // 月ビュー：日付はドロップ先、時刻はFirestoreの元データから取得
+      // （Syncfusionがドラッグ中にappointment.startTimeを0:00に書き換えるため）
       newStart = DateTime(
-        droppedTime.year, 
-        droppedTime.month, 
-        droppedTime.day, 
-        adjustedHour, 
-        adjustedMinute
+        droppedTime.year,
+        droppedTime.month,
+        droppedTime.day,
+        originalStart.hour,
+        originalStart.minute
       );
     }
     
@@ -503,38 +512,107 @@ Future<void> _saveDisplayDate(DateTime date) async {
                 stream: _familiesRef.snapshots(),
                 builder: (context, familySnapshot) {
                   List<Appointment> appointments = [];
-                  
+                  _birthdayRenderedThisFrame.clear();
+
                   // イベント処理
                   if (eventSnapshot.hasData) {
                     for (var doc in eventSnapshot.data!.docs) {
-                      final data = doc.data() as Map<String, dynamic>;
-                      final String? eventClassroom = data['classroom']; 
-                      final List<dynamic> staffIds = data['staffIds'] ?? []; 
+                      try {
+                        final data = doc.data() as Map<String, dynamic>;
+                        final String? eventClassroom = data['classroom'];
+                        final List<dynamic> staffIds = data['staffIds'] ?? [];
 
-                      bool isVisible = false;
-                      if (_showMySchedule && staffIds.contains(_myUid)) isVisible = true;
-                      if (!isVisible && eventClassroom != null) {
-                        if (_classroomFilters.containsKey(eventClassroom) && _classroomFilters[eventClassroom] == true) {
-                          isVisible = true;
+                        bool isVisible = false;
+                        if (_showMySchedule && staffIds.contains(_myUid)) isVisible = true;
+                        if (!isVisible && eventClassroom != null) {
+                          if (_classroomFilters.containsKey(eventClassroom) && _classroomFilters[eventClassroom] == true) {
+                            isVisible = true;
+                          }
                         }
-                      }
-                      if (data['classroom'] == null && data['staffIds'] == null) isVisible = true;
+                        // クラスルームもスタッフも未指定なら汎用イベントとして常時表示
+                        final bool noClassroom = eventClassroom == null;
+                        final bool noStaff = data['staffIds'] == null || staffIds.isEmpty;
+                        if (noClassroom && noStaff) isVisible = true;
 
-                      if (isVisible) {
+                        if (!isVisible) continue;
+
+                        // startTime/endTime の安全な変換
+                        final startTs = data['startTime'];
+                        final endTs = data['endTime'];
+                        if (startTs is! Timestamp || endTs is! Timestamp) {
+                          debugPrint(
+                              '⚠️ event skipped (bad timestamps): id=${doc.id} classroom=$eventClassroom');
+                          continue;
+                        }
+                        final startDt = startTs.toDate();
+                        final endDt = endTs.toDate();
+
                         Color eventColor = Color(data['color'] ?? AppColors.primary.value);
                         if (eventClassroom != null && _classroomColors.containsKey(eventClassroom)) {
                           eventColor = _classroomColors[eventClassroom]!;
                         }
 
+                        // RRULE の事前バリデーション
+                        // Syncfusion は不正な RRULE を描画時に遅延展開して throw する場合があり、
+                        // その1件がカレンダー全体のレンダリングを潰すことがある。
+                        // ここで parseRRule + getRecurrenceDateTimeCollection で検証する。
+                        String? rrule;
+                        final rawRule = data['recurrenceRule'];
+                        if (rawRule != null && rawRule.toString().isNotEmpty) {
+                          var ruleStr = rawRule.toString();
+
+                          // FREQ=WEEKLY で BYDAY がない場合、開始日の曜日から自動補完
+                          if (ruleStr.contains('FREQ=WEEKLY') &&
+                              !ruleStr.contains('BYDAY=')) {
+                            const dayNames = [
+                              'MO', 'TU', 'WE', 'TH', 'FR', 'SA', 'SU'
+                            ];
+                            final dayOfWeek =
+                                dayNames[startDt.weekday - 1]; // DateTime.monday == 1
+                            ruleStr = '$ruleStr;BYDAY=$dayOfWeek';
+                            debugPrint(
+                                '🔧 auto-fix RRULE: id=${doc.id} added BYDAY=$dayOfWeek → $ruleStr');
+                          }
+
+                          try {
+                            SfCalendar.parseRRule(ruleStr, startDt);
+                            SfCalendar.getRecurrenceDateTimeCollection(
+                              ruleStr,
+                              startDt,
+                              specificStartDate: startDt,
+                              specificEndDate: startDt.add(const Duration(days: 730)),
+                            );
+                            rrule = ruleStr;
+                          } catch (e) {
+                            debugPrint(
+                                '⚠️ invalid recurrenceRule: id=${doc.id} classroom=$eventClassroom subject=${data['subject']} rule=$ruleStr error=$e');
+                            rrule = null;
+                          }
+                        }
+
+                        // 例外日（削除された回）のサポート
+                        List<DateTime>? exceptionDates;
+                        final rawExceptions = data['exceptionDates'];
+                        if (rawExceptions is List && rawExceptions.isNotEmpty) {
+                          exceptionDates = rawExceptions
+                              .whereType<Timestamp>()
+                              .map((t) => t.toDate())
+                              .toList();
+                          if (exceptionDates.isEmpty) exceptionDates = null;
+                        }
+
                         appointments.add(Appointment(
-                          id: doc, 
-                          startTime: (data['startTime'] as Timestamp).toDate(),
-                          endTime: (data['endTime'] as Timestamp).toDate(),
+                          id: doc,
+                          startTime: startDt,
+                          endTime: endDt,
                           subject: data['subject'] ?? '(件名なし)',
                           notes: 'EVENT',
                           color: eventColor,
-                          recurrenceRule: (data['recurrenceRule'] != null && data['recurrenceRule'].toString().isNotEmpty) ? data['recurrenceRule'] : null,
+                          recurrenceRule: rrule,
+                          recurrenceExceptionDates: exceptionDates,
                         ));
+                      } catch (e) {
+                        debugPrint('⚠️ event processing failed: id=${doc.id} error=$e');
                       }
                     }
                   }
@@ -585,48 +663,56 @@ Future<void> _saveDisplayDate(DateTime date) async {
                     }
                   }
 
-                  // 誕生日処理（修正版：複数年対応＋教室フィルタ連動）
+                  // 誕生日処理（修正版：複数年対応＋教室フィルタ連動＋重複排除）
                   if (familySnapshot.hasData && _showBirthdays) {
-                    // 現在表示中の年を基準に前後1年も含めて生成
                     final displayDate = _controller.displayDate ?? DateTime.now();
                     final baseYear = displayDate.year;
-                    
+                    // 同じ名前＋同じ誕生日の重複を排除するためのSet
+                    final addedBirthdays = <String>{};
+
                     for (var doc in familySnapshot.data!.docs) {
                       final data = doc.data() as Map<String, dynamic>;
                       final children = List<Map<String, dynamic>>.from(data['children'] ?? []);
                       final parentLastName = data['lastName'] ?? '';
-                      
+
                       for (var child in children) {
                         final classroom = child['classroom'] as String?;
                         if (classroom == null || !_myClassrooms.contains(classroom)) continue;
-                        
+
                         // 教室フィルタとの連動チェック
                         if (_classroomFilters.containsKey(classroom) && _classroomFilters[classroom] != true) {
                           continue;
                         }
-                        
+
                         final birthDateStr = child['birthDate'] as String?;
                         if (birthDateStr == null || birthDateStr.isEmpty) continue;
-                        
+
                         final parts = birthDateStr.split('/');
                         if (parts.length != 3) continue;
-                        
+
                         final birthMonth = int.tryParse(parts[1]) ?? 0;
                         final birthDay = int.tryParse(parts[2]) ?? 0;
                         if (birthMonth == 0 || birthDay == 0) continue;
-                        
-                        final childName = child['firstName'] ?? '';
-                        final displayName = '$parentLastName $childName';
-                        
+
+                        final childName = (child['firstName'] ?? '').toString().trim();
+                        final displayName = '${parentLastName.trim()} $childName';
+
+                        // 同名＋同誕生日の重複チェック
+                        final dedupeKey = '${displayName}_${birthMonth}_$birthDay';
+                        if (addedBirthdays.contains(dedupeKey)) continue;
+                        addedBirthdays.add(dedupeKey);
+
                         // 表示中の年を中心に前後1年（計3年分）の誕生日を生成
                         for (int year = baseYear - 1; year <= baseYear + 1; year++) {
                           final birthdayDate = DateTime(year, birthMonth, birthDay);
-                          
+
+                          final bdStart = DateTime(year, birthMonth, birthDay, 0, 0);
+                          final bdEnd = DateTime(year, birthMonth, birthDay, 0, 1);
                           appointments.add(Appointment(
                             id: 'birthday_${doc.id}_${childName}_$year',
-                            startTime: birthdayDate,
-                            endTime: birthdayDate,
-                            isAllDay: true,
+                            startTime: bdStart,
+                            endTime: bdEnd,
+                            isAllDay: false,
                             subject: '🎂 $displayName',
                             notes: 'BIRTHDAY',
                             color: Colors.pink.shade300,
@@ -635,6 +721,14 @@ Future<void> _saveDisplayDate(DateTime date) async {
                       }
                     }
                   }
+
+                  // 誕生日を最上段に表示するためソート
+                  appointments.sort((a, b) {
+                    final aIsBirthday = a.notes == 'BIRTHDAY' ? 0 : 1;
+                    final bIsBirthday = b.notes == 'BIRTHDAY' ? 0 : 1;
+                    if (aIsBirthday != bIsBirthday) return aIsBirthday.compareTo(bIsBirthday);
+                    return a.startTime.compareTo(b.startTime);
+                  });
 
                   return Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -662,7 +756,7 @@ Future<void> _saveDisplayDate(DateTime date) async {
                               data: SfCalendarThemeData(
                                 selectionBorderColor: Colors.transparent,
                                 // 現在時刻ライン色（Google風の赤）。今日の日付ハイライトもこの色になる
-                                todayHighlightColor: const Color(0xFFEA4335),
+                                todayHighlightColor: AppColors.primary,
                                 cellBorderColor: Colors.grey.shade400,
                               ),
                               child: MouseRegion(
@@ -697,7 +791,7 @@ Future<void> _saveDisplayDate(DateTime date) async {
                                 ),
                                 monthViewSettings: const MonthViewSettings(
                                   appointmentDisplayMode: MonthAppointmentDisplayMode.appointment,
-                                  appointmentDisplayCount: 4,
+                                  appointmentDisplayCount: 5,
                                   showAgenda: false,
                                   monthCellStyle: MonthCellStyle(
                                     textStyle: TextStyle(fontSize: 12, color: AppColors.textMain),
@@ -784,6 +878,20 @@ Future<void> _saveDisplayDate(DateTime date) async {
                                   
                                   // 誕生日
                                   if (isBirthday) {
+                                    // Syncfusion月表示で同一誕生日が2回レンダリングされるバグ回避
+                                    // フレームごとにSetをリセットし、同一フレーム内の2回目をスキップ
+                                    if (!_birthdayFrameResetScheduled) {
+                                      _birthdayFrameResetScheduled = true;
+                                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                                        _birthdayRenderedThisFrame.clear();
+                                        _birthdayFrameResetScheduled = false;
+                                      });
+                                    }
+                                    final birthdayKey = '${appointment.id}_${appointment.startTime.day}';
+                                    if (_birthdayRenderedThisFrame.contains(birthdayKey)) {
+                                      return const SizedBox.shrink();
+                                    }
+                                    _birthdayRenderedThisFrame.add(birthdayKey);
                                     return Container(
                                       margin: const EdgeInsets.symmetric(vertical: 1),
                                       decoration: BoxDecoration(
@@ -828,7 +936,7 @@ Future<void> _saveDisplayDate(DateTime date) async {
                                         : const EdgeInsets.only(top: 1, bottom: 1, right: 6),
                                     decoration: BoxDecoration(
                                       color: appointment.color,
-                                      borderRadius: BorderRadius.circular(6),
+                                      borderRadius: BorderRadius.circular(3),
                                     ),
                                     alignment: isMonthView ? Alignment.centerLeft : Alignment.topLeft,
                                     padding: isMonthView
