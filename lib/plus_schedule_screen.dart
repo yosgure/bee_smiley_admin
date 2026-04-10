@@ -3434,22 +3434,21 @@ final plusStaff = _staffList.where((s) =>
       };
     }
 
-    // 集計期間: 2026年3月31日 〜 昨日（今日の分はまだ確定していないので除外）
+    // 集計期間: 2026年3月31日 〜 昨日（実績）/ 未来（予定込み）
     final startDate = DateTime(2026, 3, 31);
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final endDate = today.subtract(const Duration(days: 1)); // 昨日
 
-    // 期間内のplus_lessonsを取得
+    // 実績分（〜昨日）と予定分（今日〜）の両方を取得
     final lessonsSnap = await FirebaseFirestore.instance
         .collection('plus_lessons')
         .where('date', isGreaterThanOrEqualTo: Timestamp.fromDate(startDate))
-        .where('date', isLessThan: Timestamp.fromDate(today))
         .get();
 
     // 日付ごとのコマ（teachers配列）を集計（欠席除外）
-    // teachersは name の配列なので、後で照合用にフルネームで持つ
     final lessonsByDate = <String, List<List<String>>>{};
+    final futureLessonsByStaff = <String, int>{}; // staffId -> 今日以降の登録コマ数
     for (final doc in lessonsSnap.docs) {
       final data = doc.data();
       final course = data['course'] as String? ?? '';
@@ -3457,11 +3456,24 @@ final plusStaff = _staffList.where((s) =>
       final ts = data['date'] as Timestamp?;
       if (ts == null) continue;
       final dt = ts.toDate();
+      final dtDate = DateTime(dt.year, dt.month, dt.day);
       final key = DateFormat('yyyy-MM-dd').format(dt);
       final teachers = (data['teachers'] as List<dynamic>? ?? [])
           .map((e) => e.toString().replaceAll(RegExp(r'[\s\u3000]'), ''))
           .toList();
-      lessonsByDate.putIfAbsent(key, () => []).add(teachers);
+      if (dtDate.isBefore(today)) {
+        // 実績（昨日まで）
+        lessonsByDate.putIfAbsent(key, () => []).add(teachers);
+      } else {
+        // 予定（今日以降）- スタッフごとにカウント
+        for (final staffId in targetStaff.keys) {
+          final info = targetStaff[staffId]!;
+          final fullNameNormalized = (info['name'] as String).replaceAll(RegExp(r'[\s\u3000]'), '');
+          if (teachers.contains(fullNameNormalized)) {
+            futureLessonsByStaff[staffId] = (futureLessonsByStaff[staffId] ?? 0) + 1;
+          }
+        }
+      }
     }
 
     // 期間内のplus_shiftsを月単位で取得
@@ -3481,13 +3493,12 @@ final plusStaff = _staffList.where((s) =>
       }
     }
 
-    // スタッフ(staffId)ごとの実施/目標を集計
+    // スタッフ(staffId)ごとの実施/目標を集計（〜昨日）
     final actualCounts = <String, int>{for (final id in targetStaff.keys) id: 0};
     final targetCounts = <String, int>{for (final id in targetStaff.keys) id: 0};
 
     var d = startDate;
     while (!d.isAfter(endDate)) {
-      // 日曜・月曜は全体休み
       if (d.weekday == DateTime.sunday || d.weekday == DateTime.monday) {
         d = d.add(const Duration(days: 1));
         continue;
@@ -3496,7 +3507,6 @@ final plusStaff = _staffList.where((s) =>
       final dayKey = d.day.toString();
       final monthDoc = shiftsByMonth[monthKey];
 
-      // 月全体で設定されている手動休みならスキップ
       final holidays = ((monthDoc?['holidays'] as List<dynamic>?) ?? [])
           .map((e) => e.toString())
           .toSet();
@@ -3517,7 +3527,6 @@ final plusStaff = _staffList.where((s) =>
         final fullNameNormalized = fullName.replaceAll(RegExp(r'[\s\u3000]'), '');
         final slotTarget = info['slotTarget'] as int;
 
-        // シフトエントリを探す（staffIdで照合）
         Map<String, dynamic>? entry;
         for (final slot in daySlots) {
           if (slot is Map) {
@@ -3529,8 +3538,6 @@ final plusStaff = _staffList.where((s) =>
           }
         }
 
-        // シフトエントリが無い場合は「未設定 = 出勤予定」とみなす
-        // status: 'full' | 'half' | 'off'（後方互換で無ければ isWorking から導出）
         String entryStatus = 'full';
         if (entry != null) {
           final rawStatus = entry['shiftStatus'] as String?;
@@ -3540,37 +3547,28 @@ final plusStaff = _staffList.where((s) =>
             entryStatus = 'off';
           }
         }
-        if (entryStatus == 'off') continue;
+        if (entryStatus == 'off') {
+          d = d.add(const Duration(days: 0)); // skip
+        } else {
+          final dayTarget = entryStatus == 'half' ? (slotTarget - 1) : slotTarget;
+          if (dayTarget > 0) {
+            targetCounts[staffId] = targetCounts[staffId]! + dayTarget;
+          }
 
-        // 半休は目標を1減らす（安保=3 → 半休日は2）
-        final dayTarget =
-            entryStatus == 'half' ? (slotTarget - 1) : slotTarget;
-        if (dayTarget > 0) {
-          targetCounts[staffId] = targetCounts[staffId]! + dayTarget;
+          int actual = 0;
+          for (final teachers in dayLessons) {
+            if (teachers.contains(fullNameNormalized)) actual++;
+          }
+          actualCounts[staffId] = actualCounts[staffId]! + actual;
         }
-
-        int actual = 0;
-        for (final teachers in dayLessons) {
-          if (teachers.contains(fullNameNormalized)) actual++;
-        }
-        actualCounts[staffId] = actualCounts[staffId]! + actual;
       }
 
       d = d.add(const Duration(days: 1));
     }
 
-    // 最大差分（一番働いている人）を基準に「不足コマ数」を算出
-    int? maxDiffNullable;
-    for (final staffId in targetStaff.keys) {
-      final diff = actualCounts[staffId]! - targetCounts[staffId]!;
-      if (maxDiffNullable == null || diff > maxDiffNullable) {
-        maxDiffNullable = diff;
-      }
-    }
-    final maxDiff = maxDiffNullable ?? 0;
-
     if (!mounted) return;
 
+    final expandedStaff = <String>{}; // 詳細展開中のstaffId
     showDialog(
       context: context,
       builder: (ctx) {
@@ -3584,6 +3582,19 @@ final plusStaff = _staffList.where((s) =>
                 return fa.compareTo(fb);
               });
 
+            // 相対不足を計算: 最小不足者を基準(0)にする
+            final rawShortages = <String, int>{};
+            final rawShortagesWithFuture = <String, int>{};
+            for (final staffId in sortedStaffIds) {
+              final actual = actualCounts[staffId] ?? 0;
+              final target = targetCounts[staffId] ?? 0;
+              final futureSlots = futureLessonsByStaff[staffId] ?? 0;
+              rawShortages[staffId] = target - actual;
+              rawShortagesWithFuture[staffId] = target - actual - futureSlots;
+            }
+            final minShortage = rawShortages.values.isEmpty ? 0 : rawShortages.values.reduce((a, b) => a < b ? a : b);
+            final minShortageWithFuture = rawShortagesWithFuture.values.isEmpty ? 0 : rawShortagesWithFuture.values.reduce((a, b) => a < b ? a : b);
+
             return AlertDialog(
               title: Row(
                 children: [
@@ -3593,13 +3604,13 @@ final plusStaff = _staffList.where((s) =>
                 ],
               ),
               content: SizedBox(
-                width: 560,
+                width: 400,
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      '2026年3月31日〜 累計（括弧内は1日あたりの目標コマ数）',
+                      '3/31〜累計  一番入っている人を基準(0)とした相対不足（括弧内は1日あたり目標）',
                       style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
                     ),
                     const SizedBox(height: 16),
@@ -3613,10 +3624,8 @@ final plusStaff = _staffList.where((s) =>
                       child: const Row(
                         children: [
                           Expanded(flex: 4, child: Text('スタッフ', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13))),
-                          Expanded(flex: 2, child: Text('実施', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13), textAlign: TextAlign.center)),
-                          Expanded(flex: 2, child: Text('目標', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13), textAlign: TextAlign.center)),
-                          Expanded(flex: 2, child: Text('差分', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13), textAlign: TextAlign.center)),
-                          Expanded(flex: 3, child: Text('不足', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13), textAlign: TextAlign.center)),
+                          Expanded(flex: 3, child: Text('不足(現在)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13), textAlign: TextAlign.center)),
+                          Expanded(flex: 3, child: Text('不足(予定込)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13), textAlign: TextAlign.center)),
                         ],
                       ),
                     ),
@@ -3629,96 +3638,129 @@ final plusStaff = _staffList.where((s) =>
                       final slotTarget = info['slotTarget'] as int;
                       final actual = actualCounts[staffId] ?? 0;
                       final target = targetCounts[staffId] ?? 0;
-                      final diff = actual - target;
-                      final catchUp = maxDiff - diff;
+                      final futureSlots = futureLessonsByStaff[staffId] ?? 0;
+                      final shortage = rawShortages[staffId]! - minShortage; // 相対不足(現在)
+                      final shortageWithFuture = rawShortagesWithFuture[staffId]! - minShortageWithFuture; // 相対不足(予定込)
 
-                      return Container(
-                        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
-                        decoration: BoxDecoration(
-                          border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
-                        ),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              flex: 4,
-                              child: Row(
+                      final isExpanded = expandedStaff.contains(staffId);
+                      return GestureDetector(
+                        onTap: () {
+                          setDialogState(() {
+                            if (isExpanded) {
+                              expandedStaff.remove(staffId);
+                            } else {
+                              expandedStaff.add(staffId);
+                            }
+                          });
+                        },
+                        behavior: HitTestBehavior.opaque,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+                          decoration: BoxDecoration(
+                            border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
+                          ),
+                          child: Column(
+                            children: [
+                              Row(
                                 children: [
-                                  Text(lastName, style: const TextStyle(fontSize: 14)),
-                                  const SizedBox(width: 4),
-                                  GestureDetector(
-                                    onTap: () {
-                                      // 1日あたりの目標コマ数を変更するポップアップ
-                                      showDialog(
-                                        context: ctx,
-                                        builder: (editCtx) {
-                                          int editTarget = slotTarget;
-                                          return StatefulBuilder(
-                                            builder: (editCtx, setEditState) => AlertDialog(
-                                              title: Text('$lastName の1日あたり目標コマ数'),
-                                              content: DropdownButton<int>(
-                                                value: editTarget,
-                                                items: [1, 2, 3, 4, 5, 6].map((d) => DropdownMenuItem(value: d, child: Text('$dコマ/日'))).toList(),
-                                                onChanged: (v) {
-                                                  if (v != null) setEditState(() => editTarget = v);
-                                                },
-                                              ),
-                                              actions: [
-                                                TextButton(onPressed: () => Navigator.pop(editCtx), child: const Text('キャンセル')),
-                                                ElevatedButton(
-                                                  onPressed: () async {
-                                                    // Firestoreのスタッフ情報を更新
-                                                    await FirebaseFirestore.instance.collection('staffs').doc(staffId).update({'dailySlotTarget': editTarget});
-                                                    info['slotTarget'] = editTarget;
-                                                    // ローカルも更新
-                                                    final idx = _staffList.indexWhere((s) => s['id'] == staffId);
-                                                    if (idx != -1) _staffList[idx]['dailySlotTarget'] = editTarget;
-                                                    Navigator.pop(editCtx);
-                                                    setDialogState(() {});
-                                                  },
-                                                  style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, foregroundColor: Colors.white),
-                                                  child: const Text('保存'),
-                                                ),
-                                              ],
-                                            ),
-                                          );
-                                        },
-                                      );
-                                    },
+                                  Expanded(
+                                    flex: 4,
+                                    child: Row(
+                                      children: [
+                                        Icon(
+                                          isExpanded ? Icons.expand_less : Icons.expand_more,
+                                          size: 16,
+                                          color: Colors.grey.shade400,
+                                        ),
+                                        const SizedBox(width: 2),
+                                        Text(lastName, style: const TextStyle(fontSize: 14)),
+                                        const SizedBox(width: 4),
+                                        GestureDetector(
+                                          onTap: () {
+                                            showDialog(
+                                              context: ctx,
+                                              builder: (editCtx) {
+                                                int editTarget = slotTarget;
+                                                return StatefulBuilder(
+                                                  builder: (editCtx, setEditState) => AlertDialog(
+                                                    title: Text('$lastName の1日あたり目標コマ数'),
+                                                    content: DropdownButton<int>(
+                                                      value: editTarget,
+                                                      items: [1, 2, 3, 4, 5, 6].map((d) => DropdownMenuItem(value: d, child: Text('$dコマ/日'))).toList(),
+                                                      onChanged: (v) {
+                                                        if (v != null) setEditState(() => editTarget = v);
+                                                      },
+                                                    ),
+                                                    actions: [
+                                                      TextButton(onPressed: () => Navigator.pop(editCtx), child: const Text('キャンセル')),
+                                                      ElevatedButton(
+                                                        onPressed: () async {
+                                                          await FirebaseFirestore.instance.collection('staffs').doc(staffId).update({'dailySlotTarget': editTarget});
+                                                          info['slotTarget'] = editTarget;
+                                                          final idx = _staffList.indexWhere((s) => s['id'] == staffId);
+                                                          if (idx != -1) _staffList[idx]['dailySlotTarget'] = editTarget;
+                                                          Navigator.pop(editCtx);
+                                                          setDialogState(() {});
+                                                        },
+                                                        style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, foregroundColor: Colors.white),
+                                                        child: const Text('保存'),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                );
+                                              },
+                                            );
+                                          },
+                                          child: Text(
+                                            '($slotTarget)',
+                                            style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  Expanded(
+                                    flex: 3,
                                     child: Text(
-                                      '($slotTarget)',
-                                      style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+                                      shortage <= 0 ? '0' : '$shortage',
+                                      style: TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.bold,
+                                        color: shortage <= 0 ? Colors.grey.shade500 : Colors.red,
+                                      ),
+                                      textAlign: TextAlign.center,
+                                    ),
+                                  ),
+                                  Expanded(
+                                    flex: 3,
+                                    child: Text(
+                                      shortageWithFuture <= 0 ? '0' : '$shortageWithFuture',
+                                      style: TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.bold,
+                                        color: shortageWithFuture <= 0 ? Colors.green : Colors.orange.shade700,
+                                      ),
+                                      textAlign: TextAlign.center,
                                     ),
                                   ),
                                 ],
                               ),
-                            ),
-                            Expanded(flex: 2, child: Text('$actual', style: const TextStyle(fontSize: 14), textAlign: TextAlign.center)),
-                            Expanded(flex: 2, child: Text('$target', style: const TextStyle(fontSize: 14), textAlign: TextAlign.center)),
-                            Expanded(
-                              flex: 2,
-                              child: Text(
-                                diff >= 0 ? '+$diff' : '$diff',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.bold,
-                                  color: diff >= 0 ? Colors.blue : Colors.red,
+                              // 展開時の詳細
+                              if (isExpanded)
+                                Padding(
+                                  padding: const EdgeInsets.only(left: 22, top: 6),
+                                  child: Row(
+                                    children: [
+                                      Text('実施: $actual', style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+                                      const SizedBox(width: 12),
+                                      Text('目標: $target', style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+                                      const SizedBox(width: 12),
+                                      Text('予定: $futureSlots', style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+                                    ],
+                                  ),
                                 ),
-                                textAlign: TextAlign.center,
-                              ),
-                            ),
-                            Expanded(
-                              flex: 3,
-                              child: Text(
-                                catchUp == 0 ? '—' : '+$catchUp',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.bold,
-                                  color: catchUp == 0 ? Colors.grey.shade500 : Colors.orange.shade700,
-                                ),
-                                textAlign: TextAlign.center,
-                              ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
                       );
                     }),
