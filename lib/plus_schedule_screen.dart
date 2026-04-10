@@ -5,7 +5,6 @@ import 'package:url_launcher/url_launcher.dart';
 import 'app_theme.dart';
 import 'plus_dashboard_screen.dart';
 import 'plus_shift_request_dialog.dart';
-import 'plus_birthday_banner.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/gestures.dart';
 import 'ai_chat_screen.dart';
@@ -953,6 +952,8 @@ Map<String, dynamic>? _getCellMemo(DateTime date, int slotIndex) {
           'link': data['link'] ?? '',
           'date': date,
           'isCustomEvent': data['isCustomEvent'] ?? false,
+          'isEvent': data['isEvent'] ?? false,
+          'title': data['title'] ?? '',
           'order': data['order'] ?? (data['createdAt'] as Timestamp?)?.millisecondsSinceEpoch ?? 0,
         });
       }
@@ -1026,6 +1027,8 @@ Map<String, dynamic>? _getCellMemo(DateTime date, int slotIndex) {
           'course': data['course'] ?? '通常',
           'note': data['note'] ?? '',
           'isCustomEvent': data['isCustomEvent'] ?? false,
+          'isEvent': data['isEvent'] ?? false,
+          'title': data['title'] ?? '',
           'order': data['order'] ?? 0,
         });
       }
@@ -1237,8 +1240,6 @@ void _goToThisWeek() {
       children: [
         // トップバー（常に表示）
         _buildHeader(),
-        // 近日の誕生日バナー（プラス在籍生徒 / 2週間先まで）
-        PlusBirthdayBanner(students: _allStudents),
         // サイドメニュー + メインコンテンツ
         Expanded(
           child: Row(
@@ -2207,7 +2208,7 @@ void _goToPage(int page) {
                                 )
                               else
                                 Text(
-                                  displayName,
+                                  studentName,
                                   style: const TextStyle(
                                     fontSize: 20,
                                     fontWeight: FontWeight.bold,
@@ -3134,6 +3135,8 @@ final plusStaff = _staffList.where((s) =>
             ),
           ],
           const Spacer(),
+          // 近日の誕生日バナー（ヘッダー内、集計ボタンの左）
+          _buildBirthdayHeaderBadge(),
           // 集計ボタン
           if (_viewMode == 0)
             Padding(
@@ -3177,6 +3180,80 @@ final plusStaff = _staffList.where((s) =>
           // シフト希望入力アイコン
           _buildShiftRequestIconButton(),
         ],
+      ),
+    );
+  }
+
+  /// ヘッダー内に表示するコンパクトな誕生日バッジ（1行表示）
+  Widget _buildBirthdayHeaderBadge() {
+    if (_allStudents.isEmpty) return const SizedBox.shrink();
+
+    // 近日の誕生日を計算
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final entries = <({String name, int daysUntil, DateTime date})>[];
+    for (final s in _allStudents) {
+      final birthStr = (s['birthDate'] as String?) ?? '';
+      if (birthStr.isEmpty) continue;
+      final parts = birthStr.split('/');
+      if (parts.length != 3) continue;
+      final m = int.tryParse(parts[1]);
+      final d = int.tryParse(parts[2]);
+      if (m == null || d == null || m < 1 || m > 12 || d < 1 || d > 31) continue;
+      DateTime nextBirthday;
+      try {
+        nextBirthday = DateTime(today.year, m, d);
+      } catch (_) {
+        nextBirthday = DateTime(today.year, m, 28);
+      }
+      if (nextBirthday.month != m) {
+        nextBirthday = DateTime(today.year, m + 1, 0);
+      }
+      if (nextBirthday.isBefore(today)) continue;
+      final diff = nextBirthday.difference(today).inDays;
+      if (diff > 14) continue;
+      final name = (s['name'] as String?) ?? '';
+      if (name.isEmpty) continue;
+      entries.add((name: name, daysUntil: diff, date: nextBirthday));
+    }
+    if (entries.isEmpty) return const SizedBox.shrink();
+    entries.sort((a, b) => a.daysUntil.compareTo(b.daysUntil));
+
+    final first = entries.first;
+    final firstDateStr = '${first.date.month}/${first.date.day}';
+    final label = first.daysUntil == 0
+        ? '🎂 ${entries.length}名 ${first.name} 本日!'
+        : '🎂 ${entries.length}名 ${first.name} $firstDateStr';
+
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: Tooltip(
+        message: entries.map((e) => '${e.name}（${e.date.month}/${e.date.day}）').join('\n'),
+        child: Container(
+          height: 28,
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          decoration: BoxDecoration(
+            color: Colors.pink.shade50,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: Colors.pink.shade100),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Flexible(
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.pink.shade800,
+                    fontWeight: FontWeight.w500,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -4299,12 +4376,13 @@ final plusStaff = _staffList.where((s) =>
       // レッスンリスト（スクロール可能）
       Positioned.fill(
         child: Padding(
-          padding: const EdgeInsets.all(6),
+          padding: const EdgeInsets.only(left: 6, top: 6, bottom: 6),
           child: isHoliday && lessons.isEmpty
               ? null
               : Builder(
                   builder: (cellContext) {
                     return SingleChildScrollView(
+                      clipBehavior: Clip.none,
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: _buildLessonListWithDropIndicators(lessons, dayIndex, slotIndex, cellContext),
@@ -4615,17 +4693,18 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
     final teachers = lesson['teachers'] as List<dynamic>? ?? [];
     final note = lesson['note'] as String? ?? '';
     final hasNote = note.isNotEmpty;
-    
-    // 文字色（通常の場合は黒）
-    final textColor = course == '通常' ? Colors.black87 : color;
-    
-    // 頭文字を取得（通常の場合は空文字）
-    final courseInitial = course != '通常' && course.isNotEmpty 
-        ? '(${course.substring(0, 1)})' 
+    final isCustomEvent = lesson['isCustomEvent'] == true;
+
+    // 文字色（通常の場合は黒、イベントはオレンジ）
+    final textColor = isCustomEvent ? Colors.deepOrange : (course == '通常' ? Colors.black87 : color);
+
+    // 頭文字を取得（通常の場合は空文字、イベントも空文字）
+    final courseInitial = (!isCustomEvent && course != '通常' && course.isNotEmpty)
+        ? '(${course.substring(0, 1)})'
         : '';
-    
+
     // 講師名を頭2文字のみに変換（空要素を除外）
-    final teacherLastNames = teachers
+    var teacherLastNames = teachers
         .where((name) => name != null && name.toString().isNotEmpty)
         .map((name) {
           final lastName = name.toString().split(' ').first;
@@ -4633,6 +4712,10 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
         })
         .where((name) => name.isNotEmpty)
         .toList();
+    // イベントで講師が多い場合は省略
+    if (isCustomEvent && teacherLastNames.length > 2) {
+      teacherLastNames = [...teacherLastNames.take(2), '…'];
+    }
 
     final studentName = lesson['studentName'] as String? ?? '';
     final isHighlighted = _hoveredStudentName != null && _hoveredStudentName == studentName;
@@ -4641,6 +4724,7 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
       clipBehavior: Clip.none,
       children: [
         Container(
+          clipBehavior: Clip.hardEdge,
           padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
           decoration: BoxDecoration(
             color: isHighlighted ? Colors.yellow.shade100 : Colors.transparent,
@@ -4649,14 +4733,14 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              // 生徒名部分（クリックは_HoverContainerのonTapで処理）
+              // 生徒名/イベント名部分
               Flexible(
                 flex: 3,
                 child: Row(
                   children: [
                     Flexible(
                       child: Text(
-                        lesson['studentName'],
+                        studentName,
                         style: TextStyle(
                           color: textColor,
                           fontSize: 14,
@@ -4751,7 +4835,7 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
         if (hasNote || _hasStudentInfo(lesson['studentName'] ?? ''))
           Positioned(
             top: 0,
-            right: -6, // paddingの分を打ち消して罫線に引っ付ける
+            right: 0,
             child: CustomPaint(
               size: const Size(8, 8),
               painter: _NoteTrianglePainter(color: Colors.black87),
@@ -4931,13 +5015,14 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
     final teachers = lesson['teachers'] as List<dynamic>? ?? [];
     final note = lesson['note'] as String? ?? '';
     final hasNote = note.isNotEmpty;
+    final isCustomEvent = lesson['isCustomEvent'] == true;
 
-    final textColor = course == '通常' ? Colors.black87 : color;
-    final courseInitial = course != '通常' && course.isNotEmpty
+    final textColor = isCustomEvent ? Colors.deepOrange : (course == '通常' ? Colors.black87 : color);
+    final courseInitial = (!isCustomEvent && course != '通常' && course.isNotEmpty)
         ? '(${course.substring(0, 1)})'
         : '';
 
-    final teacherLastNames = teachers
+    var teacherLastNames = teachers
         .where((name) => name != null && name.toString().isNotEmpty)
         .map((name) {
           final lastName = name.toString().split(' ').first;
@@ -4945,6 +5030,10 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
         })
         .where((name) => name.isNotEmpty)
         .toList();
+    // イベントで講師が多い場合は省略
+    if (isCustomEvent && teacherLastNames.length > 2) {
+      teacherLastNames = [...teacherLastNames.take(2), '…'];
+    }
 
     final clickableStudentName = lesson['studentName'] as String? ?? '';
     final isHighlighted = _hoveredStudentName != null && _hoveredStudentName == clickableStudentName;
@@ -4953,6 +5042,7 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
       clipBehavior: Clip.none,
       children: [
         Container(
+          clipBehavior: Clip.hardEdge,
           padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
           decoration: BoxDecoration(
             color: isHighlighted ? Colors.yellow.shade100 : Colors.transparent,
@@ -4961,13 +5051,13 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              // 生徒名部分（クリックは_HoverContainerのonTapで処理）
+              // 生徒名/イベント名部分
               Expanded(
                 child: Row(
                   children: [
                     Flexible(
                       child: Text(
-                        lesson['studentName'],
+                        clickableStudentName,
                         style: TextStyle(
                           color: textColor,
                           fontSize: 14,
@@ -5064,7 +5154,7 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
         if (hasNote || _hasStudentInfo(lesson['studentName'] ?? ''))
           Positioned(
             top: 0,
-            right: -6,
+            right: 0,
             child: CustomPaint(
               size: const Size(8, 8),
               painter: _NoteTrianglePainter(color: Colors.black87),
