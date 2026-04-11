@@ -4738,7 +4738,7 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
     final isCustomEvent = lesson['isCustomEvent'] == true;
 
     // 文字色（通常の場合は黒、イベントはオレンジ）
-    final textColor = isCustomEvent ? Colors.deepOrange : (course == '通常' ? Colors.black87 : color);
+    final textColor = (course == '通常' || isCustomEvent) ? Colors.black87 : color;
 
     // 頭文字を取得（通常の場合は空文字、イベントも空文字）
     final courseInitial = (!isCustomEvent && course != '通常' && course.isNotEmpty)
@@ -5059,7 +5059,7 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
     final hasNote = note.isNotEmpty;
     final isCustomEvent = lesson['isCustomEvent'] == true;
 
-    final textColor = isCustomEvent ? Colors.deepOrange : (course == '通常' ? Colors.black87 : color);
+    final textColor = (course == '通常' || isCustomEvent) ? Colors.black87 : color;
     final courseInitial = (!isCustomEvent && course != '通常' && course.isNotEmpty)
         ? '(${course.substring(0, 1)})'
         : '';
