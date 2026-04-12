@@ -565,31 +565,35 @@ class _AdminShellState extends State<AdminShell> {
     int newIndex = _selectedIndex;
 
     switch (_staffType) {
+      // インデックスは _getScreen() のcase番号と一致させること
       case StaffType.plusOnly:
+        // 0:予定, 1:プラス, 2:AI相談, 3:チャット, 4:お知らせ, 5:管理
         switch (type) {
           case 'schedule': newIndex = 0; break;
-          case 'chat': newIndex = 2; break;
-          case 'info': newIndex = 3; break;
+          case 'chat': newIndex = 3; break;
+          case 'info': newIndex = 4; break;
         }
         break;
       case StaffType.beesmiley:
+        // 0:予定, 1:記録, 2:AI相談, 3:チャット, 4:お知らせ, 5:イベント, 6:管理
         switch (type) {
           case 'schedule': newIndex = 0; break;
           case 'record': newIndex = 1; break;
-          case 'chat': newIndex = 2; break;
-          case 'info': newIndex = 3; break;
-          case 'event': newIndex = 4; break;
+          case 'chat': newIndex = 3; break;
+          case 'info': newIndex = 4; break;
+          case 'event': newIndex = 5; break;
         }
         break;
       case StaffType.both:
       case StaffType.loading:
       default:
+        // 0:予定, 1:プラス, 2:記録, 3:AI相談, 4:チャット, 5:お知らせ, 6:イベント, 7:管理
         switch (type) {
           case 'schedule': newIndex = 0; break;
           case 'record': newIndex = 2; break;
-          case 'chat': newIndex = 3; break;
-          case 'info': newIndex = 4; break;
-          case 'event': newIndex = 5; break;
+          case 'chat': newIndex = 4; break;
+          case 'info': newIndex = 5; break;
+          case 'event': newIndex = 6; break;
         }
         break;
     }
