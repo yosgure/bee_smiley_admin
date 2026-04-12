@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 class AiCommandManageScreen extends StatefulWidget {
-  const AiCommandManageScreen({super.key});
+  final VoidCallback? onBack;
+  const AiCommandManageScreen({super.key, this.onBack});
 
   @override
   State<AiCommandManageScreen> createState() => _AiCommandManageScreenState();
@@ -38,18 +39,18 @@ class _AiCommandManageScreenState extends State<AiCommandManageScreen> {
   }
 
   void _addCommand() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => _CommandEditScreen(onSaved: _loadCommands)),
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => _CommandEditDialog(onSaved: _loadCommands),
     );
   }
 
   void _editCommand(Map<String, dynamic> cmd) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => _CommandEditScreen(existing: cmd, onSaved: _loadCommands),
-      ),
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => _CommandEditDialog(existing: cmd, onSaved: _loadCommands),
     );
   }
 
@@ -96,7 +97,13 @@ class _AiCommandManageScreenState extends State<AiCommandManageScreen> {
         surfaceTintColor: Colors.transparent,
         leading: IconButton(
           icon: Icon(Icons.arrow_back_ios_new_rounded, size: 20, color: Colors.grey.shade700),
-          onPressed: () => Navigator.pop(context),
+          onPressed: () {
+            if (widget.onBack != null) {
+              widget.onBack!();
+            } else {
+              Navigator.pop(context);
+            }
+          },
         ),
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1),
@@ -198,19 +205,19 @@ class _AiCommandManageScreenState extends State<AiCommandManageScreen> {
 }
 
 // ================================================
-// コマンド編集画面（質問管理付き）
+// コマンド編集ダイアログ（質問管理付き）
 // ================================================
-class _CommandEditScreen extends StatefulWidget {
+class _CommandEditDialog extends StatefulWidget {
   final Map<String, dynamic>? existing;
   final VoidCallback onSaved;
 
-  const _CommandEditScreen({this.existing, required this.onSaved});
+  const _CommandEditDialog({this.existing, required this.onSaved});
 
   @override
-  State<_CommandEditScreen> createState() => _CommandEditScreenState();
+  State<_CommandEditDialog> createState() => _CommandEditDialogState();
 }
 
-class _CommandEditScreenState extends State<_CommandEditScreen> {
+class _CommandEditDialogState extends State<_CommandEditDialog> {
   late TextEditingController _labelController;
   late TextEditingController _descController;
   late TextEditingController _scriptController;
@@ -260,9 +267,10 @@ class _CommandEditScreenState extends State<_CommandEditScreen> {
 
   void _editQuestion(int index) async {
     final q = _questions[index];
-    final result = await Navigator.push<Map<String, dynamic>>(
-      context,
-      MaterialPageRoute(builder: (_) => _QuestionEditScreen(question: q)),
+    final result = await showDialog<Map<String, dynamic>>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => _QuestionEditDialog(question: q),
     );
     if (result != null) {
       setState(() => _questions[index] = result);
@@ -313,43 +321,53 @@ class _CommandEditScreenState extends State<_CommandEditScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return Dialog(
       backgroundColor: Colors.white,
-      appBar: AppBar(
-        title: Text(_isNew ? 'コマンドを追加' : 'コマンドを編集', style: const TextStyle(fontSize: 16)),
-        centerTitle: true,
-        backgroundColor: Colors.white,
-        elevation: 0,
-        surfaceTintColor: Colors.transparent,
-        leading: IconButton(
-          icon: Icon(Icons.arrow_back_ios_new_rounded, size: 20, color: Colors.grey.shade700),
-          onPressed: () => Navigator.pop(context),
-        ),
-        actions: [
-          TextButton(
-            onPressed: _isSaving ? null : _save,
-            child: Text(
-              '保存',
-              style: TextStyle(
-                color: _isSaving ? Colors.grey : const Color(0xFF7C3AED),
-                fontWeight: FontWeight.w600,
+      surfaceTintColor: Colors.transparent,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 40, vertical: 24),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 600, maxHeight: 700),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // ヘッダー
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                border: Border(bottom: BorderSide(color: Colors.grey.shade200, width: 0.5)),
+              ),
+              child: Row(
+                children: [
+                  IconButton(
+                    icon: Icon(Icons.close_rounded, size: 20, color: Colors.grey.shade700),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                  Expanded(
+                    child: Text(
+                      _isNew ? 'コマンドを追加' : 'コマンドを編集',
+                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: _isSaving ? null : _save,
+                    child: Text(
+                      '保存',
+                      style: TextStyle(
+                        color: _isSaving ? Colors.grey : const Color(0xFF7C3AED),
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
-          ),
-          const SizedBox(width: 8),
-        ],
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(1),
-          child: Container(color: Colors.grey.shade200, height: 0.5),
-        ),
-      ),
-      body: Align(
-        alignment: Alignment.topCenter,
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 600),
-          child: ListView(
-            padding: const EdgeInsets.all(20),
-            children: [
+            // コンテンツ
+            Flexible(
+              child: ListView(
+                padding: const EdgeInsets.all(20),
+                children: [
               // 基本情報
               _buildSectionTitle('基本情報'),
               const SizedBox(height: 12),
@@ -540,6 +558,8 @@ class _CommandEditScreenState extends State<_CommandEditScreen> {
             ],
           ),
         ),
+          ],
+        ),
       ),
     );
   }
@@ -586,18 +606,18 @@ class _CommandEditScreenState extends State<_CommandEditScreen> {
 }
 
 // ================================================
-// 質問編集画面
+// 質問編集ダイアログ
 // ================================================
-class _QuestionEditScreen extends StatefulWidget {
+class _QuestionEditDialog extends StatefulWidget {
   final Map<String, dynamic> question;
 
-  const _QuestionEditScreen({required this.question});
+  const _QuestionEditDialog({required this.question});
 
   @override
-  State<_QuestionEditScreen> createState() => _QuestionEditScreenState();
+  State<_QuestionEditDialog> createState() => _QuestionEditDialogState();
 }
 
-class _QuestionEditScreenState extends State<_QuestionEditScreen> {
+class _QuestionEditDialogState extends State<_QuestionEditDialog> {
   late TextEditingController _questionController;
   late TextEditingController _placeholderController;
   late String _type;
@@ -643,38 +663,48 @@ class _QuestionEditScreenState extends State<_QuestionEditScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return Dialog(
       backgroundColor: Colors.white,
-      appBar: AppBar(
-        title: const Text('質問を編集', style: TextStyle(fontSize: 16)),
-        centerTitle: true,
-        backgroundColor: Colors.white,
-        elevation: 0,
-        surfaceTintColor: Colors.transparent,
-        leading: IconButton(
-          icon: Icon(Icons.arrow_back_ios_new_rounded, size: 20, color: Colors.grey.shade700),
-          onPressed: () => Navigator.pop(context),
-        ),
-        actions: [
-          TextButton(
-            onPressed: _save,
-            child: const Text('完了',
-                style: TextStyle(color: Color(0xFF7C3AED), fontWeight: FontWeight.w600)),
-          ),
-          const SizedBox(width: 8),
-        ],
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(1),
-          child: Container(color: Colors.grey.shade200, height: 0.5),
-        ),
-      ),
-      body: Align(
-        alignment: Alignment.topCenter,
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 600),
-          child: ListView(
-            padding: const EdgeInsets.all(20),
-            children: [
+      surfaceTintColor: Colors.transparent,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 40, vertical: 24),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 560, maxHeight: 650),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // ヘッダー
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                border: Border(bottom: BorderSide(color: Colors.grey.shade200, width: 0.5)),
+              ),
+              child: Row(
+                children: [
+                  IconButton(
+                    icon: Icon(Icons.close_rounded, size: 20, color: Colors.grey.shade700),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                  const Expanded(
+                    child: Text(
+                      '質問を編集',
+                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: _save,
+                    child: const Text('完了',
+                        style: TextStyle(color: Color(0xFF7C3AED), fontWeight: FontWeight.w600)),
+                  ),
+                ],
+              ),
+            ),
+            // コンテンツ
+            Flexible(
+              child: ListView(
+                padding: const EdgeInsets.all(20),
+                children: [
               // 質問テキスト
               Text('質問テキスト',
                   style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.grey.shade700)),
@@ -809,6 +839,8 @@ class _QuestionEditScreenState extends State<_QuestionEditScreen> {
               ),
             ],
           ),
+        ),
+          ],
         ),
       ),
     );

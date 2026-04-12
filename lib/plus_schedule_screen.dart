@@ -3233,9 +3233,9 @@ final plusStaff = _staffList.where((s) =>
           height: 28,
           padding: const EdgeInsets.symmetric(horizontal: 10),
           decoration: BoxDecoration(
-            color: Colors.pink.shade50,
+            color: Colors.pink.shade50.withOpacity(0.5),
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: Colors.pink.shade100),
+            border: Border.all(color: Colors.pink.shade50),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
@@ -3245,7 +3245,7 @@ final plusStaff = _staffList.where((s) =>
                   label,
                   style: TextStyle(
                     fontSize: 12,
-                    color: Colors.pink.shade800,
+                    color: Colors.black87,
                     fontWeight: FontWeight.w500,
                   ),
                   overflow: TextOverflow.ellipsis,
@@ -3267,14 +3267,14 @@ final plusStaff = _staffList.where((s) =>
     final d = DateTime(deadline.year, deadline.month, deadline.day);
     final daysLeft = d.difference(t).inDays;
 
-    // 色分け: 通常=オレンジ / 3日以内=赤 / 超過=濃い赤
+    // 色分け: 通常=グレー / 3日以内=赤 / 超過=濃い赤
     late final Color color;
     if (daysLeft < 0) {
       color = Colors.red.shade700;
     } else if (daysLeft <= 3) {
       color = Colors.red.shade400;
     } else {
-      color = Colors.orange.shade600;
+      color = Colors.grey.shade500;
     }
 
     final tooltipText =

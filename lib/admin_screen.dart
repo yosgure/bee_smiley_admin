@@ -110,6 +110,8 @@ void _navigateTo(BuildContext context, Widget screen) {
       screenWithBack = FamilyCsvExportScreen(onBack: widget.onCloseWebScreen);
     } else if (screen is ToolCsvExportScreen) {
       screenWithBack = ToolCsvExportScreen(onBack: widget.onCloseWebScreen);
+    } else if (screen is AiCommandManageScreen) {
+      screenWithBack = AiCommandManageScreen(onBack: widget.onCloseWebScreen);
     } else {
       screenWithBack = screen;
     }
