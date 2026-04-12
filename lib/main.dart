@@ -720,7 +720,22 @@ class _AdminShellState extends State<AdminShell> {
             selectedLabelTextStyle: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold),
             unselectedIconTheme: IconThemeData(color: context.colors.textSecondary),
             unselectedLabelTextStyle: TextStyle(color: context.colors.textSecondary),
-            leading: Padding(padding: const EdgeInsets.all(12), child: Image.asset('assets/logo_beesmileymark.png', width: 50, height: 50)),
+            leading: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Container(
+                width: 50,
+                height: 50,
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  shape: BoxShape.circle,
+                  boxShadow: context.isDark
+                      ? [BoxShadow(color: Colors.black.withOpacity(0.3), blurRadius: 4)]
+                      : [],
+                ),
+                padding: const EdgeInsets.all(4),
+                child: Image.asset('assets/logo_beesmileymark.png', width: 42, height: 42),
+              ),
+            ),
             destinations: _railDestinations,
           ),
           if (isWebLayout) const VerticalDivider(thickness: 1, width: 1),
