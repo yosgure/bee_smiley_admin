@@ -248,11 +248,11 @@ class _ParentChatScreenState extends State<ParentChatScreen> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.chat_bubble_outline, size: 64, color: Colors.grey.shade300),
-                  const SizedBox(height: 16),
-                  const Text(
+                  Icon(Icons.chat_bubble_outline, size: 64, color: context.colors.borderMedium),
+                  SizedBox(height: 16),
+                  Text(
                     'まだチャットがありません',
-                    style: TextStyle(color: Colors.grey, fontSize: 16),
+                    style: TextStyle(color: context.colors.textSecondary, fontSize: 16),
                   ),
                   const SizedBox(height: 24),
                   ElevatedButton.icon(
@@ -300,13 +300,13 @@ class _ParentChatScreenState extends State<ParentChatScreen> {
       height: 48,
       padding: const EdgeInsets.symmetric(horizontal: 16),
       decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
+        color: context.colors.cardBg,
+        border: Border(bottom: BorderSide(color: context.colors.borderLight)),
       ),
       child: Center(
         child: Text(
           title,
-          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.normal),
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.normal),
         ),
       ),
     );
@@ -346,7 +346,7 @@ class _ChatMessageListState extends State<_ChatMessageList> {
   @override
   Widget build(BuildContext context) {
     return Container(
-      color: const Color(0xFFF2F2F7),
+      color: context.colors.scaffoldBgAlt,
       child: StreamBuilder<QuerySnapshot>(
         stream: FirebaseFirestore.instance
             .collection('chat_rooms')
@@ -366,13 +366,13 @@ class _ChatMessageListState extends State<_ChatMessageList> {
           final messages = snapshot.data!.docs;
 
           if (messages.isEmpty) {
-            return const Center(
+            return Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.chat_bubble_outline, size: 48, color: Colors.grey),
+                  Icon(Icons.chat_bubble_outline, size: 48, color: context.colors.textSecondary),
                   SizedBox(height: 16),
-                  Text('メッセージを送信してみましょう', style: TextStyle(color: Colors.grey)),
+                  Text('メッセージを送信してみましょう', style: TextStyle(color: context.colors.textSecondary)),
                 ],
               ),
             );
@@ -475,14 +475,14 @@ class _ChatMessageListState extends State<_ChatMessageList> {
                 imageUrl: msg['url'],
                 width: 200,
                 fit: BoxFit.cover,
-                placeholder: (c, u) => Container(width: 200, height: 150, decoration: BoxDecoration(color: Colors.grey.shade200, borderRadius: BorderRadius.circular(12)), child: const Center(child: SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2)))),
+                placeholder: (c, u) => Container(width: 200, height: 150, decoration: BoxDecoration(color: context.colors.borderLight, borderRadius: BorderRadius.circular(12)), child: Center(child: SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2)))),
                 errorWidget: (c, u, e) => const Icon(Icons.broken_image),
               ),
             ),
           ),
           if (text.isNotEmpty) ...[
             const SizedBox(height: 8),
-            Text(text, style: const TextStyle(fontSize: 15, height: 1.5, fontFamily: 'NotoSansJP', fontFamilyFallback: ['Hiragino Sans', 'Roboto', 'sans-serif'])),
+            Text(text, style: TextStyle(fontSize: 15, height: 1.5, fontFamily: 'NotoSansJP', fontFamilyFallback: ['Hiragino Sans', 'Roboto', 'sans-serif'])),
           ],
         ],
       );
@@ -523,7 +523,7 @@ class _ChatMessageListState extends State<_ChatMessageList> {
           ),
           if (text.isNotEmpty) ...[
             const SizedBox(height: 8),
-            Text(text, style: const TextStyle(fontSize: 15, height: 1.5, fontFamily: 'NotoSansJP', fontFamilyFallback: ['Hiragino Sans', 'Roboto', 'sans-serif'])),
+            Text(text, style: TextStyle(fontSize: 15, height: 1.5, fontFamily: 'NotoSansJP', fontFamilyFallback: ['Hiragino Sans', 'Roboto', 'sans-serif'])),
           ],
         ],
       );
@@ -547,7 +547,7 @@ class _ChatMessageListState extends State<_ChatMessageList> {
       else if (['ppt', 'pptx'].contains(fExt)) { fIcon = Icons.slideshow; fIconBg = Colors.orange.shade600; }
       else if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'].contains(fExt)) { fIcon = Icons.image; fIconBg = Colors.teal; }
       else if (['zip', 'rar', '7z', 'tar', 'gz'].contains(fExt)) { fIcon = Icons.folder_zip; fIconBg = Colors.amber.shade700; }
-      else { fIcon = Icons.insert_drive_file; fIconBg = Colors.grey.shade600; }
+      else { fIcon = Icons.insert_drive_file; fIconBg = context.colors.textSecondary; }
 
       content = ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 260),
@@ -564,21 +564,21 @@ class _ChatMessageListState extends State<_ChatMessageList> {
                   Container(
                     width: 40, height: 40,
                     decoration: BoxDecoration(color: fIconBg, borderRadius: BorderRadius.circular(6)),
-                    child: Icon(fIcon, color: Colors.white, size: 24),
+                    child: Icon(fIcon, color: context.colors.cardBg, size: 24),
                   ),
-                  const SizedBox(width: 10),
+                  SizedBox(width: 10),
                   Flexible(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(fName, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500), overflow: TextOverflow.ellipsis, maxLines: 2),
+                        Text(fName, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500), overflow: TextOverflow.ellipsis, maxLines: 2),
                         if (expiryText.isNotEmpty) ...[
-                          const SizedBox(height: 2),
-                          Text(expiryText, style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
+                          SizedBox(height: 2),
+                          Text(expiryText, style: TextStyle(fontSize: 11, color: context.colors.textSecondary)),
                         ],
                         if (sizeText.isNotEmpty) ...[
-                          const SizedBox(height: 2),
-                          Text('サイズ: $sizeText', style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
+                          SizedBox(height: 2),
+                          Text('サイズ: $sizeText', style: TextStyle(fontSize: 11, color: context.colors.textSecondary)),
                         ],
                       ],
                     ),
@@ -586,9 +586,9 @@ class _ChatMessageListState extends State<_ChatMessageList> {
                 ],
               ),
             ),
-            if (text.isNotEmpty) ...[const SizedBox(height: 8), Text(text, style: const TextStyle(fontSize: 15, height: 1.5, fontFamily: 'NotoSansJP', fontFamilyFallback: ['Hiragino Sans', 'Roboto', 'sans-serif']))],
-            const SizedBox(height: 6),
-            Divider(height: 1, color: Colors.grey.shade300),
+            if (text.isNotEmpty) ...[const SizedBox(height: 8), Text(text, style: TextStyle(fontSize: 15, height: 1.5, fontFamily: 'NotoSansJP', fontFamilyFallback: ['Hiragino Sans', 'Roboto', 'sans-serif']))],
+            SizedBox(height: 6),
+            Divider(height: 1, color: context.colors.borderMedium),
             const SizedBox(height: 4),
             Row(
               mainAxisSize: MainAxisSize.min,
@@ -609,7 +609,7 @@ class _ChatMessageListState extends State<_ChatMessageList> {
         ),
       );
     } else {
-      content = Text(text, style: const TextStyle(fontSize: 15, height: 1.5, fontFamily: 'NotoSansJP', fontFamilyFallback: ['Hiragino Sans', 'Roboto', 'sans-serif']));
+      content = Text(text, style: TextStyle(fontSize: 15, height: 1.5, fontFamily: 'NotoSansJP', fontFamilyFallback: ['Hiragino Sans', 'Roboto', 'sans-serif']));
     }
 
     return GestureDetector(
@@ -625,7 +625,7 @@ class _ChatMessageListState extends State<_ChatMessageList> {
               if (senderName.isNotEmpty)
                 Padding(
                   padding: const EdgeInsets.only(left: 8, bottom: 2),
-                  child: Text(senderName, style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                  child: Text(senderName, style: TextStyle(fontSize: 11, color: context.colors.textSecondary)),
                 ),
               Row(
                 mainAxisSize: MainAxisSize.min,
@@ -635,8 +635,8 @@ class _ChatMessageListState extends State<_ChatMessageList> {
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
-                        if (isRead) const Text('既読', style: TextStyle(fontSize: 10, color: Colors.grey)),
-                        Text(timeStr, style: const TextStyle(fontSize: 10, color: Colors.grey)),
+                        if (isRead) Text('既読', style: TextStyle(fontSize: 10, color: context.colors.textSecondary)),
+                        Text(timeStr, style: TextStyle(fontSize: 10, color: context.colors.textSecondary)),
                       ],
                     ),
                     const SizedBox(width: 8),
@@ -647,7 +647,7 @@ class _ChatMessageListState extends State<_ChatMessageList> {
                         : Container(
                             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
                             decoration: BoxDecoration(
-                              color: isMe ? AppColors.primary.withOpacity(0.2) : Colors.white,
+                              color: isMe ? context.colors.chatMyBubble : context.colors.chatOtherBubble,
                               borderRadius: BorderRadius.circular(16),
                             ),
                             child: Column(
@@ -662,7 +662,7 @@ class _ChatMessageListState extends State<_ChatMessageList> {
                   ),
                   if (!isMe) ...[
                     const SizedBox(width: 8),
-                    Text(timeStr, style: const TextStyle(fontSize: 10, color: Colors.grey)),
+                    Text(timeStr, style: TextStyle(fontSize: 10, color: context.colors.textSecondary)),
                   ],
                 ],
               ),
@@ -685,8 +685,8 @@ class _ChatMessageListState extends State<_ChatMessageList> {
     final senderName = (replyTo['senderName'] ?? '') as String;
     final preview = (replyTo['preview'] ?? '') as String;
     final bgColor =
-        isMe ? Colors.white.withOpacity(0.5) : Colors.grey.shade100;
-    final accentColor = isMe ? AppColors.primary : Colors.grey.shade600;
+        isMe ? context.colors.chatMyBubble.withOpacity(0.3) : context.colors.chipBg;
+    final accentColor = isMe ? AppColors.primary : context.colors.textSecondary;
     return Container(
       margin: const EdgeInsets.only(bottom: 6),
       padding: const EdgeInsets.fromLTRB(8, 4, 8, 5),
@@ -707,12 +707,12 @@ class _ChatMessageListState extends State<_ChatMessageList> {
               color: accentColor,
             ),
           ),
-          const SizedBox(height: 1),
+          SizedBox(height: 1),
           Text(
             preview,
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontSize: 12, color: Colors.black54),
+            style: TextStyle(fontSize: 12, color: context.colors.textSecondary),
           ),
         ],
       ),
@@ -726,17 +726,17 @@ class _ChatMessageListState extends State<_ChatMessageList> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
         decoration: BoxDecoration(
-          color: isMe ? AppColors.primary.withOpacity(0.1) : Colors.grey.shade100,
+          color: isMe ? AppColors.primary.withOpacity(0.1) : context.colors.chipBg,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.grey.shade300),
+          border: Border.all(color: context.colors.borderMedium),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(emoji, style: const TextStyle(fontSize: 12)),
+            Text(emoji, style: TextStyle(fontSize: 12)),
             if (c > 1) ...[
               const SizedBox(width: 2),
-              Text('$c', style: const TextStyle(fontSize: 10, color: Colors.grey)),
+              Text('$c', style: TextStyle(fontSize: 10, color: context.colors.textSecondary)),
             ],
           ],
         ),
@@ -822,7 +822,7 @@ class _ChatMessageListState extends State<_ChatMessageList> {
                 width: 40,
                 height: 40,
                 alignment: Alignment.center,
-                child: Text(e, style: const TextStyle(fontSize: 26)),
+                child: Text(e, style: TextStyle(fontSize: 26)),
               ),
             ),
         ],
@@ -834,7 +834,7 @@ class _ChatMessageListState extends State<_ChatMessageList> {
     showDialog(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        backgroundColor: Colors.white,
+        backgroundColor: context.colors.cardBg,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         title: const Text('部分コピー', style: TextStyle(fontSize: 16)),
         content: SizedBox(
@@ -842,7 +842,7 @@ class _ChatMessageListState extends State<_ChatMessageList> {
           child: SingleChildScrollView(
             child: SelectableText(
               text,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 15,
                 height: 1.5,
                 fontFamily: 'NotoSansJP',
@@ -867,7 +867,7 @@ class _ChatMessageListState extends State<_ChatMessageList> {
       context: context,
       barrierDismissible: true,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('スタンプを選択'),
+        title: Text('スタンプを選択'),
         content: Wrap(
           alignment: WrapAlignment.center,
           spacing: 8,
@@ -880,10 +880,10 @@ class _ChatMessageListState extends State<_ChatMessageList> {
             child: Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: Colors.grey.shade100,
+                color: context.colors.chipBg,
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: Text(e, style: const TextStyle(fontSize: 28)),
+              child: Text(e, style: TextStyle(fontSize: 28)),
             ),
           )).toList(),
         ),
@@ -946,7 +946,7 @@ class _ChatMessageListState extends State<_ChatMessageList> {
           controller: controller,
           maxLines: 3,
           autofocus: true,
-          decoration: const InputDecoration(
+          decoration: InputDecoration(
             border: OutlineInputBorder(),
             hintText: 'メッセージを入力',
           ),
@@ -1031,8 +1031,8 @@ class _ChatMessageListState extends State<_ChatMessageList> {
                     child: CachedNetworkImage(
                       imageUrl: url,
                       fit: BoxFit.contain,
-                      placeholder: (c, u) => const Center(child: CircularProgressIndicator(color: Colors.white)),
-                      errorWidget: (c, u, e) => const Icon(Icons.broken_image, color: Colors.white, size: 48),
+                      placeholder: (c, u) => Center(child: CircularProgressIndicator(color: context.colors.cardBg)),
+                      errorWidget: (c, u, e) => Icon(Icons.broken_image, color: context.colors.cardBg, size: 48),
                     ),
                   ),
                 ),
@@ -1047,13 +1047,13 @@ class _ChatMessageListState extends State<_ChatMessageList> {
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           IconButton(
-                            icon: const Icon(Icons.close, color: Colors.white, size: 28),
+                            icon: Icon(Icons.close, color: context.colors.cardBg, size: 28),
                             onPressed: () => Navigator.pop(dialogContext),
                           ),
                           IconButton(
                             icon: isSaving
-                                ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                                : const Icon(Icons.download, color: Colors.white, size: 28),
+                                ? SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2, color: context.colors.cardBg))
+                                : Icon(Icons.download, color: context.colors.cardBg, size: 28),
                             tooltip: '保存',
                             onPressed: isSaving
                                 ? null
@@ -1194,8 +1194,8 @@ class _ChatInputAreaState extends State<_ChatInputArea> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
       decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border(top: BorderSide(color: Colors.grey.shade200)),
+        color: context.colors.cardBg,
+        border: Border(top: BorderSide(color: context.colors.borderLight)),
       ),
       child: SafeArea(
         top: false,
@@ -1212,28 +1212,28 @@ class _ChatInputAreaState extends State<_ChatInputArea> {
                     onTap: _isUploading ? null : _pickAndUploadImage,
                     child: Icon(
                       Icons.image,
-                      color: _isUploading ? Colors.grey.shade400 : Colors.grey.shade600,
+                      color: _isUploading ? context.colors.textHint : context.colors.textSecondary,
                       size: 28,
                     ),
                   ),
                 ),
-                const SizedBox(width: 8),
+                SizedBox(width: 8),
                 Padding(
                   padding: const EdgeInsets.only(bottom: 6),
                   child: GestureDetector(
                     onTap: _isUploading ? null : _pickAndUploadVideo,
                     child: Icon(
                       Icons.videocam,
-                      color: _isUploading ? Colors.grey.shade400 : Colors.grey.shade600,
+                      color: _isUploading ? context.colors.textHint : context.colors.textSecondary,
                       size: 28,
                     ),
                   ),
                 ),
-                const SizedBox(width: 8),
+                SizedBox(width: 8),
                 Expanded(
                   child: Container(
                     decoration: BoxDecoration(
-                      color: Colors.grey.shade200,
+                      color: context.colors.borderLight,
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: TextField(
@@ -1242,10 +1242,10 @@ class _ChatInputAreaState extends State<_ChatInputArea> {
                       maxLines: 5,
                       minLines: 1,
                       textInputAction: TextInputAction.newline,
-                      style: const TextStyle(fontSize: 16),
-                      decoration: const InputDecoration(
+                      style: TextStyle(fontSize: 16),
+                      decoration: InputDecoration(
                         hintText: 'メッセージを入力',
-                        hintStyle: TextStyle(fontSize: 16, color: Colors.grey),
+                        hintStyle: TextStyle(fontSize: 16, color: context.colors.textSecondary),
                         border: InputBorder.none,
                         contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                         isDense: true,
@@ -1253,7 +1253,7 @@ class _ChatInputAreaState extends State<_ChatInputArea> {
                     ),
                   ),
                 ),
-                const SizedBox(width: 8),
+                SizedBox(width: 8),
                 Padding(
                   padding: const EdgeInsets.only(bottom: 2),
                   child: GestureDetector(
@@ -1265,7 +1265,7 @@ class _ChatInputAreaState extends State<_ChatInputArea> {
                         color: AppColors.primary,
                         shape: BoxShape.circle,
                       ),
-                      child: const Icon(Icons.send, color: Colors.white, size: 20),
+                      child: Icon(Icons.send, color: context.colors.cardBg, size: 20),
                     ),
                   ),
                 ),

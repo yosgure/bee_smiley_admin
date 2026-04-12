@@ -38,8 +38,8 @@ class _ParentNotificationScreenState extends State<ParentNotificationScreen> {
       height: 48,
       padding: const EdgeInsets.symmetric(horizontal: 16),
       decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
+        color: context.colors.cardBg,
+        border: Border(bottom: BorderSide(color: context.colors.borderLight)),
       ),
       child: Stack(
         alignment: Alignment.center,
@@ -48,7 +48,7 @@ class _ParentNotificationScreenState extends State<ParentNotificationScreen> {
             Positioned(
               left: 0,
               child: IconButton(
-                icon: const Icon(Icons.arrow_back_ios, color: Colors.black54),
+                icon: Icon(Icons.arrow_back_ios, color: context.colors.textSecondary),
                 onPressed: () => setState(() => _selectedNotificationId = null),
               ),
             ),
@@ -77,13 +77,13 @@ class _ParentNotificationScreenState extends State<ParentNotificationScreen> {
           return const NotificationListSkeleton();
         }
         if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-          return const Center(
+          return Center(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(Icons.notifications_off_outlined, size: 64, color: Colors.grey),
+                Icon(Icons.notifications_off_outlined, size: 64, color: context.colors.textSecondary),
                 SizedBox(height: 16),
-                Text('お知らせはありません', style: TextStyle(color: Colors.grey)),
+                Text('お知らせはありません', style: TextStyle(color: context.colors.textSecondary)),
               ],
             ),
           );
@@ -120,7 +120,7 @@ class _ParentNotificationScreenState extends State<ParentNotificationScreen> {
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: Colors.grey.shade200),
+        side: BorderSide(color: context.colors.borderLight),
       ),
       child: InkWell(
         onTap: () => setState(() => _selectedNotificationId = id),
@@ -141,20 +141,20 @@ class _ParentNotificationScreenState extends State<ParentNotificationScreen> {
                     ),
                   ),
                   if (hasAttachment)
-                    const Icon(Icons.attach_file, size: 18, color: Colors.grey),
+                    Icon(Icons.attach_file, size: 18, color: context.colors.textSecondary),
                 ],
               ),
               const SizedBox(height: 8),
               Text(
                 body,
-                style: const TextStyle(color: Colors.black87, fontSize: 14),
+                style: TextStyle(color: context.colors.textPrimary, fontSize: 14),
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
               ),
               const SizedBox(height: 8),
               Text(
                 dateStr,
-                style: const TextStyle(color: Colors.grey, fontSize: 12),
+                style: TextStyle(color: context.colors.textSecondary, fontSize: 12),
               ),
             ],
           ),
@@ -208,7 +208,7 @@ class _ParentNotificationScreenState extends State<ParentNotificationScreen> {
                     // 日時
                     Text(
                       dateStr,
-                      style: const TextStyle(color: Colors.grey, fontSize: 13),
+                      style: TextStyle(color: context.colors.textSecondary, fontSize: 13),
                     ),
                     const SizedBox(height: 16),
                     const Divider(),
@@ -238,7 +238,7 @@ class _ParentNotificationScreenState extends State<ParentNotificationScreen> {
                         child: Container(
                           padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
-                            color: Colors.grey.shade100,
+                            color: context.colors.chipBg,
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: Row(
@@ -254,7 +254,7 @@ class _ParentNotificationScreenState extends State<ParentNotificationScreen> {
                                   ),
                                 ),
                               ),
-                              const Icon(Icons.download, color: Colors.grey),
+                              Icon(Icons.download, color: context.colors.textSecondary),
                             ],
                           ),
                         ),

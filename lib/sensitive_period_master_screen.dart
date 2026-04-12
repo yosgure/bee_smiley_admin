@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart'; // Firestore
+import 'app_theme.dart';
 
 class SensitivePeriodMasterScreen extends StatefulWidget {
   final VoidCallback? onBack;
@@ -20,10 +21,10 @@ class _SensitivePeriodMasterScreenState extends State<SensitivePeriodMasterScree
       appBar: AppBar(
         title: const Text('敏感期リスト'),
 centerTitle: true,
-  backgroundColor: Colors.white,
+  backgroundColor: context.colors.cardBg,
   elevation: 0,
   leading: IconButton(
-    icon: const Icon(Icons.arrow_back, color: Colors.black87),
+    icon: Icon(Icons.arrow_back, color: context.colors.textPrimary),
     onPressed: () {
       if (widget.onBack != null) {
         widget.onBack!();
@@ -34,7 +35,7 @@ centerTitle: true,
   ),
 ),
 
-      backgroundColor: const Color(0xFFF2F2F7),
+      backgroundColor: context.colors.scaffoldBgAlt,
       
       // リアルタイムデータ取得
       body: StreamBuilder<QuerySnapshot>(
@@ -50,10 +51,10 @@ centerTitle: true,
           final docs = snapshot.data!.docs;
 
           if (docs.isEmpty) {
-            return const Center(
+            return Center(
               child: Text(
                 'データがありません。\n右下の「＋」で追加してください。',
-                style: TextStyle(color: Colors.grey),
+                style: TextStyle(color: context.colors.textSecondary),
               ),
             );
           }
@@ -84,7 +85,7 @@ centerTitle: true,
                   ),
                   subtitle: Text(
                     '目安: ${data['startAge']}歳 〜 ${data['endAge']}歳頃',
-                    style: const TextStyle(color: Colors.grey),
+                    style: TextStyle(color: context.colors.textSecondary),
                   ),
                   children: [
                     Padding(
@@ -183,7 +184,7 @@ centerTitle: true,
       padding: const EdgeInsets.only(bottom: 4),
       child: Text(
         text,
-        style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.grey, fontSize: 12),
+        style: TextStyle(fontWeight: FontWeight.bold, color: context.colors.textSecondary, fontSize: 12),
       ),
     );
   }
@@ -300,11 +301,11 @@ centerTitle: true,
                                 Expanded(
                                   child: TextField(
                                     controller: entry.value,
-                                    decoration: const InputDecoration(
+                                    decoration: InputDecoration(
                                       hintText: '例：同じ道順じゃないと泣く',
                                       isDense: true,
-                                      border: OutlineInputBorder(),
-                                      filled: true, fillColor: Colors.white,
+                                      border: const OutlineInputBorder(),
+                                      filled: true, fillColor: context.colors.cardBg,
                                     ),
                                   ),
                                 ),
@@ -371,10 +372,10 @@ centerTitle: true,
       keyboardType: type,
       decoration: InputDecoration(
         labelText: label,
-        prefixIcon: icon != null ? Icon(icon, color: Colors.grey, size: 20) : null,
+        prefixIcon: icon != null ? Icon(icon, color: context.colors.textSecondary, size: 20) : null,
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
         filled: true,
-        fillColor: Colors.white,
+        fillColor: context.colors.cardBg,
         contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
         isDense: true,
       ),

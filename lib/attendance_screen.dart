@@ -42,12 +42,12 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.grey.shade100,
+      backgroundColor: context.colors.chipBg,
       appBar: AppBar(
-        backgroundColor: Colors.white,
+        backgroundColor: context.colors.cardBg,
         elevation: 1,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: AppColors.textMain),
+          icon: Icon(Icons.arrow_back, color: context.colors.textPrimary),
           onPressed: () => Navigator.pop(context),
         ),
         title: Image.asset(
@@ -69,10 +69,10 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
             child: Center(
               child: Text(
                 DateFormat('HH:mm').format(_currentTime),
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 24,
                   fontWeight: FontWeight.bold,
-                  color: AppColors.textMain,
+                  color: context.colors.textPrimary,
                 ),
               ),
             ),
@@ -148,13 +148,13 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(Icons.event_busy, size: 80, color: Colors.grey.shade400),
+                    Icon(Icons.event_busy, size: 80, color: context.colors.iconMuted),
                     const SizedBox(height: 24),
                     Text(
                       '現在レッスンはありません',
                       style: TextStyle(
                         fontSize: 24,
-                        color: Colors.grey.shade600,
+                        color: context.colors.textSecondary,
                         fontWeight: FontWeight.w500,
                       ),
                     ),
@@ -163,7 +163,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                       DateFormat('yyyy年M月d日 (E)', 'ja').format(now),
                       style: TextStyle(
                         fontSize: 18,
-                        color: Colors.grey.shade500,
+                        color: context.colors.textTertiary,
                       ),
                     ),
                   ],
@@ -212,12 +212,12 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
               const SizedBox(height: 8),
               Text(
                 '${DateFormat('HH:mm').format(startTime)} - ${DateFormat('HH:mm').format(endTime)}',
-                style: TextStyle(fontSize: 16, color: Colors.grey.shade600),
+                style: TextStyle(fontSize: 16, color: context.colors.textSecondary),
               ),
               const SizedBox(height: 16),
               Text(
                 '生徒が登録されていません',
-                style: TextStyle(color: Colors.grey.shade500),
+                style: TextStyle(color: context.colors.textTertiary),
               ),
             ],
           ),
@@ -229,7 +229,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
       margin: const EdgeInsets.only(bottom: 16),
       elevation: 2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      color: isExpired ? Colors.grey.shade100 : Colors.white,
+      color: isExpired ? context.colors.chipBg : Colors.white,
       child: Padding(
         padding: const EdgeInsets.all(20),
         child: Column(
@@ -258,7 +258,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                   '${DateFormat('HH:mm').format(startTime)} - ${DateFormat('HH:mm').format(endTime)}',
                   style: TextStyle(
                     fontSize: 16,
-                    color: Colors.grey.shade600,
+                    color: context.colors.textSecondary,
                     fontWeight: FontWeight.w500,
                   ),
                 ),
@@ -427,8 +427,8 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     String statusText;
     
     if (isExited) {
-      backgroundColor = Colors.grey.shade300;
-      textColor = Colors.grey.shade600;
+      backgroundColor = context.colors.borderMedium;
+      textColor = context.colors.textSecondary;
       statusIcon = Icons.logout;
       statusText = '退室 $exitedTime';
     } else if (isEntered) {
@@ -437,7 +437,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
       statusIcon = Icons.check_circle;
       statusText = '入室 $enteredTime';
     } else {
-      backgroundColor = Colors.white;
+      backgroundColor = context.colors.cardBg;
       textColor = AppColors.textMain;
       statusIcon = null;
       statusText = '';
@@ -462,7 +462,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
             border: Border.all(
               color: isEntered && !isExited 
                   ? Colors.green.shade400 
-                  : Colors.grey.shade300,
+                  : context.colors.borderMedium,
               width: isEntered && !isExited ? 2 : 1,
             ),
           ),
@@ -740,7 +740,7 @@ class AttendanceClassroomSelectScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.grey.shade100,
+      backgroundColor: context.colors.chipBg,
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -755,12 +755,12 @@ class AttendanceClassroomSelectScreen extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 32),
-            const Text(
+            Text(
               '入退室管理',
               style: TextStyle(
                 fontSize: 28,
                 fontWeight: FontWeight.bold,
-                color: AppColors.textMain,
+                color: context.colors.textPrimary,
               ),
             ),
             const SizedBox(height: 8),
@@ -768,7 +768,7 @@ class AttendanceClassroomSelectScreen extends StatelessWidget {
               '教室を選択してください',
               style: TextStyle(
                 fontSize: 16,
-                color: Colors.grey.shade600,
+                color: context.colors.textSecondary,
               ),
             ),
             const SizedBox(height: 48),

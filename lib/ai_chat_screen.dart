@@ -11,6 +11,7 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:intl/intl.dart';
 import 'ai_chat_history_screen.dart';
+import 'app_theme.dart';
 
 class AiChatScreen extends StatefulWidget {
   final String studentId;
@@ -778,13 +779,13 @@ class _AiChatScreenState extends State<AiChatScreen> {
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: const Color(0xFF7C3AED).withOpacity(0.1),
+                color: context.colors.aiAccent.withOpacity(0.1),
                 borderRadius: BorderRadius.circular(10),
               ),
-              child: const Icon(Icons.description, color: Color(0xFF7C3AED), size: 20),
+              child: Icon(Icons.description, color: context.colors.aiAccent, size: 20),
             ),
             const SizedBox(width: 12),
-            const Text('HUGアセスメント情報', style: TextStyle(fontSize: 16)),
+            Text('HUGアセスメント情報', style: TextStyle(fontSize: 16, color: context.colors.textPrimary)),
           ],
         ),
         content: SizedBox(
@@ -795,7 +796,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
             children: [
               Text(
                 'HUGからコピーしたアセスメント情報を貼り付けてください',
-                style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                style: TextStyle(fontSize: 12, color: context.colors.textSecondary),
               ),
               const SizedBox(height: 12),
               TextField(
@@ -804,14 +805,14 @@ class _AiChatScreenState extends State<AiChatScreen> {
                 decoration: InputDecoration(
                   hintText: '症状、得意なこと、気をつけてほしいこと など...',
                   filled: true,
-                  fillColor: Colors.grey.shade50,
+                  fillColor: context.colors.tagBg,
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide(color: Colors.grey.shade300),
+                    borderSide: BorderSide(color: context.colors.borderMedium),
                   ),
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
-                    borderSide: const BorderSide(color: Color(0xFF7C3AED)),
+                    borderSide: BorderSide(color: context.colors.aiAccent),
                   ),
                 ),
               ),
@@ -821,7 +822,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: Text('キャンセル', style: TextStyle(color: Colors.grey.shade600)),
+            child: Text('キャンセル', style: TextStyle(color: context.colors.textSecondary)),
           ),
           ElevatedButton(
             onPressed: () async {
@@ -830,7 +831,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
               await _saveHugAssessment(text.isEmpty ? null : text);
             },
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF7C3AED),
+              backgroundColor: context.colors.aiAccent,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
             ),
             child: const Text('保存', style: TextStyle(color: Colors.white)),
@@ -1141,16 +1142,16 @@ class _AiChatScreenState extends State<AiChatScreen> {
     final isFreeChat = widget.studentId.startsWith('free_chat');
 
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: context.colors.scaffoldBg,
       appBar: AppBar(
-        backgroundColor: Colors.white,
+        backgroundColor: context.colors.scaffoldBg,
         elevation: 0,
         surfaceTintColor: Colors.transparent,
         automaticallyImplyLeading: false,
         leading: widget.showBackButton
             ? IconButton(
                 icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
-                color: Colors.grey.shade700,
+                color: context.colors.textSecondary,
                 onPressed: widget.onBackPressed ?? () => Navigator.pop(context),
               )
             : null,
@@ -1161,8 +1162,8 @@ class _AiChatScreenState extends State<AiChatScreen> {
               width: 28,
               height: 28,
               decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [Color(0xFF7C3AED), Color(0xFFEC4899)],
+                gradient: LinearGradient(
+                  colors: [context.colors.aiGradientStart, context.colors.aiGradientEnd],
                 ),
                 borderRadius: BorderRadius.circular(8),
               ),
@@ -1171,7 +1172,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
             const SizedBox(width: 10),
             Text(
               widget.studentName,
-              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: context.colors.textPrimary),
             ),
           ],
         ),
@@ -1184,15 +1185,15 @@ class _AiChatScreenState extends State<AiChatScreen> {
                     ? Icons.description
                     : Icons.description_outlined,
                 color: _hugAssessment != null && _hugAssessment!.isNotEmpty
-                    ? const Color(0xFF7C3AED)
-                    : Colors.grey.shade500,
+                    ? context.colors.aiAccent
+                    : context.colors.textTertiary,
                 size: 22,
               ),
               tooltip: 'HUGアセスメント',
               onPressed: _showHugAssessmentDialog,
             ),
           IconButton(
-            icon: Icon(Icons.history_rounded, color: Colors.grey.shade500, size: 22),
+            icon: Icon(Icons.history_rounded, color: context.colors.textTertiary, size: 22),
             tooltip: '相談履歴',
             onPressed: _showChatHistory,
           ),
@@ -1200,12 +1201,12 @@ class _AiChatScreenState extends State<AiChatScreen> {
         ],
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1),
-          child: Container(color: Colors.grey.shade200, height: 0.5),
+          child: Container(color: context.colors.borderLight, height: 0.5),
         ),
       ),
       body: _isLoading
-          ? const Center(
-              child: CircularProgressIndicator(color: Color(0xFF7C3AED)),
+          ? Center(
+              child: CircularProgressIndicator(color: context.colors.aiAccent),
             )
           : Column(
               children: [
@@ -1306,15 +1307,15 @@ class _AiChatScreenState extends State<AiChatScreen> {
                 width: 72,
                 height: 72,
                 decoration: BoxDecoration(
-                  gradient: const LinearGradient(
+                  gradient: LinearGradient(
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
-                    colors: [Color(0xFF7C3AED), Color(0xFFEC4899)],
+                    colors: [context.colors.aiGradientStart, context.colors.aiGradientEnd],
                   ),
                   borderRadius: BorderRadius.circular(20),
                   boxShadow: [
                     BoxShadow(
-                      color: const Color(0xFF7C3AED).withOpacity(0.3),
+                      color: context.colors.aiAccent.withOpacity(0.3),
                       blurRadius: 20,
                       offset: const Offset(0, 8),
                     ),
@@ -1324,8 +1325,8 @@ class _AiChatScreenState extends State<AiChatScreen> {
               ),
               const SizedBox(height: 24),
               ShaderMask(
-                shaderCallback: (bounds) => const LinearGradient(
-                  colors: [Color(0xFF7C3AED), Color(0xFFEC4899)],
+                shaderCallback: (bounds) => LinearGradient(
+                  colors: [context.colors.aiGradientStart, context.colors.aiGradientEnd],
                 ).createShader(bounds),
                 child: Text(
                   isFreeChat
@@ -1345,7 +1346,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
                 _commands.isNotEmpty
                     ? 'メッセージを入力するか、/ でコマンドを使ってみましょう'
                     : 'メッセージを入力して相談してみましょう',
-                style: TextStyle(fontSize: 14, color: Colors.grey.shade500),
+                style: TextStyle(fontSize: 14, color: context.colors.textTertiary),
               ),
               if (_commands.isNotEmpty) const SizedBox(height: 24),
               // コマンド一覧をカードで表示（登録がある場合のみ）
@@ -1363,7 +1364,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
                         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                         decoration: BoxDecoration(
                           borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: Colors.grey.shade200),
+                          border: Border.all(color: context.colors.borderLight),
                         ),
                         child: Row(
                           children: [
@@ -1371,18 +1372,18 @@ class _AiChatScreenState extends State<AiChatScreen> {
                               width: 36,
                               height: 36,
                               decoration: BoxDecoration(
-                                color: const Color(0xFF7C3AED).withOpacity(0.1),
+                                color: context.colors.aiAccentBg,
                                 borderRadius: BorderRadius.circular(10),
                               ),
-                              child: const Icon(Icons.tag_rounded, size: 18, color: Color(0xFF7C3AED)),
+                              child: Icon(Icons.tag_rounded, size: 18, color: context.colors.aiAccent),
                             ),
                             const SizedBox(width: 14),
                             Expanded(
                               child: Text('/$label',
-                                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+                                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: context.colors.textPrimary)),
                             ),
                             Icon(Icons.chevron_right_rounded,
-                                size: 20, color: Colors.grey.shade400),
+                                size: 20, color: context.colors.iconMuted),
                           ],
                         ),
                       ),
@@ -1416,8 +1417,8 @@ class _AiChatScreenState extends State<AiChatScreen> {
 
         // まだデータが来ていない（初回読み込み中）
         if (!snapshot.hasData && !snapshot.hasError) {
-          return const Center(
-            child: CircularProgressIndicator(color: Color(0xFF7C3AED)),
+          return Center(
+            child: CircularProgressIndicator(color: context.colors.aiAccent),
           );
         }
 
@@ -1517,8 +1518,8 @@ class _AiChatScreenState extends State<AiChatScreen> {
             width: 32,
             height: 32,
             decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [Color(0xFF7C3AED), Color(0xFFEC4899)],
+              gradient: LinearGradient(
+                colors: [context.colors.aiGradientStart, context.colors.aiGradientEnd],
               ),
               borderRadius: BorderRadius.circular(10),
             ),
@@ -1528,7 +1529,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             decoration: BoxDecoration(
-              color: Colors.grey.shade100,
+              color: context.colors.chipBg,
               borderRadius: BorderRadius.circular(16),
             ),
             child: Row(
@@ -1618,12 +1619,12 @@ class _AiChatScreenState extends State<AiChatScreen> {
                             width: 200,
                             height: 150,
                             decoration: BoxDecoration(
-                              color: Colors.grey.shade200,
+                              color: context.colors.borderLight,
                               borderRadius: BorderRadius.circular(12),
                             ),
-                            child: const Center(
+                            child: Center(
                               child: CircularProgressIndicator(
-                                color: Color(0xFF7C3AED),
+                                color: context.colors.aiAccent,
                                 strokeWidth: 2,
                               ),
                             ),
@@ -1637,7 +1638,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
                   return Container(
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     decoration: BoxDecoration(
-                      color: isPending ? Colors.grey.shade200 : const Color(0xFFF3F4F6),
+                      color: isPending ? context.colors.borderLight : context.colors.inputFill,
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Row(
@@ -1646,7 +1647,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
                         Icon(
                           type == 'image' ? Icons.photo : Icons.insert_drive_file_rounded,
                           size: 18,
-                          color: isPending ? Colors.grey.shade400 : const Color(0xFF7C3AED),
+                          color: isPending ? context.colors.iconMuted : context.colors.aiAccent,
                         ),
                         const SizedBox(width: 6),
                         Flexible(
@@ -1654,7 +1655,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
                             name,
                             style: TextStyle(
                               fontSize: 12,
-                              color: isPending ? Colors.grey.shade500 : Colors.black87,
+                              color: isPending ? context.colors.textTertiary : context.colors.textPrimary,
                             ),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
@@ -1667,7 +1668,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
                             height: 12,
                             child: CircularProgressIndicator(
                               strokeWidth: 1.5,
-                              color: Colors.grey.shade400,
+                              color: context.colors.iconMuted,
                             ),
                           ),
                         ],
@@ -1685,14 +1686,14 @@ class _AiChatScreenState extends State<AiChatScreen> {
               ),
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               decoration: BoxDecoration(
-                color: const Color(0xFFF3F4F6),
+                color: context.colors.chatMyBubble,
                 borderRadius: BorderRadius.circular(20),
               ),
               child: SelectableText(
                 content,
                 style: TextStyle(
                   fontSize: 15,
-                  color: isSending ? Colors.grey.shade400 : Colors.black87,
+                  color: isSending ? context.colors.textHint : context.colors.chatMyBubbleText,
                   height: 1.5,
                 ),
               ),
@@ -1709,14 +1710,14 @@ class _AiChatScreenState extends State<AiChatScreen> {
                       height: 10,
                       child: CircularProgressIndicator(
                         strokeWidth: 1.5,
-                        color: Colors.grey.shade400,
+                        color: context.colors.iconMuted,
                       ),
                     ),
                     const SizedBox(width: 4),
                   ],
                   Text(
                     timeStr,
-                    style: TextStyle(fontSize: 11, color: Colors.grey.shade400),
+                    style: TextStyle(fontSize: 11, color: context.colors.textHint),
                   ),
                 ],
               ),
@@ -1736,8 +1737,8 @@ class _AiChatScreenState extends State<AiChatScreen> {
             width: 32,
             height: 32,
             decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [Color(0xFF7C3AED), Color(0xFFEC4899)],
+              gradient: LinearGradient(
+                colors: [context.colors.aiGradientStart, context.colors.aiGradientEnd],
               ),
               borderRadius: BorderRadius.circular(10),
             ),
@@ -1750,9 +1751,9 @@ class _AiChatScreenState extends State<AiChatScreen> {
               children: [
                 SelectableText(
                   content,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 15,
-                    color: Colors.black87,
+                    color: context.colors.textPrimary,
                     height: 1.6,
                   ),
                 ),
@@ -1784,7 +1785,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
                     if (timeStr.isNotEmpty)
                       Text(
                         timeStr,
-                        style: TextStyle(fontSize: 11, color: Colors.grey.shade400),
+                        style: TextStyle(fontSize: 11, color: context.colors.textHint),
                       ),
                   ],
                 ),
@@ -1804,7 +1805,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
 
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-      decoration: const BoxDecoration(color: Colors.white),
+      decoration: BoxDecoration(color: context.colors.scaffoldBg),
       child: SafeArea(
         top: false,
         child: Align(
@@ -1813,12 +1814,12 @@ class _AiChatScreenState extends State<AiChatScreen> {
             constraints: const BoxConstraints(maxWidth: 700),
             child: Container(
               decoration: BoxDecoration(
-                color: const Color(0xFFF9FAFB),
+                color: context.colors.hoverBg,
                 borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: const Color(0xFF7C3AED).withOpacity(0.3)),
+                border: Border.all(color: context.colors.aiAccent.withOpacity(0.3)),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.04),
+                    color: context.colors.shadow.withOpacity(0.04),
                     blurRadius: 8,
                     offset: const Offset(0, 2),
                   ),
@@ -1836,8 +1837,8 @@ class _AiChatScreenState extends State<AiChatScreen> {
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                           decoration: BoxDecoration(
-                            gradient: const LinearGradient(
-                              colors: [Color(0xFF7C3AED), Color(0xFFEC4899)],
+                            gradient: LinearGradient(
+                              colors: [context.colors.aiGradientStart, context.colors.aiGradientEnd],
                             ),
                             borderRadius: BorderRadius.circular(8),
                           ),
@@ -1853,13 +1854,13 @@ class _AiChatScreenState extends State<AiChatScreen> {
                         const SizedBox(width: 10),
                         Text(
                           '自由記述',
-                          style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+                          style: TextStyle(fontSize: 12, color: context.colors.textTertiary),
                         ),
                         const Spacer(),
                         TextButton(
                           onPressed: _cancelFreeform,
                           child: Text('キャンセル',
-                              style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
+                              style: TextStyle(fontSize: 12, color: context.colors.textTertiary)),
                         ),
                       ],
                     ),
@@ -1870,7 +1871,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
                       padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
                       child: Text(
                         description,
-                        style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                        style: TextStyle(fontSize: 12, color: context.colors.textSecondary),
                       ),
                     ),
                   // テキスト入力エリア
@@ -1881,24 +1882,24 @@ class _AiChatScreenState extends State<AiChatScreen> {
                       maxLines: 6,
                       minLines: 4,
                       keyboardType: TextInputType.multiline,
-                      style: const TextStyle(fontSize: 14),
+                      style: TextStyle(fontSize: 14, color: context.colors.textPrimary),
                       decoration: InputDecoration(
                         hintText: '今日の様子を自由に記入してください...',
-                        hintStyle: TextStyle(fontSize: 13, color: Colors.grey.shade400),
+                        hintStyle: TextStyle(fontSize: 13, color: context.colors.textHint),
                         filled: true,
-                        fillColor: Colors.white,
+                        fillColor: context.colors.cardBg,
                         contentPadding: const EdgeInsets.all(14),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(color: Colors.grey.shade300),
+                          borderSide: BorderSide(color: context.colors.borderMedium),
                         ),
                         enabledBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(color: Colors.grey.shade300),
+                          borderSide: BorderSide(color: context.colors.borderMedium),
                         ),
                         focusedBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(color: Color(0xFF7C3AED)),
+                          borderSide: BorderSide(color: context.colors.aiAccent),
                         ),
                       ),
                       onChanged: (_) => setState(() {}),
@@ -1917,11 +1918,11 @@ class _AiChatScreenState extends State<AiChatScreen> {
                             height: 36,
                             decoration: BoxDecoration(
                               gradient: hasText
-                                  ? const LinearGradient(
-                                      colors: [Color(0xFF7C3AED), Color(0xFFEC4899)],
+                                  ? LinearGradient(
+                                      colors: [context.colors.aiGradientStart, context.colors.aiGradientEnd],
                                     )
                                   : null,
-                              color: hasText ? null : Colors.grey.shade300,
+                              color: hasText ? null : context.colors.borderMedium,
                               borderRadius: BorderRadius.circular(18),
                             ),
                             child: const Icon(
@@ -1963,7 +1964,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
 
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-      decoration: const BoxDecoration(color: Colors.white),
+      decoration: BoxDecoration(color: context.colors.scaffoldBg),
       child: SafeArea(
         top: false,
         child: Align(
@@ -1972,12 +1973,12 @@ class _AiChatScreenState extends State<AiChatScreen> {
             constraints: const BoxConstraints(maxWidth: 700),
             child: Container(
               decoration: BoxDecoration(
-                color: const Color(0xFFF9FAFB),
+                color: context.colors.hoverBg,
                 borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: const Color(0xFF7C3AED).withOpacity(0.3)),
+                border: Border.all(color: context.colors.aiAccent.withOpacity(0.3)),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.04),
+                    color: context.colors.shadow.withOpacity(0.04),
                     blurRadius: 8,
                     offset: const Offset(0, 2),
                   ),
@@ -1995,8 +1996,8 @@ class _AiChatScreenState extends State<AiChatScreen> {
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                           decoration: BoxDecoration(
-                            gradient: const LinearGradient(
-                              colors: [Color(0xFF7C3AED), Color(0xFFEC4899)],
+                            gradient: LinearGradient(
+                              colors: [context.colors.aiGradientStart, context.colors.aiGradientEnd],
                             ),
                             borderRadius: BorderRadius.circular(8),
                           ),
@@ -2012,13 +2013,13 @@ class _AiChatScreenState extends State<AiChatScreen> {
                         const SizedBox(width: 10),
                         Text(
                           '${_elicitationStep + 1} / ${questions.length}',
-                          style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+                          style: TextStyle(fontSize: 12, color: context.colors.textTertiary),
                         ),
                         const Spacer(),
                         TextButton(
                           onPressed: _cancelElicitation,
                           child: Text('キャンセル',
-                              style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
+                              style: TextStyle(fontSize: 12, color: context.colors.textTertiary)),
                         ),
                       ],
                     ),
@@ -2030,8 +2031,8 @@ class _AiChatScreenState extends State<AiChatScreen> {
                       borderRadius: BorderRadius.circular(4),
                       child: LinearProgressIndicator(
                         value: (_elicitationStep + 1) / questions.length,
-                        backgroundColor: Colors.grey.shade200,
-                        valueColor: const AlwaysStoppedAnimation(Color(0xFF7C3AED)),
+                        backgroundColor: context.colors.borderLight,
+                        valueColor: AlwaysStoppedAnimation(context.colors.aiAccent),
                         minHeight: 3,
                       ),
                     ),
@@ -2041,7 +2042,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
                     padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
                     child: Text(
                       questionText,
-                      style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                      style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: context.colors.textPrimary),
                     ),
                   ),
                   // 回答エリア
@@ -2059,20 +2060,20 @@ class _AiChatScreenState extends State<AiChatScreen> {
                               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                               decoration: BoxDecoration(
                                 color: isSelected
-                                    ? const Color(0xFF7C3AED)
-                                    : Colors.white,
+                                    ? context.colors.aiAccent
+                                    : context.colors.cardBg,
                                 borderRadius: BorderRadius.circular(20),
                                 border: Border.all(
                                   color: isSelected
-                                      ? const Color(0xFF7C3AED)
-                                      : Colors.grey.shade300,
+                                      ? context.colors.aiAccent
+                                      : context.colors.borderMedium,
                                 ),
                               ),
                               child: Text(
                                 opt,
                                 style: TextStyle(
                                   fontSize: 13,
-                                  color: isSelected ? Colors.white : Colors.black87,
+                                  color: isSelected ? Colors.white : context.colors.textPrimary,
                                   fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
                                 ),
                               ),
@@ -2097,17 +2098,17 @@ class _AiChatScreenState extends State<AiChatScreen> {
                             child: Container(
                               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                               decoration: BoxDecoration(
-                                color: isSelected ? const Color(0xFF7C3AED) : Colors.white,
+                                color: isSelected ? context.colors.aiAccent : context.colors.cardBg,
                                 borderRadius: BorderRadius.circular(20),
                                 border: Border.all(
-                                  color: isSelected ? const Color(0xFF7C3AED) : Colors.grey.shade300,
+                                  color: isSelected ? context.colors.aiAccent : context.colors.borderMedium,
                                 ),
                               ),
                               child: Text(
                                 opt,
                                 style: TextStyle(
                                   fontSize: 13,
-                                  color: isSelected ? Colors.white : Colors.black87,
+                                  color: isSelected ? Colors.white : context.colors.textPrimary,
                                   fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
                                 ),
                               ),
@@ -2133,24 +2134,24 @@ class _AiChatScreenState extends State<AiChatScreen> {
                         },
                         child: TextField(
                           controller: _elicitationTextController,
-                          style: const TextStyle(fontSize: 14),
+                          style: TextStyle(fontSize: 14, color: context.colors.textPrimary),
                           decoration: InputDecoration(
                             hintText: 'その他（自由入力）',
-                            hintStyle: TextStyle(fontSize: 13, color: Colors.grey.shade400),
+                            hintStyle: TextStyle(fontSize: 13, color: context.colors.textHint),
                             filled: true,
-                            fillColor: Colors.white,
+                            fillColor: context.colors.cardBg,
                             contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12),
-                              borderSide: BorderSide(color: Colors.grey.shade300),
+                              borderSide: BorderSide(color: context.colors.borderMedium),
                             ),
                             enabledBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12),
-                              borderSide: BorderSide(color: Colors.grey.shade300),
+                              borderSide: BorderSide(color: context.colors.borderMedium),
                             ),
                             focusedBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12),
-                              borderSide: const BorderSide(color: Color(0xFF7C3AED)),
+                              borderSide: BorderSide(color: context.colors.aiAccent),
                             ),
                           ),
                           onChanged: (v) {
@@ -2185,24 +2186,24 @@ class _AiChatScreenState extends State<AiChatScreen> {
                           maxLines: 3,
                           minLines: 1,
                           keyboardType: TextInputType.multiline,
-                          style: const TextStyle(fontSize: 14),
+                          style: TextStyle(fontSize: 14, color: context.colors.textPrimary),
                           decoration: InputDecoration(
                             hintText: currentQ['placeholder'] as String? ?? '回答を入力...',
-                            hintStyle: TextStyle(fontSize: 13, color: Colors.grey.shade400),
+                            hintStyle: TextStyle(fontSize: 13, color: context.colors.textHint),
                             filled: true,
-                            fillColor: Colors.white,
+                            fillColor: context.colors.cardBg,
                             contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12),
-                              borderSide: BorderSide(color: Colors.grey.shade300),
+                              borderSide: BorderSide(color: context.colors.borderMedium),
                             ),
                             enabledBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12),
-                              borderSide: BorderSide(color: Colors.grey.shade300),
+                              borderSide: BorderSide(color: context.colors.borderMedium),
                             ),
                             focusedBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12),
-                              borderSide: const BorderSide(color: Color(0xFF7C3AED)),
+                              borderSide: BorderSide(color: context.colors.aiAccent),
                             ),
                           ),
                           onChanged: (v) {
@@ -2224,7 +2225,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
                             icon: const Icon(Icons.arrow_back_rounded, size: 16),
                             label: const Text('戻る', style: TextStyle(fontSize: 13)),
                             style: TextButton.styleFrom(
-                              foregroundColor: Colors.grey.shade600,
+                              foregroundColor: context.colors.textSecondary,
                             ),
                           ),
                         // 必須でなければスキップボタン
@@ -2235,7 +2236,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
                               _elicitationTextController.clear();
                             },
                             child: Text('スキップ',
-                                style: TextStyle(fontSize: 13, color: Colors.grey.shade500)),
+                                style: TextStyle(fontSize: 13, color: context.colors.textTertiary)),
                           ),
                         const Spacer(),
                         // 次へ / 送信ボタン（上矢印）
@@ -2253,8 +2254,8 @@ class _AiChatScreenState extends State<AiChatScreen> {
                                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                                 decoration: BoxDecoration(
                                   color: (currentAnswer.isNotEmpty || !isRequired)
-                                      ? const Color(0xFF7C3AED)
-                                      : Colors.grey.shade300,
+                                      ? context.colors.aiAccent
+                                      : context.colors.borderMedium,
                                   borderRadius: BorderRadius.circular(12),
                                 ),
                                 child: Text('次へ',
@@ -2262,7 +2263,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
                                       fontSize: 13,
                                       color: (currentAnswer.isNotEmpty || !isRequired)
                                           ? Colors.white
-                                          : Colors.grey.shade500,
+                                          : context.colors.textTertiary,
                                     )),
                               ),
                             )
@@ -2275,11 +2276,11 @@ class _AiChatScreenState extends State<AiChatScreen> {
                                 height: 36,
                                 decoration: BoxDecoration(
                                   gradient: allAnswered
-                                      ? const LinearGradient(
-                                          colors: [Color(0xFF7C3AED), Color(0xFFEC4899)],
+                                      ? LinearGradient(
+                                          colors: [context.colors.aiGradientStart, context.colors.aiGradientEnd],
                                         )
                                       : null,
-                                  color: allAnswered ? null : Colors.grey.shade300,
+                                  color: allAnswered ? null : context.colors.borderMedium,
                                   borderRadius: BorderRadius.circular(18),
                                 ),
                                 child: const Icon(
@@ -2313,12 +2314,12 @@ class _AiChatScreenState extends State<AiChatScreen> {
         child: Container(
           margin: const EdgeInsets.symmetric(horizontal: 16),
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: context.colors.cardBg,
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: Colors.grey.shade200),
+            border: Border.all(color: context.colors.borderLight),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.08),
+                color: context.colors.shadow.withOpacity(0.08),
                 blurRadius: 16,
                 offset: const Offset(0, -4),
               ),
@@ -2335,7 +2336,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
                   style: TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
-                    color: Colors.grey.shade500,
+                    color: context.colors.textTertiary,
                     letterSpacing: 0.5,
                   ),
                 ),
@@ -2353,18 +2354,19 @@ class _AiChatScreenState extends State<AiChatScreen> {
                           width: 32,
                           height: 32,
                           decoration: BoxDecoration(
-                            color: const Color(0xFF7C3AED).withOpacity(0.1),
+                            color: context.colors.aiAccentBg,
                             borderRadius: BorderRadius.circular(8),
                           ),
-                          child: const Icon(Icons.tag_rounded, size: 16, color: Color(0xFF7C3AED)),
+                          child: Icon(Icons.tag_rounded, size: 16, color: context.colors.aiAccent),
                         ),
                         const SizedBox(width: 12),
                         Expanded(
                           child: Text(
                             '/$label',
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 14,
                               fontWeight: FontWeight.w600,
+                              color: context.colors.textPrimary,
                             ),
                           ),
                         ),
@@ -2386,7 +2388,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
   Widget _buildInputArea() {
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-      decoration: const BoxDecoration(color: Colors.white),
+      decoration: BoxDecoration(color: context.colors.scaffoldBg),
       child: SafeArea(
         top: false,
         child: Align(
@@ -2397,18 +2399,18 @@ class _AiChatScreenState extends State<AiChatScreen> {
               child: Container(
                 decoration: BoxDecoration(
                   color: _isDragOver
-                      ? const Color(0xFF7C3AED).withOpacity(0.06)
-                      : const Color(0xFFF9FAFB),
+                      ? context.colors.aiAccent.withOpacity(0.06)
+                      : context.colors.hoverBg,
                   borderRadius: BorderRadius.circular(20),
                   border: Border.all(
                     color: _isDragOver
-                        ? const Color(0xFF7C3AED).withOpacity(0.5)
-                        : Colors.grey.shade300,
+                        ? context.colors.aiAccent.withOpacity(0.5)
+                        : context.colors.borderMedium,
                     width: _isDragOver ? 2 : 1,
                   ),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.04),
+                      color: context.colors.shadow.withOpacity(0.04),
                       blurRadius: 8,
                       offset: const Offset(0, 2),
                     ),
@@ -2444,12 +2446,12 @@ class _AiChatScreenState extends State<AiChatScreen> {
                               height: 12,
                               child: CircularProgressIndicator(
                                 strokeWidth: 1.5,
-                                color: const Color(0xFF7C3AED).withOpacity(0.6),
+                                color: context.colors.aiAccent.withOpacity(0.6),
                               ),
                             ),
                             const SizedBox(width: 8),
                             Text('アップロード中...',
-                                style: TextStyle(fontSize: 11, color: Colors.grey.shade500)),
+                                style: TextStyle(fontSize: 11, color: context.colors.textTertiary)),
                           ],
                         ),
                       ),
@@ -2461,12 +2463,12 @@ class _AiChatScreenState extends State<AiChatScreen> {
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                             Icon(Icons.file_download_rounded,
-                                size: 20, color: const Color(0xFF7C3AED).withOpacity(0.6)),
+                                size: 20, color: context.colors.aiAccent.withOpacity(0.6)),
                             const SizedBox(width: 8),
                             Text('ここにドロップして添付',
                                 style: TextStyle(
                                   fontSize: 13,
-                                  color: const Color(0xFF7C3AED).withOpacity(0.8),
+                                  color: context.colors.aiAccent.withOpacity(0.8),
                                   fontWeight: FontWeight.w500,
                                 )),
                           ],
@@ -2497,10 +2499,10 @@ class _AiChatScreenState extends State<AiChatScreen> {
                               minLines: 1,
                               keyboardType: TextInputType.multiline,
                               enabled: !_isSending,
-                              style: const TextStyle(fontSize: 15),
+                              style: TextStyle(fontSize: 15, color: context.colors.textPrimary),
                               decoration: InputDecoration(
                                 hintText: 'メッセージを入力...',
-                                hintStyle: TextStyle(color: Colors.grey.shade400),
+                                hintStyle: TextStyle(color: context.colors.textHint),
                                 filled: false,
                                 border: InputBorder.none,
                                 enabledBorder: InputBorder.none,
@@ -2547,13 +2549,13 @@ class _AiChatScreenState extends State<AiChatScreen> {
                               height: 36,
                               decoration: BoxDecoration(
                                 gradient: (_hasText || _attachedFiles.isNotEmpty) && !_isSending
-                                    ? const LinearGradient(
-                                        colors: [Color(0xFF7C3AED), Color(0xFFEC4899)],
+                                    ? LinearGradient(
+                                        colors: [context.colors.aiGradientStart, context.colors.aiGradientEnd],
                                       )
                                     : null,
                                 color: (_hasText || _attachedFiles.isNotEmpty) && !_isSending
                                     ? null
-                                    : Colors.grey.shade300,
+                                    : context.colors.borderMedium,
                                 borderRadius: BorderRadius.circular(18),
                               ),
                               child: const Icon(
@@ -2592,7 +2594,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(8),
           ),
-          child: Icon(icon, size: 20, color: Colors.grey.shade500),
+          child: Icon(icon, size: 20, color: context.colors.textTertiary),
         ),
       ),
     );
@@ -2640,9 +2642,9 @@ class _AiChatScreenState extends State<AiChatScreen> {
           height: 72,
           padding: const EdgeInsets.all(10),
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: context.colors.cardBg,
             borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: Colors.grey.shade300),
+            border: Border.all(color: context.colors.borderMedium),
           ),
           child: Row(
             children: [
@@ -2650,11 +2652,11 @@ class _AiChatScreenState extends State<AiChatScreen> {
                 width: 36,
                 height: 36,
                 decoration: BoxDecoration(
-                  color: const Color(0xFF7C3AED).withOpacity(0.1),
+                  color: context.colors.aiAccentBg,
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: const Icon(Icons.insert_drive_file_rounded,
-                    size: 18, color: Color(0xFF7C3AED)),
+                child: Icon(Icons.insert_drive_file_rounded,
+                    size: 18, color: context.colors.aiAccent),
               ),
               const SizedBox(width: 8),
               Expanded(
@@ -2671,7 +2673,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
                     if (file.fileSize != null)
                       Text(
                         _formatFileSize(file.fileSize!),
-                        style: TextStyle(fontSize: 10, color: Colors.grey.shade500),
+                        style: TextStyle(fontSize: 10, color: context.colors.textTertiary),
                       ),
                   ],
                 ),
@@ -2695,7 +2697,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
         width: 20,
         height: 20,
         decoration: BoxDecoration(
-          color: Colors.grey.shade700,
+          color: context.colors.textSecondary,
           shape: BoxShape.circle,
         ),
         child: const Icon(Icons.close_rounded, color: Colors.white, size: 12),
@@ -2715,9 +2717,9 @@ class _AiChatScreenState extends State<AiChatScreen> {
       minChildSize: 0.4,
       maxChildSize: 0.9,
       builder: (context, scrollController) => Container(
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        decoration: BoxDecoration(
+          color: context.colors.cardBg,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
         ),
         child: Column(
           children: [
@@ -2726,7 +2728,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
               width: 40,
               height: 4,
               decoration: BoxDecoration(
-                color: Colors.grey.shade300,
+                color: context.colors.borderMedium,
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
@@ -2740,26 +2742,26 @@ class _AiChatScreenState extends State<AiChatScreen> {
                       Container(
                         padding: const EdgeInsets.all(6),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF7C3AED).withOpacity(0.1),
+                          color: context.colors.aiAccent.withOpacity(0.1),
                           borderRadius: BorderRadius.circular(8),
                         ),
-                        child: const Icon(Icons.history_rounded, color: Color(0xFF7C3AED), size: 18),
+                        child: Icon(Icons.history_rounded, color: context.colors.aiAccent, size: 18),
                       ),
                       const SizedBox(width: 10),
                       Text(
                         '${widget.studentName} - 相談履歴',
-                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: context.colors.textPrimary),
                       ),
                     ],
                   ),
                   IconButton(
-                    icon: Icon(Icons.close_rounded, color: Colors.grey.shade500),
+                    icon: Icon(Icons.close_rounded, color: context.colors.textTertiary),
                     onPressed: () => Navigator.pop(ctx),
                   ),
                 ],
               ),
             ),
-            Divider(height: 1, color: Colors.grey.shade200),
+            Divider(height: 1, color: context.colors.borderLight),
             Expanded(
               child: StreamBuilder<QuerySnapshot>(
                 stream: FirebaseFirestore.instance
@@ -2782,8 +2784,8 @@ class _AiChatScreenState extends State<AiChatScreen> {
                   }
 
                   if (snapshot.connectionState == ConnectionState.waiting) {
-                    return const Center(
-                      child: CircularProgressIndicator(color: Color(0xFF7C3AED)),
+                    return Center(
+                      child: CircularProgressIndicator(color: context.colors.aiAccent),
                     );
                   }
 
@@ -2793,11 +2795,11 @@ class _AiChatScreenState extends State<AiChatScreen> {
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Icon(Icons.history_rounded, size: 48, color: Colors.grey.shade300),
+                          Icon(Icons.history_rounded, size: 48, color: context.colors.borderMedium),
                           const SizedBox(height: 12),
                           Text(
                             'まだ相談履歴がありません',
-                            style: TextStyle(color: Colors.grey.shade500),
+                            style: TextStyle(color: context.colors.textTertiary),
                           ),
                         ],
                       ),
@@ -2838,13 +2840,13 @@ class _AiChatScreenState extends State<AiChatScreen> {
                           borderRadius: BorderRadius.circular(14),
                           border: Border.all(
                             color: isCurrentSession
-                                ? const Color(0xFF7C3AED).withOpacity(0.4)
-                                : Colors.grey.shade200,
+                                ? context.colors.aiAccent.withOpacity(0.4)
+                                : context.colors.borderLight,
                             width: isCurrentSession ? 1.5 : 1,
                           ),
                           color: isCurrentSession
-                              ? const Color(0xFF7C3AED).withOpacity(0.04)
-                              : Colors.white,
+                              ? context.colors.aiAccent.withOpacity(0.04)
+                              : context.colors.cardBg,
                         ),
                         child: InkWell(
                           onTap: isCurrentSession
@@ -2874,8 +2876,8 @@ class _AiChatScreenState extends State<AiChatScreen> {
                                       Icons.auto_awesome,
                                       size: 16,
                                       color: isCurrentSession
-                                          ? const Color(0xFF7C3AED)
-                                          : Colors.grey.shade500,
+                                          ? context.colors.aiAccent
+                                          : context.colors.textTertiary,
                                     ),
                                     const SizedBox(width: 8),
                                     Text(
@@ -2884,8 +2886,8 @@ class _AiChatScreenState extends State<AiChatScreen> {
                                         fontWeight: FontWeight.w600,
                                         fontSize: 13,
                                         color: isCurrentSession
-                                            ? const Color(0xFF7C3AED)
-                                            : Colors.black87,
+                                            ? context.colors.aiAccent
+                                            : context.colors.textPrimary,
                                       ),
                                     ),
                                     if (isCurrentSession) ...[
@@ -2894,8 +2896,8 @@ class _AiChatScreenState extends State<AiChatScreen> {
                                         padding: const EdgeInsets.symmetric(
                                             horizontal: 8, vertical: 2),
                                         decoration: BoxDecoration(
-                                          gradient: const LinearGradient(
-                                            colors: [Color(0xFF7C3AED), Color(0xFFEC4899)],
+                                          gradient: LinearGradient(
+                                            colors: [context.colors.aiGradientStart, context.colors.aiGradientEnd],
                                           ),
                                           borderRadius: BorderRadius.circular(10),
                                         ),
@@ -2914,7 +2916,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
                                       '$messageCount件',
                                       style: TextStyle(
                                         fontSize: 11,
-                                        color: Colors.grey.shade500,
+                                        color: context.colors.textTertiary,
                                       ),
                                     ),
                                   ],
@@ -2924,14 +2926,14 @@ class _AiChatScreenState extends State<AiChatScreen> {
                                   Container(
                                     padding: const EdgeInsets.all(10),
                                     decoration: BoxDecoration(
-                                      color: const Color(0xFF7C3AED).withOpacity(0.05),
+                                      color: context.colors.aiAccent.withOpacity(0.05),
                                       borderRadius: BorderRadius.circular(10),
                                     ),
                                     child: Row(
                                       crossAxisAlignment: CrossAxisAlignment.start,
                                       children: [
                                         Icon(Icons.summarize_rounded, size: 14,
-                                            color: const Color(0xFF7C3AED).withOpacity(0.6)),
+                                            color: context.colors.aiAccent.withOpacity(0.6)),
                                         const SizedBox(width: 8),
                                         Expanded(
                                           child: Text(
@@ -2940,7 +2942,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
                                             overflow: TextOverflow.ellipsis,
                                             style: TextStyle(
                                               fontSize: 12,
-                                              color: Colors.grey.shade700,
+                                              color: context.colors.textSecondary,
                                               height: 1.4,
                                             ),
                                           ),
@@ -2956,7 +2958,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
                                     overflow: TextOverflow.ellipsis,
                                     style: TextStyle(
                                       fontSize: 12,
-                                      color: Colors.grey.shade600,
+                                      color: context.colors.textSecondary,
                                     ),
                                   ),
                                 ],
@@ -2965,7 +2967,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
                                   staffName,
                                   style: TextStyle(
                                     fontSize: 11,
-                                    color: Colors.grey.shade400,
+                                    color: context.colors.textHint,
                                   ),
                                 ),
                               ],
@@ -3036,8 +3038,8 @@ class _AnimatedDotState extends State<_AnimatedDot>
             height: 8,
             decoration: BoxDecoration(
               color: Color.lerp(
-                Colors.grey.shade400,
-                const Color(0xFF7C3AED),
+                context.colors.iconMuted,
+                context.colors.aiAccent,
                 _animation.value,
               ),
               shape: BoxShape.circle,
@@ -3099,13 +3101,13 @@ class _AiMessageActionButtonState extends State<_AiMessageActionButton> {
             width: 30,
             height: 30,
             decoration: BoxDecoration(
-              color: _isHovered ? Colors.grey.shade200 : Colors.transparent,
+              color: _isHovered ? context.colors.borderLight : Colors.transparent,
               borderRadius: BorderRadius.circular(6),
             ),
             child: Icon(
               widget.icon,
               size: 16,
-              color: Colors.grey.shade500,
+              color: context.colors.textTertiary,
             ),
           ),
         ),

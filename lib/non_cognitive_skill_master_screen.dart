@@ -21,10 +21,10 @@ class _NonCognitiveSkillMasterScreenState extends State<NonCognitiveSkillMasterS
       appBar: AppBar(
         title: const Text('非認知能力マスタ'),
 centerTitle: true,
-  backgroundColor: Colors.white,
+  backgroundColor: context.colors.cardBg,
   elevation: 0,
   leading: IconButton(
-    icon: const Icon(Icons.arrow_back, color: Colors.black87),
+    icon: Icon(Icons.arrow_back, color: context.colors.textPrimary),
     onPressed: () {
       if (widget.onBack != null) {
         widget.onBack!();
@@ -35,7 +35,7 @@ centerTitle: true,
   ),
 ),
 
-      backgroundColor: const Color(0xFFF2F2F7),
+      backgroundColor: context.colors.scaffoldBgAlt,
       
       // リアルタイムデータ取得
       body: StreamBuilder<QuerySnapshot>(
@@ -51,10 +51,10 @@ centerTitle: true,
           final docs = snapshot.data!.docs;
 
           if (docs.isEmpty) {
-            return const Center(
+            return Center(
               child: Text(
                 'データがありません。\n右下の「＋」で追加してください。',
-                style: TextStyle(color: Colors.grey),
+                style: TextStyle(color: context.colors.textSecondary),
               ),
             );
           }
@@ -187,10 +187,10 @@ centerTitle: true,
                       children: [
                         TextField(
                           controller: nameCtrl,
-                          decoration: const InputDecoration(
+                          decoration: InputDecoration(
                             labelText: '能力名 (例: 自立心)',
                             border: OutlineInputBorder(),
-                            filled: true, fillColor: Colors.white,
+                            filled: true, fillColor: context.colors.cardBg,
                           ),
                         ),
                         const SizedBox(height: 24),
@@ -198,7 +198,7 @@ centerTitle: true,
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            const Text('伸びている力 (項目)', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)),
+                            Text('伸びている力 (項目)', style: TextStyle(fontWeight: FontWeight.bold, color: context.colors.textSecondary)),
                             TextButton.icon(
                               icon: const Icon(Icons.add, size: 18),
                               label: const Text('項目を追加'),
@@ -226,7 +226,7 @@ centerTitle: true,
                                       isDense: true,
                                       contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                                       border: const OutlineInputBorder(),
-                                      filled: true, fillColor: Colors.white,
+                                      filled: true, fillColor: context.colors.cardBg,
                                     ),
                                   ),
                                 ),

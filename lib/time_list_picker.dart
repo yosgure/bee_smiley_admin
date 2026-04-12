@@ -99,7 +99,7 @@ Future<TimeOfDay?> showTimeListPicker({
                                 isSelected ? FontWeight.bold : FontWeight.normal,
                             color: isSelected
                                 ? AppColors.primary
-                                : AppColors.textMain,
+                                : context.colors.textPrimary,
                           ),
                         ),
                       ),

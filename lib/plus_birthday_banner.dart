@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'app_theme.dart';
 
 /// プラス画面トップに表示する「近日の誕生日」バナー。
 ///
@@ -198,12 +199,12 @@ class _PlusBirthdayBannerState extends State<PlusBirthdayBanner> {
               ),
               // 展開時の一覧
               if (_expanded) ...[
-                const SizedBox(height: 6),
+                SizedBox(height: 6),
                 Container(
                   padding: const EdgeInsets.symmetric(
                       horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
-                    color: Colors.white,
+                    color: context.colors.cardBg,
                     borderRadius: BorderRadius.circular(6),
                     border: Border.all(color: Colors.pink.shade200),
                   ),
@@ -248,7 +249,7 @@ class _PlusBirthdayBannerState extends State<PlusBirthdayBanner> {
                 fontSize: 11,
                 color: e.daysUntil == 0
                     ? Colors.pink.shade700
-                    : Colors.grey.shade700,
+                    : context.colors.textSecondary,
                 fontWeight: e.daysUntil == 0
                     ? FontWeight.bold
                     : FontWeight.normal,
@@ -258,7 +259,7 @@ class _PlusBirthdayBannerState extends State<PlusBirthdayBanner> {
           Expanded(
             child: Text(
               e.name,
-              style: const TextStyle(fontSize: 12),
+              style: TextStyle(fontSize: 12),
               overflow: TextOverflow.ellipsis,
             ),
           ),

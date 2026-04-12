@@ -87,10 +87,10 @@ return Scaffold(
   appBar: AppBar(
     title: const Text('教具CSV一括登録'),
     centerTitle: true,
-    backgroundColor: Colors.white,
+    backgroundColor: context.colors.cardBg,
     elevation: 0,
     leading: IconButton(
-      icon: const Icon(Icons.arrow_back, color: Colors.black87),
+      icon: Icon(Icons.arrow_back, color: context.colors.textPrimary),
       onPressed: () {
         if (widget.onBack != null) {
           widget.onBack!();
@@ -108,9 +108,9 @@ return Scaffold(
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: context.colors.cardBg,
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.grey.shade300),
+                border: Border.all(color: context.colors.borderMedium),
               ),
               child: const Column(
                 crossAxisAlignment: CrossAxisAlignment.start,

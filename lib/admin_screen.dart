@@ -22,6 +22,7 @@ import 'notification_settings_screen.dart';
 import 'ai_command_manage_screen.dart';
 import 'hug_mapping_screen.dart';
 import 'app_theme.dart';
+import 'main.dart' show themeNotifier, setThemeMode;
 
 class AdminScreen extends StatefulWidget {
   // Web版で画面を差し替えるためのコールバック
@@ -137,10 +138,10 @@ void _navigateTo(BuildContext context, Widget screen) {
       appBar: AppBar(
         title: const Text('管理メニュー'),
         centerTitle: true,
-        backgroundColor: Colors.white,
+        backgroundColor: context.colors.cardBg,
         elevation: 0,
       ),
-      backgroundColor: const Color(0xFFF2F2F7),
+      backgroundColor: context.colors.scaffoldBgAlt,
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
@@ -186,7 +187,7 @@ void _navigateTo(BuildContext context, Widget screen) {
               _MenuData(
                 title: 'AI相談コマンド',
                 icon: Icons.auto_awesome,
-                color: const Color(0xFF7C3AED),
+                color: context.colors.aiAccent,
                 description: '/コマンドの追加・編集',
                 destination: const AiCommandManageScreen(),
               ),
@@ -213,14 +214,14 @@ void _navigateTo(BuildContext context, Widget screen) {
     ),
   ],
 ),
-const SizedBox(height: 8),
+SizedBox(height: 8),
 Container(
   decoration: BoxDecoration(
-    color: Colors.white,
+    color: context.colors.cardBg,
     borderRadius: BorderRadius.circular(10),
     boxShadow: [
       BoxShadow(
-        color: Colors.black.withOpacity(0.05),
+        color: context.colors.shadow,
         blurRadius: 2,
         offset: const Offset(0, 1),
       ),
@@ -239,11 +240,11 @@ Container(
       '入退室管理',
       style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
     ),
-    subtitle: const Text(
+    subtitle: Text(
       'タブレット用の入退室画面',
-      style: TextStyle(fontSize: 12, color: Colors.grey),
+      style: TextStyle(fontSize: 12, color: context.colors.textSecondary),
     ),
-    trailing: const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey),
+    trailing: Icon(Icons.arrow_forward_ios, size: 16, color: context.colors.iconMuted),
     onTap: () {
       _navigateFullScreen(context, const AttendanceClassroomSelectScreen());
     },
@@ -251,6 +252,8 @@ Container(
 ),
           const SizedBox(height: 24),
           _buildCsvSection(context),
+          const SizedBox(height: 24),
+          _buildThemeSection(context),
           const SizedBox(height: 24),
           _buildAccountSection(context),
           const SizedBox(height: 40),
@@ -268,7 +271,7 @@ Container(
           child: Text(
             'CSV管理',
             style: TextStyle(
-              color: Colors.grey.shade600,
+              color: context.colors.textSecondary,
               fontWeight: FontWeight.bold,
               fontSize: 13,
             ),
@@ -276,11 +279,11 @@ Container(
         ),
         Container(
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: context.colors.cardBg,
             borderRadius: BorderRadius.circular(10),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.05),
+                color: context.colors.shadow,
                 blurRadius: 2,
                 offset: const Offset(0, 1),
               ),
@@ -301,11 +304,11 @@ Container(
                   'インポート（登録）',
                   style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                 ),
-                subtitle: const Text(
+                subtitle: Text(
                   'CSVファイルから一括登録',
-                  style: TextStyle(fontSize: 12, color: Colors.grey),
+                  style: TextStyle(fontSize: 12, color: context.colors.textSecondary),
                 ),
-                trailing: const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey),
+                trailing: Icon(Icons.arrow_forward_ios, size: 16, color: context.colors.iconMuted),
                 onTap: () => _showCsvImportMenu(context),
               ),
               const Divider(height: 1, indent: 60),
@@ -322,11 +325,11 @@ Container(
                   'エクスポート（出力）',
                   style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                 ),
-                subtitle: const Text(
+                subtitle: Text(
                   'データをCSVファイルに出力',
-                  style: TextStyle(fontSize: 12, color: Colors.grey),
+                  style: TextStyle(fontSize: 12, color: context.colors.textSecondary),
                 ),
-                trailing: const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey),
+                trailing: Icon(Icons.arrow_forward_ios, size: 16, color: context.colors.iconMuted),
                 onTap: () => _showCsvExportMenu(context),
               ),
             ],
@@ -393,7 +396,7 @@ Container(
     } else {
       showModalBottomSheet(
         context: context,
-        backgroundColor: Colors.white,
+        backgroundColor: context.colors.dialogBg,
         shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
         ),
@@ -408,7 +411,7 @@ Container(
                   height: 4,
                   margin: const EdgeInsets.only(bottom: 16),
                   decoration: BoxDecoration(
-                    color: Colors.grey.shade300,
+                    color: context.colors.borderMedium,
                     borderRadius: BorderRadius.circular(2),
                   ),
                 ),
@@ -510,7 +513,7 @@ Container(
     } else {
       showModalBottomSheet(
         context: context,
-        backgroundColor: Colors.white,
+        backgroundColor: context.colors.dialogBg,
         shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
         ),
@@ -525,7 +528,7 @@ Container(
                   height: 4,
                   margin: const EdgeInsets.only(bottom: 16),
                   decoration: BoxDecoration(
-                    color: Colors.grey.shade300,
+                    color: context.colors.borderMedium,
                     borderRadius: BorderRadius.circular(2),
                   ),
                 ),
@@ -570,6 +573,81 @@ Container(
     }
   }
 
+  Widget _buildThemeSection(BuildContext context) {
+    final currentMode = themeNotifier.value;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(left: 12, bottom: 8),
+          child: Text(
+            '表示設定',
+            style: TextStyle(
+              color: context.colors.textSecondary,
+              fontWeight: FontWeight.bold,
+              fontSize: 13,
+            ),
+          ),
+        ),
+        Container(
+          decoration: BoxDecoration(
+            color: context.colors.cardBg,
+            borderRadius: BorderRadius.circular(10),
+            boxShadow: [
+              BoxShadow(
+                color: context.colors.shadow,
+                blurRadius: 2,
+                offset: const Offset(0, 1),
+              ),
+            ],
+          ),
+          child: ListTile(
+            leading: Container(
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                color: Colors.deepPurple.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(
+                context.isDark ? Icons.dark_mode : Icons.light_mode,
+                color: Colors.deepPurple,
+                size: 24,
+              ),
+            ),
+            title: const Text(
+              'テーマ',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+            subtitle: Text(
+              currentMode == ThemeMode.system
+                  ? 'システム設定に連動'
+                  : currentMode == ThemeMode.dark
+                      ? 'ダーク'
+                      : 'ライト',
+              style: TextStyle(fontSize: 12, color: context.colors.textSecondary),
+            ),
+            trailing: SegmentedButton<ThemeMode>(
+              segments: const [
+                ButtonSegment(value: ThemeMode.light, icon: Icon(Icons.light_mode, size: 18)),
+                ButtonSegment(value: ThemeMode.system, icon: Icon(Icons.settings_brightness, size: 18)),
+                ButtonSegment(value: ThemeMode.dark, icon: Icon(Icons.dark_mode, size: 18)),
+              ],
+              selected: {currentMode},
+              onSelectionChanged: (selected) {
+                setThemeMode(selected.first);
+                setState(() {});
+              },
+              style: ButtonStyle(
+                visualDensity: VisualDensity.compact,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildAccountSection(BuildContext context) {
     final name = _staffData?['displayName'] ?? '';
     final loginId = _staffData?['loginId'] ?? '';
@@ -583,7 +661,7 @@ Container(
           child: Text(
             'アカウント',
             style: TextStyle(
-              color: Colors.grey.shade600,
+              color: context.colors.textSecondary,
               fontWeight: FontWeight.bold,
               fontSize: 13,
             ),
@@ -591,11 +669,11 @@ Container(
         ),
         Container(
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: context.colors.cardBg,
             borderRadius: BorderRadius.circular(10),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.05),
+                color: context.colors.shadow,
                 blurRadius: 2,
                 offset: const Offset(0, 1),
               ),
@@ -610,12 +688,12 @@ Container(
                     children: [
                       CircleAvatar(
                         radius: 24,
-                        backgroundColor: Colors.grey.shade200,
+                        backgroundColor: context.colors.borderLight,
                         backgroundImage: photoUrl != null && photoUrl.isNotEmpty
                             ? NetworkImage(photoUrl)
                             : null,
                         child: photoUrl == null || photoUrl.isEmpty
-                            ? Icon(Icons.person, size: 24, color: Colors.grey.shade400)
+                            ? Icon(Icons.person, size: 24, color: context.colors.iconMuted)
                             : null,
                       ),
                       if (_isUploadingPhoto)
@@ -625,11 +703,11 @@ Container(
                               color: Colors.black.withOpacity(0.5),
                               shape: BoxShape.circle,
                             ),
-                            child: const Center(
+                            child: Center(
                               child: SizedBox(
                                 width: 20,
                                 height: 20,
-                                child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                                child: CircularProgressIndicator(color: context.colors.cardBg, strokeWidth: 2),
                               ),
                             ),
                           ),
@@ -643,7 +721,7 @@ Container(
                             decoration: BoxDecoration(
                               color: Colors.blue,
                               shape: BoxShape.circle,
-                              border: Border.all(color: Colors.white, width: 1.5),
+                              border: Border.all(color: context.colors.cardBg, width: 1.5),
                             ),
                             child: const Icon(Icons.camera_alt, size: 10, color: Colors.white),
                           ),
@@ -651,13 +729,13 @@ Container(
                     ],
                   ),
                 ),
-                title: const Text(
+                title: Text(
                   '氏名',
-                  style: TextStyle(fontSize: 12, color: Colors.grey),
+                  style: TextStyle(fontSize: 12, color: context.colors.textSecondary),
                 ),
                 subtitle: Text(
                   name.isNotEmpty ? name : '---',
-                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.black87),
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: context.colors.textPrimary),
                 ),
                 trailing: photoUrl != null && photoUrl.isNotEmpty
                     ? TextButton(
@@ -681,13 +759,13 @@ Container(
                   ),
                   child: const Icon(Icons.badge, color: Colors.green, size: 24),
                 ),
-                title: const Text(
+                title: Text(
                   'ログインID',
-                  style: TextStyle(fontSize: 12, color: Colors.grey),
+                  style: TextStyle(fontSize: 12, color: context.colors.textSecondary),
                 ),
                 subtitle: Text(
                   loginId.isNotEmpty ? loginId : '---',
-                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.black87),
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: context.colors.textPrimary),
                 ),
               ),
               const Divider(height: 1, indent: 60),
@@ -704,7 +782,7 @@ Container(
                   '通知設定',
                   style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                 ),
-                trailing: const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey),
+                trailing: Icon(Icons.arrow_forward_ios, size: 16, color: context.colors.iconMuted),
                 onTap: () {
                   _navigateTo(context, const NotificationSettingsScreen());
                 },
@@ -723,7 +801,7 @@ Container(
                   'パスワード変更',
                   style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                 ),
-                trailing: const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey),
+                trailing: Icon(Icons.arrow_forward_ios, size: 16, color: context.colors.iconMuted),
                 onTap: () => _showChangePasswordDialog(context),
               ),
               const Divider(height: 1, indent: 60),
@@ -892,7 +970,7 @@ Container(
               TextField(
                 controller: currentPasswordController,
                 obscureText: true,
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   labelText: '現在のパスワード',
                   prefixIcon: Icon(Icons.lock_outline),
                 ),
@@ -901,7 +979,7 @@ Container(
               TextField(
                 controller: newPasswordController,
                 obscureText: true,
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   labelText: '新しいパスワード',
                   prefixIcon: Icon(Icons.lock),
                 ),
@@ -910,7 +988,7 @@ Container(
               TextField(
                 controller: confirmPasswordController,
                 obscureText: true,
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   labelText: '新しいパスワード（確認）',
                   prefixIcon: Icon(Icons.lock),
                 ),
@@ -1003,7 +1081,7 @@ Container(
           child: Text(
             header,
             style: TextStyle(
-              color: Colors.grey.shade600,
+              color: context.colors.textSecondary,
               fontWeight: FontWeight.bold,
               fontSize: 13,
             ),
@@ -1011,11 +1089,11 @@ Container(
         ),
         Container(
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: context.colors.cardBg,
             borderRadius: BorderRadius.circular(10),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.05),
+                color: context.colors.shadow,
                 blurRadius: 2,
                 offset: const Offset(0, 1),
               ),
@@ -1040,13 +1118,13 @@ Container(
                     ),
                     title: Text(
                       item.title,
-                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                     ),
                     subtitle: Text(
                       item.description,
-                      style: const TextStyle(fontSize: 12, color: Colors.grey),
+                      style: TextStyle(fontSize: 12, color: context.colors.textSecondary),
                     ),
-                    trailing: const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey),
+                    trailing: Icon(Icons.arrow_forward_ios, size: 16, color: context.colors.iconMuted),
                     onTap: () {
                       if (item.destination == null) {
                         ScaffoldMessenger.of(context).showSnackBar(

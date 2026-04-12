@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
+import 'app_theme.dart';
 
 /// hug連携のIDマッピング管理画面
 /// Firestoreの hug_settings/child_mapping, hug_settings/staff_mapping を管理
@@ -218,15 +219,15 @@ class _MappingList extends StatelessWidget {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(Icons.link_off, size: 40, color: Colors.grey.shade400),
+                      Icon(Icons.link_off, size: 40, color: context.colors.iconMuted),
                       const SizedBox(height: 8),
                       Text('マッピングが未設定です',
-                          style: TextStyle(color: Colors.grey.shade500)),
+                          style: TextStyle(color: context.colors.textTertiary)),
                       const SizedBox(height: 4),
                       Text('右下の＋ボタンで追加するか、\nAppBarの↓ボタンでhugから自動取得してください',
                           textAlign: TextAlign.center,
                           style: TextStyle(
-                              color: Colors.grey.shade400, fontSize: 12)),
+                              color: context.colors.iconMuted, fontSize: 12)),
                     ],
                   ),
                 )

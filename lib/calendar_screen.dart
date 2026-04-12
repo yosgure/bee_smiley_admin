@@ -349,15 +349,15 @@ Future<void> _saveDisplayDate(DateTime date) async {
   @override
   Widget build(BuildContext context) {
     if (!_isLocaleInitialized || _isLoadingStaffInfo) {
-      return const Scaffold(
-        backgroundColor: Colors.white,
+      return Scaffold(
+        backgroundColor: context.colors.scaffoldBg,
         body: Center(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              CircularProgressIndicator(),
+              const CircularProgressIndicator(),
               SizedBox(height: 16),
-              Text('データを読み込んでいます...', style: TextStyle(color: AppColors.textSub)),
+              Text('データを読み込んでいます...', style: TextStyle(color: context.colors.textSecondary)),
             ],
           ),
         ),
@@ -369,7 +369,7 @@ Future<void> _saveDisplayDate(DateTime date) async {
     if (_showPlusSchedule) {
       return Scaffold(
         key: _scaffoldKey,
-        backgroundColor: Colors.white,
+        backgroundColor: context.colors.scaffoldBg,
         body: PlusScheduleContent(
           onBack: () => setState(() => _showPlusSchedule = false),
         ),
@@ -378,11 +378,11 @@ Future<void> _saveDisplayDate(DateTime date) async {
 
     return Scaffold(
       key: _scaffoldKey,
-      backgroundColor: Colors.white,
+      backgroundColor: context.colors.scaffoldBg,
       drawer: showSidebar
           ? null
           : Drawer(
-              backgroundColor: AppColors.surface,
+              backgroundColor: context.colors.cardBg,
               width: 300,
               shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
               child: SafeArea(
@@ -394,8 +394,8 @@ Future<void> _saveDisplayDate(DateTime date) async {
             ),
       appBar: showSidebar 
         ? AppBar(
-            backgroundColor: Colors.white,
-            surfaceTintColor: Colors.white,
+            backgroundColor: context.colors.cardBg,
+            surfaceTintColor: Colors.transparent,
             elevation: 0,
             toolbarHeight: 64,
             titleSpacing: 24, 
@@ -409,29 +409,29 @@ Future<void> _saveDisplayDate(DateTime date) async {
                     onPressed: _goToToday,
                     style: OutlinedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(horizontal: 16),
-                      side: BorderSide(color: Colors.grey.shade300),
+                      side: BorderSide(color: context.colors.borderMedium),
                       shape: RoundedRectangleBorder(borderRadius: AppStyles.radiusSmall),
-                      foregroundColor: AppColors.textMain,
+                      foregroundColor: context.colors.textPrimary,
                     ),
                     child: const Text('今日'),
                   ),
                 ),
-                const SizedBox(width: 20),
+                SizedBox(width: 20),
                 IconButton(
-                  icon: const Icon(Icons.chevron_left, color: AppColors.textSub),
+                  icon: Icon(Icons.chevron_left, color: context.colors.textSecondary),
                   onPressed: () => _controller.backward!(),
                   splashRadius: 20,
                 ),
                 IconButton(
-                  icon: const Icon(Icons.chevron_right, color: AppColors.textSub),
+                  icon: Icon(Icons.chevron_right, color: context.colors.textSecondary),
                   onPressed: () => _controller.forward!(),
                   splashRadius: 20,
                 ),
-                const SizedBox(width: 16),
+                SizedBox(width: 16),
                 Text(
                   _headerTextWithYear,
-                  style: const TextStyle(
-                    color: AppColors.textMain, fontSize: 22, fontWeight: FontWeight.w400,
+                  style: TextStyle(
+                    color: context.colors.textPrimary, fontSize: 22, fontWeight: FontWeight.w400,
                   ),
                 ),
               ],
@@ -444,8 +444,8 @@ Future<void> _saveDisplayDate(DateTime date) async {
             ],
           )
         : AppBar(
-            backgroundColor: Colors.white,
-            surfaceTintColor: Colors.white,
+            backgroundColor: context.colors.cardBg,
+            surfaceTintColor: Colors.transparent,
             elevation: 0,
             toolbarHeight: kToolbarHeight,
             automaticallyImplyLeading: false,
@@ -462,13 +462,13 @@ Future<void> _saveDisplayDate(DateTime date) async {
                     Row(
                       children: [
                         IconButton(
-                          icon: const Icon(Icons.menu, color: AppColors.textMain),
+                          icon: Icon(Icons.menu, color: context.colors.textPrimary),
                           onPressed: () => _scaffoldKey.currentState?.openDrawer(),
                         ),
                         Text(
                           _headerText,
-                          style: const TextStyle(
-                            color: AppColors.textMain, fontSize: 20, fontWeight: FontWeight.w400,
+                          style: TextStyle(
+                            color: context.colors.textPrimary, fontSize: 20, fontWeight: FontWeight.w400,
                           ),
                         ),
                       ],
@@ -481,16 +481,16 @@ Future<void> _saveDisplayDate(DateTime date) async {
                           width: 24,
                           height: 24,
                           decoration: BoxDecoration(
-                            border: Border.all(color: Colors.grey.shade400, width: 1.5),
+                            border: Border.all(color: context.colors.iconMuted, width: 1.5),
                             borderRadius: BorderRadius.circular(2),
                           ),
                           alignment: Alignment.center,
                           child: Text(
                             '${DateTime.now().day}',
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 11,
                               fontWeight: FontWeight.bold,
-                              color: AppColors.textMain,
+                              color: context.colors.textPrimary,
                               height: 1.0,
                             ),
                           ),
@@ -741,8 +741,8 @@ Future<void> _saveDisplayDate(DateTime date) async {
                         Container(
                           width: 280,
                           padding: const EdgeInsets.only(top: 16, left: 12, right: 12),
-                          decoration: const BoxDecoration(
-                            color: AppColors.surface,
+                          decoration: BoxDecoration(
+                            color: context.colors.cardBg,
                           ),
                           child: _buildSidebarContent(),
                         ),
@@ -761,7 +761,7 @@ Future<void> _saveDisplayDate(DateTime date) async {
                                 selectionBorderColor: Colors.transparent,
                                 // 現在時刻ライン色（Google風の赤）。今日の日付ハイライトもこの色になる
                                 todayHighlightColor: AppColors.primary,
-                                cellBorderColor: Colors.grey.shade400,
+                                cellBorderColor: context.colors.borderMedium,
                               ),
                               child: MouseRegion(
                                 onEnter: (_) {},
@@ -780,8 +780,8 @@ Future<void> _saveDisplayDate(DateTime date) async {
                                 // リサイズでイベントの時間変更を有効化
                                 allowAppointmentResize: true,
                                 onAppointmentResizeEnd: _onAppointmentResizeEnd,
-                                backgroundColor: AppColors.surface,
-                                cellBorderColor: Colors.grey.shade400,
+                                backgroundColor: context.colors.cardBg,
+                                cellBorderColor: context.colors.borderMedium,
                                 headerHeight: 0,
                                 viewHeaderHeight: 60,
                                 allowViewNavigation: false,
@@ -789,18 +789,18 @@ Future<void> _saveDisplayDate(DateTime date) async {
                                   color: Colors.transparent,
                                   border: null,
                                 ),
-                                viewHeaderStyle: const ViewHeaderStyle(
-                                  dayTextStyle: TextStyle(fontSize: 11, color: AppColors.textSub, fontWeight: FontWeight.w500, letterSpacing: 0.5),
-                                  dateTextStyle: TextStyle(fontSize: 18, color: AppColors.textMain, fontWeight: FontWeight.w400),
+                                viewHeaderStyle: ViewHeaderStyle(
+                                  dayTextStyle: TextStyle(fontSize: 11, color: context.colors.textSecondary, fontWeight: FontWeight.w500, letterSpacing: 0.5),
+                                  dateTextStyle: TextStyle(fontSize: 18, color: context.colors.textPrimary, fontWeight: FontWeight.w400),
                                 ),
-                                monthViewSettings: const MonthViewSettings(
+                                monthViewSettings: MonthViewSettings(
                                   appointmentDisplayMode: MonthAppointmentDisplayMode.appointment,
                                   appointmentDisplayCount: 5,
                                   showAgenda: false,
                                   monthCellStyle: MonthCellStyle(
-                                    textStyle: TextStyle(fontSize: 12, color: AppColors.textMain),
-                                    trailingDatesTextStyle: TextStyle(fontSize: 12, color: AppColors.textSub),
-                                    leadingDatesTextStyle: TextStyle(fontSize: 12, color: AppColors.textSub),
+                                    textStyle: TextStyle(fontSize: 12, color: context.colors.textPrimary),
+                                    trailingDatesTextStyle: TextStyle(fontSize: 12, color: context.colors.textSecondary),
+                                    leadingDatesTextStyle: TextStyle(fontSize: 12, color: context.colors.textSecondary),
                                     todayBackgroundColor: Colors.transparent, 
                                     todayTextStyle: TextStyle(fontSize: 12, color: AppColors.primary, fontWeight: FontWeight.bold),
                                   ),
@@ -817,7 +817,7 @@ Future<void> _saveDisplayDate(DateTime date) async {
                                     return Container(
                                       margin: const EdgeInsets.symmetric(vertical: 1),
                                       decoration: BoxDecoration(
-                                        color: AppColors.surface,
+                                        color: context.colors.cardBg,
                                         borderRadius: BorderRadius.circular(2),
                                         border: Border.all(color: AppColors.error.withOpacity(0.5)),
                                       ),
@@ -832,7 +832,7 @@ Future<void> _saveDisplayDate(DateTime date) async {
                                           Expanded(
                                             child: Text(
                                               appointment.subject.replaceAll('⚠️ ', ''), 
-                                              style: const TextStyle(
+                                              style: TextStyle(
                                                 color: AppColors.error, 
                                                 fontSize: 12,
                                                 height: 1.0, 
@@ -865,7 +865,7 @@ Future<void> _saveDisplayDate(DateTime date) async {
                                           Expanded(
                                             child: Text(
                                               appointment.subject.replaceAll('◯ ', ''),
-                                              style: const TextStyle(
+                                              style: TextStyle(
                                                 color: Colors.white,
                                                 fontSize: 12, 
                                                 decoration: TextDecoration.none,
@@ -906,7 +906,7 @@ Future<void> _saveDisplayDate(DateTime date) async {
                                       alignment: Alignment.centerLeft,
                                       child: Text(
                                         appointment.subject,
-                                        style: const TextStyle(
+                                        style: TextStyle(
                                           color: Colors.white,
                                           fontSize: 12,
                                           height: 1.0,
@@ -951,7 +951,7 @@ Future<void> _saveDisplayDate(DateTime date) async {
                                     child: isMonthView
                                         ? Text(
                                             appointment.subject,
-                                            style: const TextStyle(
+                                            style: TextStyle(
                                               color: Colors.white,
                                               fontSize: 12,
                                               height: 1.0,
@@ -962,7 +962,7 @@ Future<void> _saveDisplayDate(DateTime date) async {
                                         : isCompact
                                             ? Text(
                                                 '${appointment.subject}、$timeText',
-                                                style: const TextStyle(
+                                                style: TextStyle(
                                                   color: Colors.white,
                                                   fontSize: 12,
                                                   fontWeight: FontWeight.w400,
@@ -977,7 +977,7 @@ Future<void> _saveDisplayDate(DateTime date) async {
                                                 children: [
                                                   Text(
                                                     appointment.subject,
-                                                    style: const TextStyle(
+                                                    style: TextStyle(
                                                       color: Colors.white,
                                                       fontSize: 12,
                                                       fontWeight: FontWeight.w400,
@@ -1002,22 +1002,22 @@ Future<void> _saveDisplayDate(DateTime date) async {
                                               ),
                                   );
                                 },
-                                timeSlotViewSettings: const TimeSlotViewSettings(
+                                timeSlotViewSettings: TimeSlotViewSettings(
                                   timeIntervalHeight: 60,
                                   timeRulerSize: 64,
                                   // Google風の時間表記（例: 午前9時, 午後12時）
                                   timeFormat: 'a h時',
                                   // 時間グリッドは1時間単位
                                   timeInterval: Duration(minutes: 60),
-                                  timeTextStyle: TextStyle(color: AppColors.textSub, fontSize: 11),
+                                  timeTextStyle: TextStyle(color: context.colors.textSecondary, fontSize: 11),
                                   dateFormat: 'd',
                                   dayFormat: 'EEE',
-                                  allDayPanelColor: AppColors.surface,
+                                  allDayPanelColor: context.colors.cardBg,
                                   // 15分単位で操作可能に
                                   minimumAppointmentDuration: Duration(minutes: 15),
                                 ),
                                 // 【修正2】dragAndDropSettingsでドラッグ時の動作を設定
-                                dragAndDropSettings: const DragAndDropSettings(
+                                dragAndDropSettings: DragAndDropSettings(
                                   allowNavigation: true,
                                   allowScroll: true,
                                   showTimeIndicator: true,
@@ -1046,7 +1046,7 @@ Future<void> _saveDisplayDate(DateTime date) async {
       floatingActionButton: _showDashboard ? null : FloatingActionButton(
         heroTag: null, 
         onPressed: () => _showAddEventDialog(),
-        backgroundColor: AppColors.surface,
+        backgroundColor: context.colors.cardBg,
         elevation: 4,
         shape: const CircleBorder(),
         child: Padding(
@@ -1069,7 +1069,7 @@ Future<void> _saveDisplayDate(DateTime date) async {
         context: context,
         barrierDismissible: true,
         builder: (context) => Dialog(
-          backgroundColor: Colors.white,
+          backgroundColor: context.colors.dialogBg,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           insetPadding: const EdgeInsets.symmetric(horizontal: 40, vertical: 24),
           child: SizedBox(
@@ -1092,8 +1092,8 @@ Future<void> _saveDisplayDate(DateTime date) async {
         backgroundColor: Colors.transparent,
         builder: (context) => Container(
           height: MediaQuery.of(context).size.height * 0.9,
-          decoration: const BoxDecoration(
-            color: Colors.white,
+          decoration: BoxDecoration(
+            color: context.colors.cardBg,
             borderRadius: BorderRadius.only(
               topLeft: Radius.circular(20),
               topRight: Radius.circular(20),
@@ -1133,11 +1133,11 @@ Future<void> _saveDisplayDate(DateTime date) async {
               cellBorderColor: Colors.transparent,
               headerHeight: 40,
               viewHeaderHeight: 30,
-              viewHeaderStyle: const ViewHeaderStyle(
-                dayTextStyle: TextStyle(fontSize: 11, color: AppColors.textSub, fontWeight: FontWeight.w500),
+              viewHeaderStyle: ViewHeaderStyle(
+                dayTextStyle: TextStyle(fontSize: 11, color: context.colors.textSecondary, fontWeight: FontWeight.w500),
               ),
-              headerStyle: const CalendarHeaderStyle(
-                textStyle: TextStyle(fontSize: 13, color: AppColors.textMain, fontWeight: FontWeight.bold),
+              headerStyle: CalendarHeaderStyle(
+                textStyle: TextStyle(fontSize: 13, color: context.colors.textPrimary, fontWeight: FontWeight.bold),
                 backgroundColor: Colors.transparent,
               ),
               todayHighlightColor: AppColors.primary,
@@ -1146,13 +1146,13 @@ Future<void> _saveDisplayDate(DateTime date) async {
                 shape: BoxShape.circle,
                 border: Border.all(color: AppColors.primary, width: 2),
               ),
-              monthViewSettings: const MonthViewSettings(
+              monthViewSettings: MonthViewSettings(
                 numberOfWeeksInView: 6,
                 appointmentDisplayMode: MonthAppointmentDisplayMode.none,
                 monthCellStyle: MonthCellStyle(
-                  textStyle: TextStyle(fontSize: 12, color: AppColors.textMain),
-                  trailingDatesTextStyle: TextStyle(fontSize: 12, color: AppColors.textSub),
-                  leadingDatesTextStyle: TextStyle(fontSize: 12, color: AppColors.textSub),
+                  textStyle: TextStyle(fontSize: 12, color: context.colors.textPrimary),
+                  trailingDatesTextStyle: TextStyle(fontSize: 12, color: context.colors.textSecondary),
+                  leadingDatesTextStyle: TextStyle(fontSize: 12, color: context.colors.textSecondary),
                   todayBackgroundColor: Colors.transparent,
                   todayTextStyle: TextStyle(fontSize: 12, color: AppColors.primary, fontWeight: FontWeight.bold),
                 ),
@@ -1175,9 +1175,9 @@ Future<void> _saveDisplayDate(DateTime date) async {
               _buildFilterCheckbox('誕生日', _showBirthdays, (val) => setState(() => _showBirthdays = val), Colors.pink.shade300),
               const SizedBox(height: 8),
               if (_myClassrooms.isEmpty)
-                const Padding(
+                Padding(
                   padding: EdgeInsets.only(left: 32, top: 4),
-                  child: Text('担当教室なし', style: TextStyle(color: AppColors.textSub, fontSize: 12)),
+                  child: Text('担当教室なし', style: TextStyle(color: context.colors.textSecondary, fontSize: 12)),
                 )
               else
                 ..._myClassrooms.map((roomName) {
@@ -1208,9 +1208,9 @@ Future<void> _saveDisplayDate(DateTime date) async {
               _buildFilterCheckbox('誕生日', _showBirthdays, (val) => setState(() => _showBirthdays = val), Colors.pink.shade300),
               const SizedBox(height: 8),
               if (_myClassrooms.isEmpty)
-                const Padding(
+                Padding(
                   padding: EdgeInsets.only(left: 32, top: 4),
-                  child: Text('担当教室なし', style: TextStyle(color: AppColors.textSub, fontSize: 12)),
+                  child: Text('担当教室なし', style: TextStyle(color: context.colors.textSecondary, fontSize: 12)),
                 )
               else
                 ..._myClassrooms.map((roomName) {
@@ -1263,7 +1263,7 @@ Future<void> _saveDisplayDate(DateTime date) async {
       height: buttonHeight + containerPadding * 2,
       padding: EdgeInsets.all(containerPadding),
       decoration: BoxDecoration(
-        color: Colors.grey.shade200,
+        color: context.colors.borderLight,
         borderRadius: BorderRadius.circular(10),
       ),
       child: Stack(
@@ -1277,7 +1277,7 @@ Future<void> _saveDisplayDate(DateTime date) async {
               width: selectedWidth,
               height: buttonHeight,
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: context.colors.cardBg,
                 borderRadius: BorderRadius.circular(7),
                 boxShadow: [
                   BoxShadow(
@@ -1311,7 +1311,7 @@ Future<void> _saveDisplayDate(DateTime date) async {
                       style: TextStyle(
                         fontSize: 14,
                         fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
-                        color: isSelected ? AppColors.textMain : AppColors.textSub,
+                        color: isSelected ? context.colors.textPrimary : context.colors.textSecondary,
                       ),
                     ),
                   ),
@@ -1330,7 +1330,7 @@ Future<void> _saveDisplayDate(DateTime date) async {
                   child: Icon(
                     Icons.dashboard_outlined,
                     size: 18,
-                    color: selectedIndex == 3 ? AppColors.textMain : AppColors.textSub,
+                    color: selectedIndex == 3 ? context.colors.textPrimary : context.colors.textSecondary,
                   ),
                 ),
               ),
@@ -1354,8 +1354,8 @@ Future<void> _saveDisplayDate(DateTime date) async {
         child: Row(
           children: [
             SizedBox(width: 24, height: 24, child: Checkbox(value: value, activeColor: color, onChanged: (val) => onChanged(val!))),
-            const SizedBox(width: 8),
-            Expanded(child: Text(title, style: const TextStyle(fontSize: 13, color: AppColors.textMain))),
+            SizedBox(width: 8),
+            Expanded(child: Text(title, style: TextStyle(fontSize: 13, color: context.colors.textPrimary))),
           ],
         ),
       ),
@@ -1467,7 +1467,7 @@ Future<void> _saveDisplayDate(DateTime date) async {
         context: context,
         barrierDismissible: true,
         builder: (context) => Dialog(
-          backgroundColor: Colors.white,
+          backgroundColor: context.colors.dialogBg,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           insetPadding: const EdgeInsets.symmetric(horizontal: 40, vertical: 24),
           child: SizedBox(
@@ -1487,8 +1487,8 @@ Future<void> _saveDisplayDate(DateTime date) async {
         backgroundColor: Colors.transparent,
         builder: (context) => Container(
           height: MediaQuery.of(context).size.height * 0.9,
-          decoration: const BoxDecoration(
-            color: Colors.white,
+          decoration: BoxDecoration(
+            color: context.colors.cardBg,
             borderRadius: BorderRadius.only(
               topLeft: Radius.circular(20),
               topRight: Radius.circular(20),
@@ -1512,7 +1512,7 @@ Future<void> _saveDisplayDate(DateTime date) async {
       context: context,
       builder: (context) {
         return Dialog(
-          backgroundColor: Colors.white,
+          backgroundColor: context.colors.dialogBg,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           child: StreamBuilder<QuerySnapshot>(
             stream: _tasksRef
@@ -1574,10 +1574,10 @@ Future<void> _saveDisplayDate(DateTime date) async {
                     SizedBox(
                       height: contentHeight,
                       child: pendingDocs.isEmpty
-                        ? const Center(
+                        ? Center(
                             child: Text(
                               '保留中のタスクはありません',
-                              style: TextStyle(color: AppColors.textSub),
+                              style: TextStyle(color: context.colors.textSecondary),
                             ),
                           )
                         : ListView.builder(
@@ -1598,12 +1598,12 @@ Future<void> _saveDisplayDate(DateTime date) async {
                                         children: [
                                           Text(
                                             data['title'] ?? '無題',
-                                            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                                            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
                                           ),
                                           const SizedBox(height: 4),
                                           Text(
                                             DateFormat('yyyy/MM/dd').format(date),
-                                            style: const TextStyle(fontSize: 13, color: AppColors.error),
+                                            style: TextStyle(fontSize: 13, color: AppColors.error),
                                           ),
                                         ],
                                       ),
@@ -1615,9 +1615,9 @@ Future<void> _saveDisplayDate(DateTime date) async {
                                         await doc.reference.delete();
                                       },
                                     ),
-                                    const SizedBox(width: 4),
+                                    SizedBox(width: 4),
                                     IconButton(
-                                      icon: Icon(Icons.edit_outlined, size: 24, color: Colors.grey.shade600),
+                                      icon: Icon(Icons.edit_outlined, size: 24, color: context.colors.textSecondary),
                                       tooltip: '編集',
                                       onPressed: () {
                                         Navigator.pop(context);
@@ -1649,7 +1649,7 @@ Future<void> _saveDisplayDate(DateTime date) async {
         context: context,
         barrierDismissible: true,
         builder: (context) => Dialog(
-          backgroundColor: Colors.white,
+          backgroundColor: context.colors.dialogBg,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           insetPadding: const EdgeInsets.symmetric(horizontal: 40, vertical: 24),
           child: SizedBox(
@@ -1669,8 +1669,8 @@ Future<void> _saveDisplayDate(DateTime date) async {
         backgroundColor: Colors.transparent,
         builder: (context) => Container(
           height: MediaQuery.of(context).size.height * 0.9,
-          decoration: const BoxDecoration(
-            color: Colors.white,
+          decoration: BoxDecoration(
+            color: context.colors.cardBg,
             borderRadius: BorderRadius.only(
               topLeft: Radius.circular(20),
               topRight: Radius.circular(20),
@@ -1712,7 +1712,7 @@ Future<void> _saveDisplayDate(DateTime date) async {
                   const SizedBox(width: 8),
                   const Expanded(child: Text('タスク詳細', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold))),
                   IconButton(
-                    icon: const Icon(Icons.edit, size: 20, color: Colors.grey),
+                    icon: Icon(Icons.edit, size: 20, color: context.colors.iconMuted),
                     tooltip: '編集',
                     onPressed: () {
                       Navigator.pop(ctx);
@@ -1720,12 +1720,12 @@ Future<void> _saveDisplayDate(DateTime date) async {
                     },
                   ),
                   IconButton(
-                    icon: const Icon(Icons.delete_outline, size: 20, color: Colors.grey),
+                    icon: Icon(Icons.delete_outline, size: 20, color: context.colors.iconMuted),
                     tooltip: '削除',
                     onPressed: () async { Navigator.pop(ctx); await doc.reference.delete(); },
                   ),
                   IconButton(
-                    icon: const Icon(Icons.close, size: 20, color: Colors.grey),
+                    icon: Icon(Icons.close, size: 20, color: context.colors.iconMuted),
                     tooltip: '閉じる',
                     onPressed: () => Navigator.pop(ctx),
                   ),
@@ -1739,25 +1739,25 @@ Future<void> _saveDisplayDate(DateTime date) async {
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(title, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: AppColors.textMain)),
-                      const SizedBox(height: 16),
+                      Text(title, style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: context.colors.textPrimary)),
+                      SizedBox(height: 16),
                       Row(
                         children: [
-                          const Icon(Icons.calendar_today, size: 16, color: AppColors.textSub),
-                          const SizedBox(width: 8),
-                          Text(DateFormat('yyyy年MM月dd日 (E)', 'ja').format(date), style: const TextStyle(fontSize: 14, color: AppColors.textSub)),
+                          Icon(Icons.calendar_today, size: 16, color: context.colors.textSecondary),
+                          SizedBox(width: 8),
+                          Text(DateFormat('yyyy年MM月dd日 (E)', 'ja').format(date), style: TextStyle(fontSize: 14, color: context.colors.textSecondary)),
                         ],
                       ),
                       if (notes.isNotEmpty) ...[
-                        const SizedBox(height: 24),
+                        SizedBox(height: 24),
                         Container(
                           width: double.infinity,
                           padding: const EdgeInsets.all(16),
                           decoration: BoxDecoration(
-                            color: AppColors.inputFill, 
+                            color: context.colors.inputFill, 
                             borderRadius: AppStyles.radiusSmall,
                           ),
-                          child: Text(notes, style: const TextStyle(fontSize: 14, height: 1.5, color: AppColors.textMain)),
+                          child: Text(notes, style: TextStyle(fontSize: 14, height: 1.5, color: context.colors.textPrimary)),
                         ),
                       ],
                     ],
@@ -1855,11 +1855,11 @@ Future<void> _saveDisplayDate(DateTime date) async {
                             width: 14, height: 14,
                             decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(4)),
                           ),
-                          const SizedBox(width: 14),
+                          SizedBox(width: 14),
                           Expanded(
                             child: Text(
                               subject,
-                              style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w500, color: AppColors.textMain, height: 1.2),
+                              style: TextStyle(fontSize: 22, fontWeight: FontWeight.w500, color: context.colors.textPrimary, height: 1.2),
                             ),
                           ),
                         ],
@@ -1885,11 +1885,11 @@ Future<void> _saveDisplayDate(DateTime date) async {
                         _buildDetailList(Icons.badge_outlined, staffNames),
                       
                       if (studentNames.isNotEmpty) ...[
-                        const SizedBox(height: 16),
+                        SizedBox(height: 16),
                         Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Icon(Icons.face, size: 20, color: AppColors.textSub),
+                            Icon(Icons.face, size: 20, color: context.colors.textSecondary),
                             const SizedBox(width: 20),
                             Expanded(
                               child: Column(
@@ -2102,9 +2102,9 @@ Future<void> _saveDisplayDate(DateTime date) async {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(icon, size: 20, color: AppColors.textSub),
-        const SizedBox(width: 20),
-        Expanded(child: Text(text, style: const TextStyle(fontSize: 14, color: AppColors.textMain))),
+        Icon(icon, size: 20, color: context.colors.textSecondary),
+        SizedBox(width: 20),
+        Expanded(child: Text(text, style: TextStyle(fontSize: 14, color: context.colors.textPrimary))),
       ],
     );
   }
@@ -2119,7 +2119,7 @@ Future<void> _saveDisplayDate(DateTime date) async {
         context: context,
         barrierDismissible: true,
         builder: (context) => Dialog(
-          backgroundColor: Colors.white,
+          backgroundColor: context.colors.dialogBg,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           insetPadding: const EdgeInsets.symmetric(horizontal: 40, vertical: 24),
           child: SizedBox(
@@ -2139,8 +2139,8 @@ Future<void> _saveDisplayDate(DateTime date) async {
         backgroundColor: Colors.transparent,
         builder: (context) => Container(
           height: MediaQuery.of(context).size.height * 0.9,
-          decoration: const BoxDecoration(
-            color: Colors.white,
+          decoration: BoxDecoration(
+            color: context.colors.cardBg,
             borderRadius: BorderRadius.only(
               topLeft: Radius.circular(20),
               topRight: Radius.circular(20),
@@ -2162,14 +2162,14 @@ Future<void> _saveDisplayDate(DateTime date) async {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(icon, size: 20, color: AppColors.textSub),
-        const SizedBox(width: 20),
+        Icon(icon, size: 20, color: context.colors.textSecondary),
+        SizedBox(width: 20),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: items.map((item) => Padding(
               padding: const EdgeInsets.only(bottom: 4.0),
-              child: Text(item, style: const TextStyle(fontSize: 14, color: AppColors.textMain)),
+              child: Text(item, style: TextStyle(fontSize: 14, color: context.colors.textPrimary)),
             )).toList(),
           ),
         ),

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart'; // Firestore用パッケージ
+import 'app_theme.dart';
 
 class ClassroomMasterScreen extends StatefulWidget {
   final VoidCallback? onBack;
@@ -29,10 +30,10 @@ class _ClassroomMasterScreenState extends State<ClassroomMasterScreen> {
       appBar: AppBar(
         title: const Text('教室設定'),
 centerTitle: true,
-  backgroundColor: Colors.white,
+  backgroundColor: context.colors.cardBg,
   elevation: 0,
   leading: IconButton(
-    icon: const Icon(Icons.arrow_back, color: Colors.black87),
+    icon: Icon(Icons.arrow_back, color: context.colors.textPrimary),
     onPressed: () {
       if (widget.onBack != null) {
         widget.onBack!();
@@ -43,7 +44,7 @@ centerTitle: true,
   ),
 ),
 
-      backgroundColor: const Color(0xFFF2F2F7),
+      backgroundColor: context.colors.scaffoldBgAlt,
       
       // ★ここが重要：Firestoreのデータをリアルタイムに表示する仕組み
       body: StreamBuilder<QuerySnapshot>(
@@ -62,11 +63,11 @@ centerTitle: true,
 
           // 3. データが空っぽの場合
           if (dataList.isEmpty) {
-            return const Center(
+            return Center(
               child: Text(
                 'データがありません。\n右下の「＋」ボタンで追加してください。',
                 textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.grey),
+                style: TextStyle(color: context.colors.textSecondary),
               ),
             );
           }
@@ -93,7 +94,7 @@ centerTitle: true,
                     decoration: BoxDecoration(
                       color: roomColor,
                       shape: BoxShape.circle,
-                      border: Border.all(color: Colors.grey.shade300, width: 1),
+                      border: Border.all(color: context.colors.borderMedium, width: 1),
                     ),
                   ),
                   title: Text(
@@ -226,12 +227,12 @@ centerTitle: true,
                         
                         DropdownButtonFormField<String>(
                           value: _categories.contains(selectedCategory) ? selectedCategory : _categories[0],
-                          decoration: const InputDecoration(
+                          decoration: InputDecoration(
                             labelText: 'カテゴリー',
-                            border: OutlineInputBorder(),
+                            border: const OutlineInputBorder(),
                             filled: true,
-                            fillColor: Colors.white,
-                            contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                            fillColor: context.colors.cardBg,
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                             isDense: true,
                           ),
                           items: _categories.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
@@ -267,10 +268,10 @@ centerTitle: true,
                                   color: color,
                                   shape: BoxShape.circle,
                                   border: isSelected
-                                      ? Border.all(color: Colors.black87, width: 3)
-                                      : Border.all(color: Colors.grey.shade300),
+                                      ? Border.all(color: context.colors.textPrimary, width: 3)
+                                      : Border.all(color: context.colors.borderMedium),
                                   boxShadow: isSelected
-                                      ? [BoxShadow(color: Colors.black.withOpacity(0.2), blurRadius: 4, offset: const Offset(0, 2))]
+                                      ? [BoxShadow(color: context.colors.shadow, blurRadius: 4, offset: const Offset(0, 2))]
                                       : [],
                                 ),
                                 child: isSelected
@@ -325,10 +326,10 @@ centerTitle: true,
       keyboardType: type,
       decoration: InputDecoration(
         labelText: label,
-        prefixIcon: icon != null ? Icon(icon, color: Colors.grey, size: 20) : null,
+        prefixIcon: icon != null ? Icon(icon, color: context.colors.textSecondary, size: 20) : null,
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
         filled: true,
-        fillColor: Colors.white,
+        fillColor: context.colors.cardBg,
         contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
         isDense: true,
       ),

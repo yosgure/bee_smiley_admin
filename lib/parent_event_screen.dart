@@ -36,8 +36,8 @@ class _ParentEventScreenState extends State<ParentEventScreen> {
       height: 48,
       padding: const EdgeInsets.symmetric(horizontal: 16),
       decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
+        color: context.colors.cardBg,
+        border: Border(bottom: BorderSide(color: context.colors.borderLight)),
       ),
       child: Center(
         child: Text(
@@ -76,13 +76,13 @@ class _ParentEventScreenState extends State<ParentEventScreen> {
           return const EventListSkeleton();
         }
         if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-          return const Center(
+          return Center(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(Icons.event_busy, size: 64, color: Colors.grey),
+                Icon(Icons.event_busy, size: 64, color: context.colors.textSecondary),
                 SizedBox(height: 16),
-                Text('予定されているイベントはありません', style: TextStyle(color: Colors.grey)),
+                Text('予定されているイベントはありません', style: TextStyle(color: context.colors.textSecondary)),
               ],
             ),
           );
@@ -97,13 +97,13 @@ class _ParentEventScreenState extends State<ParentEventScreen> {
         }).toList();
 
         if (docs.isEmpty) {
-          return const Center(
+          return Center(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(Icons.event_busy, size: 64, color: Colors.grey),
+                Icon(Icons.event_busy, size: 64, color: context.colors.textSecondary),
                 SizedBox(height: 16),
-                Text('予定されているイベントはありません', style: TextStyle(color: Colors.grey)),
+                Text('予定されているイベントはありません', style: TextStyle(color: context.colors.textSecondary)),
               ],
             ),
           );
@@ -166,7 +166,7 @@ class _ParentEventScreenState extends State<ParentEventScreen> {
     return Card(
       margin: const EdgeInsets.only(bottom: 16),
       elevation: 2,
-      shadowColor: Colors.black12,
+      shadowColor: context.colors.shadow,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
       ),
@@ -183,13 +183,13 @@ class _ParentEventScreenState extends State<ParentEventScreen> {
               fit: BoxFit.cover,
               placeholder: (context, url) => Container(
                 height: 180,
-                color: Colors.grey.shade200,
+                color: context.colors.borderLight,
                 child: const EventListSkeleton(),
               ),
               errorWidget: (context, url, error) => Container(
                 height: 180,
-                color: Colors.grey.shade200,
-                child: const Icon(Icons.broken_image, size: 48, color: Colors.grey),
+                color: context.colors.borderLight,
+                child: Icon(Icons.broken_image, size: 48, color: context.colors.textSecondary),
               ),
             )
           else
@@ -210,7 +210,7 @@ class _ParentEventScreenState extends State<ParentEventScreen> {
                 Text(
                   dateTimeStr,
                   style: TextStyle(
-                    color: Colors.grey.shade600,
+                    color: context.colors.textSecondary,
                     fontSize: 13,
                   ),
                 ),
@@ -251,7 +251,7 @@ class _ParentEventScreenState extends State<ParentEventScreen> {
                   Text(
                     detail,
                     style: TextStyle(
-                      color: Colors.grey.shade700,
+                      color: context.colors.textSecondary,
                       fontSize: 14,
                       height: 1.4,
                     ),
@@ -292,13 +292,13 @@ class _ParentEventScreenState extends State<ParentEventScreen> {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(icon, size: 16, color: color ?? Colors.grey.shade500),
+        Icon(icon, size: 16, color: color ?? context.colors.textTertiary),
         const SizedBox(width: 6),
         Expanded(
           child: Text(
             text,
             style: TextStyle(
-              color: color ?? Colors.grey.shade600,
+              color: color ?? context.colors.textSecondary,
               fontSize: 13,
             ),
           ),

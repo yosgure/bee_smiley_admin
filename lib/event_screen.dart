@@ -51,12 +51,12 @@ class _EventScreenState extends State<EventScreen> with SingleTickerProviderStat
       appBar: AppBar(
         title: const Text('イベント'),
         centerTitle: true,
-        backgroundColor: Colors.white,
+        backgroundColor: context.colors.cardBg,
         elevation: 0,
         bottom: TabBar(
           controller: _tabController,
           labelColor: AppColors.primary,
-          unselectedLabelColor: AppColors.textSub,
+          unselectedLabelColor: context.colors.textSecondary,
           indicatorColor: AppColors.primary,
           tabs: const [
             Tab(text: '公開中'),
@@ -64,7 +64,7 @@ class _EventScreenState extends State<EventScreen> with SingleTickerProviderStat
           ],
         ),
       ),
-      backgroundColor: AppColors.background,
+      backgroundColor: context.colors.scaffoldBg,
       
       body: Align(
         alignment: Alignment.topCenter,
@@ -118,7 +118,7 @@ class _EventScreenState extends State<EventScreen> with SingleTickerProviderStat
             MaterialPageRoute(builder: (context) => const EventCreateScreen()),
           );
         },
-        backgroundColor: Colors.white,
+        backgroundColor: context.colors.cardBg,
         elevation: 4,
         shape: const CircleBorder(),
         child: Padding(
@@ -134,7 +134,7 @@ class _EventScreenState extends State<EventScreen> with SingleTickerProviderStat
       return Center(
         child: Text(
           isActive ? '現在公開中のイベントはありません' : '過去のイベントはありません',
-          style: const TextStyle(color: AppColors.textSub),
+          style: TextStyle(color: context.colors.textSecondary),
         ),
       );
     }
@@ -173,12 +173,12 @@ class _EventScreenState extends State<EventScreen> with SingleTickerProviderStat
     return Container(
       margin: const EdgeInsets.only(bottom: 20),
       decoration: BoxDecoration(
-        color: isActive ? Colors.white : Colors.grey.shade100,
+        color: isActive ? context.colors.cardBg : context.colors.chipBg,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey.shade200),
+        border: Border.all(color: context.colors.borderLight),
         boxShadow: isActive ? [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: context.colors.shadow,
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -193,20 +193,20 @@ class _EventScreenState extends State<EventScreen> with SingleTickerProviderStat
             aspectRatio: 16 / 9,
             child: Container(
               width: double.infinity,
-              color: AppColors.inputFill,
+              color: context.colors.inputFill,
               child: event['imageUrl'] != null && (event['imageUrl'] as String).isNotEmpty
                   ? CachedNetworkImage(
                       imageUrl: event['imageUrl'],
                       fit: BoxFit.cover,
                       color: isActive ? null : Colors.grey.withOpacity(0.5),
                       colorBlendMode: isActive ? null : BlendMode.saturation,
-                      placeholder: (context, url) => Container(color: Colors.grey.shade200),
+                      placeholder: (context, url) => Container(color: context.colors.borderLight),
                       errorWidget: (context, url, error) => const Center(child: Icon(Icons.broken_image, color: Colors.grey)),
                     )
                   : Container(
-                      color: Colors.grey.shade200,
+                      color: context.colors.borderLight,
                       child: Center(
-                        child: Icon(Icons.event, size: 50, color: Colors.grey.shade400),
+                        child: Icon(Icons.event, size: 50, color: context.colors.iconMuted),
                       ),
                     ),
             ),
@@ -225,15 +225,15 @@ class _EventScreenState extends State<EventScreen> with SingleTickerProviderStat
                     Expanded(
                       child: Text(
                         event['title'] ?? '名称未設定',
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 18, 
                           fontWeight: FontWeight.bold,
-                          color: AppColors.textMain,
+                          color: context.colors.textPrimary,
                         ),
                       ),
                     ),
                     IconButton(
-                      icon: Icon(Icons.delete_outline, color: Colors.grey.shade400, size: 20),
+                      icon: Icon(Icons.delete_outline, color: context.colors.iconMuted, size: 20),
                       onPressed: () => _deleteEvent(docId, event['title']),
                       padding: EdgeInsets.zero,
                       constraints: const BoxConstraints(),
@@ -253,12 +253,12 @@ class _EventScreenState extends State<EventScreen> with SingleTickerProviderStat
                     padding: const EdgeInsets.only(left: 26),
                     child: Row(
                       children: [
-                        Icon(Icons.timer_outlined, size: 14, color: Colors.grey.shade500),
+                        Icon(Icons.timer_outlined, size: 14, color: context.colors.textTertiary),
                         const SizedBox(width: 6),
                         Text(
                           '申込締切: $deadlineStr まで',
                           style: TextStyle(
-                            color: Colors.grey.shade600,
+                            color: context.colors.textSecondary,
                             fontSize: 12,
                           ),
                         ),
@@ -275,19 +275,19 @@ class _EventScreenState extends State<EventScreen> with SingleTickerProviderStat
                     padding: const EdgeInsets.only(left: 26, top: 2),
                     child: Text(
                       event['address'],
-                      style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
+                      style: TextStyle(color: context.colors.textTertiary, fontSize: 12),
                     ),
                   ),
                 
                 const SizedBox(height: 16),
-                Divider(color: Colors.grey.shade200),
+                Divider(color: context.colors.borderLight),
                 const SizedBox(height: 12),
 
                 // 詳細
                 Text(
                   event['detail'] ?? '',
-                  style: const TextStyle(
-                    color: AppColors.textMain, 
+                  style: TextStyle(
+                    color: context.colors.textPrimary,
                     height: 1.6,
                     fontSize: 14,
                   ),
@@ -311,7 +311,7 @@ class _EventScreenState extends State<EventScreen> with SingleTickerProviderStat
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(8),
                         ),
-                        disabledBackgroundColor: Colors.grey.shade200,
+                        disabledBackgroundColor: context.colors.borderLight,
                         disabledForegroundColor: Colors.grey,
                       ),
                     ),
@@ -333,10 +333,10 @@ class _EventScreenState extends State<EventScreen> with SingleTickerProviderStat
         Expanded(
           child: Text(
             text,
-            style: const TextStyle(
-              fontSize: 14, 
+            style: TextStyle(
+              fontSize: 14,
               fontWeight: FontWeight.w500,
-              color: AppColors.textMain,
+              color: context.colors.textPrimary,
             ),
           ),
         ),
@@ -541,14 +541,14 @@ class _EventCreateScreenState extends State<EventCreateScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: context.colors.scaffoldBg,
       appBar: AppBar(
         title: const Text('新規イベント'),
         centerTitle: true,
-        backgroundColor: Colors.white,
+        backgroundColor: context.colors.cardBg,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.close, color: AppColors.textMain),
+          icon: Icon(Icons.close, color: context.colors.textPrimary),
           onPressed: () => Navigator.pop(context),
         ),
         actions: [
@@ -588,9 +588,9 @@ class _EventCreateScreenState extends State<EventCreateScreen> {
                     height: 180,
                     width: double.infinity,
                     decoration: BoxDecoration(
-                      color: AppColors.inputFill,
+                      color: context.colors.inputFill,
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.grey.shade300),
+                      border: Border.all(color: context.colors.borderMedium),
                       image: _imageBytes != null
                           ? DecorationImage(image: MemoryImage(_imageBytes!), fit: BoxFit.cover)
                           : null,
@@ -599,11 +599,11 @@ class _EventCreateScreenState extends State<EventCreateScreen> {
                         ? Column(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Icon(Icons.add_a_photo, size: 36, color: Colors.grey.shade400),
+                              Icon(Icons.add_a_photo, size: 36, color: context.colors.iconMuted),
                               const SizedBox(height: 8),
                               Text(
                                 'カバー写真を追加',
-                                style: TextStyle(color: Colors.grey.shade500, fontSize: 14),
+                                style: TextStyle(color: context.colors.textTertiary, fontSize: 14),
                               ),
                             ],
                           )
@@ -673,9 +673,9 @@ class _EventCreateScreenState extends State<EventCreateScreen> {
       padding: const EdgeInsets.only(top: 16, bottom: 8),
       child: Text(
         label, 
-        style: const TextStyle(
+        style: TextStyle(
           fontWeight: FontWeight.w600, 
-          color: AppColors.textMain,
+          color: context.colors.textPrimary,
           fontSize: 13,
         ),
       ),
@@ -686,7 +686,7 @@ class _EventCreateScreenState extends State<EventCreateScreen> {
     return Container(
       margin: const EdgeInsets.only(bottom: 4),
       decoration: BoxDecoration(
-        color: AppColors.inputFill,
+        color: context.colors.inputFill,
         borderRadius: BorderRadius.circular(8),
       ),
       child: TextField(
@@ -696,7 +696,7 @@ class _EventCreateScreenState extends State<EventCreateScreen> {
           hintText: hint,
           border: InputBorder.none,
           contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-          hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 14),
+          hintStyle: TextStyle(color: context.colors.textHint, fontSize: 14),
         ),
       ),
     );
@@ -713,7 +713,7 @@ class _EventCreateScreenState extends State<EventCreateScreen> {
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         margin: const EdgeInsets.only(bottom: 8),
         decoration: BoxDecoration(
-          color: AppColors.inputFill,
+          color: context.colors.inputFill,
           borderRadius: BorderRadius.circular(8),
         ),
         child: Row(
@@ -729,11 +729,11 @@ class _EventCreateScreenState extends State<EventCreateScreen> {
               style: TextStyle(
                 fontSize: 14, 
                 fontWeight: FontWeight.w500,
-                color: isDeadline ? AppColors.error : AppColors.textMain,
+                color: isDeadline ? AppColors.error : context.colors.textPrimary,
               ),
             ),
             const Spacer(),
-            Icon(Icons.arrow_drop_down, color: Colors.grey.shade400),
+            Icon(Icons.arrow_drop_down, color: context.colors.iconMuted),
           ],
         ),
       ),
@@ -751,7 +751,7 @@ class _EventCreateScreenState extends State<EventCreateScreen> {
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         margin: const EdgeInsets.only(bottom: 8),
         decoration: BoxDecoration(
-          color: AppColors.inputFill,
+          color: context.colors.inputFill,
           borderRadius: BorderRadius.circular(8),
         ),
         child: Row(
@@ -763,11 +763,11 @@ class _EventCreateScreenState extends State<EventCreateScreen> {
               style: TextStyle(
                 fontSize: 14, 
                 fontWeight: FontWeight.w500,
-                color: time != null ? AppColors.textMain : Colors.grey.shade400,
+                color: time != null ? context.colors.textPrimary : context.colors.textHint,
               ),
             ),
             const Spacer(),
-            Icon(Icons.arrow_drop_down, color: Colors.grey.shade400),
+            Icon(Icons.arrow_drop_down, color: context.colors.iconMuted),
           ],
         ),
       ),

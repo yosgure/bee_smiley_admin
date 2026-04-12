@@ -22,10 +22,40 @@ import 'plus_schedule_screen.dart';
 import 'parent_main.dart';
 import 'ai_chat_main_screen.dart';
 
+// テーマモード管理（グローバル）
+final ValueNotifier<ThemeMode> themeNotifier = ValueNotifier(ThemeMode.system);
+
+Future<void> _loadThemePreference() async {
+  final prefs = await SharedPreferences.getInstance();
+  final mode = prefs.getString('themeMode') ?? 'system';
+  switch (mode) {
+    case 'light':
+      themeNotifier.value = ThemeMode.light;
+    case 'dark':
+      themeNotifier.value = ThemeMode.dark;
+    default:
+      themeNotifier.value = ThemeMode.system;
+  }
+}
+
+Future<void> setThemeMode(ThemeMode mode) async {
+  themeNotifier.value = mode;
+  final prefs = await SharedPreferences.getInstance();
+  switch (mode) {
+    case ThemeMode.light:
+      await prefs.setString('themeMode', 'light');
+    case ThemeMode.dark:
+      await prefs.setString('themeMode', 'dark');
+    case ThemeMode.system:
+      await prefs.setString('themeMode', 'system');
+  }
+}
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
+  await _loadThemePreference();
   runApp(const BeeSmileyApp());
 }
 
@@ -34,18 +64,25 @@ class BeeSmileyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Bee Smiley',
-      debugShowCheckedModeBanner: false,
-      theme: getAppTheme(),
-      localizationsDelegates: const [
-        GlobalMaterialLocalizations.delegate,
-        GlobalWidgetsLocalizations.delegate,
-        GlobalCupertinoLocalizations.delegate,
-      ],
-      supportedLocales: const [Locale('ja', 'JP')],
-      locale: const Locale('ja', 'JP'),
-      home: const AuthCheckWrapper(),
+    return ValueListenableBuilder<ThemeMode>(
+      valueListenable: themeNotifier,
+      builder: (context, mode, _) {
+        return MaterialApp(
+          title: 'Bee Smiley',
+          debugShowCheckedModeBanner: false,
+          theme: getAppTheme(),
+          darkTheme: getDarkTheme(),
+          themeMode: mode,
+          localizationsDelegates: const [
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          supportedLocales: const [Locale('ja', 'JP')],
+          locale: const Locale('ja', 'JP'),
+          home: const AuthCheckWrapper(),
+        );
+      },
     );
   }
 }
@@ -166,7 +203,7 @@ class _AuthCheckWrapperState extends State<AuthCheckWrapper> with WidgetsBinding
   Widget build(BuildContext context) {
     if (_loading) {
       return Scaffold(
-        backgroundColor: Colors.white,
+        backgroundColor: context.colors.scaffoldBg,
         body: Center(
           child: Image.asset(
             'assets/logo_beesmiley.png',
@@ -659,7 +696,7 @@ class _AdminShellState extends State<AdminShell> {
     final isWebLayout = MediaQuery.of(context).size.width >= AppBreakpoints.tablet;
     
     if (_staffType == StaffType.loading) {
-      return const Scaffold(backgroundColor: Colors.white, body: SizedBox.shrink());
+      return Scaffold(backgroundColor: context.colors.scaffoldBg, body: const SizedBox.shrink());
     }
     
     final safeIndex = _selectedIndex < _screenCount ? _selectedIndex : 0;
@@ -681,8 +718,8 @@ class _AdminShellState extends State<AdminShell> {
             indicatorColor: AppColors.primary.withOpacity(0.2),
             selectedIconTheme: const IconThemeData(color: AppColors.primary),
             selectedLabelTextStyle: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold),
-            unselectedIconTheme: IconThemeData(color: Colors.grey.shade600),
-            unselectedLabelTextStyle: TextStyle(color: Colors.grey.shade600),
+            unselectedIconTheme: IconThemeData(color: context.colors.textSecondary),
+            unselectedLabelTextStyle: TextStyle(color: context.colors.textSecondary),
             leading: Padding(padding: const EdgeInsets.all(12), child: Image.asset('assets/logo_beesmileymark.png', width: 50, height: 50)),
             destinations: _railDestinations,
           ),

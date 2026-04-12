@@ -178,8 +178,8 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
           child: Container(
             alignment: Alignment.centerLeft,
             padding: const EdgeInsets.only(top: 8, bottom: 4),
-            decoration: const BoxDecoration(
-              border: Border(bottom: BorderSide(color: Colors.grey, width: 0.5)),
+            decoration: BoxDecoration(
+              border: Border(bottom: BorderSide(color: context.colors.textSecondary, width: 0.5)),
             ),
             child: Text(
               header,
@@ -222,23 +222,23 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
     return DefaultTabController(
       length: 2,
       child: Scaffold(
-        backgroundColor: Colors.white,
+        backgroundColor: context.colors.cardBg,
         appBar: AppBar(
           title: Text(_isDirectAccess ? _selectedStudentName : 'アセスメント'),
           centerTitle: true,
-          backgroundColor: Colors.white,
+          backgroundColor: context.colors.cardBg,
           elevation: 0,
           // ★修正: 外部から開いた場合は戻るボタンを表示
           leading: _isDirectAccess 
             ? IconButton(
-                icon: const Icon(Icons.arrow_back_ios, color: AppColors.textMain),
+                icon: Icon(Icons.arrow_back_ios, color: context.colors.textPrimary),
                 onPressed: () => Navigator.pop(context),
               )
             : null,
           bottom: TabBar(
             onTap: (index) => setState(() => _currentTabIndex = index),
             labelColor: AppColors.primary,
-            unselectedLabelColor: AppColors.textSub,
+            unselectedLabelColor: context.colors.textSecondary,
             indicatorColor: AppColors.primary,
             tabs: const [
               Tab(text: '週次アセスメント'),
@@ -251,7 +251,7 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
             // ★修正: 外部から生徒指定で開いた場合はフィルタエリアを非表示
             if (!_isDirectAccess)
               Container(
-                color: Colors.white,
+                color: context.colors.cardBg,
                 padding: const EdgeInsets.symmetric(vertical: 16),
                 child: Center(
                   child: ConstrainedBox(
@@ -261,13 +261,13 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text('教室', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: AppColors.textSub)),
+                          Text('教室', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: context.colors.textSecondary)),
                           const SizedBox(height: 4),
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 12),
                             margin: const EdgeInsets.only(bottom: 12),
                             decoration: BoxDecoration(
-                              color: AppColors.inputFill,
+                              color: context.colors.inputFill,
                               borderRadius: AppStyles.radiusSmall,
                             ),
                             child: DropdownButtonHideUnderline(
@@ -288,12 +288,12 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
                             ),
                           ),
 
-                          const Text('対象児童', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: AppColors.textSub)),
+                          Text('対象児童', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: context.colors.textSecondary)),
                           const SizedBox(height: 4),
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 12),
                             decoration: BoxDecoration(
-                              color: AppColors.inputFill,
+                              color: context.colors.inputFill,
                               borderRadius: AppStyles.radiusSmall,
                             ),
                             child: DropdownButtonHideUnderline(
@@ -326,7 +326,7 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
             // リスト本体（中央寄せ・幅制限）
             Expanded(
               child: _selectedStudentId == null
-                  ? const Center(child: Text('児童を選択してください', style: TextStyle(color: AppColors.textSub)))
+                  ? Center(child: Text('児童を選択してください', style: TextStyle(color: context.colors.textSecondary)))
                   : TabBarView(
                       physics: const NeverScrollableScrollPhysics(),
                       children: [
@@ -366,7 +366,7 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
           return const Center(child: CircularProgressIndicator());
         }
         if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-          return const Center(child: Text('データがありません', style: TextStyle(color: AppColors.textSub)));
+          return Center(child: Text('データがありません', style: TextStyle(color: context.colors.textSecondary)));
         }
 
         final docs = snapshot.data!.docs;
@@ -411,13 +411,13 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
                               // 下書き/公開バッジ
                               _buildStatusBadge(data['isPublished'] == true),
                               const Spacer(),
-                              const Icon(Icons.chevron_right, color: AppColors.textSub),
+                              Icon(Icons.chevron_right, color: context.colors.textSecondary),
                             ],
                           ),
                           const SizedBox(height: 8),
                           Text(
                             toolNames.isEmpty ? '記録なし' : toolNames,
-                            style: const TextStyle(color: AppColors.textMain, fontSize: 14),
+                            style: TextStyle(color: context.colors.textPrimary, fontSize: 14),
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                           ),
@@ -448,7 +448,7 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
           return const Center(child: CircularProgressIndicator());
         }
         if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-          return const Center(child: Text('データがありません', style: TextStyle(color: AppColors.textSub)));
+          return Center(child: Text('データがありません', style: TextStyle(color: context.colors.textSecondary)));
         }
 
         final docs = snapshot.data!.docs;
@@ -490,7 +490,7 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
                               // 下書き/公開バッジ
                               _buildStatusBadge(data['isPublished'] == true),
                               const Spacer(),
-                              const Icon(Icons.chevron_right, color: AppColors.textSub),
+                              Icon(Icons.chevron_right, color: context.colors.textSecondary),
                             ],
                           ),
                           const SizedBox(height: 8),
@@ -498,7 +498,7 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
                             data['summary'] ?? '',
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(color: AppColors.textSub),
+                            style: TextStyle(color: context.colors.textSecondary),
                           ),
                         ],
                       ),

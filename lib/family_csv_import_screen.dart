@@ -435,10 +435,10 @@ class _FamilyCsvImportScreenState extends State<FamilyCsvImportScreen> {
 appBar: AppBar(
   title: const Text('保護者CSV一括登録・更新'),
   centerTitle: true,
-  backgroundColor: Colors.white,
+  backgroundColor: context.colors.cardBg,
   elevation: 0,
   leading: IconButton(
-    icon: const Icon(Icons.arrow_back, color: Colors.black87),
+    icon: Icon(Icons.arrow_back, color: context.colors.textPrimary),
     onPressed: () {
       if (widget.onBack != null) {
         widget.onBack!();
@@ -449,7 +449,7 @@ appBar: AppBar(
   ),
 ),
 
-      backgroundColor: const Color(0xFFF2F2F7),
+      backgroundColor: context.colors.scaffoldBgAlt,
       body: Padding(
         padding: const EdgeInsets.all(24.0),
         child: Column(
@@ -459,9 +459,9 @@ appBar: AppBar(
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: context.colors.cardBg,
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.grey.shade300),
+                border: Border.all(color: context.colors.borderMedium),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -511,9 +511,9 @@ appBar: AppBar(
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: context.colors.cardBg,
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.grey.shade300),
+                border: Border.all(color: context.colors.borderMedium),
               ),
               child: _importMode == 0 
                   ? _buildNewFormatHelp() 
@@ -573,7 +573,7 @@ appBar: AppBar(
                   width: double.infinity,
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: Colors.grey.shade200,
+                    color: context.colors.borderLight,
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Text(_statusMessage.isEmpty ? '待機中' : _statusMessage),
@@ -593,10 +593,10 @@ appBar: AppBar(
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: isSelected ? color.withOpacity(0.1) : Colors.grey.shade50,
+          color: isSelected ? color.withOpacity(0.1) : context.colors.tagBg,
           borderRadius: BorderRadius.circular(8),
           border: Border.all(
-            color: isSelected ? color : Colors.grey.shade300,
+            color: isSelected ? color : context.colors.borderMedium,
             width: isSelected ? 2 : 1,
           ),
         ),
@@ -608,13 +608,13 @@ appBar: AppBar(
               title,
               style: TextStyle(
                 fontWeight: FontWeight.bold,
-                color: isSelected ? color : Colors.black87,
+                color: isSelected ? color : context.colors.textPrimary,
               ),
             ),
             const SizedBox(height: 4),
             Text(
               subtitle,
-              style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+              style: TextStyle(fontSize: 11, color: context.colors.textSecondary),
               textAlign: TextAlign.center,
             ),
           ],
@@ -630,8 +630,8 @@ appBar: AppBar(
         const Text('【新規登録CSVフォーマット（従来形式）】', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.blue)),
         const SizedBox(height: 8),
         const Text('列の順序（14列目まで）:', style: TextStyle(fontSize: 12)),
-        const Text('1.姓, 2.名, 3.姓かな, 4.名かな, 5.ID, 6.PW, 7.続柄, 8.電話, 9.Email, 10.郵便番号, 11.住所, 12.緊急名, 13.緊急続柄, 14.緊急電話', 
-          style: TextStyle(fontSize: 11, color: Colors.grey)),
+        Text('1.姓, 2.名, 3.姓かな, 4.名かな, 5.ID, 6.PW, 7.続柄, 8.電話, 9.Email, 10.郵便番号, 11.住所, 12.緊急名, 13.緊急続柄, 14.緊急電話', 
+          style: TextStyle(fontSize: 11, color: context.colors.textSecondary)),
         const SizedBox(height: 12),
         const Text('児童情報（15列目以降、7項目×児童数）:', style: TextStyle(fontSize: 12)),
         SingleChildScrollView(
@@ -708,8 +708,8 @@ appBar: AppBar(
         ),
         const SizedBox(height: 12),
         const Text('列順序:', style: TextStyle(fontSize: 12)),
-        const Text('ログインID, 保護者姓, 保護者名, 姓カナ, 名カナ, 続柄, 電話, メール, 郵便番号, 住所, 緊急名, 緊急続柄, 緊急電話, アカウント状態, 児童名, 児童カナ, 性別, 生年月日, 教室, コース, アレルギー', 
-          style: TextStyle(fontSize: 10, color: Colors.grey)),
+        Text('ログインID, 保護者姓, 保護者名, 姓カナ, 名カナ, 続柄, 電話, メール, 郵便番号, 住所, 緊急名, 緊急続柄, 緊急電話, アカウント状態, 児童名, 児童カナ, 性別, 生年月日, 教室, コース, アレルギー', 
+          style: TextStyle(fontSize: 10, color: context.colors.textSecondary)),
       ],
     );
   }

@@ -110,13 +110,13 @@ class _StaffManageScreenState extends State<StaffManageScreen> {
               borderRadius: BorderRadius.circular(2),
             ),
           ),
-          const SizedBox(width: 8),
+          SizedBox(width: 8),
           Text(
             '$headerText行',
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.bold,
-              color: Colors.black87,
+              color: context.colors.textPrimary,
             ),
           ),
         ],
@@ -130,10 +130,10 @@ class _StaffManageScreenState extends State<StaffManageScreen> {
 appBar: AppBar(
   title: const Text('スタッフ管理'),
   centerTitle: true,
-  backgroundColor: Colors.white,
+  backgroundColor: context.colors.cardBg,
   elevation: 0,
   leading: IconButton(
-    icon: const Icon(Icons.arrow_back, color: Colors.black87),
+    icon: Icon(Icons.arrow_back, color: context.colors.textPrimary),
     onPressed: () {
       if (widget.onBack != null) {
         widget.onBack!();
@@ -143,7 +143,7 @@ appBar: AppBar(
     },
   ),
 ),
-      backgroundColor: const Color(0xFFF2F2F7),
+      backgroundColor: context.colors.scaffoldBgAlt,
       body: StreamBuilder<QuerySnapshot>(
         stream: _staffsRef.snapshots(),
         builder: (context, snapshot) {
@@ -157,8 +157,8 @@ appBar: AppBar(
           final docs = List<QueryDocumentSnapshot>.from(snapshot.data!.docs);
 
           if (docs.isEmpty) {
-            return const Center(
-              child: Text('スタッフが登録されていません', style: TextStyle(color: Colors.grey)),
+            return Center(
+              child: Text('スタッフが登録されていません', style: TextStyle(color: context.colors.textSecondary)),
             );
           }
 
@@ -236,7 +236,7 @@ appBar: AppBar(
                             (data['name'] as String?)?.isNotEmpty == true 
                                 ? data['name'].substring(0, 1) 
                                 : '?',
-                            style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.bold),
+                            style: TextStyle(color: Colors.blue, fontWeight: FontWeight.bold),
                           )
                         : null,
                   ),
@@ -244,7 +244,7 @@ appBar: AppBar(
                     children: [
                       Text(
                         data['name'] ?? '名称未設定',
-                        style: const TextStyle(fontWeight: FontWeight.bold),
+                        style: TextStyle(fontWeight: FontWeight.bold),
                       ),
                       const SizedBox(width: 8),
                       // 社員/パートのバッジ
@@ -266,11 +266,11 @@ appBar: AppBar(
                         ),
                       // スケジュール非表示バッジ
                       if (!showInSchedule) ...[
-                        const SizedBox(width: 4),
+                        SizedBox(width: 4),
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                           decoration: BoxDecoration(
-                            color: Colors.grey.shade200,
+                            color: context.colors.borderLight,
                             borderRadius: BorderRadius.circular(4),
                           ),
                           child: Text(
@@ -278,7 +278,7 @@ appBar: AppBar(
                             style: TextStyle(
                               fontSize: 10,
                               fontWeight: FontWeight.bold,
-                              color: Colors.grey.shade600,
+                              color: context.colors.textSecondary,
                             ),
                           ),
                         ),
@@ -308,8 +308,8 @@ appBar: AppBar(
                             'スケジュール表示', 
                             showInSchedule ? '表示' : '非表示'
                           ),
-                          const SizedBox(height: 8),
-                          const Text('担当教室:', style: TextStyle(color: Colors.grey, fontSize: 12)),
+                          SizedBox(height: 8),
+                          Text('担当教室:', style: TextStyle(color: context.colors.textSecondary, fontSize: 12)),
                           const SizedBox(height: 4),
                           if (classrooms.isEmpty)
                             const Text('登録なし', style: TextStyle(fontSize: 13))
@@ -319,7 +319,7 @@ appBar: AppBar(
                               runSpacing: 4,
                               children: classrooms.map((room) {
                                 return Chip(
-                                  label: Text(room, style: const TextStyle(fontSize: 11)),
+                                  label: Text(room, style: TextStyle(fontSize: 11)),
                                   backgroundColor: Colors.blue.shade50,
                                   padding: EdgeInsets.zero,
                                   materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
@@ -363,7 +363,7 @@ appBar: AppBar(
       floatingActionButton: FloatingActionButton(
         heroTag: null, 
         onPressed: () => _showEditDialog(),
-        backgroundColor: Colors.white,
+        backgroundColor: context.colors.cardBg,
         elevation: 4,
         shape: const CircleBorder(),
         child: Padding(
@@ -382,8 +382,8 @@ appBar: AppBar(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
         children: [
-          SizedBox(width: 100, child: Text(label, style: const TextStyle(color: Colors.grey, fontSize: 13))),
-          Expanded(child: Text(value, style: const TextStyle(fontSize: 14))),
+          SizedBox(width: 100, child: Text(label, style: TextStyle(color: context.colors.iconMuted, fontSize: 13))),
+          Expanded(child: Text(value, style: TextStyle(fontSize: 14))),
         ],
       ),
     );
@@ -507,14 +507,14 @@ appBar: AppBar(
                               children: [
                                 CircleAvatar(
                                   radius: 40,
-                                  backgroundColor: Colors.grey.shade200,
+                                  backgroundColor: context.colors.borderLight,
                                   backgroundImage: newImageBytes != null
                                       ? MemoryImage(newImageBytes!)
                                       : (currentPhotoUrl != null && currentPhotoUrl!.isNotEmpty
                                           ? CachedNetworkImageProvider(currentPhotoUrl!)
                                           : null) as ImageProvider?,
                                   child: (newImageBytes == null && (currentPhotoUrl == null || currentPhotoUrl!.isEmpty))
-                                      ? const Icon(Icons.person, size: 40, color: Colors.grey)
+                                      ? Icon(Icons.person, size: 40, color: context.colors.iconMuted)
                                       : null,
                                 ),
                                 Positioned(
@@ -540,7 +540,7 @@ appBar: AppBar(
                             padding: const EdgeInsets.only(bottom: 16.0),
                             child: Text(
                               '※新規登録時は初期パスワードが設定されます。',
-                              style: const TextStyle(color: Colors.red, fontSize: 12),
+                              style: TextStyle(color: Colors.red, fontSize: 12),
                             ),
                           ),
                         _buildTextField(loginIdCtrl, 'ログインID', icon: Icons.vpn_key, enabled: !isEditing),
@@ -563,7 +563,7 @@ appBar: AppBar(
                         
                         // === 雇用形態セクション ===
                         const Text('雇用形態', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                        const SizedBox(height: 8),
+                        SizedBox(height: 8),
                         Row(
                           children: [
                             Expanded(
@@ -572,10 +572,10 @@ appBar: AppBar(
                                 child: Container(
                                   padding: const EdgeInsets.symmetric(vertical: 12),
                                   decoration: BoxDecoration(
-                                    color: staffType == 'fulltime' ? Colors.blue.shade50 : Colors.grey.shade100,
+                                    color: staffType == 'fulltime' ? Colors.blue.shade50 : context.colors.chipBg,
                                     borderRadius: BorderRadius.circular(8),
                                     border: Border.all(
-                                      color: staffType == 'fulltime' ? Colors.blue : Colors.grey.shade300,
+                                      color: staffType == 'fulltime' ? Colors.blue : context.colors.borderMedium,
                                       width: staffType == 'fulltime' ? 2 : 1,
                                     ),
                                   ),
@@ -587,12 +587,12 @@ appBar: AppBar(
                                         color: staffType == 'fulltime' ? Colors.blue : Colors.grey,
                                         size: 20,
                                       ),
-                                      const SizedBox(width: 8),
+                                      SizedBox(width: 8),
                                       Text(
                                         '社員',
                                         style: TextStyle(
                                           fontWeight: staffType == 'fulltime' ? FontWeight.bold : FontWeight.normal,
-                                          color: staffType == 'fulltime' ? Colors.blue : Colors.grey.shade700,
+                                          color: staffType == 'fulltime' ? Colors.blue : context.colors.textSecondary,
                                         ),
                                       ),
                                     ],
@@ -600,17 +600,17 @@ appBar: AppBar(
                                 ),
                               ),
                             ),
-                            const SizedBox(width: 12),
+                            SizedBox(width: 12),
                             Expanded(
                               child: GestureDetector(
                                 onTap: () => setStateDialog(() => staffType = 'part'),
                                 child: Container(
                                   padding: const EdgeInsets.symmetric(vertical: 12),
                                   decoration: BoxDecoration(
-                                    color: staffType == 'part' ? AppColors.accent.shade50 : Colors.grey.shade100,
+                                    color: staffType == 'part' ? AppColors.accent.shade50 : context.colors.chipBg,
                                     borderRadius: BorderRadius.circular(8),
                                     border: Border.all(
-                                      color: staffType == 'part' ? AppColors.accent : Colors.grey.shade300,
+                                      color: staffType == 'part' ? AppColors.accent : context.colors.borderMedium,
                                       width: staffType == 'part' ? 2 : 1,
                                     ),
                                   ),
@@ -622,12 +622,12 @@ appBar: AppBar(
                                         color: staffType == 'part' ? AppColors.accent : Colors.grey,
                                         size: 20,
                                       ),
-                                      const SizedBox(width: 8),
+                                      SizedBox(width: 8),
                                       Text(
                                         'パート',
                                         style: TextStyle(
                                           fontWeight: staffType == 'part' ? FontWeight.bold : FontWeight.normal,
-                                          color: staffType == 'part' ? AppColors.accent : Colors.grey.shade700,
+                                          color: staffType == 'part' ? AppColors.accent : context.colors.textSecondary,
                                         ),
                                       ),
                                     ],
@@ -683,7 +683,7 @@ appBar: AppBar(
                                           contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                                           isDense: true,
                                           filled: true,
-                                          fillColor: Colors.white,
+                                          fillColor: context.colors.cardBg,
                                         ),
                                       ),
                                     ),
@@ -701,7 +701,7 @@ appBar: AppBar(
                                           contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                                           isDense: true,
                                           filled: true,
-                                          fillColor: Colors.white,
+                                          fillColor: context.colors.cardBg,
                                         ),
                                       ),
                                     ),
@@ -746,28 +746,28 @@ appBar: AppBar(
                         Container(
                           padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
-                            color: Colors.grey.shade100,
+                            color: context.colors.chipBg,
                             borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: Colors.grey.shade300),
+                            border: Border.all(color: context.colors.borderMedium),
                           ),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Row(
                                 children: [
-                                  Icon(Icons.calendar_month, size: 18, color: Colors.grey.shade700),
-                                  const SizedBox(width: 8),
+                                  Icon(Icons.calendar_month, size: 18, color: context.colors.textSecondary),
+                                  SizedBox(width: 8),
                                   Text(
                                     'スケジュール表示設定',
                                     style: TextStyle(
                                       fontWeight: FontWeight.bold,
                                       fontSize: 13,
-                                      color: Colors.grey.shade700,
+                                      color: context.colors.textSecondary,
                                     ),
                                   ),
                                 ],
                               ),
-                              const SizedBox(height: 12),
+                              SizedBox(height: 12),
                               Row(
                                 children: [
                                   Expanded(
@@ -779,7 +779,7 @@ appBar: AppBar(
                                           color: showInSchedule ? Colors.green.shade50 : Colors.white,
                                           borderRadius: BorderRadius.circular(6),
                                           border: Border.all(
-                                            color: showInSchedule ? Colors.green : Colors.grey.shade300,
+                                            color: showInSchedule ? Colors.green : context.colors.borderMedium,
                                             width: showInSchedule ? 2 : 1,
                                           ),
                                         ),
@@ -791,13 +791,13 @@ appBar: AppBar(
                                               color: showInSchedule ? Colors.green : Colors.grey,
                                               size: 18,
                                             ),
-                                            const SizedBox(width: 6),
+                                            SizedBox(width: 6),
                                             Text(
                                               '表示',
                                               style: TextStyle(
                                                 fontSize: 13,
                                                 fontWeight: showInSchedule ? FontWeight.bold : FontWeight.normal,
-                                                color: showInSchedule ? Colors.green : Colors.grey.shade600,
+                                                color: showInSchedule ? Colors.green : context.colors.textSecondary,
                                               ),
                                             ),
                                           ],
@@ -805,17 +805,17 @@ appBar: AppBar(
                                       ),
                                     ),
                                   ),
-                                  const SizedBox(width: 8),
+                                  SizedBox(width: 8),
                                   Expanded(
                                     child: GestureDetector(
                                       onTap: () => setStateDialog(() => showInSchedule = false),
                                       child: Container(
                                         padding: const EdgeInsets.symmetric(vertical: 10),
                                         decoration: BoxDecoration(
-                                          color: !showInSchedule ? Colors.grey.shade200 : Colors.white,
+                                          color: !showInSchedule ? context.colors.borderLight : Colors.white,
                                           borderRadius: BorderRadius.circular(6),
                                           border: Border.all(
-                                            color: !showInSchedule ? Colors.grey.shade500 : Colors.grey.shade300,
+                                            color: !showInSchedule ? context.colors.textTertiary : context.colors.borderMedium,
                                             width: !showInSchedule ? 2 : 1,
                                           ),
                                         ),
@@ -824,16 +824,16 @@ appBar: AppBar(
                                           children: [
                                             Icon(
                                               !showInSchedule ? Icons.visibility_off : Icons.visibility_off_outlined,
-                                              color: !showInSchedule ? Colors.grey.shade700 : Colors.grey,
+                                              color: !showInSchedule ? context.colors.textSecondary : Colors.grey,
                                               size: 18,
                                             ),
-                                            const SizedBox(width: 6),
+                                            SizedBox(width: 6),
                                             Text(
                                               '非表示',
                                               style: TextStyle(
                                                 fontSize: 13,
                                                 fontWeight: !showInSchedule ? FontWeight.bold : FontWeight.normal,
-                                                color: !showInSchedule ? Colors.grey.shade700 : Colors.grey.shade600,
+                                                color: !showInSchedule ? context.colors.textSecondary : context.colors.textSecondary,
                                               ),
                                             ),
                                           ],
@@ -843,10 +843,10 @@ appBar: AppBar(
                                   ),
                                 ],
                               ),
-                              const SizedBox(height: 8),
+                              SizedBox(height: 8),
                               Text(
                                 '※非表示にすると講師選択やシフト表に表示されません\n　（管理者など現場に出ないスタッフ向け）',
-                                style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                                style: TextStyle(fontSize: 11, color: context.colors.textSecondary),
                               ),
                             ],
                           ),
@@ -1081,11 +1081,11 @@ appBar: AppBar(
       enabled: enabled,
       decoration: InputDecoration(
         labelText: label,
-        prefixIcon: icon != null ? Icon(icon, color: Colors.grey, size: 20) : null,
+        prefixIcon: icon != null ? Icon(icon, color: context.colors.iconMuted, size: 20) : null,
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
         contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
         isDense: true,
-        fillColor: enabled ? null : Colors.grey.shade200,
+        fillColor: enabled ? null : context.colors.borderLight,
         filled: !enabled,
       ),
     );

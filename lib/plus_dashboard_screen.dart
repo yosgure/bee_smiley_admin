@@ -378,7 +378,7 @@ class _PlusDashboardContentState extends State<PlusDashboardContent> {
     }
 
     return Container(
-      color: Colors.white,
+      color: context.colors.cardBg,
       padding: const EdgeInsets.all(16),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -413,7 +413,7 @@ class _PlusDashboardContentState extends State<PlusDashboardContent> {
   // モバイルレイアウト
   Widget _buildMobileLayout() {
     return Container(
-      color: Colors.white,
+      color: context.colors.cardBg,
       child: Column(
         children: [
           // スケジュール/タスク切り替えタブ
@@ -422,7 +422,7 @@ class _PlusDashboardContentState extends State<PlusDashboardContent> {
             child: Container(
               height: 32,
               decoration: BoxDecoration(
-                color: Colors.grey.shade100,
+                color: context.colors.chipBg,
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Row(
@@ -452,23 +452,23 @@ class _PlusDashboardContentState extends State<PlusDashboardContent> {
         child: Container(
           margin: const EdgeInsets.all(2),
           decoration: BoxDecoration(
-            color: isSelected ? Colors.white : Colors.transparent,
+            color: isSelected ? context.colors.cardBg : Colors.transparent,
             borderRadius: BorderRadius.circular(6),
             boxShadow: isSelected
-                ? [BoxShadow(color: Colors.black.withValues(alpha: 0.08), blurRadius: 2)]
+                ? [BoxShadow(color: context.colors.shadow, blurRadius: 2)]
                 : null,
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(icon, size: 14, color: isSelected ? AppColors.primary : AppColors.textSub),
+              Icon(icon, size: 14, color: isSelected ? AppColors.primary : context.colors.textSecondary),
               const SizedBox(width: 4),
               Text(
                 label,
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
-                  color: isSelected ? AppColors.primary : AppColors.textSub,
+                  color: isSelected ? AppColors.primary : context.colors.textSecondary,
                 ),
               ),
             ],
@@ -510,7 +510,7 @@ class _PlusDashboardContentState extends State<PlusDashboardContent> {
   Widget _buildTabButtons() {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.grey.shade200,
+        color: context.colors.borderLight,
         borderRadius: BorderRadius.circular(8),
       ),
       padding: const EdgeInsets.all(4),
@@ -539,12 +539,12 @@ class _PlusDashboardContentState extends State<PlusDashboardContent> {
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 8),
           decoration: BoxDecoration(
-            color: isSelected ? Colors.white : Colors.transparent,
+            color: isSelected ? context.colors.cardBg : Colors.transparent,
             borderRadius: BorderRadius.circular(6),
             boxShadow: isSelected
                 ? [
                     BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.08),
+                      color: context.colors.shadow,
                       blurRadius: 2,
                       offset: const Offset(0, 1),
                     ),
@@ -557,7 +557,7 @@ class _PlusDashboardContentState extends State<PlusDashboardContent> {
               Icon(
                 icon,
                 size: 14,
-                color: isSelected ? AppColors.primary : AppColors.textSub,
+                color: isSelected ? AppColors.primary : context.colors.textSecondary,
               ),
               const SizedBox(width: 3),
               Text(
@@ -565,7 +565,7 @@ class _PlusDashboardContentState extends State<PlusDashboardContent> {
                 style: TextStyle(
                   fontSize: 11,
                   fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                  color: isSelected ? AppColors.primary : AppColors.textSub,
+                  color: isSelected ? AppColors.primary : context.colors.textSecondary,
                 ),
               ),
             ],
@@ -668,11 +668,11 @@ class _PlusDashboardContentState extends State<PlusDashboardContent> {
   }) {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: context.colors.cardBg,
         borderRadius: BorderRadius.circular(8),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
+            color: context.colors.shadow,
             blurRadius: 4,
             offset: const Offset(0, 2),
           ),
@@ -696,7 +696,7 @@ class _PlusDashboardContentState extends State<PlusDashboardContent> {
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.bold,
-                    color: AppColors.textMain,
+                    color: context.colors.textPrimary,
                   ),
                 ),
                 const Spacer(),
@@ -704,7 +704,7 @@ class _PlusDashboardContentState extends State<PlusDashboardContent> {
                   '${notes.length}件',
                   style: TextStyle(
                     fontSize: 12,
-                    color: AppColors.textSub,
+                    color: context.colors.textSecondary,
                   ),
                 ),
               ],
@@ -716,7 +716,7 @@ class _PlusDashboardContentState extends State<PlusDashboardContent> {
                 ? Center(
                     child: Text(
                       emptyMessage,
-                      style: TextStyle(color: AppColors.textSub, fontSize: 13),
+                      style: TextStyle(color: context.colors.textSecondary, fontSize: 13),
                     ),
                   )
                 : ListView.builder(
@@ -730,7 +730,7 @@ class _PlusDashboardContentState extends State<PlusDashboardContent> {
             child: Container(
               padding: const EdgeInsets.symmetric(vertical: 12),
               decoration: BoxDecoration(
-                border: Border(top: BorderSide(color: Colors.grey.shade200)),
+                border: Border(top: BorderSide(color: context.colors.borderLight)),
               ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -764,7 +764,7 @@ class _PlusDashboardContentState extends State<PlusDashboardContent> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         decoration: BoxDecoration(
-          border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
+          border: Border(bottom: BorderSide(color: context.colors.borderLight)),
         ),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.center,
@@ -785,9 +785,9 @@ class _PlusDashboardContentState extends State<PlusDashboardContent> {
             Expanded(
               child: Text(
                 content,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 13,
-                  color: AppColors.textMain,
+                  color: context.colors.textPrimary,
                 ),
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
@@ -795,7 +795,7 @@ class _PlusDashboardContentState extends State<PlusDashboardContent> {
             ),
             // 削除ボタン
             IconButton(
-              icon: Icon(Icons.close, size: 18, color: Colors.grey.shade400),
+              icon: Icon(Icons.close, size: 18, color: context.colors.iconMuted),
               padding: EdgeInsets.zero,
               constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
               onPressed: () => _showDeleteNoteConfirmDialog(studentName, noteKey),
@@ -829,9 +829,9 @@ class _PlusDashboardContentState extends State<PlusDashboardContent> {
     showDialog(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        backgroundColor: Colors.white,
+        backgroundColor: context.colors.cardBg,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        title: Text('$titleを削除', style: const TextStyle(fontSize: 16)),
+        title: Text('$titleを削除', style: TextStyle(fontSize: 16)),
         content: Text('$studentNameの$titleを削除しますか？'),
         actions: [
           TextButton(
@@ -912,13 +912,13 @@ class _PlusDashboardContentState extends State<PlusDashboardContent> {
       context: context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (dialogContext, setDialogState) => AlertDialog(
-          backgroundColor: Colors.white,
+          backgroundColor: context.colors.cardBg,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           title: Row(
             children: [
               Icon(icon, size: 20, color: iconColor),
               const SizedBox(width: 8),
-              Text('$titleを追加', style: const TextStyle(fontSize: 16)),
+              Text('$titleを追加', style: TextStyle(fontSize: 16)),
             ],
           ),
           content: SizedBox(
@@ -936,7 +936,7 @@ class _PlusDashboardContentState extends State<PlusDashboardContent> {
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                     decoration: BoxDecoration(
-                      border: Border.all(color: Colors.grey.shade300),
+                      border: Border.all(color: context.colors.borderMedium),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Row(
@@ -946,11 +946,11 @@ class _PlusDashboardContentState extends State<PlusDashboardContent> {
                             selectedStudent ?? '生徒を選択',
                             style: TextStyle(
                               fontSize: 14,
-                              color: selectedStudent != null ? AppColors.textMain : AppColors.textSub,
+                              color: selectedStudent != null ? context.colors.textPrimary : context.colors.textSecondary,
                             ),
                           ),
                         ),
-                        const Icon(Icons.arrow_drop_down, color: AppColors.textSub),
+                        Icon(Icons.arrow_drop_down, color: context.colors.textSecondary),
                       ],
                     ),
                   ),
@@ -1057,19 +1057,19 @@ class _PlusDashboardContentState extends State<PlusDashboardContent> {
         title = 'メモ';
         hintText = 'メモを記入';
         icon = Icons.note;
-        iconColor = Colors.grey;
+        iconColor = context.colors.textSecondary;
     }
     
     showDialog(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        backgroundColor: Colors.white,
+        backgroundColor: context.colors.cardBg,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         title: Row(
           children: [
             Icon(icon, size: 20, color: iconColor),
             const SizedBox(width: 8),
-            Text('$studentName - $title', style: const TextStyle(fontSize: 16)),
+            Text('$studentName - $title', style: TextStyle(fontSize: 16)),
           ],
         ),
         content: SizedBox(
@@ -1145,12 +1145,12 @@ class _PlusDashboardContentState extends State<PlusDashboardContent> {
 
         return Container(
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: context.colors.cardBg,
             borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: Colors.grey.shade300, width: borderWidth),
+            border: Border.all(color: context.colors.borderMedium, width: borderWidth),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withValues(alpha: 0.08),
+                color: context.colors.shadow,
                 blurRadius: 4,
                 offset: const Offset(0, 2),
               ),
@@ -1192,14 +1192,14 @@ class _PlusDashboardContentState extends State<PlusDashboardContent> {
               alignment: Alignment.center,
               decoration: BoxDecoration(
                 border: Border(
-                  top: index == 0 ? BorderSide(color: Colors.grey.shade300) : BorderSide.none,
-                  bottom: BorderSide(color: Colors.grey.shade300),
+                  top: index == 0 ? BorderSide(color: context.colors.borderMedium) : BorderSide.none,
+                  bottom: BorderSide(color: context.colors.borderMedium),
                 ),
               ),
               child: Text(
                 _timeSlots[index],
-                style: const TextStyle(
-                  color: AppColors.textSub,
+                style: TextStyle(
+                  color: context.colors.textSecondary,
                   fontSize: 12,
                 ),
               ),
@@ -1249,7 +1249,7 @@ class _PlusDashboardContentState extends State<PlusDashboardContent> {
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 14,
-                    color: isSaturday ? Colors.blue : AppColors.textMain,
+                    color: isSaturday ? Colors.blue : context.colors.textPrimary,
                   ),
                 ),
               ),
@@ -1269,11 +1269,11 @@ class _PlusDashboardContentState extends State<PlusDashboardContent> {
         child: Container(
           padding: const EdgeInsets.all(6),
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: context.colors.cardBg,
             border: Border(
-              top: slotIndex == 0 ? BorderSide(color: Colors.grey.shade300) : BorderSide.none,
-              bottom: BorderSide(color: Colors.grey.shade300),
-              left: BorderSide(color: Colors.grey.shade300),
+              top: slotIndex == 0 ? BorderSide(color: context.colors.borderMedium) : BorderSide.none,
+              bottom: BorderSide(color: context.colors.borderMedium),
+              left: BorderSide(color: context.colors.borderMedium),
             ),
           ),
           child: students.isEmpty
@@ -1321,7 +1321,7 @@ final hasAnyNote = scheduleNote.isNotEmpty ||
     hasTask;
     
     // 文字色（通常の場合は黒）
-    final textColor = course == '通常' ? Colors.black87 : color;
+    final textColor = course == '通常' ? context.colors.textPrimary : color;
     
     // 頭文字を取得（通常の場合は空文字）
     final courseInitial = course != '通常' && course.isNotEmpty 
@@ -1364,7 +1364,7 @@ final hasAnyNote = scheduleNote.isNotEmpty ||
             right: 0,
             child: CustomPaint(
               size: const Size(6, 6),
-              painter: _NoteTrianglePainter(color: Colors.black87),
+              painter: _NoteTrianglePainter(color: context.colors.textPrimary),
             ),
           ),
       ],
@@ -1402,22 +1402,22 @@ final hasAnyNote = scheduleNote.isNotEmpty ||
       final widgets = <Widget>[];
       if (therapyPlan.isNotEmpty) {
         widgets.add(const Text('【療育プラン】', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)));
-        widgets.add(Text(therapyPlan, style: const TextStyle(fontSize: 12)));
+        widgets.add(Text(therapyPlan, style: TextStyle(fontSize: 12)));
         widgets.add(const SizedBox(height: 8));
       }
       if (schoolVisit.isNotEmpty) {
         widgets.add(const Text('【園訪問】', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)));
-        widgets.add(Text(schoolVisit, style: const TextStyle(fontSize: 12)));
+        widgets.add(Text(schoolVisit, style: TextStyle(fontSize: 12)));
         widgets.add(const SizedBox(height: 8));
       }
       if (schoolConsultation.isNotEmpty) {
         widgets.add(const Text('【就学相談】', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)));
-        widgets.add(Text(schoolConsultation, style: const TextStyle(fontSize: 12)));
+        widgets.add(Text(schoolConsultation, style: TextStyle(fontSize: 12)));
         widgets.add(const SizedBox(height: 8));
       }
       if (moveRequest.isNotEmpty) {
         widgets.add(const Text('【移動希望】', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)));
-        widgets.add(Text(moveRequest, style: const TextStyle(fontSize: 12)));
+        widgets.add(Text(moveRequest, style: TextStyle(fontSize: 12)));
         widgets.add(const SizedBox(height: 8));
       }
       // タスク情報
@@ -1428,13 +1428,13 @@ if (studentTasks.isNotEmpty) {
     final title = task['title'] as String? ?? '';
     final dueDate = task['dueDate'] as Timestamp?;
     final dueDateStr = dueDate != null ? ' (${DateFormat('M/d').format(dueDate.toDate())})' : '';
-    widgets.add(Text('・$title$dueDateStr', style: const TextStyle(fontSize: 12)));
+    widgets.add(Text('・$title$dueDateStr', style: TextStyle(fontSize: 12)));
   }
   widgets.add(const SizedBox(height: 8));
 }
       if (scheduleNote.isNotEmpty) {
         widgets.add(const Text('【メモ】', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)));
-        widgets.add(Text(scheduleNote, style: const TextStyle(fontSize: 12)));
+        widgets.add(Text(scheduleNote, style: TextStyle(fontSize: 12)));
       }
       // 最後のSizedBoxを削除
       if (widgets.isNotEmpty && widgets.last is SizedBox) {
@@ -1444,7 +1444,7 @@ if (studentTasks.isNotEmpty) {
       final popupContent = Material(
         elevation: 4,
         borderRadius: BorderRadius.circular(8),
-        color: Colors.white,
+        color: context.colors.cardBg,
         child: Container(
           width: popupWidth,
           padding: const EdgeInsets.all(12),
@@ -1498,7 +1498,7 @@ if (studentTasks.isNotEmpty) {
     return Container(
       height: footerHeight,
       decoration: BoxDecoration(
-        color: Colors.grey.shade50,
+        color: context.colors.tagBg,
       ),
       child: Row(
         children: [
@@ -1542,11 +1542,11 @@ if (studentTasks.isNotEmpty) {
   Widget _buildTaskSection() {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: context.colors.cardBg,
         borderRadius: BorderRadius.circular(8),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
+            color: context.colors.shadow,
             blurRadius: 4,
             offset: const Offset(0, 2),
           ),
@@ -1570,7 +1570,7 @@ if (studentTasks.isNotEmpty) {
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.bold,
-                    color: AppColors.textMain,
+                    color: context.colors.textPrimary,
                   ),
                 ),
                 const Spacer(),
@@ -1578,7 +1578,7 @@ if (studentTasks.isNotEmpty) {
                   '${_tasks.length}件',
                   style: TextStyle(
                     fontSize: 12,
-                    color: AppColors.textSub,
+                    color: context.colors.textSecondary,
                   ),
                 ),
               ],
@@ -1590,7 +1590,7 @@ if (studentTasks.isNotEmpty) {
                 ? Center(
                     child: Text(
                       'タスクはありません',
-                      style: TextStyle(color: AppColors.textSub, fontSize: 13),
+                      style: TextStyle(color: context.colors.textSecondary, fontSize: 13),
                     ),
                   )
                 : ListView.builder(
@@ -1604,7 +1604,7 @@ if (studentTasks.isNotEmpty) {
             child: Container(
               padding: const EdgeInsets.symmetric(vertical: 12),
               decoration: BoxDecoration(
-                border: Border(top: BorderSide(color: Colors.grey.shade200)),
+                border: Border(top: BorderSide(color: context.colors.borderLight)),
               ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -1644,7 +1644,7 @@ if (studentTasks.isNotEmpty) {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         decoration: BoxDecoration(
-          border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
+          border: Border(bottom: BorderSide(color: context.colors.borderLight)),
         ),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.center,
@@ -1654,9 +1654,9 @@ if (studentTasks.isNotEmpty) {
               Expanded(
                 child: Text(
                   title,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 13,
-                    color: AppColors.textMain,
+                    color: context.colors.textPrimary,
                   ),
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -1667,9 +1667,9 @@ if (studentTasks.isNotEmpty) {
                 width: 80,
                 child: Text(
                   studentName,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 13,
-                    color: AppColors.textMain,
+                    color: context.colors.textPrimary,
                   ),
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -1678,9 +1678,9 @@ if (studentTasks.isNotEmpty) {
               Expanded(
                 child: Text(
                   title,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 13,
-                    color: AppColors.textMain,
+                    color: context.colors.textPrimary,
                   ),
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -1752,7 +1752,7 @@ if (studentTasks.isNotEmpty) {
               : titleController.text.isNotEmpty;
 
           return AlertDialog(
-            backgroundColor: Colors.white,
+            backgroundColor: context.colors.cardBg,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             title: const Text('タスクを追加', style: TextStyle(fontSize: 18)),
             content: SizedBox(
@@ -1772,7 +1772,7 @@ if (studentTasks.isNotEmpty) {
                             decoration: BoxDecoration(
                               color: inputMode == 'student'
                                   ? AppColors.primary
-                                  : Colors.grey.shade200,
+                                  : context.colors.borderLight,
                               borderRadius: const BorderRadius.horizontal(
                                 left: Radius.circular(8),
                               ),
@@ -1782,8 +1782,8 @@ if (studentTasks.isNotEmpty) {
                               '生徒',
                               style: TextStyle(
                                 color: inputMode == 'student'
-                                    ? Colors.white
-                                    : AppColors.textMain,
+                                    ? context.colors.cardBg
+                                    : context.colors.textPrimary,
                                 fontWeight: FontWeight.w500,
                               ),
                             ),
@@ -1798,7 +1798,7 @@ if (studentTasks.isNotEmpty) {
                             decoration: BoxDecoration(
                               color: inputMode == 'custom'
                                   ? AppColors.primary
-                                  : Colors.grey.shade200,
+                                  : context.colors.borderLight,
                               borderRadius: const BorderRadius.horizontal(
                                 right: Radius.circular(8),
                               ),
@@ -1808,8 +1808,8 @@ if (studentTasks.isNotEmpty) {
                               '自由記述',
                               style: TextStyle(
                                 color: inputMode == 'custom'
-                                    ? Colors.white
-                                    : AppColors.textMain,
+                                    ? context.colors.cardBg
+                                    : context.colors.textPrimary,
                                 fontWeight: FontWeight.w500,
                               ),
                             ),
@@ -1828,12 +1828,12 @@ if (studentTasks.isNotEmpty) {
                       child: Container(
                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                         decoration: BoxDecoration(
-                          border: Border.all(color: Colors.grey.shade300),
+                          border: Border.all(color: context.colors.borderMedium),
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Row(
                           children: [
-                            const Icon(Icons.person, size: 20, color: AppColors.textSub),
+                            Icon(Icons.person, size: 20, color: context.colors.textSecondary),
                             const SizedBox(width: 12),
                             Expanded(
                               child: Text(
@@ -1843,12 +1843,12 @@ if (studentTasks.isNotEmpty) {
                                 style: TextStyle(
                                   fontSize: 15,
                                   color: selectedStudent == null
-                                      ? AppColors.textSub
-                                      : AppColors.textMain,
+                                      ? context.colors.textSecondary
+                                      : context.colors.textPrimary,
                                 ),
                               ),
                             ),
-                            const Icon(Icons.arrow_drop_down, color: AppColors.textSub),
+                            Icon(Icons.arrow_drop_down, color: context.colors.textSecondary),
                           ],
                         ),
                       ),
@@ -1902,7 +1902,7 @@ if (studentTasks.isNotEmpty) {
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                       decoration: BoxDecoration(
-                        border: Border.all(color: Colors.grey.shade300),
+                        border: Border.all(color: context.colors.borderMedium),
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Row(
@@ -1917,15 +1917,15 @@ if (studentTasks.isNotEmpty) {
                               style: TextStyle(
                                 fontSize: 15,
                                 color: selectedDueDate != null
-                                    ? AppColors.textMain
-                                    : AppColors.textSub,
+                                    ? context.colors.textPrimary
+                                    : context.colors.textSecondary,
                               ),
                             ),
                           ),
                           if (selectedDueDate != null)
                             GestureDetector(
                               onTap: () => setDialogState(() => selectedDueDate = null),
-                              child: const Icon(Icons.close, size: 18, color: AppColors.textSub),
+                              child: Icon(Icons.close, size: 18, color: context.colors.textSecondary),
                             ),
                         ],
                       ),
@@ -2000,7 +2000,7 @@ if (studentTasks.isNotEmpty) {
       builder: (dialogContext) => StatefulBuilder(
         builder: (dialogContext, setDialogState) {
           return Dialog(
-            backgroundColor: Colors.white,
+            backgroundColor: context.colors.cardBg,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
             child: Container(
               width: 420,
@@ -2022,13 +2022,13 @@ if (studentTasks.isNotEmpty) {
                         Expanded(
                           child: Text(
                             isCustom ? 'タスクを編集' : '$studentName のタスク',
-                            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
                         IconButton(
                           onPressed: () => Navigator.pop(dialogContext),
-                          icon: Icon(Icons.close, color: Colors.grey.shade500, size: 20),
+                          icon: Icon(Icons.close, color: context.colors.textTertiary, size: 20),
                           padding: EdgeInsets.zero,
                           constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
                         ),
@@ -2042,7 +2042,7 @@ if (studentTasks.isNotEmpty) {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         // タスク内容
-                        const Text('内容', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textSub)),
+                        Text('内容', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: context.colors.textSecondary)),
                         const SizedBox(height: 6),
                         TextField(
                           controller: titleController,
@@ -2050,16 +2050,16 @@ if (studentTasks.isNotEmpty) {
                           minLines: 3,
                           decoration: InputDecoration(
                             hintText: 'タスクの内容を入力...',
-                            hintStyle: TextStyle(color: Colors.grey.shade400),
+                            hintStyle: TextStyle(color: context.colors.iconMuted),
                             filled: true,
-                            fillColor: Colors.grey.shade50,
+                            fillColor: context.colors.tagBg,
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(10),
-                              borderSide: BorderSide(color: Colors.grey.shade200),
+                              borderSide: BorderSide(color: context.colors.borderLight),
                             ),
                             enabledBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(10),
-                              borderSide: BorderSide(color: Colors.grey.shade200),
+                              borderSide: BorderSide(color: context.colors.borderLight),
                             ),
                             focusedBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(10),
@@ -2067,11 +2067,11 @@ if (studentTasks.isNotEmpty) {
                             ),
                             contentPadding: const EdgeInsets.all(14),
                           ),
-                          style: const TextStyle(fontSize: 14, height: 1.5),
+                          style: TextStyle(fontSize: 14, height: 1.5),
                         ),
                         const SizedBox(height: 20),
                         // 期限日
-                        const Text('期限日', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textSub)),
+                        Text('期限日', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: context.colors.textSecondary)),
                         const SizedBox(height: 6),
                         InkWell(
                           borderRadius: BorderRadius.circular(10),
@@ -2089,26 +2089,26 @@ if (studentTasks.isNotEmpty) {
                           child: Container(
                             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                             decoration: BoxDecoration(
-                              color: Colors.grey.shade50,
-                              border: Border.all(color: Colors.grey.shade200),
+                              color: context.colors.tagBg,
+                              border: Border.all(color: context.colors.borderLight),
                               borderRadius: BorderRadius.circular(10),
                             ),
                             child: Row(
                               children: [
-                                Icon(Icons.calendar_today, size: 18, color: selectedDueDate != null ? AppColors.primary : AppColors.textSub),
+                                Icon(Icons.calendar_today, size: 18, color: selectedDueDate != null ? AppColors.primary : context.colors.textSecondary),
                                 const SizedBox(width: 10),
                                 Text(
                                   selectedDueDate != null ? DateFormat('yyyy年M月d日').format(selectedDueDate!) : '期限を設定...',
                                   style: TextStyle(
                                     fontSize: 14,
-                                    color: selectedDueDate != null ? AppColors.textMain : Colors.grey.shade400,
+                                    color: selectedDueDate != null ? context.colors.textPrimary : context.colors.iconMuted,
                                   ),
                                 ),
                                 const Spacer(),
                                 if (selectedDueDate != null)
                                   GestureDetector(
                                     onTap: () => setDialogState(() => selectedDueDate = null),
-                                    child: Icon(Icons.close, size: 18, color: Colors.grey.shade400),
+                                    child: Icon(Icons.close, size: 18, color: context.colors.iconMuted),
                                   ),
                               ],
                             ),
@@ -2117,7 +2117,7 @@ if (studentTasks.isNotEmpty) {
                         // コメント欄（生徒タスクのみ）
                         if (!isCustom) ...[
                           const SizedBox(height: 20),
-                          const Text('コメント', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textSub)),
+                          Text('コメント', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: context.colors.textSecondary)),
                           const SizedBox(height: 6),
                           TextField(
                             controller: commentController,
@@ -2125,16 +2125,16 @@ if (studentTasks.isNotEmpty) {
                             minLines: 2,
                             decoration: InputDecoration(
                               hintText: 'コメントを入力...',
-                              hintStyle: TextStyle(color: Colors.grey.shade400),
+                              hintStyle: TextStyle(color: context.colors.iconMuted),
                               filled: true,
-                              fillColor: Colors.grey.shade50,
+                              fillColor: context.colors.tagBg,
                               border: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(10),
-                                borderSide: BorderSide(color: Colors.grey.shade200),
+                                borderSide: BorderSide(color: context.colors.borderLight),
                               ),
                               enabledBorder: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(10),
-                                borderSide: BorderSide(color: Colors.grey.shade200),
+                                borderSide: BorderSide(color: context.colors.borderLight),
                               ),
                               focusedBorder: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(10),
@@ -2142,7 +2142,7 @@ if (studentTasks.isNotEmpty) {
                               ),
                               contentPadding: const EdgeInsets.all(14),
                             ),
-                            style: const TextStyle(fontSize: 14, height: 1.5),
+                            style: TextStyle(fontSize: 14, height: 1.5),
                           ),
                         ],
                       ],
@@ -2203,7 +2203,7 @@ if (studentTasks.isNotEmpty) {
     showDialog(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        backgroundColor: Colors.white,
+        backgroundColor: context.colors.cardBg,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         title: const Text('タスクを削除'),
         content: Text('「${task['title']}」を削除しますか？'),
@@ -2323,7 +2323,7 @@ if (studentTasks.isNotEmpty) {
           final bool canSave = title.isNotEmpty;
           
           return Dialog(
-            backgroundColor: Colors.white,
+            backgroundColor: context.colors.cardBg,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             child: Container(
               width: 500,
@@ -2348,7 +2348,7 @@ if (studentTasks.isNotEmpty) {
                         IconButton(
                           icon: const Icon(Icons.close, size: 20),
                           onPressed: () => Navigator.pop(dialogContext),
-                          color: AppColors.textSub,
+                          color: context.colors.textSecondary,
                         ),
                       ],
                     ),
@@ -2357,7 +2357,7 @@ if (studentTasks.isNotEmpty) {
                     padding: const EdgeInsets.symmetric(horizontal: 20),
                     child: Text(
                       'レギュラースケジュール',
-                      style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
+                      style: TextStyle(fontSize: 14, color: context.colors.textSecondary),
                     ),
                   ),
                   const SizedBox(height: 16),
@@ -2367,7 +2367,7 @@ if (studentTasks.isNotEmpty) {
                     padding: const EdgeInsets.symmetric(horizontal: 20),
                     child: Container(
                       decoration: BoxDecoration(
-                        color: Colors.grey.shade100,
+                        color: context.colors.chipBg,
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Row(
@@ -2378,22 +2378,22 @@ if (studentTasks.isNotEmpty) {
                               child: Container(
                                 padding: const EdgeInsets.symmetric(vertical: 10),
                                 decoration: BoxDecoration(
-                                  color: inputMode == 'student' ? Colors.white : Colors.transparent,
+                                  color: inputMode == 'student' ? context.colors.cardBg : Colors.transparent,
                                   borderRadius: BorderRadius.circular(6),
                                   boxShadow: inputMode == 'student' ? [
-                                    BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 2),
+                                    BoxShadow(color: context.colors.shadow, blurRadius: 2),
                                   ] : null,
                                 ),
                                 child: Row(
                                   mainAxisAlignment: MainAxisAlignment.center,
                                   children: [
                                     Icon(Icons.person, size: 16, 
-                                      color: inputMode == 'student' ? AppColors.primary : AppColors.textSub),
+                                      color: inputMode == 'student' ? AppColors.primary : context.colors.textSecondary),
                                     const SizedBox(width: 6),
                                     Text('生徒選択', style: TextStyle(
                                       fontSize: 13,
                                       fontWeight: inputMode == 'student' ? FontWeight.bold : FontWeight.normal,
-                                      color: inputMode == 'student' ? AppColors.primary : AppColors.textSub,
+                                      color: inputMode == 'student' ? AppColors.primary : context.colors.textSecondary,
                                     )),
                                   ],
                                 ),
@@ -2406,22 +2406,22 @@ if (studentTasks.isNotEmpty) {
                               child: Container(
                                 padding: const EdgeInsets.symmetric(vertical: 10),
                                 decoration: BoxDecoration(
-                                  color: inputMode == 'custom' ? Colors.white : Colors.transparent,
+                                  color: inputMode == 'custom' ? context.colors.cardBg : Colors.transparent,
                                   borderRadius: BorderRadius.circular(6),
                                   boxShadow: inputMode == 'custom' ? [
-                                    BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 2),
+                                    BoxShadow(color: context.colors.shadow, blurRadius: 2),
                                   ] : null,
                                 ),
                                 child: Row(
                                   mainAxisAlignment: MainAxisAlignment.center,
                                   children: [
                                     Icon(Icons.edit_note, size: 16,
-                                      color: inputMode == 'custom' ? AppColors.primary : AppColors.textSub),
+                                      color: inputMode == 'custom' ? AppColors.primary : context.colors.textSecondary),
                                     const SizedBox(width: 6),
                                     Text('イベント', style: TextStyle(
                                       fontSize: 13,
                                       fontWeight: inputMode == 'custom' ? FontWeight.bold : FontWeight.normal,
-                                      color: inputMode == 'custom' ? AppColors.primary : AppColors.textSub,
+                                      color: inputMode == 'custom' ? AppColors.primary : context.colors.textSecondary,
                                     )),
                                   ],
                                 ),
@@ -2451,12 +2451,12 @@ if (studentTasks.isNotEmpty) {
                               child: Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                                 decoration: BoxDecoration(
-                                  border: Border.all(color: Colors.grey.shade300),
+                                  border: Border.all(color: context.colors.borderMedium),
                                   borderRadius: BorderRadius.circular(8),
                                 ),
                                 child: Row(
                                   children: [
-                                    const Icon(Icons.person, size: 20, color: AppColors.textSub),
+                                    Icon(Icons.person, size: 20, color: context.colors.textSecondary),
                                     const SizedBox(width: 12),
                                     Expanded(
                                       child: Text(
@@ -2466,12 +2466,12 @@ if (studentTasks.isNotEmpty) {
                                         style: TextStyle(
                                           fontSize: 15,
                                           color: selectedStudent == null
-                                              ? AppColors.textSub
-                                              : AppColors.textMain,
+                                              ? context.colors.textSecondary
+                                              : context.colors.textPrimary,
                                         ),
                                       ),
                                     ),
-                                    const Icon(Icons.arrow_drop_down, color: AppColors.textSub),
+                                    Icon(Icons.arrow_drop_down, color: context.colors.textSecondary),
                                   ],
                                 ),
                               ),
@@ -2485,18 +2485,18 @@ if (studentTasks.isNotEmpty) {
                               controller: customTitleController,
                               decoration: InputDecoration(
                                 hintText: 'タイトルを入力',
-                                prefixIcon: const Icon(Icons.title, size: 20, color: Colors.grey),
+                                prefixIcon: Icon(Icons.title, size: 20, color: context.colors.textSecondary),
                                 border: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(8),
-                                  borderSide: BorderSide(color: Colors.grey.shade300),
+                                  borderSide: BorderSide(color: context.colors.borderMedium),
                                 ),
                                 enabledBorder: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(8),
-                                  borderSide: BorderSide(color: Colors.grey.shade300),
+                                  borderSide: BorderSide(color: context.colors.borderMedium),
                                 ),
                                 contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
                                 filled: true,
-                                fillColor: Colors.grey.shade50,
+                                fillColor: context.colors.tagBg,
                               ),
                               onChanged: (_) => setDialogState(() {}),
                             ),
@@ -2512,7 +2512,7 @@ if (studentTasks.isNotEmpty) {
                             child: Container(
                               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                               decoration: BoxDecoration(
-                                border: Border.all(color: Colors.grey.shade300),
+                                border: Border.all(color: context.colors.borderMedium),
                                 borderRadius: BorderRadius.circular(8),
                               ),
                               child: Row(
@@ -2525,8 +2525,8 @@ if (studentTasks.isNotEmpty) {
                                     ),
                                   ),
                                   const SizedBox(width: 8),
-                                  Expanded(child: Text(selectedCourse, style: const TextStyle(fontSize: 15))),
-                                  const Icon(Icons.arrow_drop_down, color: AppColors.textSub),
+                                  Expanded(child: Text(selectedCourse, style: TextStyle(fontSize: 15))),
+                                  Icon(Icons.arrow_drop_down, color: context.colors.textSecondary),
                                 ],
                               ),
                             ),
@@ -2535,7 +2535,7 @@ if (studentTasks.isNotEmpty) {
                           // === 生徒情報セクション（生徒モードで生徒選択済みの場合のみ） ===
                           if (inputMode == 'student' && title.isNotEmpty) ...[
                             const SizedBox(height: 24),
-                            Divider(height: 1, color: Colors.grey.shade200),
+                            Divider(height: 1, color: context.colors.borderLight),
                             const SizedBox(height: 20),
                             
                             // タスクセクション
@@ -2564,11 +2564,11 @@ if (studentTasks.isNotEmpty) {
                                         child: Column(
                                           crossAxisAlignment: CrossAxisAlignment.start,
                                           children: [
-                                            Text(task['title'] ?? '', style: const TextStyle(fontSize: 13)),
+                                            Text(task['title'] ?? '', style: TextStyle(fontSize: 13)),
                                             if (task['dueDate'] != null)
                                               Text(
                                                 '期限: ${DateFormat('M/d').format((task['dueDate'] as Timestamp).toDate())}',
-                                                style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                                                style: TextStyle(fontSize: 11, color: context.colors.textSecondary),
                                               ),
                                           ],
                                         ),
@@ -2603,7 +2603,7 @@ if (studentTasks.isNotEmpty) {
                                       contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                                       isDense: true,
                                     ),
-                                    style: const TextStyle(fontSize: 13),
+                                    style: TextStyle(fontSize: 13),
                                     onChanged: (_) => setDialogState(() {}),
                                   ),
                                 ),
@@ -2624,23 +2624,23 @@ InkWell(
   child: Container(
     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
     decoration: BoxDecoration(
-      border: Border.all(color: Colors.grey.shade300),
+      border: Border.all(color: context.colors.borderMedium),
       borderRadius: BorderRadius.circular(8),
     ),
     child: Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(Icons.calendar_today, size: 16, color: newTaskDueDate != null ? AppColors.primary : AppColors.textSub),
+        Icon(Icons.calendar_today, size: 16, color: newTaskDueDate != null ? AppColors.primary : context.colors.textSecondary),
         if (newTaskDueDate != null) ...[
           const SizedBox(width: 4),
           Text(
             DateFormat('M/d').format(newTaskDueDate!),
-            style: const TextStyle(fontSize: 12),
+            style: TextStyle(fontSize: 12),
           ),
           const SizedBox(width: 4),
           GestureDetector(
             onTap: () => setDialogState(() => newTaskDueDate = null),
-            child: const Icon(Icons.close, size: 14, color: AppColors.textSub),
+            child: Icon(Icons.close, size: 14, color: context.colors.textSecondary),
           ),
         ],
       ],
@@ -2671,7 +2671,7 @@ InkWell(
                                   height: 24,
                                   decoration: BoxDecoration(
                                     color: newTaskController.text.trim().isEmpty 
-                                        ? Colors.grey.shade300 
+                                        ? context.colors.borderMedium 
                                         : AppColors.primary,
                                     shape: BoxShape.circle,
                                   ),
@@ -2681,7 +2681,7 @@ InkWell(
                             ),
                             
                             const SizedBox(height: 20),
-                            Divider(height: 1, color: Colors.grey.shade200),
+                            Divider(height: 1, color: context.colors.borderLight),
                             const SizedBox(height: 20),
                             
                             // 療育プラン
@@ -2701,7 +2701,7 @@ InkWell(
                                 contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                                 isDense: true,
                               ),
-                              style: const TextStyle(fontSize: 13),
+                              style: TextStyle(fontSize: 13),
                               maxLines: 3,
                               minLines: 2,
                             ),
@@ -2724,7 +2724,7 @@ InkWell(
                                 contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                                 isDense: true,
                               ),
-                              style: const TextStyle(fontSize: 13),
+                              style: TextStyle(fontSize: 13),
                               maxLines: 3,
                               minLines: 2,
                             ),
@@ -2747,7 +2747,7 @@ InkWell(
                                 contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                                 isDense: true,
                               ),
-                              style: const TextStyle(fontSize: 13),
+                              style: TextStyle(fontSize: 13),
                               maxLines: 3,
                               minLines: 2,
                             ),
@@ -2770,7 +2770,7 @@ InkWell(
                                 contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                                 isDense: true,
                               ),
-                              style: const TextStyle(fontSize: 13),
+                              style: TextStyle(fontSize: 13),
                               maxLines: 3,
                               minLines: 2,
                             ),
@@ -2784,7 +2784,7 @@ InkWell(
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
-                      border: Border(top: BorderSide(color: Colors.grey.shade200)),
+                      border: Border(top: BorderSide(color: context.colors.borderLight)),
                     ),
                     child: SizedBox(
                       width: double.infinity,
@@ -2832,8 +2832,8 @@ InkWell(
                         style: ElevatedButton.styleFrom(
                           backgroundColor: AppColors.primary,
                           foregroundColor: Colors.white,
-                          disabledBackgroundColor: Colors.grey.shade200,
-                          disabledForegroundColor: Colors.grey.shade500,
+                          disabledBackgroundColor: context.colors.borderLight,
+                          disabledForegroundColor: context.colors.textTertiary,
                           padding: const EdgeInsets.symmetric(vertical: 14),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(8),
@@ -2841,7 +2841,7 @@ InkWell(
                         ),
                         child: Text(
                           canSave ? '追加' : (inputMode == 'student' ? '生徒を選択してください' : 'タイトルを入力してください'),
-                          style: const TextStyle(fontSize: 15),
+                          style: TextStyle(fontSize: 15),
                         ),
                       ),
                     ),
@@ -2880,7 +2880,7 @@ void _showStudentSelectionDialog(Function(Map<String, dynamic>) onSelect) {
         final sortedGroups = groupedStudents.keys.toList()..sort();
 
         return AlertDialog(
-          backgroundColor: Colors.white,
+          backgroundColor: context.colors.cardBg,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           title: const Text('生徒を選択', style: TextStyle(fontSize: 18)),
           content: SizedBox(
@@ -2892,10 +2892,10 @@ void _showStudentSelectionDialog(Function(Map<String, dynamic>) onSelect) {
                 TextField(
                   decoration: InputDecoration(
                     hintText: '名前で検索...',
-                    prefixIcon: const Icon(Icons.search, size: 20, color: Colors.grey),
+                    prefixIcon: Icon(Icons.search, size: 20, color: context.colors.textSecondary),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8),
-                      borderSide: BorderSide(color: Colors.grey.shade300),
+                      borderSide: BorderSide(color: context.colors.borderMedium),
                     ),
                     contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                     isDense: true,
@@ -2906,7 +2906,7 @@ void _showStudentSelectionDialog(Function(Map<String, dynamic>) onSelect) {
                 // 生徒リスト
                 Expanded(
                   child: filteredStudents.isEmpty
-                      ? const Center(child: Text('生徒が見つかりません', style: TextStyle(color: Colors.grey)))
+                      ? Center(child: Text('生徒が見つかりません', style: TextStyle(color: context.colors.textSecondary)))
                       : ListView.builder(
                           itemCount: sortedGroups.length,
                           itemBuilder: (listContext, groupIndex) {
@@ -2922,13 +2922,13 @@ void _showStudentSelectionDialog(Function(Map<String, dynamic>) onSelect) {
                                     horizontal: 12,
                                     vertical: 6,
                                   ),
-                                  color: Colors.grey.shade100,
+                                  color: context.colors.chipBg,
                                   child: Text(
                                     group,
                                     style: TextStyle(
                                       fontSize: 13,
                                       fontWeight: FontWeight.bold,
-                                      color: Colors.grey.shade700,
+                                      color: context.colors.textSecondary,
                                     ),
                                   ),
                                 ),
@@ -2968,7 +2968,7 @@ void _showStudentSelectionDialog(Function(Map<String, dynamic>) onSelect) {
     showDialog(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        backgroundColor: Colors.white,
+        backgroundColor: context.colors.cardBg,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         title: const Text('内容を選択', style: TextStyle(fontSize: 18)),
         content: SizedBox(
@@ -3046,7 +3046,7 @@ void _showStudentSelectionDialog(Function(Map<String, dynamic>) onSelect) {
           final currentColor = _courseColors[selectedCourse] ?? Colors.blue;
           
           return Dialog(
-            backgroundColor: Colors.white,
+            backgroundColor: context.colors.cardBg,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             child: Container(
               width: 500,
@@ -3069,12 +3069,12 @@ void _showStudentSelectionDialog(Function(Map<String, dynamic>) onSelect) {
                             _showDeleteConfirmDialog(day, timeSlot, index, student);
                           },
                           tooltip: '削除',
-                          color: AppColors.textSub,
+                          color: context.colors.textSecondary,
                         ),
                         IconButton(
                           icon: const Icon(Icons.close, size: 20),
                           onPressed: () => Navigator.pop(dialogContext),
-                          color: AppColors.textSub,
+                          color: context.colors.textSecondary,
                         ),
                       ],
                     ),
@@ -3141,11 +3141,11 @@ void _showStudentSelectionDialog(Function(Map<String, dynamic>) onSelect) {
                     padding: const EdgeInsets.symmetric(horizontal: 20),
                     child: Text(
                       '$day曜日　$timeSlot',
-                      style: const TextStyle(fontSize: 14, color: AppColors.textSub),
+                      style: TextStyle(fontSize: 14, color: context.colors.textSecondary),
                     ),
                   ),
                   const SizedBox(height: 16),
-                  Divider(height: 1, color: Colors.grey.shade200),
+                  Divider(height: 1, color: context.colors.borderLight),
                   // メインコンテンツ
                   Flexible(
                     child: SingleChildScrollView(
@@ -3162,7 +3162,7 @@ void _showStudentSelectionDialog(Function(Map<String, dynamic>) onSelect) {
                             child: Container(
                               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                               decoration: BoxDecoration(
-                                border: Border.all(color: Colors.grey.shade300),
+                                border: Border.all(color: context.colors.borderMedium),
                                 borderRadius: BorderRadius.circular(8),
                               ),
                               child: Row(
@@ -3175,8 +3175,8 @@ void _showStudentSelectionDialog(Function(Map<String, dynamic>) onSelect) {
                                     ),
                                   ),
                                   const SizedBox(width: 8),
-                                  Expanded(child: Text(selectedCourse, style: const TextStyle(fontSize: 15))),
-                                  const Icon(Icons.arrow_drop_down, color: AppColors.textSub),
+                                  Expanded(child: Text(selectedCourse, style: TextStyle(fontSize: 15))),
+                                  Icon(Icons.arrow_drop_down, color: context.colors.textSecondary),
                                 ],
                               ),
                             ),
@@ -3184,7 +3184,7 @@ void _showStudentSelectionDialog(Function(Map<String, dynamic>) onSelect) {
                           
                           // === タスクセクション ===
                           const SizedBox(height: 24),
-                          Divider(height: 1, color: Colors.grey.shade200),
+                          Divider(height: 1, color: context.colors.borderLight),
                           const SizedBox(height: 20),
                           
                           Row(
@@ -3212,11 +3212,11 @@ void _showStudentSelectionDialog(Function(Map<String, dynamic>) onSelect) {
                                       child: Column(
                                         crossAxisAlignment: CrossAxisAlignment.start,
                                         children: [
-                                          Text(task['title'] ?? '', style: const TextStyle(fontSize: 13)),
+                                          Text(task['title'] ?? '', style: TextStyle(fontSize: 13)),
                                           if (task['dueDate'] != null)
                                             Text(
                                               '期限: ${DateFormat('M/d').format((task['dueDate'] as Timestamp).toDate())}',
-                                              style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                                              style: TextStyle(fontSize: 11, color: context.colors.textSecondary),
                                             ),
                                         ],
                                       ),
@@ -3251,7 +3251,7 @@ void _showStudentSelectionDialog(Function(Map<String, dynamic>) onSelect) {
                                     contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                                     isDense: true,
                                   ),
-                                  style: const TextStyle(fontSize: 13),
+                                  style: TextStyle(fontSize: 13),
                                   onChanged: (_) => setDialogState(() {}),
                                 ),
                               ),
@@ -3272,23 +3272,23 @@ InkWell(
   child: Container(
     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
     decoration: BoxDecoration(
-      border: Border.all(color: Colors.grey.shade300),
+      border: Border.all(color: context.colors.borderMedium),
       borderRadius: BorderRadius.circular(8),
     ),
     child: Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(Icons.calendar_today, size: 16, color: newTaskDueDate != null ? AppColors.primary : AppColors.textSub),
+        Icon(Icons.calendar_today, size: 16, color: newTaskDueDate != null ? AppColors.primary : context.colors.textSecondary),
         if (newTaskDueDate != null) ...[
           const SizedBox(width: 4),
           Text(
             DateFormat('M/d').format(newTaskDueDate!),
-            style: const TextStyle(fontSize: 12),
+            style: TextStyle(fontSize: 12),
           ),
           const SizedBox(width: 4),
           GestureDetector(
             onTap: () => setDialogState(() => newTaskDueDate = null),
-            child: const Icon(Icons.close, size: 14, color: AppColors.textSub),
+            child: Icon(Icons.close, size: 14, color: context.colors.textSecondary),
           ),
         ],
       ],
@@ -3319,7 +3319,7 @@ InkWell(
                                 height: 24,
                                 decoration: BoxDecoration(
                                   color: newTaskController.text.trim().isEmpty 
-                                      ? Colors.grey.shade300 
+                                      ? context.colors.borderMedium 
                                       : AppColors.primary,
                                   shape: BoxShape.circle,
                                 ),
@@ -3330,7 +3330,7 @@ InkWell(
                           
                           // === 生徒情報セクション ===
                           const SizedBox(height: 24),
-                          Divider(height: 1, color: Colors.grey.shade200),
+                          Divider(height: 1, color: context.colors.borderLight),
                           const SizedBox(height: 20),
                           
                           // 療育プラン
@@ -3350,7 +3350,7 @@ InkWell(
                               contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                               isDense: true,
                             ),
-                            style: const TextStyle(fontSize: 13),
+                            style: TextStyle(fontSize: 13),
                             maxLines: 3,
                             minLines: 2,
                           ),
@@ -3373,7 +3373,7 @@ InkWell(
                               contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                               isDense: true,
                             ),
-                            style: const TextStyle(fontSize: 13),
+                            style: TextStyle(fontSize: 13),
                             maxLines: 3,
                             minLines: 2,
                           ),
@@ -3396,7 +3396,7 @@ InkWell(
                               contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                               isDense: true,
                             ),
-                            style: const TextStyle(fontSize: 13),
+                            style: TextStyle(fontSize: 13),
                             maxLines: 3,
                             minLines: 2,
                           ),
@@ -3419,7 +3419,7 @@ InkWell(
                               contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                               isDense: true,
                             ),
-                            style: const TextStyle(fontSize: 13),
+                            style: TextStyle(fontSize: 13),
                             maxLines: 3,
                             minLines: 2,
                           ),
@@ -3431,7 +3431,7 @@ InkWell(
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
-                      border: Border(top: BorderSide(color: Colors.grey.shade200)),
+                      border: Border(top: BorderSide(color: context.colors.borderLight)),
                     ),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.end,
@@ -3544,7 +3544,7 @@ InkWell(
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: Colors.white,
+        backgroundColor: context.colors.cardBg,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         title: const Text('内容を選択', style: TextStyle(fontSize: 18)),
         content: SizedBox(
@@ -3583,7 +3583,7 @@ InkWell(
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: Colors.white,
+        backgroundColor: context.colors.cardBg,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         title: const Text('生徒を削除'),
         content: Text('${student['name']} を$day曜日 $timeSlotから削除しますか？'),

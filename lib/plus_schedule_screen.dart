@@ -564,7 +564,7 @@ Map<String, dynamic>? _getCellMemo(DateTime date, int slotIndex) {
       builder: (dialogContext) => StatefulBuilder(
         builder: (dialogContext, setDialogState) {
           return Dialog(
-            backgroundColor: Colors.white,
+            backgroundColor: context.colors.cardBg,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
             child: Container(
               width: 420,
@@ -588,7 +588,7 @@ Map<String, dynamic>? _getCellMemo(DateTime date, int slotIndex) {
                         const Spacer(),
                         IconButton(
                           onPressed: () => Navigator.pop(dialogContext),
-                          icon: Icon(Icons.close, color: Colors.grey.shade500, size: 20),
+                          icon: Icon(Icons.close, color: context.colors.textTertiary, size: 20),
                           padding: EdgeInsets.zero,
                           constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
                         ),
@@ -607,17 +607,17 @@ Map<String, dynamic>? _getCellMemo(DateTime date, int slotIndex) {
                             padding: const EdgeInsets.only(bottom: 12),
                             child: Row(
                               children: [
-                                Icon(Icons.person_outline, size: 16, color: AppColors.textSub),
+                                Icon(Icons.person_outline, size: 16, color: context.colors.textSecondary),
                                 const SizedBox(width: 6),
                                 Text(
                                   task['studentName'] as String,
-                                  style: TextStyle(fontSize: 13, color: AppColors.textSub),
+                                  style: TextStyle(fontSize: 13, color: context.colors.textSecondary),
                                 ),
                               ],
                             ),
                           ),
                         // タスク内容
-                        const Text('内容', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textSub)),
+                        Text('内容', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: context.colors.textSecondary)),
                         const SizedBox(height: 6),
                         TextField(
                           controller: titleController,
@@ -625,16 +625,16 @@ Map<String, dynamic>? _getCellMemo(DateTime date, int slotIndex) {
                           minLines: 3,
                           decoration: InputDecoration(
                             hintText: 'タスクの内容を入力...',
-                            hintStyle: TextStyle(color: Colors.grey.shade400),
+                            hintStyle: TextStyle(color: context.colors.textHint),
                             filled: true,
-                            fillColor: Colors.grey.shade50,
+                            fillColor: context.colors.tagBg,
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(10),
-                              borderSide: BorderSide(color: Colors.grey.shade200),
+                              borderSide: BorderSide(color: context.colors.borderLight),
                             ),
                             enabledBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(10),
-                              borderSide: BorderSide(color: Colors.grey.shade200),
+                              borderSide: BorderSide(color: context.colors.borderLight),
                             ),
                             focusedBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(10),
@@ -646,7 +646,7 @@ Map<String, dynamic>? _getCellMemo(DateTime date, int slotIndex) {
                         ),
                         const SizedBox(height: 20),
                         // 期限日
-                        const Text('期限日', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textSub)),
+                        Text('期限日', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: context.colors.textSecondary)),
                         const SizedBox(height: 6),
                         InkWell(
                           borderRadius: BorderRadius.circular(10),
@@ -664,26 +664,26 @@ Map<String, dynamic>? _getCellMemo(DateTime date, int slotIndex) {
                           child: Container(
                             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                             decoration: BoxDecoration(
-                              color: Colors.grey.shade50,
-                              border: Border.all(color: Colors.grey.shade200),
+                              color: context.colors.tagBg,
+                              border: Border.all(color: context.colors.borderLight),
                               borderRadius: BorderRadius.circular(10),
                             ),
                             child: Row(
                               children: [
-                                Icon(Icons.calendar_today, size: 18, color: dueDate != null ? AppColors.primary : AppColors.textSub),
+                                Icon(Icons.calendar_today, size: 18, color: dueDate != null ? AppColors.primary : context.colors.textSecondary),
                                 const SizedBox(width: 10),
                                 Text(
                                   dueDate != null ? DateFormat('yyyy年M月d日').format(dueDate!) : '期限を設定...',
                                   style: TextStyle(
                                     fontSize: 14,
-                                    color: dueDate != null ? AppColors.textMain : Colors.grey.shade400,
+                                    color: dueDate != null ? context.colors.textPrimary : context.colors.textHint,
                                   ),
                                 ),
                                 const Spacer(),
                                 if (dueDate != null)
                                   GestureDetector(
                                     onTap: () => setDialogState(() => dueDate = null),
-                                    child: Icon(Icons.close, size: 18, color: Colors.grey.shade400),
+                                    child: Icon(Icons.close, size: 18, color: context.colors.iconMuted),
                                   ),
                               ],
                             ),
@@ -703,7 +703,7 @@ Map<String, dynamic>? _getCellMemo(DateTime date, int slotIndex) {
                             final confirm = await showDialog<bool>(
                               context: dialogContext,
                               builder: (ctx) => AlertDialog(
-                                backgroundColor: Colors.white,
+                                backgroundColor: context.colors.cardBg,
                                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                                 title: const Text('タスクを削除'),
                                 content: const Text('このタスクを削除しますか？'),
@@ -755,7 +755,7 @@ Map<String, dynamic>? _getCellMemo(DateTime date, int slotIndex) {
                           },
                           style: ElevatedButton.styleFrom(
                             backgroundColor: AppColors.primary,
-                            foregroundColor: Colors.white,
+                            foregroundColor: context.colors.textOnPrimary,
                             padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 12),
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                             elevation: 0,
@@ -1495,7 +1495,7 @@ void _goToPage(int page) {
     return Material(
       elevation: 16,
       child: Container(
-        color: Colors.white,
+        color: context.colors.cardBg,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -1506,7 +1506,7 @@ void _goToPage(int page) {
               decoration: BoxDecoration(
                 color: AppColors.primary.withValues(alpha: 0.1),
               ),
-              child: const Row(
+              child: Row(
                 children: [
                   Icon(Icons.filter_list, color: AppColors.primary),
                   SizedBox(width: 12),
@@ -1515,7 +1515,7 @@ void _goToPage(int page) {
                     style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
-                      color: AppColors.textMain,
+                      color: context.colors.textPrimary,
                     ),
                   ),
                 ],
@@ -1584,7 +1584,7 @@ void _goToPage(int page) {
               height: 24,
               decoration: BoxDecoration(
                 color: isSelected ? color : Colors.transparent,
-                border: Border.all(color: isSelected ? color : Colors.grey.shade400, width: 2),
+                border: Border.all(color: isSelected ? color : context.colors.iconMuted, width: 2),
                 borderRadius: BorderRadius.circular(4),
               ),
               child: isSelected
@@ -1613,7 +1613,7 @@ void _goToPage(int page) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 4),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: context.colors.cardBg,
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.05),
@@ -1633,7 +1633,7 @@ void _goToPage(int page) {
                 if (_viewMode == 0) ...[
                   // スケジュールモード: ハンバーガーメニュー + 日付ナビ
                   IconButton(
-                    icon: const Icon(Icons.menu, size: 22, color: AppColors.textMain),
+                    icon: Icon(Icons.menu, size: 22, color: context.colors.textPrimary),
                     tooltip: 'メニュー',
                     onPressed: () => setState(() => _isMobileSideMenuOpen = true),
                   ),
@@ -1642,7 +1642,7 @@ void _goToPage(int page) {
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         IconButton(
-                          icon: const Icon(Icons.chevron_left, color: AppColors.textSub),
+                          icon: Icon(Icons.chevron_left, color: context.colors.textSecondary),
                           onPressed: _goToPreviousDay,
                         ),
                         GestureDetector(
@@ -1651,16 +1651,16 @@ void _goToPage(int page) {
                             padding: const EdgeInsets.symmetric(horizontal: 4),
                             child: Text(
                               dateStr,
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 16,
                                 fontWeight: FontWeight.w500,
-                                color: AppColors.textMain,
+                                color: context.colors.textPrimary,
                               ),
                             ),
                           ),
                         ),
                         IconButton(
-                          icon: const Icon(Icons.chevron_right, color: AppColors.textSub),
+                          icon: Icon(Icons.chevron_right, color: context.colors.textSecondary),
                           onPressed: _goToNextDay,
                         ),
                       ],
@@ -1678,14 +1678,14 @@ void _goToPage(int page) {
                 ] else ...[
                   // ダッシュボードモード: タイトル
                   const SizedBox(width: 12),
-                  const Icon(Icons.dashboard_outlined, size: 20, color: AppColors.textMain),
+                  Icon(Icons.dashboard_outlined, size: 20, color: context.colors.textPrimary),
                   const SizedBox(width: 8),
-                  const Text(
+                  Text(
                     'ダッシュボード',
                     style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w500,
-                      color: AppColors.textMain,
+                      color: context.colors.textPrimary,
                     ),
                   ),
                 ],
@@ -1699,7 +1699,7 @@ void _goToPage(int page) {
             child: Container(
               height: 32,
               decoration: BoxDecoration(
-                color: Colors.grey.shade100,
+                color: context.colors.chipBg,
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Row(
@@ -1731,7 +1731,7 @@ void _goToPage(int page) {
         child: Container(
           margin: const EdgeInsets.all(2),
           decoration: BoxDecoration(
-            color: isSelected ? Colors.white : Colors.transparent,
+            color: isSelected ? context.colors.cardBg : Colors.transparent,
             borderRadius: BorderRadius.circular(6),
             boxShadow: isSelected
                 ? [BoxShadow(color: Colors.black.withValues(alpha: 0.08), blurRadius: 2)]
@@ -1740,14 +1740,14 @@ void _goToPage(int page) {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(icon, size: 14, color: isSelected ? AppColors.primary : AppColors.textSub),
+              Icon(icon, size: 14, color: isSelected ? AppColors.primary : context.colors.textSecondary),
               const SizedBox(width: 4),
               Text(
                 label,
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
-                  color: isSelected ? AppColors.primary : AppColors.textSub,
+                  color: isSelected ? AppColors.primary : context.colors.textSecondary,
                 ),
               ),
             ],
@@ -1826,13 +1826,13 @@ void _goToPage(int page) {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.weekend, size: 64, color: Colors.grey.shade400),
+            Icon(Icons.weekend, size: 64, color: context.colors.iconMuted),
             const SizedBox(height: 16),
             Text(
               '日曜日は休みです',
               style: TextStyle(
                 fontSize: 18,
-                color: Colors.grey.shade600,
+                color: context.colors.textSecondary,
               ),
             ),
           ],
@@ -1846,13 +1846,13 @@ void _goToPage(int page) {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.event_busy, size: 64, color: Colors.grey.shade400),
+            Icon(Icons.event_busy, size: 64, color: context.colors.iconMuted),
             const SizedBox(height: 16),
             Text(
               '休み',
               style: TextStyle(
                 fontSize: 18,
-                color: Colors.grey.shade600,
+                color: context.colors.textSecondary,
               ),
             ),
           ],
@@ -1866,13 +1866,13 @@ void _goToPage(int page) {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.calendar_today, size: 64, color: Colors.grey.shade400),
+            Icon(Icons.calendar_today, size: 64, color: context.colors.iconMuted),
             const SizedBox(height: 16),
             Text(
               'データを読み込んでいます...',
               style: TextStyle(
                 fontSize: 16,
-                color: Colors.grey.shade600,
+                color: context.colors.textSecondary,
               ),
             ),
             const SizedBox(height: 16),
@@ -1951,7 +1951,7 @@ void _goToPage(int page) {
                 '${lessons.length}件',
                 style: TextStyle(
                   fontSize: 12,
-                  color: Colors.grey.shade600,
+                  color: context.colors.textSecondary,
                 ),
               ),
             ],
@@ -1965,7 +1965,7 @@ void _goToPage(int page) {
               '予定なし',
               style: TextStyle(
                 fontSize: 14,
-                color: Colors.grey.shade500,
+                color: context.colors.textTertiary,
               ),
             ),
           )
@@ -1992,9 +1992,9 @@ void _goToPage(int page) {
         margin: const EdgeInsets.only(bottom: 8),
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: context.colors.cardBg,
           borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: Colors.grey.shade200),
+          border: Border.all(color: context.colors.borderLight),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withValues(alpha: 0.03),
@@ -2026,7 +2026,7 @@ void _goToPage(int page) {
                     style: TextStyle(
                       fontSize: 15,
                       fontWeight: FontWeight.w500,
-                      color: isEvent ? Colors.deepOrange : (course == '感覚統合' ? Colors.teal : AppColors.textMain),
+                      color: isEvent ? Colors.deepOrange : (course == '感覚統合' ? Colors.teal : context.colors.textPrimary),
                     ),
                   ),
                   const SizedBox(height: 4),
@@ -2034,20 +2034,20 @@ void _goToPage(int page) {
                   Row(
                     children: [
                       if (teachers.isNotEmpty) ...[
-                        Icon(Icons.person, size: 14, color: Colors.grey.shade500),
+                        Icon(Icons.person, size: 14, color: context.colors.textTertiary),
                         const SizedBox(width: 4),
                         Text(
                           teachers.map((t) => t.toString().split(' ').first).join(', '),
-                          style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                          style: TextStyle(fontSize: 12, color: context.colors.textSecondary),
                         ),
                         const SizedBox(width: 12),
                       ],
                       if (room.isNotEmpty) ...[
-                        Icon(Icons.room, size: 14, color: Colors.grey.shade500),
+                        Icon(Icons.room, size: 14, color: context.colors.textTertiary),
                         const SizedBox(width: 4),
                         Text(
                           room,
-                          style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                          style: TextStyle(fontSize: 12, color: context.colors.textSecondary),
                         ),
                       ],
                     ],
@@ -2056,7 +2056,7 @@ void _goToPage(int page) {
               ),
             ),
             // 矢印
-            Icon(Icons.chevron_right, color: Colors.grey.shade400),
+            Icon(Icons.chevron_right, color: context.colors.iconMuted),
           ],
         ),
       ),
@@ -2125,9 +2125,9 @@ void _goToPage(int page) {
               constraints: BoxConstraints(
                 maxHeight: MediaQuery.of(sheetContext).size.height * 0.85,
               ),
-              decoration: const BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+              decoration: BoxDecoration(
+                color: context.colors.cardBg,
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
               ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -2138,7 +2138,7 @@ void _goToPage(int page) {
                     width: 40,
                     height: 4,
                     decoration: BoxDecoration(
-                      color: Colors.grey.shade300,
+                      color: context.colors.borderMedium,
                       borderRadius: BorderRadius.circular(2),
                     ),
                   ),
@@ -2170,7 +2170,7 @@ void _goToPage(int page) {
                                   ),
                                   decoration: InputDecoration(
                                     border: UnderlineInputBorder(
-                                      borderSide: BorderSide(color: Colors.grey.shade300),
+                                      borderSide: BorderSide(color: context.colors.borderMedium),
                                     ),
                                     focusedBorder: const UnderlineInputBorder(
                                       borderSide: BorderSide(color: AppColors.primary, width: 2),
@@ -2197,12 +2197,12 @@ void _goToPage(int page) {
                                           style: TextStyle(
                                             fontSize: 20,
                                             fontWeight: FontWeight.bold,
-                                            color: mobileTitleController.text.isEmpty ? AppColors.textSub : null,
+                                            color: mobileTitleController.text.isEmpty ? context.colors.textSecondary : null,
                                           ),
                                         ),
                                       ),
                                       const SizedBox(width: 8),
-                                      Icon(Icons.edit, size: 16, color: AppColors.textSub),
+                                      Icon(Icons.edit, size: 16, color: context.colors.textSecondary),
                                     ],
                                   ),
                                 )
@@ -2216,7 +2216,7 @@ void _goToPage(int page) {
                                 ),
                               Text(
                                 '${DateFormat('M月d日 (E)', 'ja').format(date)}　${_timeSlots[slotIndex]}',
-                                style: const TextStyle(fontSize: 13, color: AppColors.textSub),
+                                style: TextStyle(fontSize: 13, color: context.colors.textSecondary),
                               ),
                             ],
                           ),
@@ -2228,7 +2228,7 @@ void _goToPage(int page) {
                             _showDeleteConfirmDialog(lesson);
                           },
                           tooltip: '削除',
-                          color: AppColors.textSub,
+                          color: context.colors.textSecondary,
                         ),
                         IconButton(
                           icon: const Icon(Icons.close),
@@ -2238,7 +2238,7 @@ void _goToPage(int page) {
                     ),
                   ),
                   const SizedBox(height: 8),
-                  Divider(height: 1, color: Colors.grey.shade200),
+                  Divider(height: 1, color: context.colors.borderLight),
                   // 編集コンテンツ
                   Flexible(
                     child: SingleChildScrollView(
@@ -2255,12 +2255,12 @@ void _goToPage(int page) {
                             child: Container(
                               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                               decoration: BoxDecoration(
-                                border: Border.all(color: Colors.grey.shade300),
+                                border: Border.all(color: context.colors.borderMedium),
                                 borderRadius: BorderRadius.circular(8),
                               ),
                               child: Row(
                                 children: [
-                                  const Icon(Icons.person, size: 20, color: AppColors.textSub),
+                                  Icon(Icons.person, size: 20, color: context.colors.textSecondary),
                                   const SizedBox(width: 12),
                                   Expanded(
                                     child: Text(
@@ -2271,19 +2271,19 @@ void _goToPage(int page) {
                                               : selectedTeachers.join('、'),
                                       style: TextStyle(
                                         fontSize: 15,
-                                        color: selectedTeachers.isEmpty ? AppColors.textSub : AppColors.textMain,
+                                        color: selectedTeachers.isEmpty ? context.colors.textSecondary : context.colors.textPrimary,
                                       ),
                                     ),
                                   ),
                                   if (selectedTeachers.isNotEmpty)
                                     GestureDetector(
                                       onTap: () => setSheetState(() => selectedTeachers = []),
-                                      child: const Padding(
+                                      child: Padding(
                                         padding: EdgeInsets.only(right: 4),
-                                        child: Icon(Icons.close, size: 18, color: AppColors.textSub),
+                                        child: Icon(Icons.close, size: 18, color: context.colors.textSecondary),
                                       ),
                                     ),
-                                  const Icon(Icons.arrow_drop_down, color: AppColors.textSub),
+                                  Icon(Icons.arrow_drop_down, color: context.colors.textSecondary),
                                 ],
                               ),
                             ),
@@ -2298,31 +2298,31 @@ void _goToPage(int page) {
                             child: Container(
                               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                               decoration: BoxDecoration(
-                                border: Border.all(color: Colors.grey.shade300),
+                                border: Border.all(color: context.colors.borderMedium),
                                 borderRadius: BorderRadius.circular(8),
                               ),
                               child: Row(
                                 children: [
-                                  const Icon(Icons.meeting_room, size: 20, color: AppColors.textSub),
+                                  Icon(Icons.meeting_room, size: 20, color: context.colors.textSecondary),
                                   const SizedBox(width: 12),
                                   Expanded(
                                     child: Text(
                                       selectedRoom.isEmpty ? '部屋を選択' : selectedRoom,
                                       style: TextStyle(
                                         fontSize: 15,
-                                        color: selectedRoom.isEmpty ? AppColors.textSub : AppColors.textMain,
+                                        color: selectedRoom.isEmpty ? context.colors.textSecondary : context.colors.textPrimary,
                                       ),
                                     ),
                                   ),
                                   if (selectedRoom.isNotEmpty)
                                     GestureDetector(
                                       onTap: () => setSheetState(() => selectedRoom = ''),
-                                      child: const Padding(
+                                      child: Padding(
                                         padding: EdgeInsets.only(right: 4),
-                                        child: Icon(Icons.close, size: 18, color: AppColors.textSub),
+                                        child: Icon(Icons.close, size: 18, color: context.colors.textSecondary),
                                       ),
                                     ),
-                                  const Icon(Icons.arrow_drop_down, color: AppColors.textSub),
+                                  Icon(Icons.arrow_drop_down, color: context.colors.textSecondary),
                                 ],
                               ),
                             ),
@@ -2337,7 +2337,7 @@ void _goToPage(int page) {
                             child: Container(
                               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                               decoration: BoxDecoration(
-                                border: Border.all(color: Colors.grey.shade300),
+                                border: Border.all(color: context.colors.borderMedium),
                                 borderRadius: BorderRadius.circular(8),
                               ),
                               child: Row(
@@ -2351,7 +2351,7 @@ void _goToPage(int page) {
                                   ),
                                   const SizedBox(width: 8),
                                   Expanded(child: Text(selectedCourse, style: const TextStyle(fontSize: 15))),
-                                  const Icon(Icons.arrow_drop_down, color: AppColors.textSub),
+                                  Icon(Icons.arrow_drop_down, color: context.colors.textSecondary),
                                 ],
                               ),
                             ),
@@ -2360,7 +2360,7 @@ void _goToPage(int page) {
                           // 生徒情報セクション
                           if (!isCustomEvent && studentName.isNotEmpty) ...[
                             const SizedBox(height: 24),
-                            Divider(height: 1, color: Colors.grey.shade200),
+                            Divider(height: 1, color: context.colors.borderLight),
                             const SizedBox(height: 20),
 
                             // タスクセクション
@@ -2398,7 +2398,7 @@ void _goToPage(int page) {
                                             if (task['dueDate'] != null)
                                               Text(
                                                 '期限: ${DateFormat('M/d').format((task['dueDate'] as Timestamp).toDate())}',
-                                                style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                                                style: TextStyle(fontSize: 11, color: context.colors.textSecondary),
                                               ),
                                           ],
                                         ),
@@ -2453,13 +2453,13 @@ void _goToPage(int page) {
                                   child: Container(
                                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
                                     decoration: BoxDecoration(
-                                      border: Border.all(color: Colors.grey.shade300),
+                                      border: Border.all(color: context.colors.borderMedium),
                                       borderRadius: BorderRadius.circular(8),
                                     ),
                                     child: Row(
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
-                                        Icon(Icons.calendar_today, size: 16, color: newTaskDueDate != null ? AppColors.primary : AppColors.textSub),
+                                        Icon(Icons.calendar_today, size: 16, color: newTaskDueDate != null ? AppColors.primary : context.colors.textSecondary),
                                         if (newTaskDueDate != null) ...[
                                           const SizedBox(width: 4),
                                           Text(
@@ -2469,7 +2469,7 @@ void _goToPage(int page) {
                                           const SizedBox(width: 4),
                                           GestureDetector(
                                             onTap: () => setSheetState(() => newTaskDueDate = null),
-                                            child: const Icon(Icons.close, size: 14, color: AppColors.textSub),
+                                            child: Icon(Icons.close, size: 14, color: context.colors.textSecondary),
                                           ),
                                         ],
                                       ],
@@ -2503,7 +2503,7 @@ void _goToPage(int page) {
                                   height: 24,
                                   decoration: BoxDecoration(
                                     color: newTaskController.text.trim().isEmpty
-                                        ? Colors.grey.shade300
+                                        ? context.colors.borderMedium
                                         : AppColors.primary,
                                     shape: BoxShape.circle,
                                   ),
@@ -2604,8 +2604,8 @@ void _goToPage(int page) {
                   Container(
                     padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
                     decoration: BoxDecoration(
-                      color: Colors.white,
-                      border: Border(top: BorderSide(color: Colors.grey.shade200)),
+                      color: context.colors.cardBg,
+                      border: Border(top: BorderSide(color: context.colors.borderLight)),
                     ),
                     child: SafeArea(
                       top: false,
@@ -2676,7 +2676,7 @@ void _goToPage(int page) {
                           },
                           style: ElevatedButton.styleFrom(
                             backgroundColor: AppColors.primary,
-                            foregroundColor: Colors.white,
+                            foregroundColor: context.colors.textOnPrimary,
                             padding: const EdgeInsets.symmetric(vertical: 14),
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                           ),
@@ -2698,7 +2698,7 @@ void _goToPage(int page) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(icon, size: 20, color: Colors.grey.shade600),
+        Icon(icon, size: 20, color: context.colors.textSecondary),
         const SizedBox(width: 8),
         Expanded(
           child: Column(
@@ -2708,7 +2708,7 @@ void _goToPage(int page) {
                 label,
                 style: TextStyle(
                   fontSize: 12,
-                  color: Colors.grey.shade500,
+                  color: context.colors.textTertiary,
                 ),
               ),
               Text(
@@ -2736,9 +2736,9 @@ void _goToPage(int page) {
     // スケジュールモードの場合は完全なメニュー
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: context.colors.cardBg,
         border: Border(
-          right: BorderSide(color: Colors.grey.shade300),
+          right: BorderSide(color: context.colors.borderMedium),
         ),
       ),
       child: Column(
@@ -2821,7 +2821,7 @@ void _goToPage(int page) {
                     day,
                     style: TextStyle(
                       fontSize: 12,
-                      color: isSunday ? Colors.red : (isSaturday ? Colors.blue : Colors.grey),
+                      color: isSunday ? Colors.red : (isSaturday ? Colors.blue : context.colors.textSecondary),
                     ),
                   ),
                 ),
@@ -2876,7 +2876,7 @@ void _goToPage(int page) {
                               '$dayNumber',
                               style: TextStyle(
                                 fontSize: 13,
-                                color: isToday ? Colors.white : (isSunday ? Colors.red : (isSaturday ? Colors.blue : Colors.black87)),
+                                color: isToday ? Colors.white : (isSunday ? Colors.red : (isSaturday ? Colors.blue : context.colors.textPrimary)),
                                 fontWeight: isToday ? FontWeight.bold : FontWeight.normal,
                               ),
                             ),
@@ -2969,7 +2969,7 @@ final plusStaff = _staffList.where((s) =>
               height: 24,
               decoration: BoxDecoration(
                 color: isSelected ? color : Colors.transparent,
-                border: Border.all(color: isSelected ? color : Colors.grey.shade400, width: 2),
+                border: Border.all(color: isSelected ? color : context.colors.iconMuted, width: 2),
                 borderRadius: BorderRadius.circular(4),
               ),
               child: isSelected
@@ -3000,8 +3000,8 @@ final plusStaff = _staffList.where((s) =>
         children: [
           if (_viewMode == 0)
             ListTile(
-              leading: const Icon(Icons.schedule, color: AppColors.textSub),
-              title: const Text('スケジュール管理'),
+              leading: Icon(Icons.schedule, color: context.colors.textSecondary),
+              title: Text('スケジュール管理'),
               onTap: () {
                 _showShiftManagementDialog();
               },
@@ -3015,8 +3015,8 @@ final plusStaff = _staffList.where((s) =>
     return Container(
       height: 56,
       padding: const EdgeInsets.symmetric(horizontal: 16),
-      decoration: const BoxDecoration(
-        color: Colors.white,
+      decoration: BoxDecoration(
+        color: context.colors.cardBg,
       ),
       child: Row(
         children: [
@@ -3024,7 +3024,7 @@ final plusStaff = _staffList.where((s) =>
           if (_viewMode == 0)
             // スケジュールモード：サイドメニューを開く
             IconButton(
-              icon: const Icon(Icons.menu, color: AppColors.textMain),
+              icon: Icon(Icons.menu, color: context.colors.textPrimary),
               tooltip: 'メニュー',
               onPressed: () => setState(() => _isSideMenuOpen = !_isSideMenuOpen),
             ),
@@ -3032,10 +3032,10 @@ final plusStaff = _staffList.where((s) =>
           if (_viewMode == 0) ...[
             const Icon(Icons.calendar_today, color: AppColors.primary),
             const SizedBox(width: 8),
-            const Text(
+            Text(
               'スケジュール',
               style: TextStyle(
-                color: AppColors.textMain,
+                color: context.colors.textPrimary,
                 fontSize: 20,
                 fontWeight: FontWeight.w500,
               ),
@@ -3047,27 +3047,27 @@ final plusStaff = _staffList.where((s) =>
                 onPressed: _goToThisWeek,
                 style: OutlinedButton.styleFrom(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
-                  side: BorderSide(color: Colors.grey.shade300),
+                  side: BorderSide(color: context.colors.borderMedium),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                  foregroundColor: AppColors.textMain,
+                  foregroundColor: context.colors.textPrimary,
                 ),
                 child: const Text('今週'),
               ),
             ),
             const SizedBox(width: 8),
             IconButton(
-              icon: const Icon(Icons.chevron_left, color: AppColors.textSub),
+              icon: Icon(Icons.chevron_left, color: context.colors.textSecondary),
               onPressed: _previousWeek,
             ),
             IconButton(
-              icon: const Icon(Icons.chevron_right, color: AppColors.textSub),
+              icon: Icon(Icons.chevron_right, color: context.colors.textSecondary),
               onPressed: _nextWeek,
             ),
             const SizedBox(width: 8),
            Text(
               _formatWeekRange(),
-              style: const TextStyle(
-                color: AppColors.textMain,
+              style: TextStyle(
+                color: context.colors.textPrimary,
                 fontSize: 20,
                 fontWeight: FontWeight.w500,
               ),
@@ -3075,16 +3075,16 @@ final plusStaff = _staffList.where((s) =>
           ] else if (_viewMode == 2) ...[   // ← ] を追加
             // 月カレンダーモードの時
             IconButton(
-              icon: const Icon(Icons.menu, color: AppColors.textMain),
+              icon: Icon(Icons.menu, color: context.colors.textPrimary),
               tooltip: 'メニュー',
               onPressed: () => setState(() => _isSideMenuOpen = !_isSideMenuOpen),
             ),
             const Icon(Icons.calendar_today, color: AppColors.primary),
             const SizedBox(width: 8),
-            const Text(
+            Text(
               'スケジュール',
               style: TextStyle(
-                color: AppColors.textMain,
+                color: context.colors.textPrimary,
                 fontSize: 20,
                 fontWeight: FontWeight.w500,
               ),
@@ -3096,27 +3096,27 @@ final plusStaff = _staffList.where((s) =>
                 onPressed: _goToThisMonth,
                 style: OutlinedButton.styleFrom(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
-                  side: BorderSide(color: Colors.grey.shade300),
+                  side: BorderSide(color: context.colors.borderMedium),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                  foregroundColor: AppColors.textMain,
+                  foregroundColor: context.colors.textPrimary,
                 ),
                 child: const Text('今月'),
               ),
             ),
             const SizedBox(width: 8),
             IconButton(
-              icon: const Icon(Icons.chevron_left, color: AppColors.textSub),
+              icon: Icon(Icons.chevron_left, color: context.colors.textSecondary),
               onPressed: _previousMonth,
             ),
             IconButton(
-              icon: const Icon(Icons.chevron_right, color: AppColors.textSub),
+              icon: Icon(Icons.chevron_right, color: context.colors.textSecondary),
               onPressed: _nextMonth,
             ),
             const SizedBox(width: 8),
             Text(
               DateFormat('yyyy年 M月', 'ja').format(_monthViewDate),
-              style: const TextStyle(
-                color: AppColors.textMain,
+              style: TextStyle(
+                color: context.colors.textPrimary,
                 fontSize: 20,
                 fontWeight: FontWeight.w500,
               ),
@@ -3125,10 +3125,10 @@ final plusStaff = _staffList.where((s) =>
             // ダッシュボードモードの時
             const Icon(Icons.dashboard_outlined, color: AppColors.primary),
             const SizedBox(width: 8),
-            const Text(
+            Text(
               'ダッシュボード',
               style: TextStyle(
-                color: AppColors.textMain,
+                color: context.colors.textPrimary,
                 fontSize: 20,
                 fontWeight: FontWeight.w500,
               ),
@@ -3147,11 +3147,11 @@ final plusStaff = _staffList.where((s) =>
                   onPressed: _showStatsDialog,
                   style: ButtonStyle(
                     padding: WidgetStateProperty.all(const EdgeInsets.symmetric(horizontal: 12)),
-                    side: WidgetStateProperty.all(BorderSide(color: Colors.grey.shade300)),
+                    side: WidgetStateProperty.all(BorderSide(color: context.colors.borderMedium)),
                     shape: WidgetStateProperty.all(RoundedRectangleBorder(borderRadius: BorderRadius.circular(6))),
-                    foregroundColor: WidgetStateProperty.all(AppColors.textSub),
+                    foregroundColor: WidgetStateProperty.all(context.colors.textSecondary),
                     backgroundColor: WidgetStateProperty.resolveWith((states) {
-                      if (states.contains(WidgetState.hovered)) return Colors.grey.shade100;
+                      if (states.contains(WidgetState.hovered)) return context.colors.chipBg;
                       return Colors.transparent;
                     }),
                     minimumSize: WidgetStateProperty.all(Size.zero),
@@ -3165,7 +3165,7 @@ final plusStaff = _staffList.where((s) =>
           Container(
             height: 36,
             decoration: BoxDecoration(
-              color: Colors.grey.shade100,
+              color: context.colors.chipBg,
               borderRadius: BorderRadius.circular(8),
             ),
            child: Row(
@@ -3233,9 +3233,9 @@ final plusStaff = _staffList.where((s) =>
           height: 28,
           padding: const EdgeInsets.symmetric(horizontal: 10),
           decoration: BoxDecoration(
-            color: Colors.pink.shade50.withOpacity(0.5),
+            color: context.isDark ? Colors.pink.shade900.withOpacity(0.3) : Colors.pink.shade50.withOpacity(0.5),
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: Colors.pink.shade50),
+            border: Border.all(color: context.isDark ? Colors.pink.shade800.withOpacity(0.3) : Colors.pink.shade50),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
@@ -3245,7 +3245,7 @@ final plusStaff = _staffList.where((s) =>
                   label,
                   style: TextStyle(
                     fontSize: 12,
-                    color: Colors.black87,
+                    color: context.colors.textPrimary,
                     fontWeight: FontWeight.w500,
                   ),
                   overflow: TextOverflow.ellipsis,
@@ -3274,7 +3274,7 @@ final plusStaff = _staffList.where((s) =>
     } else if (daysLeft <= 3) {
       color = Colors.red.shade400;
     } else {
-      color = Colors.grey.shade500;
+      color = context.colors.textTertiary;
     }
 
     final tooltipText =
@@ -3339,7 +3339,7 @@ final plusStaff = _staffList.where((s) =>
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
           decoration: BoxDecoration(
-            color: isSelected ? Colors.white : Colors.transparent,
+            color: isSelected ? context.colors.cardBg : Colors.transparent,
             borderRadius: BorderRadius.circular(6),
             boxShadow: isSelected
                 ? [
@@ -3354,7 +3354,7 @@ final plusStaff = _staffList.where((s) =>
           child: Icon(
             icon,
             size: 18,
-            color: isSelected ? AppColors.primary : AppColors.textSub,
+            color: isSelected ? AppColors.primary : context.colors.textSecondary,
           ),
         ),
       ),
@@ -3611,14 +3611,14 @@ final plusStaff = _staffList.where((s) =>
                   children: [
                     Text(
                       '3/31〜累計  一番入っている人を基準(0)とした相対不足（括弧内は1日あたり目標）',
-                      style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                      style: TextStyle(fontSize: 12, color: context.colors.textSecondary),
                     ),
                     const SizedBox(height: 16),
                     // ヘッダー
                     Container(
                       padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
                       decoration: BoxDecoration(
-                        color: Colors.grey.shade100,
+                        color: context.colors.chipBg,
                         borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
                       ),
                       child: const Row(
@@ -3657,7 +3657,7 @@ final plusStaff = _staffList.where((s) =>
                         child: Container(
                           padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
                           decoration: BoxDecoration(
-                            border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
+                            border: Border(bottom: BorderSide(color: context.colors.borderLight)),
                           ),
                           child: Column(
                             children: [
@@ -3670,7 +3670,7 @@ final plusStaff = _staffList.where((s) =>
                                         Icon(
                                           isExpanded ? Icons.expand_less : Icons.expand_more,
                                           size: 16,
-                                          color: Colors.grey.shade400,
+                                          color: context.colors.iconMuted,
                                         ),
                                         const SizedBox(width: 2),
                                         Text(lastName, style: const TextStyle(fontSize: 14)),
@@ -3702,7 +3702,7 @@ final plusStaff = _staffList.where((s) =>
                                                           Navigator.pop(editCtx);
                                                           setDialogState(() {});
                                                         },
-                                                        style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, foregroundColor: Colors.white),
+                                                        style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, foregroundColor: context.colors.textOnPrimary),
                                                         child: const Text('保存'),
                                                       ),
                                                     ],
@@ -3713,7 +3713,7 @@ final plusStaff = _staffList.where((s) =>
                                           },
                                           child: Text(
                                             '($slotTarget)',
-                                            style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+                                            style: TextStyle(fontSize: 12, color: context.colors.textTertiary),
                                           ),
                                         ),
                                       ],
@@ -3726,7 +3726,7 @@ final plusStaff = _staffList.where((s) =>
                                       style: TextStyle(
                                         fontSize: 14,
                                         fontWeight: FontWeight.bold,
-                                        color: shortage <= 0 ? Colors.grey.shade500 : Colors.red,
+                                        color: shortage <= 0 ? context.colors.textTertiary : Colors.red,
                                       ),
                                       textAlign: TextAlign.center,
                                     ),
@@ -3751,11 +3751,11 @@ final plusStaff = _staffList.where((s) =>
                                   padding: const EdgeInsets.only(left: 22, top: 6),
                                   child: Row(
                                     children: [
-                                      Text('実施: $actual', style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+                                      Text('実施: $actual', style: TextStyle(fontSize: 12, color: context.colors.textSecondary)),
                                       const SizedBox(width: 12),
-                                      Text('目標: $target', style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+                                      Text('目標: $target', style: TextStyle(fontSize: 12, color: context.colors.textSecondary)),
                                       const SizedBox(width: 12),
-                                      Text('予定: $futureSlots', style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+                                      Text('予定: $futureSlots', style: TextStyle(fontSize: 12, color: context.colors.textSecondary)),
                                     ],
                                   ),
                                 ),
@@ -3768,7 +3768,7 @@ final plusStaff = _staffList.where((s) =>
                 ),
               ),
               actions: [
-                TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('閉じる')),
+                TextButton(onPressed: () => Navigator.pop(ctx), child: Text('閉じる')),
               ],
             );
           },
@@ -3783,8 +3783,8 @@ final plusStaff = _staffList.where((s) =>
 
     return Container(
       height: headerHeight,
-      decoration: const BoxDecoration(
-        color: AppColors.surface,
+      decoration: BoxDecoration(
+        color: context.colors.cardBg,
       ),
       child: Row(
         children: [
@@ -3809,7 +3809,7 @@ final plusStaff = _staffList.where((s) =>
                   Text(
                     days[index],
                     style: TextStyle(
-                      color: isSaturday ? Colors.blue : AppColors.textSub,
+                      color: isSaturday ? Colors.blue : context.colors.textSecondary,
                       fontSize: 11,
                       fontWeight: FontWeight.bold,
                     ),
@@ -3833,7 +3833,7 @@ final plusStaff = _staffList.where((s) =>
                             child: Text(
                               '${date.day}',
                               style: TextStyle(
-                                color: isToday ? Colors.white : (isSaturday ? Colors.blue : AppColors.textMain),
+                                color: isToday ? Colors.white : (isSaturday ? Colors.blue : context.colors.textPrimary),
                                 fontSize: 22,
                                 fontWeight: FontWeight.w400,
                               ),
@@ -3847,7 +3847,7 @@ final plusStaff = _staffList.where((s) =>
                         preferBelow: true,
                         verticalOffset: 20,
                         textStyle: const TextStyle(color: Colors.white, fontSize: 12, height: 1.5),
-                        decoration: BoxDecoration(color: Colors.grey.shade800, borderRadius: BorderRadius.circular(8)),
+                        decoration: BoxDecoration(color: context.colors.textPrimary, borderRadius: BorderRadius.circular(8)),
                         waitDuration: const Duration(milliseconds: 300),
                         child: dateWidget,
                       );
@@ -3882,7 +3882,7 @@ final plusStaff = _staffList.where((s) =>
                                 child: Icon(
                                   Icons.add_circle_outline,
                                   size: 16,
-                                  color: Colors.grey.shade400,
+                                  color: context.colors.iconMuted,
                                 ),
                               ),
                             ),
@@ -3909,7 +3909,7 @@ final plusStaff = _staffList.where((s) =>
           final currentTasks = _tasksByDueDate[dateKey] ?? [];
           
           return AlertDialog(
-            backgroundColor: Colors.white,
+            backgroundColor: context.colors.cardBg,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             title: Row(
               children: [
@@ -3927,9 +3927,9 @@ final plusStaff = _staffList.where((s) =>
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   if (currentTasks.isEmpty)
-                    const Padding(
-                      padding: EdgeInsets.all(20),
-                      child: Text('タスクはありません', style: TextStyle(color: Colors.grey)),
+                    Padding(
+                      padding: const EdgeInsets.all(20),
+                      child: Text('タスクはありません', style: TextStyle(color: context.colors.textSecondary)),
                     )
                   else
                     ...currentTasks.map((task) {
@@ -3945,7 +3945,7 @@ final plusStaff = _staffList.where((s) =>
                           margin: const EdgeInsets.only(bottom: 8),
                           padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
-                            border: Border.all(color: Colors.grey.shade300),
+                            border: Border.all(color: context.colors.borderMedium),
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: Row(
@@ -3966,7 +3966,7 @@ final plusStaff = _staffList.where((s) =>
                                       task['title'] ?? '',
                                       style: TextStyle(
                                         fontSize: 14,
-                                        color: studentName != null ? AppColors.textSub : AppColors.textMain,
+                                        color: studentName != null ? context.colors.textSecondary : context.colors.textPrimary,
                                       ),
                                     ),
                                   ],
@@ -4053,7 +4053,7 @@ final plusStaff = _staffList.where((s) =>
               : titleController.text.isNotEmpty;
 
           return AlertDialog(
-            backgroundColor: Colors.white,
+            backgroundColor: context.colors.cardBg,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             title: Row(
               children: [
@@ -4079,7 +4079,7 @@ final plusStaff = _staffList.where((s) =>
                             decoration: BoxDecoration(
                               color: inputMode == 'student'
                                   ? AppColors.primary
-                                  : Colors.grey.shade200,
+                                  : context.colors.borderLight,
                               borderRadius: const BorderRadius.horizontal(
                                 left: Radius.circular(8),
                               ),
@@ -4089,8 +4089,8 @@ final plusStaff = _staffList.where((s) =>
                               '生徒',
                               style: TextStyle(
                                 color: inputMode == 'student'
-                                    ? Colors.white
-                                    : AppColors.textMain,
+                                    ? context.colors.textOnPrimary
+                                    : context.colors.textPrimary,
                                 fontWeight: FontWeight.w500,
                               ),
                             ),
@@ -4105,7 +4105,7 @@ final plusStaff = _staffList.where((s) =>
                             decoration: BoxDecoration(
                               color: inputMode == 'custom'
                                   ? AppColors.primary
-                                  : Colors.grey.shade200,
+                                  : context.colors.borderLight,
                               borderRadius: const BorderRadius.horizontal(
                                 right: Radius.circular(8),
                               ),
@@ -4115,8 +4115,8 @@ final plusStaff = _staffList.where((s) =>
                               '自由記述',
                               style: TextStyle(
                                 color: inputMode == 'custom'
-                                    ? Colors.white
-                                    : AppColors.textMain,
+                                    ? context.colors.textOnPrimary
+                                    : context.colors.textPrimary,
                                 fontWeight: FontWeight.w500,
                               ),
                             ),
@@ -4136,12 +4136,12 @@ final plusStaff = _staffList.where((s) =>
                       child: Container(
                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                         decoration: BoxDecoration(
-                          border: Border.all(color: Colors.grey.shade300),
+                          border: Border.all(color: context.colors.borderMedium),
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Row(
                           children: [
-                            const Icon(Icons.person, size: 20, color: AppColors.textSub),
+                            Icon(Icons.person, size: 20, color: context.colors.textSecondary),
                             const SizedBox(width: 12),
                             Expanded(
                               child: Text(
@@ -4151,12 +4151,12 @@ final plusStaff = _staffList.where((s) =>
                                 style: TextStyle(
                                   fontSize: 15,
                                   color: selectedStudent == null
-                                      ? AppColors.textSub
-                                      : AppColors.textMain,
+                                      ? context.colors.textSecondary
+                                      : context.colors.textPrimary,
                                 ),
                               ),
                             ),
-                            const Icon(Icons.arrow_drop_down, color: AppColors.textSub),
+                            Icon(Icons.arrow_drop_down, color: context.colors.textSecondary),
                           ],
                         ),
                       ),
@@ -4210,7 +4210,7 @@ final plusStaff = _staffList.where((s) =>
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                       decoration: BoxDecoration(
-                        border: Border.all(color: Colors.grey.shade300),
+                        border: Border.all(color: context.colors.borderMedium),
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Row(
@@ -4220,9 +4220,9 @@ final plusStaff = _staffList.where((s) =>
                           Expanded(
                             child: Text(
                               DateFormat('M月d日 (E)', 'ja').format(selectedDueDate),
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 15,
-                                color: AppColors.textMain,
+                                color: context.colors.textPrimary,
                               ),
                             ),
                           ),
@@ -4279,7 +4279,7 @@ final plusStaff = _staffList.where((s) =>
                     : null,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.primary,
-                  foregroundColor: Colors.white,
+                  foregroundColor: context.colors.textOnPrimary,
                 ),
                 child: const Text('追加'),
               ),
@@ -4300,14 +4300,14 @@ final plusStaff = _staffList.where((s) =>
             alignment: Alignment.center,
             decoration: BoxDecoration(
               border: Border(
-                top: index == 0 ? BorderSide(color: Colors.grey.shade300) : BorderSide.none,
-                bottom: BorderSide(color: Colors.grey.shade300),
+                top: index == 0 ? BorderSide(color: context.colors.borderMedium) : BorderSide.none,
+                bottom: BorderSide(color: context.colors.borderMedium),
               ),
             ),
             child: Text(
               _timeSlots[index],
-              style: const TextStyle(
-                color: AppColors.textSub,
+              style: TextStyle(
+                color: context.colors.textSecondary,
                 fontSize: 11,
               ),
             ),
@@ -4406,11 +4406,11 @@ final plusStaff = _staffList.where((s) =>
   width: cellWidth,
   height: cellHeight,
   decoration: BoxDecoration(
-    color: isHoliday ? Colors.grey.shade200 : Colors.white,
+    color: isHoliday ? context.colors.borderLight : context.colors.cardBg,
     border: Border(
-      top: slotIndex == 0 ? BorderSide(color: Colors.grey.shade300) : BorderSide.none,
-      bottom: BorderSide(color: Colors.grey.shade300),
-      left: BorderSide(color: Colors.grey.shade300),
+      top: slotIndex == 0 ? BorderSide(color: context.colors.borderMedium) : BorderSide.none,
+      bottom: BorderSide(color: context.colors.borderMedium),
+      left: BorderSide(color: context.colors.borderMedium),
     ),
   ),
   child: Stack(
@@ -4478,23 +4478,27 @@ Widget _buildCellMemoIcon(DateTime date, int slotIndex, Map<String, dynamic> mem
           child: Material(
             elevation: 8,
             borderRadius: BorderRadius.circular(8),
-            color: Colors.white,
+            color: context.colors.dialogBg,
             child: Container(
               width: popupWidth,
               padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: context.colors.borderMedium),
+              ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     memo['title'] ?? '',
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: context.colors.textPrimary),
                   ),
                   if ((memo['comment'] ?? '').toString().isNotEmpty) ...[
                     const SizedBox(height: 4),
                     Text(
                       memo['comment'] ?? '',
-                      style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+                      style: TextStyle(fontSize: 12, color: context.colors.textSecondary),
                     ),
                   ],
                 ],
@@ -4521,7 +4525,7 @@ Widget _buildCellMemoIcon(DateTime date, int slotIndex, Map<String, dynamic> mem
       child: Icon(
   Icons.info_outline,
   size: 16,
-  color: Colors.grey.shade500,
+  color: context.colors.textTertiary,
 ),
     ),
   );
@@ -4536,11 +4540,11 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
   showDialog(
     context: context,
     builder: (dialogContext) => AlertDialog(
-      backgroundColor: Colors.white,
+      backgroundColor: context.colors.cardBg,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       title: Row(
         children: [
-          Icon(Icons.info_outline, color: Colors.grey.shade600, size: 22),
+          Icon(Icons.info_outline, color: context.colors.textSecondary, size: 22),
           const SizedBox(width: 8),
           const Text('コマメモを編集', style: TextStyle(fontSize: 18)),
           const Spacer(),
@@ -4551,7 +4555,7 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
               final confirm = await showDialog<bool>(
                 context: dialogContext,
                 builder: (ctx) => AlertDialog(
-                  backgroundColor: Colors.white,
+                  backgroundColor: context.colors.cardBg,
                   title: const Text('メモを削除'),
                   content: const Text('このメモを削除しますか？'),
                   actions: [
@@ -4577,7 +4581,7 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
           children: [
             Text(
               '${DateFormat('M月d日 (E)', 'ja').format(date)} ${_timeSlots[slotIndex]}',
-              style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
+              style: TextStyle(fontSize: 14, color: context.colors.textSecondary),
             ),
             const SizedBox(height: 16),
             TextField(
@@ -4611,7 +4615,7 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
             if (dialogContext.mounted) Navigator.pop(dialogContext);
             scaffoldMessenger.showSnackBar(const SnackBar(content: Text('メモを保存しました')));
           },
-          style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, foregroundColor: Colors.white),
+          style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, foregroundColor: context.colors.textOnPrimary),
           child: const Text('保存'),
         ),
       ],
@@ -4738,7 +4742,7 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
     final isCustomEvent = lesson['isCustomEvent'] == true;
 
     // 文字色（通常の場合は黒、イベントはオレンジ）
-    final textColor = (course == '通常' || isCustomEvent) ? Colors.black87 : color;
+    final textColor = (course == '通常' || isCustomEvent) ? context.colors.textPrimary : color;
 
     // 頭文字を取得（通常の場合は空文字、イベントも空文字）
     final courseInitial = (!isCustomEvent && course != '通常' && course.isNotEmpty)
@@ -4769,7 +4773,7 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
           clipBehavior: Clip.hardEdge,
           padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
           decoration: BoxDecoration(
-            color: isHighlighted ? Colors.yellow.shade100 : Colors.transparent,
+            color: isHighlighted ? (context.isDark ? Colors.yellow.shade900.withOpacity(0.4) : Colors.yellow.shade100) : Colors.transparent,
             borderRadius: BorderRadius.circular(4),
           ),
           child: Row(
@@ -4828,8 +4832,8 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
                     ),
                     child: Text(
                       teacherLastNames.join('・'),
-                      style: const TextStyle(
-                        color: AppColors.textMain,
+                      style: TextStyle(
+                        color: context.colors.textPrimary,
                         fontSize: 13,
                       ),
                     ),
@@ -4862,8 +4866,8 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
                     ),
                     child: Text(
                       lesson['room'],
-                      style: const TextStyle(
-                        color: AppColors.textSub,
+                      style: TextStyle(
+                        color: context.colors.textSecondary,
                         fontSize: 13,
                       ),
                     ),
@@ -4880,7 +4884,7 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
             right: 0,
             child: CustomPaint(
               size: const Size(8, 8),
-              painter: _NoteTrianglePainter(color: Colors.black87),
+              painter: _NoteTrianglePainter(color: context.colors.textPrimary),
             ),
           ),
       ],
@@ -4893,7 +4897,7 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: context.colors.cardBg,
           borderRadius: BorderRadius.circular(4),
           border: Border.all(color: AppColors.primary, width: 2),
         ),
@@ -4994,10 +4998,14 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
       final popupContent = Material(
         elevation: 4,
         borderRadius: BorderRadius.circular(8),
-        color: Colors.white,
+        color: context.colors.dialogBg,
         child: Container(
           width: popupWidth,
           padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: context.colors.borderMedium),
+          ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -5059,7 +5067,7 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
     final hasNote = note.isNotEmpty;
     final isCustomEvent = lesson['isCustomEvent'] == true;
 
-    final textColor = (course == '通常' || isCustomEvent) ? Colors.black87 : color;
+    final textColor = (course == '通常' || isCustomEvent) ? context.colors.textPrimary : color;
     final courseInitial = (!isCustomEvent && course != '通常' && course.isNotEmpty)
         ? '(${course.substring(0, 1)})'
         : '';
@@ -5087,7 +5095,7 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
           clipBehavior: Clip.hardEdge,
           padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
           decoration: BoxDecoration(
-            color: isHighlighted ? Colors.yellow.shade100 : Colors.transparent,
+            color: isHighlighted ? (context.isDark ? Colors.yellow.shade900.withOpacity(0.4) : Colors.yellow.shade100) : Colors.transparent,
             borderRadius: BorderRadius.circular(4),
           ),
           child: Row(
@@ -5146,8 +5154,8 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
                     ),
                     child: Text(
                       teacherLastNames.join('・'),
-                      style: const TextStyle(
-                        color: AppColors.textMain,
+                      style: TextStyle(
+                        color: context.colors.textPrimary,
                         fontSize: 13,
                       ),
                     ),
@@ -5181,8 +5189,8 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
                     ),
                     child: Text(
                       lesson['room'],
-                      style: const TextStyle(
-                        color: AppColors.textSub,
+                      style: TextStyle(
+                        color: context.colors.textSecondary,
                         fontSize: 13,
                       ),
                     ),
@@ -5199,7 +5207,7 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
             right: 0,
             child: CustomPaint(
               size: const Size(8, 8),
-              painter: _NoteTrianglePainter(color: Colors.black87),
+              painter: _NoteTrianglePainter(color: context.colors.textPrimary),
             ),
           ),
       ],
@@ -5415,14 +5423,14 @@ Widget _buildStatusSegment({
   final items = <({String value, String label, Color color})>[
     (value: 'full', label: '出勤', color: AppColors.primary),
     (value: 'half', label: '半休', color: Colors.orange.shade700),
-    (value: 'off', label: '休', color: Colors.grey.shade500),
+    (value: 'off', label: '休', color: context.colors.textTertiary),
   ];
   return Container(
     height: 28,
     decoration: BoxDecoration(
-      color: Colors.grey.shade100,
+      color: context.colors.chipBg,
       borderRadius: BorderRadius.circular(6),
-      border: Border.all(color: Colors.grey.shade300),
+      border: Border.all(color: context.colors.borderMedium),
     ),
     padding: const EdgeInsets.all(2),
     child: Row(
@@ -5445,7 +5453,7 @@ Widget _buildStatusSegment({
                   fontWeight: FontWeight.bold,
                   color: selected
                       ? Colors.white
-                      : (enabled ? Colors.grey.shade700 : Colors.grey.shade400),
+                      : (enabled ? context.colors.textSecondary : context.colors.iconMuted),
                 ),
               ),
             ),
@@ -5548,7 +5556,7 @@ for (var staff in _staffList.where((s) => s['showInSchedule'] != false)) {
           });
           
           return AlertDialog(
-            backgroundColor: Colors.white,
+            backgroundColor: context.colors.cardBg,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             title: Row(
               children: [
@@ -5563,7 +5571,7 @@ for (var staff in _staffList.where((s) => s['showInSchedule'] != false)) {
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                     decoration: BoxDecoration(
-                      color: Colors.grey.shade400,
+                      color: context.colors.iconMuted,
                       borderRadius: BorderRadius.circular(4),
                     ),
                     child: const Text(
@@ -5590,18 +5598,18 @@ for (var staff in _staffList.where((s) => s['showInSchedule'] != false)) {
                   Container(
                     padding: const EdgeInsets.symmetric(vertical: 12),
                     decoration: BoxDecoration(
-                      border: Border(bottom: BorderSide(color: Colors.grey.shade300)),
+                      border: Border(bottom: BorderSide(color: context.colors.borderMedium)),
                     ),
                     child: Row(
                       children: [
-                        SizedBox(width: 80, child: Text('スタッフ', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.grey.shade700))),
-                        SizedBox(width: 70, child: Text('開始', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.grey.shade700), textAlign: TextAlign.center)),
+                        SizedBox(width: 80, child: Text('スタッフ', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: context.colors.textSecondary))),
+                        SizedBox(width: 70, child: Text('開始', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: context.colors.textSecondary), textAlign: TextAlign.center)),
                         const SizedBox(width: 8),
-                        SizedBox(width: 70, child: Text('終了', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.grey.shade700), textAlign: TextAlign.center)),
+                        SizedBox(width: 70, child: Text('終了', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: context.colors.textSecondary), textAlign: TextAlign.center)),
                         const SizedBox(width: 8),
-                        Expanded(child: Text('備考', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.grey.shade700))),
+                        Expanded(child: Text('備考', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: context.colors.textSecondary))),
                         const SizedBox(width: 8),
-                        SizedBox(width: 140, child: Text('勤怠', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.grey.shade700), textAlign: TextAlign.center)),
+                        SizedBox(width: 140, child: Text('勤怠', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: context.colors.textSecondary), textAlign: TextAlign.center)),
                       ],
                     ),
                   ),
@@ -5619,7 +5627,7 @@ for (var staff in _staffList.where((s) => s['showInSchedule'] != false)) {
                         return Container(
                           padding: const EdgeInsets.symmetric(vertical: 10),
                           decoration: BoxDecoration(
-                            border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
+                            border: Border(bottom: BorderSide(color: context.colors.borderLight)),
                           ),
                           child: Row(
                             children: [
@@ -5631,7 +5639,7 @@ for (var staff in _staffList.where((s) => s['showInSchedule'] != false)) {
                                   style: TextStyle(
                                     fontSize: 14,
                                     fontWeight: FontWeight.w500,
-                                    color: isWorking ? AppColors.textMain : Colors.grey.shade500,
+                                    color: isWorking ? context.colors.textPrimary : context.colors.textTertiary,
                                   ),
                                   overflow: TextOverflow.ellipsis,
                                 ),
@@ -5646,10 +5654,10 @@ for (var staff in _staffList.where((s) => s['showInSchedule'] != false)) {
                                         decoration: InputDecoration(
                                           isDense: true,
                                           contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
-                                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: BorderSide(color: Colors.grey.shade300)),
-                                          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: BorderSide(color: Colors.grey.shade300)),
+                                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: BorderSide(color: context.colors.borderMedium)),
+                                          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: BorderSide(color: context.colors.borderMedium)),
                                           filled: true,
-                                          fillColor: Colors.white,
+                                          fillColor: context.colors.cardBg,
                                         ),
                                         style: const TextStyle(fontSize: 14),
                                         textAlign: TextAlign.center,
@@ -5661,7 +5669,7 @@ for (var staff in _staffList.where((s) => s['showInSchedule'] != false)) {
                                             fontSize: 14,
                                             color: status == 'half'
                                                 ? Colors.orange.shade700
-                                                : Colors.grey.shade500,
+                                                : context.colors.textTertiary,
                                             fontWeight: status == 'half'
                                                 ? FontWeight.bold
                                                 : FontWeight.normal,
@@ -5680,10 +5688,10 @@ for (var staff in _staffList.where((s) => s['showInSchedule'] != false)) {
                                         decoration: InputDecoration(
                                           isDense: true,
                                           contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
-                                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: BorderSide(color: Colors.grey.shade300)),
-                                          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: BorderSide(color: Colors.grey.shade300)),
+                                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: BorderSide(color: context.colors.borderMedium)),
+                                          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: BorderSide(color: context.colors.borderMedium)),
                                           filled: true,
-                                          fillColor: Colors.white,
+                                          fillColor: context.colors.cardBg,
                                         ),
                                         style: const TextStyle(fontSize: 14),
                                         textAlign: TextAlign.center,
@@ -5700,10 +5708,10 @@ for (var staff in _staffList.where((s) => s['showInSchedule'] != false)) {
                                         decoration: InputDecoration(
                                           isDense: true,
                                           contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-                                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: BorderSide(color: Colors.grey.shade300)),
-                                          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: BorderSide(color: Colors.grey.shade300)),
+                                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: BorderSide(color: context.colors.borderMedium)),
+                                          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: BorderSide(color: context.colors.borderMedium)),
                                           filled: true,
-                                          fillColor: Colors.white,
+                                          fillColor: context.colors.cardBg,
                                         ),
                                         style: const TextStyle(fontSize: 14),
                                       )
@@ -5735,14 +5743,14 @@ for (var staff in _staffList.where((s) => s['showInSchedule'] != false)) {
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                       decoration: BoxDecoration(
-                        color: Colors.grey.shade100,
+                        color: context.colors.chipBg,
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Row(
                         children: [
-                          Icon(Icons.event_busy, size: 18, color: Colors.grey.shade600),
+                          Icon(Icons.event_busy, size: 18, color: context.colors.textSecondary),
                           const SizedBox(width: 8),
-                          Text('この日を休みにする', style: TextStyle(fontSize: 13, color: Colors.grey.shade700)),
+                          Text('この日を休みにする', style: TextStyle(fontSize: 13, color: context.colors.textSecondary)),
                           const Spacer(),
                           Transform.scale(
                             scale: 0.8,
@@ -5804,7 +5812,7 @@ for (var staff in _staffList.where((s) => s['showInSchedule'] != false)) {
 },
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.primary,
-                  foregroundColor: Colors.white,
+                  foregroundColor: context.colors.textOnPrimary,
                 ),
                 child: const Text('保存'),
               ),
@@ -5894,7 +5902,7 @@ for (var staff in _staffList.where((s) => s['showInSchedule'] != false)) {
       builder: (dialogContext) => StatefulBuilder(
         builder: (dialogContext, setDialogState) {
           return AlertDialog(
-            backgroundColor: Colors.white,
+            backgroundColor: context.colors.cardBg,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             title: const Row(
               children: [
@@ -5946,7 +5954,7 @@ for (var staff in _staffList.where((s) => s['showInSchedule'] != false)) {
                             label: Text('$previousWeekLabelのスケジュールをコピー'),
                             style: ElevatedButton.styleFrom(
                               backgroundColor: AppColors.primary,
-                              foregroundColor: Colors.white,
+                              foregroundColor: context.colors.textOnPrimary,
                               padding: const EdgeInsets.symmetric(vertical: 12),
                             ),
                           ),
@@ -5954,7 +5962,7 @@ for (var staff in _staffList.where((s) => s['showInSchedule'] != false)) {
                         const SizedBox(height: 8),
                         Text(
                           '※先週のシフトとレッスンを今週にコピーします',
-                          style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                          style: TextStyle(fontSize: 12, color: context.colors.textSecondary),
                         ),
                       ],
                     ),
@@ -5964,15 +5972,15 @@ for (var staff in _staffList.where((s) => s['showInSchedule'] != false)) {
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
-                      color: Colors.grey.shade100,
+                      color: context.colors.chipBg,
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Row(
+                        Row(
                           children: [
-                            Icon(Icons.calendar_month, size: 18, color: AppColors.textSub),
+                            Icon(Icons.calendar_month, size: 18, color: context.colors.textSecondary),
                             SizedBox(width: 8),
                             Text(
                               '月単位コピー',
@@ -6001,9 +6009,9 @@ for (var staff in _staffList.where((s) => s['showInSchedule'] != false)) {
                           ),
                         ),
                         const SizedBox(height: 8),
-                        const Text(
+                        Text(
                           '※前月のシフトデータを今月にコピーします',
-                          style: TextStyle(fontSize: 11, color: AppColors.textSub),
+                          style: TextStyle(fontSize: 11, color: context.colors.textSecondary),
                         ),
                       ],
                     ),
@@ -6042,8 +6050,8 @@ for (var staff in _staffList.where((s) => s['showInSchedule'] != false)) {
                               .get(),
                           builder: (context, snapshot) {
                             if (snapshot.connectionState == ConnectionState.waiting) {
-                              return const Text('提出状況を確認中...',
-                                  style: TextStyle(fontSize: 12, color: AppColors.textSub));
+                              return Text('提出状況を確認中...',
+                                  style: TextStyle(fontSize: 12, color: context.colors.textSecondary));
                             }
                             int count = 0;
                             if (snapshot.hasData && snapshot.data!.exists) {
@@ -6057,7 +6065,7 @@ for (var staff in _staffList.where((s) => s['showInSchedule'] != false)) {
                               '$count人が提出済み',
                               style: TextStyle(
                                   fontSize: 12,
-                                  color: count > 0 ? Colors.green.shade800 : AppColors.textSub,
+                                  color: count > 0 ? Colors.green.shade800 : context.colors.textSecondary,
                                   fontWeight: count > 0 ? FontWeight.bold : FontWeight.normal),
                             );
                           },
@@ -6081,15 +6089,15 @@ for (var staff in _staffList.where((s) => s['showInSchedule'] != false)) {
                             label: const Text('シフトを決定する'),
                             style: ElevatedButton.styleFrom(
                               backgroundColor: Colors.green.shade700,
-                              foregroundColor: Colors.white,
+                              foregroundColor: context.colors.textOnPrimary,
                               padding: const EdgeInsets.symmetric(vertical: 10),
                             ),
                           ),
                         ),
                         const SizedBox(height: 8),
-                        const Text(
+                        Text(
                           '※希望をカレンダー上で確認しながら決定し、そのまま実シフトに反映できます',
-                          style: TextStyle(fontSize: 11, color: AppColors.textSub),
+                          style: TextStyle(fontSize: 11, color: context.colors.textSecondary),
                         ),
                       ],
                     ),
@@ -6532,7 +6540,7 @@ final memoCommentController = TextEditingController();
     : title.isNotEmpty;
           
           Widget dialogContent = Material(
-            color: Colors.white,
+            color: context.colors.cardBg,
             borderRadius: BorderRadius.circular(12),
             elevation: 24,
             child: Container(
@@ -6558,7 +6566,7 @@ final memoCommentController = TextEditingController();
                         IconButton(
                           icon: const Icon(Icons.close, size: 20),
                           onPressed: () => Navigator.pop(dialogContext),
-                          color: AppColors.textSub,
+                          color: context.colors.textSecondary,
                         ),
                       ],
                     ),
@@ -6567,7 +6575,7 @@ final memoCommentController = TextEditingController();
                     padding: const EdgeInsets.symmetric(horizontal: 20),
                     child: Text(
                       DateFormat('M月d日 (E)', 'ja').format(date),
-                      style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
+                      style: TextStyle(fontSize: 14, color: context.colors.textSecondary),
                     ),
                   ),
                   const SizedBox(height: 16),
@@ -6577,7 +6585,7 @@ final memoCommentController = TextEditingController();
                     padding: const EdgeInsets.symmetric(horizontal: 20),
                     child: Container(
                       decoration: BoxDecoration(
-                        color: Colors.grey.shade100,
+                        color: context.colors.chipBg,
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Row(
@@ -6589,7 +6597,7 @@ final memoCommentController = TextEditingController();
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 10),
           decoration: BoxDecoration(
-            color: inputMode == 'student' ? Colors.white : Colors.transparent,
+            color: inputMode == 'student' ? context.colors.cardBg : Colors.transparent,
             borderRadius: BorderRadius.circular(6),
             boxShadow: inputMode == 'student' ? [
               BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 2),
@@ -6599,12 +6607,12 @@ final memoCommentController = TextEditingController();
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Icon(Icons.person, size: 16, 
-                color: inputMode == 'student' ? AppColors.primary : AppColors.textSub),
+                color: inputMode == 'student' ? AppColors.primary : context.colors.textSecondary),
               const SizedBox(width: 4),
               Text('生徒', style: TextStyle(
                 fontSize: 12,
                 fontWeight: inputMode == 'student' ? FontWeight.bold : FontWeight.normal,
-                color: inputMode == 'student' ? AppColors.primary : AppColors.textSub,
+                color: inputMode == 'student' ? AppColors.primary : context.colors.textSecondary,
               )),
             ],
           ),
@@ -6618,7 +6626,7 @@ final memoCommentController = TextEditingController();
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 10),
           decoration: BoxDecoration(
-            color: inputMode == 'custom' ? Colors.white : Colors.transparent,
+            color: inputMode == 'custom' ? context.colors.cardBg : Colors.transparent,
             borderRadius: BorderRadius.circular(6),
             boxShadow: inputMode == 'custom' ? [
               BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 2),
@@ -6628,12 +6636,12 @@ final memoCommentController = TextEditingController();
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Icon(Icons.edit_note, size: 16,
-                color: inputMode == 'custom' ? AppColors.primary : AppColors.textSub),
+                color: inputMode == 'custom' ? AppColors.primary : context.colors.textSecondary),
               const SizedBox(width: 4),
               Text('イベント', style: TextStyle(
                 fontSize: 12,
                 fontWeight: inputMode == 'custom' ? FontWeight.bold : FontWeight.normal,
-                color: inputMode == 'custom' ? AppColors.primary : AppColors.textSub,
+                color: inputMode == 'custom' ? AppColors.primary : context.colors.textSecondary,
               )),
             ],
           ),
@@ -6647,7 +6655,7 @@ final memoCommentController = TextEditingController();
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 10),
           decoration: BoxDecoration(
-            color: inputMode == 'memo' ? Colors.white : Colors.transparent,
+            color: inputMode == 'memo' ? context.colors.cardBg : Colors.transparent,
             borderRadius: BorderRadius.circular(6),
             boxShadow: inputMode == 'memo' ? [
               BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 2),
@@ -6659,13 +6667,13 @@ final memoCommentController = TextEditingController();
               Icon(
   Icons.info_outline,
   size: 16,
-  color: inputMode == 'memo' ? AppColors.primary : AppColors.textSub,
+  color: inputMode == 'memo' ? AppColors.primary : context.colors.textSecondary,
 ),
               const SizedBox(width: 4),
               Text('メモ', style: TextStyle(
                 fontSize: 12,
                 fontWeight: inputMode == 'memo' ? FontWeight.bold : FontWeight.normal,
-                color: inputMode == 'memo' ? AppColors.primary : AppColors.textSub,
+                color: inputMode == 'memo' ? AppColors.primary : context.colors.textSecondary,
               )),
             ],
           ),
@@ -6696,12 +6704,12 @@ final memoCommentController = TextEditingController();
                               child: Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                                 decoration: BoxDecoration(
-                                  border: Border.all(color: Colors.grey.shade300),
+                                  border: Border.all(color: context.colors.borderMedium),
                                   borderRadius: BorderRadius.circular(8),
                                 ),
                                 child: Row(
                                   children: [
-                                    const Icon(Icons.person, size: 20, color: AppColors.textSub),
+                                    Icon(Icons.person, size: 20, color: context.colors.textSecondary),
                                     const SizedBox(width: 12),
                                     Expanded(
                                       child: Text(
@@ -6710,11 +6718,11 @@ final memoCommentController = TextEditingController();
                                             : selectedStudent!['name'] as String,
                                         style: TextStyle(
                                           fontSize: 15,
-                                          color: selectedStudent == null ? AppColors.textSub : AppColors.textMain,
+                                          color: selectedStudent == null ? context.colors.textSecondary : context.colors.textPrimary,
                                         ),
                                       ),
                                     ),
-                                    const Icon(Icons.arrow_drop_down, color: AppColors.textSub),
+                                    Icon(Icons.arrow_drop_down, color: context.colors.textSecondary),
                                   ],
                                 ),
                               ),
@@ -6728,18 +6736,18 @@ final memoCommentController = TextEditingController();
                               controller: customTitleController,
                               decoration: InputDecoration(
                                 hintText: 'タイトルを入力',
-                                prefixIcon: const Icon(Icons.title, size: 20, color: Colors.grey),
+                                prefixIcon: Icon(Icons.title, size: 20, color: context.colors.iconMuted),
                                 border: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(8),
-                                  borderSide: BorderSide(color: Colors.grey.shade300),
+                                  borderSide: BorderSide(color: context.colors.borderMedium),
                                 ),
                                 enabledBorder: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(8),
-                                  borderSide: BorderSide(color: Colors.grey.shade300),
+                                  borderSide: BorderSide(color: context.colors.borderMedium),
                                 ),
                                 contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
                                 filled: true,
-                                fillColor: Colors.grey.shade50,
+                                fillColor: context.colors.tagBg,
                               ),
                               onChanged: (_) => setDialogState(() {}),
                             ),
@@ -6751,10 +6759,10 @@ final memoCommentController = TextEditingController();
     controller: memoTitleController,
     decoration: InputDecoration(
       hintText: 'タイトルを入力',
-      prefixIcon: const Icon(Icons.info_outline, size: 20, color: Colors.grey),
+      prefixIcon: Icon(Icons.info_outline, size: 20, color: context.colors.iconMuted),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(8),
-        borderSide: BorderSide(color: Colors.grey.shade300),
+        borderSide: BorderSide(color: context.colors.borderMedium),
       ),
       contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
     ),
@@ -6767,7 +6775,7 @@ final memoCommentController = TextEditingController();
       hintText: 'コメント（任意）',
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(8),
-        borderSide: BorderSide(color: Colors.grey.shade300),
+        borderSide: BorderSide(color: context.colors.borderMedium),
       ),
       contentPadding: const EdgeInsets.all(12),
     ),
@@ -6786,12 +6794,12 @@ if (inputMode != 'memo') ...[
                             child: Container(
                               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                               decoration: BoxDecoration(
-                                border: Border.all(color: Colors.grey.shade300),
+                                border: Border.all(color: context.colors.borderMedium),
                                 borderRadius: BorderRadius.circular(8),
                               ),
                               child: Row(
                                 children: [
-                                  const Icon(Icons.person, size: 20, color: AppColors.textSub),
+                                  Icon(Icons.person, size: 20, color: context.colors.textSecondary),
                                   const SizedBox(width: 12),
                                   Expanded(
                                     child: Text(
@@ -6802,19 +6810,19 @@ if (inputMode != 'memo') ...[
                                               : selectedTeachers.join('、'),
                                       style: TextStyle(
                                         fontSize: 15,
-                                        color: selectedTeachers.isEmpty ? AppColors.textSub : AppColors.textMain,
+                                        color: selectedTeachers.isEmpty ? context.colors.textSecondary : context.colors.textPrimary,
                                       ),
                                     ),
                                   ),
                                   if (selectedTeachers.isNotEmpty)
                                     GestureDetector(
                                       onTap: () => setDialogState(() => selectedTeachers = []),
-                                      child: const Padding(
+                                      child: Padding(
                                         padding: EdgeInsets.only(right: 4),
-                                        child: Icon(Icons.close, size: 18, color: AppColors.textSub),
+                                        child: Icon(Icons.close, size: 18, color: context.colors.textSecondary),
                                       ),
                                     ),
-                                  const Icon(Icons.arrow_drop_down, color: AppColors.textSub),
+                                  Icon(Icons.arrow_drop_down, color: context.colors.textSecondary),
                                 ],
                               ),
                             ),
@@ -6829,31 +6837,31 @@ if (inputMode != 'memo') ...[
                             child: Container(
                               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                               decoration: BoxDecoration(
-                                border: Border.all(color: Colors.grey.shade300),
+                                border: Border.all(color: context.colors.borderMedium),
                                 borderRadius: BorderRadius.circular(8),
                               ),
                               child: Row(
                                 children: [
-                                  const Icon(Icons.meeting_room, size: 20, color: AppColors.textSub),
+                                  Icon(Icons.meeting_room, size: 20, color: context.colors.textSecondary),
                                   const SizedBox(width: 12),
                                   Expanded(
                                     child: Text(
                                       selectedRoom.isEmpty ? '部屋を選択' : selectedRoom,
                                       style: TextStyle(
                                         fontSize: 15,
-                                        color: selectedRoom.isEmpty ? AppColors.textSub : AppColors.textMain,
+                                        color: selectedRoom.isEmpty ? context.colors.textSecondary : context.colors.textPrimary,
                                       ),
                                     ),
                                   ),
                                   if (selectedRoom.isNotEmpty)
                                     GestureDetector(
                                       onTap: () => setDialogState(() => selectedRoom = ''),
-                                      child: const Padding(
+                                      child: Padding(
                                         padding: EdgeInsets.only(right: 4),
-                                        child: Icon(Icons.close, size: 18, color: AppColors.textSub),
+                                        child: Icon(Icons.close, size: 18, color: context.colors.textSecondary),
                                       ),
                                     ),
-                                  const Icon(Icons.arrow_drop_down, color: AppColors.textSub),
+                                  Icon(Icons.arrow_drop_down, color: context.colors.textSecondary),
                                 ],
                               ),
                             ),
@@ -6868,7 +6876,7 @@ if (inputMode != 'memo') ...[
                             child: Container(
                               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                               decoration: BoxDecoration(
-                                border: Border.all(color: Colors.grey.shade300),
+                                border: Border.all(color: context.colors.borderMedium),
                                 borderRadius: BorderRadius.circular(8),
                               ),
                               child: Row(
@@ -6882,7 +6890,7 @@ if (inputMode != 'memo') ...[
                                   ),
                                   const SizedBox(width: 8),
                                   Expanded(child: Text(selectedCourse, style: const TextStyle(fontSize: 15))),
-                                  const Icon(Icons.arrow_drop_down, color: AppColors.textSub),
+                                  Icon(Icons.arrow_drop_down, color: context.colors.textSecondary),
                                 ],
                               ),
                             ),
@@ -6892,7 +6900,7 @@ if (inputMode != 'memo') ...[
                           // === 生徒情報セクション（生徒モードで生徒選択済みの場合のみ） ===
                           if (inputMode == 'student' && title.isNotEmpty) ...[
                             const SizedBox(height: 24),
-                            Divider(height: 1, color: Colors.grey.shade200),
+                            Divider(height: 1, color: context.colors.borderLight),
                             const SizedBox(height: 20),
                             
                             // タスクセクション
@@ -6931,7 +6939,7 @@ if (inputMode != 'memo') ...[
                                             if (task['dueDate'] != null)
                                               Text(
                                                 '期限: ${DateFormat('M/d').format((task['dueDate'] as Timestamp).toDate())}',
-                                                style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                                                style: TextStyle(fontSize: 11, color: context.colors.textSecondary),
                                               ),
                                           ],
                                         ),
@@ -6987,13 +6995,13 @@ InkWell(
   child: Container(
     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
     decoration: BoxDecoration(
-      border: Border.all(color: Colors.grey.shade300),
+      border: Border.all(color: context.colors.borderMedium),
       borderRadius: BorderRadius.circular(8),
     ),
     child: Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(Icons.calendar_today, size: 16, color: newTaskDueDate != null ? AppColors.primary : AppColors.textSub),
+        Icon(Icons.calendar_today, size: 16, color: newTaskDueDate != null ? AppColors.primary : context.colors.textSecondary),
         if (newTaskDueDate != null) ...[
           const SizedBox(width: 4),
           Text(
@@ -7003,7 +7011,7 @@ InkWell(
           const SizedBox(width: 4),
           GestureDetector(
             onTap: () => setDialogState(() => newTaskDueDate = null),
-            child: const Icon(Icons.close, size: 14, color: AppColors.textSub),
+            child: Icon(Icons.close, size: 14, color: context.colors.textSecondary),
           ),
         ],
       ],
@@ -7039,7 +7047,7 @@ InkWell(
                                   height: 24,
                                   decoration: BoxDecoration(
                                     color: newTaskController.text.trim().isEmpty 
-                                        ? Colors.grey.shade300 
+                                        ? context.colors.borderMedium 
                                         : AppColors.primary,
                                     shape: BoxShape.circle,
                                   ),
@@ -7217,7 +7225,7 @@ await _loadLessonsForWeek(showLoading: false);
                             : null,
                         style: ElevatedButton.styleFrom(
                           backgroundColor: AppColors.primary,
-                          foregroundColor: Colors.white,
+                          foregroundColor: context.colors.textOnPrimary,
                           padding: const EdgeInsets.symmetric(vertical: 14),
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                         ),
@@ -7284,7 +7292,7 @@ await _loadLessonsForWeek(showLoading: false);
           final sortedGroups = groupedStudents.keys.toList()..sort();
           
           return AlertDialog(
-            backgroundColor: Colors.white,
+            backgroundColor: context.colors.cardBg,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             title: const Text('生徒を選択', style: TextStyle(fontSize: 18)),
             content: SizedBox(
@@ -7296,10 +7304,10 @@ await _loadLessonsForWeek(showLoading: false);
                   TextField(
                     decoration: InputDecoration(
                       hintText: '名前で検索...',
-                      prefixIcon: const Icon(Icons.search, size: 20, color: Colors.grey),
+                      prefixIcon: Icon(Icons.search, size: 20, color: context.colors.iconMuted),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(8),
-                        borderSide: BorderSide(color: Colors.grey.shade300),
+                        borderSide: BorderSide(color: context.colors.borderMedium),
                       ),
                       contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                       isDense: true,
@@ -7310,7 +7318,7 @@ await _loadLessonsForWeek(showLoading: false);
                   // 生徒リスト
                   Expanded(
                     child: filteredStudents.isEmpty
-                        ? const Center(child: Text('生徒が見つかりません', style: TextStyle(color: Colors.grey)))
+                        ? Center(child: Text('生徒が見つかりません', style: TextStyle(color: context.colors.textSecondary)))
                         : ListView.builder(
                             itemCount: sortedGroups.length,
                             itemBuilder: (listContext, groupIndex) {
@@ -7323,9 +7331,9 @@ await _loadLessonsForWeek(showLoading: false);
                                   Container(
                                     width: double.infinity,
                                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                    color: Colors.grey.shade100,
+                                    color: context.colors.chipBg,
                                     child: Text(group, style: TextStyle(
-                                      fontSize: 13, fontWeight: FontWeight.bold, color: Colors.grey.shade700,
+                                      fontSize: 13, fontWeight: FontWeight.bold, color: context.colors.textSecondary,
                                     )),
                                   ),
                                   ...studentsInGroup.map((student) {
@@ -7372,7 +7380,7 @@ await _loadLessonsForWeek(showLoading: false);
       builder: (dialogContext) => StatefulBuilder(
         builder: (dialogContext, setDialogState) {
           return AlertDialog(
-            backgroundColor: Colors.white,
+            backgroundColor: context.colors.cardBg,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             title: const Text('講師を選択', style: TextStyle(fontSize: 18)),
             content: SizedBox(
@@ -7397,9 +7405,9 @@ await _loadLessonsForWeek(showLoading: false);
                             }
                           });
                         },
-                        activeColor: Colors.grey.shade500,
+                        activeColor: context.colors.textTertiary,
                         checkColor: Colors.white,
-                        side: BorderSide(color: Colors.grey.shade400),
+                        side: BorderSide(color: context.colors.iconMuted),
                         controlAffinity: ListTileControlAffinity.leading,
                       );
                     }),
@@ -7419,9 +7427,9 @@ await _loadLessonsForWeek(showLoading: false);
                           }
                         });
                       },
-                      activeColor: Colors.grey.shade500,
+                      activeColor: context.colors.textTertiary,
                       checkColor: Colors.white,
-                      side: BorderSide(color: Colors.grey.shade400),
+                      side: BorderSide(color: context.colors.iconMuted),
                       controlAffinity: ListTileControlAffinity.leading,
                     ),
                   ],
@@ -7440,7 +7448,7 @@ await _loadLessonsForWeek(showLoading: false);
                 },
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.primary,
-                  foregroundColor: Colors.white,
+                  foregroundColor: context.colors.textOnPrimary,
                 ),
                 child: const Text('確定'),
               ),
@@ -7457,7 +7465,7 @@ await _loadLessonsForWeek(showLoading: false);
       context: context,
       builder: (dialogContext) {
         return AlertDialog(
-          backgroundColor: Colors.white,
+          backgroundColor: context.colors.cardBg,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           title: const Text('部屋を選択', style: TextStyle(fontSize: 18)),
           content: SizedBox(
@@ -7592,7 +7600,7 @@ await _loadLessonsForWeek(showLoading: false);
           
           // セル位置が指定されている場合はPositionedで配置
           Widget dialogContent = Material(
-                color: Colors.white,
+                color: context.colors.cardBg,
                 borderRadius: BorderRadius.circular(12),
                 elevation: 24,
                 child: Container(
@@ -7616,12 +7624,12 @@ await _loadLessonsForWeek(showLoading: false);
                             _showDeleteConfirmDialog(lesson);
                           },
                           tooltip: '削除',
-                          color: AppColors.textSub,
+                          color: context.colors.textSecondary,
                         ),
                         IconButton(
                           icon: const Icon(Icons.close, size: 20),
                           onPressed: () => Navigator.pop(dialogContext),
-                          color: AppColors.textSub,
+                          color: context.colors.textSecondary,
                         ),
                       ],
                     ),
@@ -7646,14 +7654,14 @@ await _loadLessonsForWeek(showLoading: false);
                               ? TextField(
                                   controller: titleController,
                                   autofocus: true,
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     fontSize: 22,
                                     fontWeight: FontWeight.w400,
-                                    color: Color(0xFF333333),
+                                    color: context.colors.textPrimary,
                                   ),
                                   decoration: InputDecoration(
                                     border: UnderlineInputBorder(
-                                      borderSide: BorderSide(color: Colors.grey.shade300),
+                                      borderSide: BorderSide(color: context.colors.borderMedium),
                                     ),
                                     focusedBorder: const UnderlineInputBorder(
                                       borderSide: BorderSide(color: AppColors.primary, width: 2),
@@ -7681,12 +7689,12 @@ await _loadLessonsForWeek(showLoading: false);
                                             style: TextStyle(
                                               fontSize: 22,
                                               fontWeight: FontWeight.w400,
-                                              color: titleController.text.isEmpty ? AppColors.textSub : const Color(0xFF333333),
+                                              color: titleController.text.isEmpty ? context.colors.textSecondary : context.colors.textPrimary,
                                             ),
                                           ),
                                         ),
                                         const SizedBox(width: 8),
-                                        Icon(Icons.edit, size: 18, color: AppColors.textSub),
+                                        Icon(Icons.edit, size: 18, color: context.colors.textSecondary),
                                       ],
                                     ),
                                   ),
@@ -7744,7 +7752,7 @@ await _loadLessonsForWeek(showLoading: false);
                                 child: const Text('策定会議'),
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: Colors.teal,
-                                  foregroundColor: Colors.white,
+                                  foregroundColor: context.colors.textOnPrimary,
                                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                                 ),
@@ -7785,7 +7793,7 @@ await _loadLessonsForWeek(showLoading: false);
                               child: const Text('AIに相談'),
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: Colors.purple.shade600,
-                                foregroundColor: Colors.white,
+                                foregroundColor: context.colors.textOnPrimary,
                                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                               ),
@@ -7800,11 +7808,11 @@ await _loadLessonsForWeek(showLoading: false);
                     padding: const EdgeInsets.symmetric(horizontal: 20),
                     child: Text(
                       '${DateFormat('M月d日 (E)', 'ja').format(date)}　${_timeSlots[slotIndex]}',
-                      style: const TextStyle(fontSize: 14, color: AppColors.textSub),
+                      style: TextStyle(fontSize: 14, color: context.colors.textSecondary),
                     ),
                   ),
                   const SizedBox(height: 16),
-                  Divider(height: 1, color: Colors.grey.shade200),
+                  Divider(height: 1, color: context.colors.borderLight),
                   // メインコンテンツ
                   Flexible(
                     child: SingleChildScrollView(
@@ -7822,12 +7830,12 @@ await _loadLessonsForWeek(showLoading: false);
                             child: Container(
                               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                               decoration: BoxDecoration(
-                                border: Border.all(color: Colors.grey.shade300),
+                                border: Border.all(color: context.colors.borderMedium),
                                 borderRadius: BorderRadius.circular(8),
                               ),
                               child: Row(
                                 children: [
-                                  const Icon(Icons.person, size: 20, color: AppColors.textSub),
+                                  Icon(Icons.person, size: 20, color: context.colors.textSecondary),
                                   const SizedBox(width: 12),
                                   Expanded(
                                     child: Text(
@@ -7838,19 +7846,19 @@ await _loadLessonsForWeek(showLoading: false);
                                               : selectedTeachers.join('、'),
                                       style: TextStyle(
                                         fontSize: 15,
-                                        color: selectedTeachers.isEmpty ? AppColors.textSub : AppColors.textMain,
+                                        color: selectedTeachers.isEmpty ? context.colors.textSecondary : context.colors.textPrimary,
                                       ),
                                     ),
                                   ),
                                   if (selectedTeachers.isNotEmpty)
                                     GestureDetector(
                                       onTap: () => setDialogState(() => selectedTeachers = []),
-                                      child: const Padding(
+                                      child: Padding(
                                         padding: EdgeInsets.only(right: 4),
-                                        child: Icon(Icons.close, size: 18, color: AppColors.textSub),
+                                        child: Icon(Icons.close, size: 18, color: context.colors.textSecondary),
                                       ),
                                     ),
-                                  const Icon(Icons.arrow_drop_down, color: AppColors.textSub),
+                                  Icon(Icons.arrow_drop_down, color: context.colors.textSecondary),
                                 ],
                               ),
                             ),
@@ -7865,31 +7873,31 @@ await _loadLessonsForWeek(showLoading: false);
                             child: Container(
                               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                               decoration: BoxDecoration(
-                                border: Border.all(color: Colors.grey.shade300),
+                                border: Border.all(color: context.colors.borderMedium),
                                 borderRadius: BorderRadius.circular(8),
                               ),
                               child: Row(
                                 children: [
-                                  const Icon(Icons.meeting_room, size: 20, color: AppColors.textSub),
+                                  Icon(Icons.meeting_room, size: 20, color: context.colors.textSecondary),
                                   const SizedBox(width: 12),
                                   Expanded(
                                     child: Text(
                                       selectedRoom.isEmpty ? '部屋を選択' : selectedRoom,
                                       style: TextStyle(
                                         fontSize: 15,
-                                        color: selectedRoom.isEmpty ? AppColors.textSub : AppColors.textMain,
+                                        color: selectedRoom.isEmpty ? context.colors.textSecondary : context.colors.textPrimary,
                                       ),
                                     ),
                                   ),
                                   if (selectedRoom.isNotEmpty)
                                     GestureDetector(
                                       onTap: () => setDialogState(() => selectedRoom = ''),
-                                      child: const Padding(
+                                      child: Padding(
                                         padding: EdgeInsets.only(right: 4),
-                                        child: Icon(Icons.close, size: 18, color: AppColors.textSub),
+                                        child: Icon(Icons.close, size: 18, color: context.colors.textSecondary),
                                       ),
                                     ),
-                                  const Icon(Icons.arrow_drop_down, color: AppColors.textSub),
+                                  Icon(Icons.arrow_drop_down, color: context.colors.textSecondary),
                                 ],
                               ),
                             ),
@@ -7904,7 +7912,7 @@ await _loadLessonsForWeek(showLoading: false);
                             child: Container(
                               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                               decoration: BoxDecoration(
-                                border: Border.all(color: Colors.grey.shade300),
+                                border: Border.all(color: context.colors.borderMedium),
                                 borderRadius: BorderRadius.circular(8),
                               ),
                               child: Row(
@@ -7918,7 +7926,7 @@ await _loadLessonsForWeek(showLoading: false);
                                   ),
                                   const SizedBox(width: 8),
                                   Expanded(child: Text(selectedCourse, style: const TextStyle(fontSize: 15))),
-                                  const Icon(Icons.arrow_drop_down, color: AppColors.textSub),
+                                  Icon(Icons.arrow_drop_down, color: context.colors.textSecondary),
                                 ],
                               ),
                             ),
@@ -7927,7 +7935,7 @@ await _loadLessonsForWeek(showLoading: false);
                           // === 生徒情報セクション（イベントモードでない場合のみ表示） ===
                           if (!isCustomEvent && studentName.isNotEmpty) ...[
                             const SizedBox(height: 24),
-                            Divider(height: 1, color: Colors.grey.shade200),
+                            Divider(height: 1, color: context.colors.borderLight),
                             const SizedBox(height: 20),
 
                             // タスクセクション
@@ -7966,7 +7974,7 @@ await _loadLessonsForWeek(showLoading: false);
                                             if (task['dueDate'] != null)
                                               Text(
                                                 '期限: ${DateFormat('M/d').format((task['dueDate'] as Timestamp).toDate())}',
-                                                style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                                                style: TextStyle(fontSize: 11, color: context.colors.textSecondary),
                                               ),
                                           ],
                                         ),
@@ -8022,13 +8030,13 @@ InkWell(
   child: Container(
     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
     decoration: BoxDecoration(
-      border: Border.all(color: Colors.grey.shade300),
+      border: Border.all(color: context.colors.borderMedium),
       borderRadius: BorderRadius.circular(8),
     ),
     child: Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(Icons.calendar_today, size: 16, color: newTaskDueDate != null ? AppColors.primary : AppColors.textSub),
+        Icon(Icons.calendar_today, size: 16, color: newTaskDueDate != null ? AppColors.primary : context.colors.textSecondary),
         if (newTaskDueDate != null) ...[
           const SizedBox(width: 4),
           Text(
@@ -8038,7 +8046,7 @@ InkWell(
           const SizedBox(width: 4),
           GestureDetector(
             onTap: () => setDialogState(() => newTaskDueDate = null),
-            child: const Icon(Icons.close, size: 14, color: AppColors.textSub),
+            child: Icon(Icons.close, size: 14, color: context.colors.textSecondary),
           ),
         ],
       ],
@@ -8074,7 +8082,7 @@ InkWell(
                                   height: 24,
                                   decoration: BoxDecoration(
                                     color: newTaskController.text.trim().isEmpty 
-                                        ? Colors.grey.shade300 
+                                        ? context.colors.borderMedium 
                                         : AppColors.primary,
                                     shape: BoxShape.circle,
                                   ),
@@ -8250,7 +8258,7 @@ await _loadLessonsForWeek(showLoading: false);
                           },
                           style: ElevatedButton.styleFrom(
                             backgroundColor: AppColors.primary,
-                            foregroundColor: Colors.white,
+                            foregroundColor: context.colors.textOnPrimary,
                           ),
                           child: const Text('保存'),
                         ),
@@ -8297,7 +8305,7 @@ await _loadLessonsForWeek(showLoading: false);
     builder: (dialogContext) => StatefulBuilder(
       builder: (dialogContext, setDialogState) {
         return AlertDialog(
-          backgroundColor: Colors.white,
+          backgroundColor: context.colors.cardBg,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           title: const Text('内容を選択', style: TextStyle(fontSize: 18)),
           content: SizedBox(
@@ -8322,7 +8330,7 @@ await _loadLessonsForWeek(showLoading: false);
                         decoration: BoxDecoration(
                           color: color,
                           borderRadius: BorderRadius.circular(4),
-                          border: Border.all(color: Colors.grey.shade400),
+                          border: Border.all(color: context.colors.iconMuted),
                         ),
                         child: const Icon(Icons.edit, size: 14, color: Colors.white),
                       ),
@@ -8351,7 +8359,7 @@ void _showColorPickerDialog(String course, Color currentColor, Function(Color) o
   showDialog(
     context: context,
     builder: (dialogContext) => AlertDialog(
-      backgroundColor: Colors.white,
+      backgroundColor: context.colors.cardBg,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       title: Text('$courseの色を選択', style: const TextStyle(fontSize: 16)),
       content: SizedBox(
@@ -8374,7 +8382,7 @@ void _showColorPickerDialog(String course, Color currentColor, Function(Color) o
                   borderRadius: BorderRadius.circular(8),
                   border: isSelected
                       ? Border.all(color: Colors.black, width: 3)
-                      : Border.all(color: Colors.grey.shade300),
+                      : Border.all(color: context.colors.borderMedium),
                 ),
                 child: isSelected
                     ? const Icon(Icons.check, color: Colors.white, size: 20)
@@ -8437,7 +8445,7 @@ void _showColorPickerDialog(String course, Color currentColor, Function(Color) o
           bool isAllSelected = selectedTeachers.contains('全員');
           
           Widget dialogContent = Material(
-            color: Colors.white,
+            color: context.colors.cardBg,
             borderRadius: BorderRadius.circular(12),
             elevation: 24,
             child: Container(
@@ -8543,7 +8551,7 @@ void _showColorPickerDialog(String course, Color currentColor, Function(Color) o
                         },
                         style: ElevatedButton.styleFrom(
                           backgroundColor: AppColors.primary,
-                          foregroundColor: Colors.white,
+                          foregroundColor: context.colors.textOnPrimary,
                         ),
                         child: const Text('保存'),
                       ),
@@ -8614,7 +8622,7 @@ void _showColorPickerDialog(String course, Color currentColor, Function(Color) o
       barrierColor: Colors.black26,
       builder: (dialogContext) {
         Widget dialogContent = Material(
-          color: Colors.white,
+          color: context.colors.cardBg,
           borderRadius: BorderRadius.circular(12),
           elevation: 24,
           child: Container(
@@ -8649,7 +8657,7 @@ void _showColorPickerDialog(String course, Color currentColor, Function(Color) o
                     )),
                     leading: Icon(
                       isSelected ? Icons.check_circle : Icons.circle_outlined,
-                      color: isSelected ? AppColors.primary : Colors.grey,
+                      color: isSelected ? AppColors.primary : context.colors.textSecondary,
                       size: 20,
                     ),
                     dense: true,
@@ -8713,7 +8721,7 @@ void _showColorPickerDialog(String course, Color currentColor, Function(Color) o
     showDialog(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        backgroundColor: Colors.white,
+        backgroundColor: context.colors.cardBg,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         title: const Text('レッスンを削除'),
         content: Text('${lesson['studentName']} のレッスンを削除しますか？'),
@@ -8843,7 +8851,7 @@ await _loadLessonsForWeek(showLoading: false);
     }
     
     return Container(
-      color: Colors.white,
+      color: context.colors.cardBg,
       child: Column(
         children: [
           // 曜日ヘッダー（日曜除く）
@@ -8851,7 +8859,7 @@ await _loadLessonsForWeek(showLoading: false);
             height: 32,
             decoration: BoxDecoration(
               color: AppColors.primary.withValues(alpha: 0.1),
-              border: Border(bottom: BorderSide(color: Colors.grey.shade300)),
+              border: Border(bottom: BorderSide(color: context.colors.borderMedium)),
             ),
             child: Row(
               children: List.generate(6, (index) {
@@ -8863,7 +8871,7 @@ await _loadLessonsForWeek(showLoading: false);
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
                         fontSize: 13,
-                        color: isSaturday ? Colors.blue : AppColors.textMain,
+                        color: isSaturday ? Colors.blue : context.colors.textPrimary,
                       ),
                     ),
                   ),
@@ -8882,10 +8890,10 @@ await _loadLessonsForWeek(showLoading: false);
                         return Expanded(
                           child: Container(
                             decoration: BoxDecoration(
-                              color: Colors.grey.shade100,
+                              color: context.colors.chipBg,
                               border: Border(
-                                right: BorderSide(color: Colors.grey.shade300),
-                                bottom: BorderSide(color: Colors.grey.shade300),
+                                right: BorderSide(color: context.colors.borderMedium),
+                                bottom: BorderSide(color: context.colors.borderMedium),
                               ),
                             ),
                           ),
@@ -8972,10 +8980,14 @@ await _loadLessonsForWeek(showLoading: false);
           final popupContent = Material(
             elevation: 8,
             borderRadius: BorderRadius.circular(12),
-            color: Colors.white,
+            color: context.colors.dialogBg,
             child: Container(
               width: popupWidth,
               constraints: BoxConstraints(maxHeight: screenHeight * 0.6),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: context.colors.borderMedium),
+              ),
               child: SingleChildScrollView(
                 child: Padding(
                   padding: const EdgeInsets.all(16),
@@ -9007,7 +9019,7 @@ await _loadLessonsForWeek(showLoading: false);
                               style: TextStyle(
                                 fontSize: 11,
                                 fontWeight: FontWeight.bold,
-                                color: Colors.grey.shade600,
+                                color: context.colors.textSecondary,
                               ),
                             ),
                             const SizedBox(height: 4),
@@ -9052,7 +9064,7 @@ await _loadLessonsForWeek(showLoading: false);
                                         teacherNames,
                                         style: TextStyle(
                                           fontSize: 11,
-                                          color: Colors.grey.shade600,
+                                          color: context.colors.textSecondary,
                                         ),
                                       ),
                                     ],
@@ -9062,7 +9074,7 @@ await _loadLessonsForWeek(showLoading: false);
                                         room,
                                         style: TextStyle(
                                           fontSize: 11,
-                                          color: Colors.grey.shade500,
+                                          color: context.colors.textTertiary,
                                         ),
                                       ),
                                     ],
@@ -9119,10 +9131,10 @@ await _loadLessonsForWeek(showLoading: false);
         onExit: (_) => _hideCurrentOverlay(),
         child: Container(
           decoration: BoxDecoration(
-            color: isHoliday ? Colors.grey.shade100 : Colors.white,
+            color: isHoliday ? context.colors.chipBg : context.colors.cardBg,
             border: Border(
-              right: BorderSide(color: Colors.grey.shade300),
-              bottom: BorderSide(color: Colors.grey.shade300),
+              right: BorderSide(color: context.colors.borderMedium),
+              bottom: BorderSide(color: context.colors.borderMedium),
             ),
           ),
           child: Column(
@@ -9147,7 +9159,7 @@ await _loadLessonsForWeek(showLoading: false);
                         fontWeight: isToday ? FontWeight.bold : FontWeight.normal,
                         color: isToday 
                             ? Colors.white 
-                            : (isSaturday ? Colors.blue : AppColors.textMain),
+                            : (isSaturday ? Colors.blue : context.colors.textPrimary),
                       ),
                     ),
                   ),
@@ -9176,7 +9188,7 @@ await _loadLessonsForWeek(showLoading: false);
                                     timeLabels[slotIndex],
                                     style: TextStyle(
                                       fontSize: 12,
-                                      color: Colors.grey.shade500,
+                                      color: context.colors.textTertiary,
                                     ),
                                   ),
                                 ),
@@ -9230,7 +9242,7 @@ Expanded(
                                 text: ' $teacherInitials',
                                 style: TextStyle(
                                   fontSize: 11,
-                                  color: Colors.grey.shade500,
+                                  color: context.colors.textTertiary,
                                 ),
                               ),
                           ],
@@ -9271,7 +9283,7 @@ class PlusScheduleScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: context.colors.cardBg,
       body: PlusScheduleContent(
         onBack: () => Navigator.pop(context),
       ),

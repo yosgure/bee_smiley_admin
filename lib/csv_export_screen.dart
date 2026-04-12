@@ -148,10 +148,10 @@ class _StaffCsvExportScreenState extends State<StaffCsvExportScreen> {
 appBar: AppBar(
   title: const Text('スタッフCSVエクスポート'),
   centerTitle: true,
-  backgroundColor: Colors.white,
+  backgroundColor: context.colors.cardBg,
   elevation: 0,
   leading: IconButton(
-    icon: const Icon(Icons.arrow_back, color: Colors.black87),
+    icon: Icon(Icons.arrow_back, color: context.colors.textPrimary),
     onPressed: () {
       if (widget.onBack != null) {
         widget.onBack!();
@@ -161,7 +161,7 @@ appBar: AppBar(
     },
   ),
 ),
-      backgroundColor: const Color(0xFFF2F2F7),
+      backgroundColor: context.colors.scaffoldBgAlt,
       body: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 500),
@@ -173,11 +173,11 @@ appBar: AppBar(
                 Container(
                   padding: const EdgeInsets.all(24),
                   decoration: BoxDecoration(
-                    color: Colors.white,
+                    color: context.colors.cardBg,
                     borderRadius: BorderRadius.circular(16),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withOpacity(0.05),
+                        color: context.colors.shadow,
                         blurRadius: 10,
                       ),
                     ],
@@ -194,13 +194,13 @@ appBar: AppBar(
                       Text(
                         '登録されている $_totalCount 件のスタッフ情報を\nCSVファイルとしてダウンロードします',
                         textAlign: TextAlign.center,
-                        style: TextStyle(color: Colors.grey.shade600),
+                        style: TextStyle(color: context.colors.textSecondary),
                       ),
                       const SizedBox(height: 24),
-                      const Text(
+                      Text(
                         '出力項目: ログインID、名前、フリガナ、\nメールアドレス、役職、担当教室、権限、登録日',
                         textAlign: TextAlign.center,
-                        style: TextStyle(fontSize: 12, color: Colors.grey),
+                        style: TextStyle(fontSize: 12, color: context.colors.textSecondary),
                       ),
                       const SizedBox(height: 24),
                       SizedBox(
@@ -420,10 +420,10 @@ class _FamilyCsvExportScreenState extends State<FamilyCsvExportScreen> {
 appBar: AppBar(
   title: const Text('保護者・児童CSVエクスポート'),
   centerTitle: true,
-  backgroundColor: Colors.white,
+  backgroundColor: context.colors.cardBg,
   elevation: 0,
   leading: IconButton(
-    icon: const Icon(Icons.arrow_back, color: Colors.black87),
+    icon: Icon(Icons.arrow_back, color: context.colors.textPrimary),
     onPressed: () {
       if (widget.onBack != null) {
         widget.onBack!();
@@ -433,7 +433,7 @@ appBar: AppBar(
     },
   ),
 ),
-      backgroundColor: const Color(0xFFF2F2F7),
+      backgroundColor: context.colors.scaffoldBgAlt,
       body: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 500),
@@ -445,11 +445,11 @@ appBar: AppBar(
                 Container(
                   padding: const EdgeInsets.all(24),
                   decoration: BoxDecoration(
-                    color: Colors.white,
+                    color: context.colors.cardBg,
                     borderRadius: BorderRadius.circular(16),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withOpacity(0.05),
+                        color: context.colors.shadow,
                         blurRadius: 10,
                       ),
                     ],
@@ -466,13 +466,13 @@ appBar: AppBar(
                       Text(
                         '$_familyCount 世帯・$_childCount 名の児童情報を\nCSVファイルとしてダウンロードします',
                         textAlign: TextAlign.center,
-                        style: TextStyle(color: Colors.grey.shade600),
+                        style: TextStyle(color: context.colors.textSecondary),
                       ),
                       const SizedBox(height: 24),
-                      const Text(
+                      Text(
                         '出力項目: ログインID、保護者情報、続柄、連絡先、\n住所、緊急連絡先、アカウント状態、\n児童名、カナ、性別、生年月日、教室、コース、特記事項',
                         textAlign: TextAlign.center,
-                        style: TextStyle(fontSize: 12, color: Colors.grey),
+                        style: TextStyle(fontSize: 12, color: context.colors.textSecondary),
                       ),
                       const SizedBox(height: 24),
                       SizedBox(
@@ -595,10 +595,10 @@ class _ToolCsvExportScreenState extends State<ToolCsvExportScreen> {
 appBar: AppBar(
   title: const Text('教具CSVエクスポート'),
   centerTitle: true,
-  backgroundColor: Colors.white,
+  backgroundColor: context.colors.cardBg,
   elevation: 0,
   leading: IconButton(
-    icon: const Icon(Icons.arrow_back, color: Colors.black87),
+    icon: Icon(Icons.arrow_back, color: context.colors.textPrimary),
     onPressed: () {
       if (widget.onBack != null) {
         widget.onBack!();
@@ -608,7 +608,7 @@ appBar: AppBar(
     },
   ),
 ),
-      backgroundColor: const Color(0xFFF2F2F7),
+      backgroundColor: context.colors.scaffoldBgAlt,
       body: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 500),
@@ -620,11 +620,11 @@ appBar: AppBar(
                 Container(
                   padding: const EdgeInsets.all(24),
                   decoration: BoxDecoration(
-                    color: Colors.white,
+                    color: context.colors.cardBg,
                     borderRadius: BorderRadius.circular(16),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withOpacity(0.05),
+                        color: context.colors.shadow,
                         blurRadius: 10,
                       ),
                     ],
@@ -641,13 +641,13 @@ appBar: AppBar(
                       Text(
                         '登録されている $_totalCount 件の教具情報を\nCSVファイルとしてダウンロードします',
                         textAlign: TextAlign.center,
-                        style: TextStyle(color: Colors.grey.shade600),
+                        style: TextStyle(color: context.colors.textSecondary),
                       ),
                       const SizedBox(height: 24),
-                      const Text(
+                      Text(
                         '出力項目: 教具名、カテゴリ、説明、対象年齢',
                         textAlign: TextAlign.center,
-                        style: TextStyle(fontSize: 12, color: Colors.grey),
+                        style: TextStyle(fontSize: 12, color: context.colors.textSecondary),
                       ),
                       const SizedBox(height: 24),
                       SizedBox(

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'app_theme.dart';
 
 /// スケルトンローディング用のシマーエフェクト付きウィジェット
 class SkeletonLoading extends StatefulWidget {
@@ -54,9 +55,9 @@ class _SkeletonLoadingState extends State<SkeletonLoading>
               begin: Alignment.centerLeft,
               end: Alignment.centerRight,
               colors: [
-                Colors.grey.shade200,
-                Colors.grey.shade100,
-                Colors.grey.shade200,
+                context.colors.skeletonBase,
+                context.colors.skeletonHighlight,
+                context.colors.skeletonBase,
               ],
               stops: [
                 (_animation.value - 0.3).clamp(0.0, 1.0),
@@ -147,9 +148,9 @@ class NotificationListSkeleton extends StatelessWidget {
           child: Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: context.colors.cardBg,
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.grey.shade200),
+              border: Border.all(color: context.colors.borderLight),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,

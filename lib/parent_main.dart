@@ -220,7 +220,7 @@ class _ParentMainScreenState extends State<ParentMainScreen> {
   Widget build(BuildContext context) {
     if (_isLoading) {
       return Scaffold(
-        backgroundColor: Colors.white,
+        backgroundColor: context.colors.scaffoldBg,
         body: Center(
           child: Image.asset(
             'assets/logo_beesmiley.png',
@@ -281,7 +281,7 @@ class _ParentMainScreenState extends State<ParentMainScreen> {
             });
           },
           selectedItemColor: AppColors.primary,
-          unselectedItemColor: Colors.grey,
+          unselectedItemColor: context.colors.textSecondary,
           selectedFontSize: 12,
           unselectedFontSize: 12,
           items: [

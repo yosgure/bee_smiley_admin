@@ -363,7 +363,7 @@ class _AssessmentEditScreenState extends State<AssessmentEditScreen> {
     final isAlreadyPublished = widget.initialData?['isPublished'] == true;
     
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: context.colors.cardBg,
       appBar: AppBar(
         title: Text(widget.type == 'weekly' ? '週次アセスメント編集' : '月次サマリ編集'),
         leading: IconButton(
@@ -420,7 +420,7 @@ class _AssessmentEditScreenState extends State<AssessmentEditScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('対象児童: ${widget.studentName}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppColors.textMain)),
+                      Text('対象児童: ${widget.studentName}', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: context.colors.textPrimary)),
                       const SizedBox(height: 16),
                       
                       _buildDateSelector(),
@@ -458,13 +458,13 @@ class _AssessmentEditScreenState extends State<AssessmentEditScreen> {
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: AppColors.inputFill,
+          color: context.colors.inputFill,
           borderRadius: AppStyles.radius,
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(isWeekly ? '対象日' : '対象月', style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.textSub, fontSize: 12)),
+            Text(isWeekly ? '対象日' : '対象月', style: TextStyle(fontWeight: FontWeight.bold, color: context.colors.textSecondary, fontSize: 12)),
             const SizedBox(height: 8),
             Row(
               children: [
@@ -477,7 +477,7 @@ class _AssessmentEditScreenState extends State<AssessmentEditScreen> {
                   style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                 ),
                 const Spacer(),
-                const Icon(Icons.arrow_drop_down, color: Colors.grey),
+                Icon(Icons.arrow_drop_down, color: context.colors.textSecondary),
               ],
             ),
           ],
@@ -499,9 +499,9 @@ class _AssessmentEditScreenState extends State<AssessmentEditScreen> {
               margin: const EdgeInsets.only(bottom: 16),
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: context.colors.cardBg,
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.grey.shade200),
+                border: Border.all(color: context.colors.borderLight),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -509,10 +509,10 @@ class _AssessmentEditScreenState extends State<AssessmentEditScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text('教具 ${index + 1}', style: const TextStyle(color: AppColors.textSub, fontSize: 12)),
+                      Text('教具 ${index + 1}', style: TextStyle(color: context.colors.textSecondary, fontSize: 12)),
                       if (_weeklyEntries.length > 1)
                         IconButton(
-                          icon: const Icon(Icons.close, color: Colors.grey, size: 20),
+                          icon: Icon(Icons.close, color: context.colors.textSecondary, size: 20),
                           onPressed: () => _removeWeeklyEntry(index),
                           padding: EdgeInsets.zero,
                           constraints: const BoxConstraints(),
@@ -527,7 +527,7 @@ class _AssessmentEditScreenState extends State<AssessmentEditScreen> {
                       width: double.infinity,
                       padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
                       decoration: BoxDecoration(
-                        color: AppColors.inputFill,
+                        color: context.colors.inputFill,
                         borderRadius: AppStyles.radiusSmall,
                       ),
                       child: Row(
@@ -536,12 +536,12 @@ class _AssessmentEditScreenState extends State<AssessmentEditScreen> {
                           Text(
                             entry['tool'] ?? '教具を選択',
                             style: TextStyle(
-                              color: entry['tool'] == null ? Colors.grey : AppColors.textMain,
+                              color: entry['tool'] == null ? context.colors.textSecondary : context.colors.textPrimary,
                               fontSize: 16,
                               fontWeight: entry['tool'] != null ? FontWeight.bold : FontWeight.normal,
                             ),
                           ),
-                          const Icon(Icons.arrow_drop_down, color: Colors.grey),
+                          Icon(Icons.arrow_drop_down, color: context.colors.textSecondary),
                         ],
                       ),
                     ),
@@ -550,7 +550,7 @@ class _AssessmentEditScreenState extends State<AssessmentEditScreen> {
                   
                   Row(
                     children: [
-                      const Text('評価', style: TextStyle(fontSize: 12, color: AppColors.textSub, fontWeight: FontWeight.bold)),
+                      Text('評価', style: TextStyle(fontSize: 12, color: context.colors.textSecondary, fontWeight: FontWeight.bold)),
                       const SizedBox(width: 12),
                       _buildCircleRating(index, '△', Colors.blue),
                       const SizedBox(width: 8),
@@ -579,7 +579,7 @@ class _AssessmentEditScreenState extends State<AssessmentEditScreen> {
                         child: Container(
                           width: 80, height: 80,
                           decoration: BoxDecoration(
-                            color: AppColors.inputFill,
+                            color: context.colors.inputFill,
                             borderRadius: BorderRadius.circular(8),
                           ),
                           clipBehavior: Clip.antiAlias,
@@ -589,11 +589,11 @@ class _AssessmentEditScreenState extends State<AssessmentEditScreen> {
                                   : Image.file(File(entry['localPhoto'].path), fit: BoxFit.cover))
                               : (entry['photoUrl'] != null
                                   ? Image.network(entry['photoUrl'], fit: BoxFit.cover)
-                                  : const Center(child: Icon(Icons.add_a_photo, color: Colors.grey))),
+                                  : Center(child: Icon(Icons.add_a_photo, color: context.colors.textSecondary))),
                         ),
                       ),
                       const SizedBox(width: 12),
-                      const Text('写真を添付', style: TextStyle(fontSize: 14, color: AppColors.textSub)),
+                      Text('写真を添付', style: TextStyle(fontSize: 14, color: context.colors.textSecondary)),
                     ],
                   ),
                 ],
@@ -624,14 +624,14 @@ class _AssessmentEditScreenState extends State<AssessmentEditScreen> {
         width: 36, height: 36,
         alignment: Alignment.center,
         decoration: BoxDecoration(
-          color: isSelected ? color : Colors.white,
+          color: isSelected ? color : context.colors.cardBg,
           shape: BoxShape.circle,
-          border: Border.all(color: isSelected ? color : Colors.grey.shade400),
+          border: Border.all(color: isSelected ? color : context.colors.iconMuted),
         ),
         child: Text(
           label,
           style: TextStyle(
-            color: isSelected ? Colors.white : Colors.grey.shade600,
+            color: isSelected ? Colors.white : context.colors.textSecondary,
             fontWeight: FontWeight.bold,
             fontSize: 16,
           ),
@@ -644,9 +644,9 @@ class _AssessmentEditScreenState extends State<AssessmentEditScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Padding(
+        Padding(
           padding: EdgeInsets.only(left: 4, bottom: 8),
-          child: Text('非認知能力・伸びている力', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.textSub)),
+          child: Text('非認知能力・伸びている力', style: TextStyle(fontWeight: FontWeight.bold, color: context.colors.textSecondary)),
         ),
         
         ListView.builder(
@@ -662,9 +662,9 @@ class _AssessmentEditScreenState extends State<AssessmentEditScreen> {
               margin: const EdgeInsets.only(bottom: 12),
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: context.colors.cardBg,
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.grey.shade200),
+                border: Border.all(color: context.colors.borderLight),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -672,10 +672,10 @@ class _AssessmentEditScreenState extends State<AssessmentEditScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text('項目 ${index + 1}', style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.textSub, fontSize: 12)),
+                      Text('項目 ${index + 1}', style: TextStyle(fontWeight: FontWeight.bold, color: context.colors.textSecondary, fontSize: 12)),
                       if (_monthlyEntries.length > 1)
                         IconButton(
-                          icon: const Icon(Icons.close, size: 18, color: Colors.grey),
+                          icon: Icon(Icons.close, size: 18, color: context.colors.textSecondary),
                           onPressed: () => _removeMonthlyEntry(index),
                           padding: EdgeInsets.zero,
                           constraints: const BoxConstraints(),
@@ -704,7 +704,7 @@ class _AssessmentEditScreenState extends State<AssessmentEditScreen> {
                     decoration: InputDecoration(
                       labelText: '伸びている力',
                       filled: selectedCategory == null,
-                      fillColor: selectedCategory == null ? Colors.grey.shade100 : AppColors.inputFill,
+                      fillColor: selectedCategory == null ? context.colors.chipBg : context.colors.inputFill,
                     ),
                     isExpanded: true,
                     items: skillOptions.map((skill) => DropdownMenuItem(value: skill, child: Text(skill))).toList(),
@@ -727,9 +727,9 @@ class _AssessmentEditScreenState extends State<AssessmentEditScreen> {
         ),
         const SizedBox(height: 24),
 
-        const Padding(
+        Padding(
           padding: EdgeInsets.only(left: 4, bottom: 8),
-          child: Text('月間総評', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.textSub)),
+          child: Text('月間総評', style: TextStyle(fontWeight: FontWeight.bold, color: context.colors.textSecondary)),
         ),
         TextField(
           controller: _monthlySummaryController,
@@ -829,7 +829,7 @@ class _ToolSelectDialogState extends State<_ToolSelectDialog> {
                 ],
               ),
             ),
-            const Divider(height: 1, color: Colors.grey),
+            Divider(height: 1, color: context.colors.textSecondary),
             Expanded(
               child: ListView.builder(
                 itemCount: _filteredTools.length,
@@ -849,8 +849,8 @@ class _ToolSelectDialogState extends State<_ToolSelectDialog> {
                         Container(
                           width: double.infinity,
                           padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-                          color: AppColors.inputFill,
-                          child: Text(header, style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey.shade700)),
+                          color: context.colors.inputFill,
+                          child: Text(header, style: TextStyle(fontWeight: FontWeight.bold, color: context.colors.textSecondary)),
                         ),
                       ListTile(
                         title: Text(tool['name']!),

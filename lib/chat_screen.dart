@@ -187,7 +187,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
           const VerticalDivider(width: 1, thickness: 1),
           Expanded(
             child: _selectedRoomId == null
-                ? const Center(child: Text('チャットを選択してください', style: TextStyle(color: Colors.grey)))
+                ? Center(child: Text('チャットを選択してください', style: TextStyle(color: context.colors.textSecondary)))
                 : _buildChatDetailWrapper(),
           ),
         ],
@@ -211,15 +211,15 @@ class _ChatListScreenState extends State<ChatListScreen> {
       height: 40,
       padding: const EdgeInsets.symmetric(horizontal: 8),
       decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border(bottom: BorderSide(color: Colors.grey.shade300, width: 1)),
+        color: context.colors.cardBg,
+        border: Border(bottom: BorderSide(color: context.colors.borderMedium, width: 1)),
       ),
       child: Stack(
         alignment: Alignment.center,
         children: [
-          Center(child: Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.normal), overflow: TextOverflow.ellipsis)),
+          Center(child: Text(title, style: TextStyle(fontSize: 18, fontWeight: FontWeight.normal), overflow: TextOverflow.ellipsis)),
           if (showBackButton)
-            Positioned(left: 0, child: IconButton(icon: const Icon(Icons.arrow_back_ios, color: Colors.black54), onPressed: () => Navigator.pop(context))),
+            Positioned(left: 0, child: IconButton(icon: Icon(Icons.arrow_back_ios, color: context.colors.textSecondary), onPressed: () => Navigator.pop(context))),
           Positioned(
             right: 0,
             child: Row(
@@ -298,7 +298,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
 
   Widget _buildChatMenu(String roomId, bool isGroup, Map<String, dynamic> memberNames, bool isWide) {
     return PopupMenuButton<String>(
-      icon: const Icon(Icons.more_vert, color: Colors.grey),
+      icon: Icon(Icons.more_vert, color: context.colors.textSecondary),
       onSelected: (value) {
         if (value == 'delete') _deleteChat(roomId, isWide);
         if (value == 'members') _showMemberList(memberNames);
@@ -555,7 +555,7 @@ class _RoomListTileState extends State<_RoomListTile> {
         mainAxisAlignment: MainAxisAlignment.center,
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
-          Text(timeStr, style: const TextStyle(fontSize: 11, color: Colors.grey)),
+          Text(timeStr, style: TextStyle(fontSize: 11, color: context.colors.textSecondary)),
         ],
       );
     }
@@ -574,7 +574,7 @@ class _RoomListTileState extends State<_RoomListTile> {
           mainAxisAlignment: MainAxisAlignment.center,
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
-            Text(timeStr, style: const TextStyle(fontSize: 11, color: Colors.grey)),
+            Text(timeStr, style: TextStyle(fontSize: 11, color: context.colors.textSecondary)),
             if (unreadCount > 0)
               Container(
                 margin: const EdgeInsets.only(top: 4), width: 20, height: 20,
@@ -609,8 +609,8 @@ class _RoomListTileState extends State<_RoomListTile> {
           backgroundImage: photoUrl != null && photoUrl.isNotEmpty ? NetworkImage(photoUrl) : null,
           child: (photoUrl == null || photoUrl.isEmpty) ? Text(groupName.isNotEmpty ? groupName[0] : 'G', style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold)) : null,
         ),
-        title: Text(groupName, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontWeight: widget.isSelected ? FontWeight.bold : FontWeight.normal, color: widget.isSelected ? AppColors.primary : AppColors.textMain)),
-        subtitle: Text(room['lastMessage'] ?? '', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12, color: Colors.grey)),
+        title: Text(groupName, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontWeight: widget.isSelected ? FontWeight.bold : FontWeight.normal, color: widget.isSelected ? AppColors.primary : context.colors.textPrimary)),
+        subtitle: Text(room['lastMessage'] ?? '', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12, color: context.colors.textSecondary)),
         trailing: _buildTrailing(roomId, timeStr),
         onTap: () => widget.onTap(roomId, groupName, true, memberNames),
       );
@@ -637,9 +637,9 @@ class _RoomListTileState extends State<_RoomListTile> {
           // フェッチ完了まではスケルトン表示（names mapの古いデータでチラつくのを防止）
           return ListTile(
             contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            leading: CircleAvatar(backgroundColor: Colors.grey.shade200),
-            title: Container(height: 14, width: 80, decoration: BoxDecoration(color: Colors.grey.shade200, borderRadius: BorderRadius.circular(4))),
-            subtitle: Container(height: 10, width: 120, margin: const EdgeInsets.only(top: 4), decoration: BoxDecoration(color: Colors.grey.shade100, borderRadius: BorderRadius.circular(4))),
+            leading: CircleAvatar(backgroundColor: context.colors.borderLight),
+            title: Container(height: 14, width: 80, decoration: BoxDecoration(color: context.colors.borderLight, borderRadius: BorderRadius.circular(4))),
+            subtitle: Container(height: 10, width: 120, margin: const EdgeInsets.only(top: 4), decoration: BoxDecoration(color: context.colors.chipBg, borderRadius: BorderRadius.circular(4))),
             trailing: _buildTrailing(roomId, timeStr),
           );
         }
@@ -655,8 +655,8 @@ class _RoomListTileState extends State<_RoomListTile> {
             backgroundImage: photoUrl != null && photoUrl.isNotEmpty ? NetworkImage(photoUrl) : null,
             child: (photoUrl == null || photoUrl.isEmpty) ? Text(name.isNotEmpty ? name[0] : '?', style: TextStyle(color: isStaff ? AppColors.primary : AppColors.accent, fontWeight: FontWeight.bold)) : null,
           ),
-          title: Text(name, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontWeight: widget.isSelected ? FontWeight.bold : FontWeight.normal, color: widget.isSelected ? AppColors.primary : AppColors.textMain)),
-          subtitle: Text(room['lastMessage'] ?? '', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12, color: Colors.grey)),
+          title: Text(name, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontWeight: widget.isSelected ? FontWeight.bold : FontWeight.normal, color: widget.isSelected ? AppColors.primary : context.colors.textPrimary)),
+          subtitle: Text(room['lastMessage'] ?? '', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12, color: context.colors.textSecondary)),
           trailing: _buildTrailing(roomId, timeStr),
           onTap: () => widget.onTap(roomId, name, false, memberNames),
         );
@@ -776,14 +776,14 @@ class _NewChatDialogState extends State<NewChatDialog> with SingleTickerProvider
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Container(width: double.infinity, padding: const EdgeInsets.fromLTRB(16, 12, 16, 8), color: Colors.white, child: Text(header, style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary, fontSize: 14))),
-            const Divider(height: 1, thickness: 1, color: Color(0xFFF2F2F7)),
+            Container(width: double.infinity, padding: const EdgeInsets.fromLTRB(16, 12, 16, 8), color: context.colors.cardBg, child: Text(header, style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary, fontSize: 14))),
+            Divider(height: 1, thickness: 1, color: context.colors.scaffoldBgAlt),
             ...groupUsers.map((user) {
               final uid = user['uid']; final isSelected = _selectedUids.contains(uid); final photoUrl = user['photoUrl']; final name = user['name'];
               return ListTile(
                 contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
                 leading: CircleAvatar(backgroundColor: isStaffTab ? AppColors.primary.withOpacity(0.15) : AppColors.accent.shade100, backgroundImage: photoUrl != null && photoUrl.isNotEmpty ? NetworkImage(photoUrl) : null, child: (photoUrl == null || photoUrl.isEmpty) ? Text(name.isNotEmpty ? name[0] : '?', style: TextStyle(color: isStaffTab ? AppColors.primary : AppColors.accent, fontWeight: FontWeight.bold)) : null),
-                title: Text(name, style: const TextStyle(fontSize: 16)),
+                title: Text(name, style: TextStyle(fontSize: 16)),
                 trailing: isStaffTab && _isGroupMode ? Checkbox(value: isSelected, activeColor: AppColors.primary, onChanged: (val) => _toggleSelection(uid)) : null,
                 onTap: () { if (isStaffTab && _isGroupMode) _toggleSelection(uid); else if (isStaffTab) _startSingleChat(uid, user['name']); else _startFamilyChat(user); },
               );
@@ -858,7 +858,7 @@ class _NewChatDialogState extends State<NewChatDialog> with SingleTickerProvider
     final dialogWidth = screenWidth < 600 ? screenWidth * 0.95 : 500.0;
     final dialogHeight = screenHeight < 700 ? screenHeight * 0.85 : 650.0;
     return AlertDialog(
-      contentPadding: EdgeInsets.zero, backgroundColor: Colors.white, surfaceTintColor: Colors.white,
+      contentPadding: EdgeInsets.zero, backgroundColor: context.colors.cardBg, surfaceTintColor: Colors.transparent,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       content: SizedBox(
         width: dialogWidth, height: dialogHeight,
@@ -884,7 +884,7 @@ class _NewChatDialogState extends State<NewChatDialog> with SingleTickerProvider
                             if (_isGroupMode) ...[
                               const SizedBox(height: 16),
                               Row(children: [
-                                GestureDetector(onTap: _pickGroupImage, child: CircleAvatar(radius: 24, backgroundColor: Colors.grey.shade200, backgroundImage: _groupImageBytes != null ? MemoryImage(_groupImageBytes!) : null, child: _groupImageBytes == null ? const Icon(Icons.camera_alt, color: Colors.grey) : null)),
+                                GestureDetector(onTap: _pickGroupImage, child: CircleAvatar(radius: 24, backgroundColor: context.colors.borderLight, backgroundImage: _groupImageBytes != null ? MemoryImage(_groupImageBytes!) : null, child: _groupImageBytes == null ? Icon(Icons.camera_alt, color: context.colors.textSecondary) : null)),
                                 const SizedBox(width: 16),
                                 Expanded(child: TextField(controller: _groupNameController, decoration: const InputDecoration(labelText: 'グループ名（任意）', border: OutlineInputBorder(), isDense: true))),
                               ]),
@@ -1001,11 +1001,11 @@ class _ChatDetailViewState extends State<ChatDetailView> {
           if (widget.showAppBar) ...[
             Container(
               height: 40, padding: const EdgeInsets.symmetric(horizontal: 16),
-              decoration: BoxDecoration(color: Colors.white, border: Border(bottom: BorderSide(color: Colors.grey.shade300, width: 1))),
+              decoration: BoxDecoration(color: context.colors.cardBg, border: Border(bottom: BorderSide(color: context.colors.borderMedium, width: 1))),
               child: Row(children: [
-                Expanded(child: Text(widget.roomName, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis)),
+                Expanded(child: Text(widget.roomName, style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis)),
                 PopupMenuButton<String>(
-                  icon: const Icon(Icons.more_vert, color: Colors.grey),
+                  icon: Icon(Icons.more_vert, color: context.colors.textSecondary),
                   onSelected: (value) { if (value == 'delete') _deleteChat(); if (value == 'members') _showMembers(); },
                   itemBuilder: (context) => [if (widget.isGroup) const PopupMenuItem(value: 'members', child: Text('メンバー一覧')), const PopupMenuItem(value: 'delete', child: Text('チャットを削除', style: TextStyle(color: Colors.red)))],
                 ),
@@ -1014,7 +1014,7 @@ class _ChatDetailViewState extends State<ChatDetailView> {
           ],
           Expanded(
             child: Container(
-              color: Colors.white,
+              color: context.colors.cardBg,
               child: StreamBuilder<QuerySnapshot>(
                 stream: FirebaseFirestore.instance.collection('chat_rooms').doc(widget.roomId).collection('messages').orderBy('createdAt', descending: false).snapshots(),
                 builder: (context, snapshot) {
@@ -1050,8 +1050,8 @@ class _ChatDetailViewState extends State<ChatDetailView> {
                           dateSeparator = Center(child: Container(
                             margin: const EdgeInsets.symmetric(vertical: 16),
                             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                            decoration: BoxDecoration(color: Colors.grey.shade200, borderRadius: BorderRadius.circular(12)),
-                            child: Text(dateStr, style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                            decoration: BoxDecoration(color: context.colors.borderLight, borderRadius: BorderRadius.circular(12)),
+                            child: Text(dateStr, style: TextStyle(fontSize: 12, color: context.colors.textSecondary)),
                           ));
                         }
                       }
@@ -1088,7 +1088,7 @@ class _ChatDetailViewState extends State<ChatDetailView> {
 
     if (isWide) {
       return Container(
-        color: Colors.white,
+        color: context.colors.cardBg,
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -1098,7 +1098,7 @@ class _ChatDetailViewState extends State<ChatDetailView> {
             // 入力エリア全体を角丸コンテナで囲む
             Container(
               decoration: BoxDecoration(
-                color: Colors.grey.shade100,
+                color: context.colors.chipBg,
                 borderRadius: BorderRadius.circular(16),
               ),
               child: Column(
@@ -1115,13 +1115,13 @@ class _ChatDetailViewState extends State<ChatDetailView> {
                         child: TextField(
                           controller: _textController, focusNode: _focusNode,
                           maxLines: null, minLines: 3, keyboardType: TextInputType.multiline,
-                          style: const TextStyle(fontSize: 15, height: 1.5, fontFamily: 'NotoSansJP', fontFamilyFallback: ['Hiragino Sans', 'Roboto', 'sans-serif']),
+                          style: TextStyle(fontSize: 15, height: 1.5, fontFamily: 'NotoSansJP', fontFamilyFallback: ['Hiragino Sans', 'Roboto', 'sans-serif']),
                           decoration: InputDecoration(
                             hintText: 'メッセージを入力してください。(Enterで送信 / Shift + Enterで改行)',
-                            hintStyle: TextStyle(fontSize: 14, color: Colors.grey.shade400),
+                            hintStyle: TextStyle(fontSize: 14, color: context.colors.iconMuted),
                             border: InputBorder.none,
                             filled: true,
-                            fillColor: Colors.grey.shade100,
+                            fillColor: context.colors.chipBg,
                             hoverColor: Colors.transparent,
                             contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                             isDense: true,
@@ -1135,19 +1135,19 @@ class _ChatDetailViewState extends State<ChatDetailView> {
                     child: Row(
                       children: [
                         IconButton(
-                          icon: Icon(Icons.attach_file, color: _isUploading ? Colors.grey.shade300 : Colors.grey.shade600, size: 22),
+                          icon: Icon(Icons.attach_file, color: _isUploading ? context.colors.borderMedium : context.colors.textSecondary, size: 22),
                           constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
                           tooltip: 'ファイルを添付',
                           onPressed: _isUploading ? null : _pickAndUploadFile,
                         ),
                         IconButton(
-                          icon: Icon(Icons.image_outlined, color: _isUploading ? Colors.grey.shade300 : Colors.grey.shade600, size: 22),
+                          icon: Icon(Icons.image_outlined, color: _isUploading ? context.colors.borderMedium : context.colors.textSecondary, size: 22),
                           constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
                           tooltip: '画像を送信',
                           onPressed: _isUploading ? null : _pickAndUploadImage,
                         ),
                         IconButton(
-                          icon: Icon(Icons.videocam_outlined, color: _isUploading ? Colors.grey.shade300 : Colors.grey.shade600, size: 22),
+                          icon: Icon(Icons.videocam_outlined, color: _isUploading ? context.colors.borderMedium : context.colors.textSecondary, size: 22),
                           constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
                           tooltip: '動画を送信',
                           onPressed: _isUploading ? null : _pickAndUploadVideo,
@@ -1175,7 +1175,7 @@ class _ChatDetailViewState extends State<ChatDetailView> {
     }
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8), color: Colors.white,
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8), color: context.colors.cardBg,
       child: SafeArea(
         top: false,
         child: Column(
@@ -1196,23 +1196,23 @@ class _ChatDetailViewState extends State<ChatDetailView> {
                   onTap: () => setState(() => _iconsExpanded = true),
                   child: Container(
                     width: 28, height: 28, margin: const EdgeInsets.only(right: 4),
-                    decoration: BoxDecoration(color: Colors.grey.shade200, shape: BoxShape.circle),
-                    child: const Icon(Icons.add, color: Colors.grey, size: 18),
+                    decoration: BoxDecoration(color: context.colors.borderLight, shape: BoxShape.circle),
+                    child: Icon(Icons.add, color: context.colors.textSecondary, size: 18),
                   ),
                 ),
               )
             else ...[
               Padding(
                 padding: const EdgeInsets.only(bottom: 4),
-                child: IconButton(icon: const Icon(Icons.attach_file, color: Colors.grey, size: 20), constraints: const BoxConstraints(minWidth: 28, minHeight: 28), padding: EdgeInsets.zero, onPressed: _isUploading ? null : _pickAndUploadFile),
+                child: IconButton(icon: Icon(Icons.attach_file, color: context.colors.textSecondary, size: 20), constraints: const BoxConstraints(minWidth: 28, minHeight: 28), padding: EdgeInsets.zero, onPressed: _isUploading ? null : _pickAndUploadFile),
               ),
               Padding(
                 padding: const EdgeInsets.only(bottom: 4),
-                child: IconButton(icon: const Icon(Icons.image, color: Colors.grey, size: 20), constraints: const BoxConstraints(minWidth: 28, minHeight: 28), padding: EdgeInsets.zero, onPressed: _isUploading ? null : _pickAndUploadImage),
+                child: IconButton(icon: Icon(Icons.image, color: context.colors.textSecondary, size: 20), constraints: const BoxConstraints(minWidth: 28, minHeight: 28), padding: EdgeInsets.zero, onPressed: _isUploading ? null : _pickAndUploadImage),
               ),
               Padding(
                 padding: const EdgeInsets.only(bottom: 4),
-                child: IconButton(icon: const Icon(Icons.videocam, color: Colors.grey, size: 20), constraints: const BoxConstraints(minWidth: 28, minHeight: 28), padding: EdgeInsets.zero, onPressed: _isUploading ? null : _pickAndUploadVideo),
+                child: IconButton(icon: Icon(Icons.videocam, color: context.colors.textSecondary, size: 20), constraints: const BoxConstraints(minWidth: 28, minHeight: 28), padding: EdgeInsets.zero, onPressed: _isUploading ? null : _pickAndUploadVideo),
               ),
             ],
             const SizedBox(width: 4),
@@ -1225,8 +1225,8 @@ class _ChatDetailViewState extends State<ChatDetailView> {
                 },
                 child: TextField(
                   controller: _textController, focusNode: _focusNode, maxLines: null, minLines: 1, keyboardType: TextInputType.multiline,
-                  style: const TextStyle(fontSize: 15, height: 1.5, fontFamily: 'NotoSansJP', fontFamilyFallback: ['Hiragino Sans', 'Roboto', 'sans-serif']),
-                  decoration: InputDecoration(hintText: 'メッセージを入力', filled: true, fillColor: Colors.grey.shade100, border: OutlineInputBorder(borderRadius: BorderRadius.circular(24), borderSide: BorderSide.none), contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10)),
+                  style: TextStyle(fontSize: 15, height: 1.5, fontFamily: 'NotoSansJP', fontFamilyFallback: ['Hiragino Sans', 'Roboto', 'sans-serif']),
+                  decoration: InputDecoration(hintText: 'メッセージを入力', filled: true, fillColor: context.colors.chipBg, border: OutlineInputBorder(borderRadius: BorderRadius.circular(24), borderSide: BorderSide.none), contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10)),
                 ),
               ),
             ),
@@ -1279,7 +1279,7 @@ class _ChatDetailViewState extends State<ChatDetailView> {
                   preview,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 12, color: Colors.black54),
+                  style: TextStyle(fontSize: 12, color: context.colors.textSecondary),
                 ),
               ],
             ),
@@ -1287,9 +1287,9 @@ class _ChatDetailViewState extends State<ChatDetailView> {
           InkWell(
             onTap: _cancelReply,
             borderRadius: BorderRadius.circular(12),
-            child: const Padding(
-              padding: EdgeInsets.all(4),
-              child: Icon(Icons.close, size: 16, color: Colors.grey),
+            child: Padding(
+              padding: const EdgeInsets.all(4),
+              child: Icon(Icons.close, size: 16, color: context.colors.textSecondary),
             ),
           ),
         ],
@@ -1297,20 +1297,21 @@ class _ChatDetailViewState extends State<ChatDetailView> {
     );
   }
 
-  static const _chatTextStyle = TextStyle(fontSize: 15, height: 1.5, color: Colors.black87, fontFamily: 'NotoSansJP', fontFamilyFallback: ['Hiragino Sans', 'Roboto', 'sans-serif']);
+  TextStyle _chatTextStyleOf(BuildContext context) => TextStyle(fontSize: 15, height: 1.5, color: context.colors.textPrimary, fontFamily: 'NotoSansJP', fontFamilyFallback: const ['Hiragino Sans', 'Roboto', 'sans-serif']);
   static const _chatLinkStyle = TextStyle(fontSize: 15, height: 1.5, color: Colors.blue, decoration: TextDecoration.underline, decorationColor: Colors.blue, fontFamily: 'NotoSansJP', fontFamilyFallback: ['Hiragino Sans', 'Roboto', 'sans-serif']);
 
-  List<InlineSpan> _buildTextSpansWithLinks(String text) {
+  List<InlineSpan> _buildTextSpansWithLinks(String text, {BuildContext? ctx}) {
+    final textStyle = ctx != null ? _chatTextStyleOf(ctx) : const TextStyle(fontSize: 15, height: 1.5, color: Colors.black87, fontFamily: 'NotoSansJP', fontFamilyFallback: ['Hiragino Sans', 'Roboto', 'sans-serif']);
     final urlPattern = RegExp(r'https?://[^\s\u3000]+', caseSensitive: false);
     final spans = <InlineSpan>[]; int lastEnd = 0;
     for (final match in urlPattern.allMatches(text)) {
-      if (match.start > lastEnd) spans.add(TextSpan(text: text.substring(lastEnd, match.start), style: _chatTextStyle));
+      if (match.start > lastEnd) spans.add(TextSpan(text: text.substring(lastEnd, match.start), style: textStyle));
       final url = match.group(0)!;
       spans.add(TextSpan(text: url, style: _chatLinkStyle, recognizer: TapGestureRecognizer()..onTap = () async { final uri = Uri.tryParse(url); if (uri != null && await canLaunchUrl(uri)) await launchUrl(uri, mode: LaunchMode.externalApplication); }));
       lastEnd = match.end;
     }
-    if (lastEnd < text.length) spans.add(TextSpan(text: text.substring(lastEnd), style: _chatTextStyle));
-    if (spans.isEmpty) spans.add(TextSpan(text: text, style: _chatTextStyle));
+    if (lastEnd < text.length) spans.add(TextSpan(text: text.substring(lastEnd), style: textStyle));
+    if (spans.isEmpty) spans.add(TextSpan(text: text, style: textStyle));
     return spans;
   }
 
@@ -1318,8 +1319,8 @@ class _ChatDetailViewState extends State<ChatDetailView> {
     final senderName = (replyTo['senderName'] ?? '') as String;
     final preview = (replyTo['preview'] ?? '') as String;
     final bgColor =
-        isMe ? Colors.white.withOpacity(0.5) : Colors.white.withOpacity(0.7);
-    final accentColor = isMe ? AppColors.primary : Colors.grey.shade600;
+        isMe ? context.colors.cardBg.withOpacity(0.5) : context.colors.cardBg.withOpacity(0.7);
+    final accentColor = isMe ? AppColors.primary : context.colors.textSecondary;
     return Container(
       margin: const EdgeInsets.only(bottom: 6),
       padding: const EdgeInsets.fromLTRB(8, 4, 8, 5),
@@ -1345,7 +1346,7 @@ class _ChatDetailViewState extends State<ChatDetailView> {
             preview,
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontSize: 12, color: Colors.black54),
+            style: TextStyle(fontSize: 12, color: context.colors.textSecondary),
           ),
         ],
       ),
@@ -1377,8 +1378,8 @@ class _ChatDetailViewState extends State<ChatDetailView> {
     final bool isImageOnly = (type == 'image' || type == 'video') && text.isEmpty;
     if (type == 'image') {
       content = Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        GestureDetector(onTap: () => _showImagePreview(msg['url']), child: ClipRRect(borderRadius: BorderRadius.circular(12), child: CachedNetworkImage(imageUrl: msg['url'], width: 200, fit: BoxFit.cover, placeholder: (c, u) => Container(width: 200, height: 150, decoration: BoxDecoration(color: Colors.grey.shade200, borderRadius: BorderRadius.circular(12)), child: const Center(child: SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2)))), errorWidget: (c, u, e) => const Icon(Icons.broken_image)))),
-        if (text.isNotEmpty) ...[const SizedBox(height: 8), Text.rich(TextSpan(children: _buildTextSpansWithLinks(text)))]
+        GestureDetector(onTap: () => _showImagePreview(msg['url']), child: ClipRRect(borderRadius: BorderRadius.circular(12), child: CachedNetworkImage(imageUrl: msg['url'], width: 200, fit: BoxFit.cover, placeholder: (c, u) => Container(width: 200, height: 150, decoration: BoxDecoration(color: context.colors.borderLight, borderRadius: BorderRadius.circular(12)), child: Center(child: SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2)))), errorWidget: (c, u, e) => Icon(Icons.broken_image)))),
+        if (text.isNotEmpty) ...[const SizedBox(height: 8), Text.rich(TextSpan(children: _buildTextSpansWithLinks(text, ctx: context)))]
       ]);
     } else if (type == 'video') {
       final vUrl = (msg['url'] ?? '') as String;
@@ -1405,7 +1406,7 @@ class _ChatDetailViewState extends State<ChatDetailView> {
             ),
           ),
         ),
-        if (text.isNotEmpty) ...[const SizedBox(height: 8), Text.rich(TextSpan(children: _buildTextSpansWithLinks(text)))]
+        if (text.isNotEmpty) ...[const SizedBox(height: 8), Text.rich(TextSpan(children: _buildTextSpansWithLinks(text, ctx: context)))]
       ]);
     } else if (type == 'file') {
       final String fName = msg['fileName'] ?? 'ファイル';
@@ -1428,7 +1429,7 @@ class _ChatDetailViewState extends State<ChatDetailView> {
       else if (['ppt', 'pptx'].contains(fExt)) { fIcon = Icons.slideshow; fIconBg = Colors.orange.shade600; }
       else if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'].contains(fExt)) { fIcon = Icons.image; fIconBg = Colors.teal; }
       else if (['zip', 'rar', '7z', 'tar', 'gz'].contains(fExt)) { fIcon = Icons.folder_zip; fIconBg = Colors.amber.shade700; }
-      else { fIcon = Icons.insert_drive_file; fIconBg = Colors.grey.shade600; }
+      else { fIcon = Icons.insert_drive_file; fIconBg = context.colors.textSecondary; }
 
       content = ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 260),
@@ -1452,14 +1453,14 @@ class _ChatDetailViewState extends State<ChatDetailView> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(fName, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500), overflow: TextOverflow.ellipsis, maxLines: 2),
+                        Text(fName, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500), overflow: TextOverflow.ellipsis, maxLines: 2),
                         if (expiryText.isNotEmpty) ...[
                           const SizedBox(height: 2),
-                          Text(expiryText, style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
+                          Text(expiryText, style: TextStyle(fontSize: 11, color: context.colors.textSecondary)),
                         ],
                         if (sizeText.isNotEmpty) ...[
                           const SizedBox(height: 2),
-                          Text('サイズ: $sizeText', style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
+                          Text('サイズ: $sizeText', style: TextStyle(fontSize: 11, color: context.colors.textSecondary)),
                         ],
                       ],
                     ),
@@ -1467,9 +1468,9 @@ class _ChatDetailViewState extends State<ChatDetailView> {
                 ],
               ),
             ),
-            if (text.isNotEmpty) ...[const SizedBox(height: 8), Text.rich(TextSpan(children: _buildTextSpansWithLinks(text)))],
+            if (text.isNotEmpty) ...[const SizedBox(height: 8), Text.rich(TextSpan(children: _buildTextSpansWithLinks(text, ctx: context)))],
             const SizedBox(height: 6),
-            Divider(height: 1, color: Colors.grey.shade300),
+            Divider(height: 1, color: context.colors.borderMedium),
             const SizedBox(height: 4),
             Row(
               mainAxisSize: MainAxisSize.min,
@@ -1489,7 +1490,7 @@ class _ChatDetailViewState extends State<ChatDetailView> {
           ],
         ),
       );
-    } else { content = Text.rich(TextSpan(children: _buildTextSpansWithLinks(text))); }
+    } else { content = Text.rich(TextSpan(children: _buildTextSpansWithLinks(text, ctx: context))); }
 
     String readText = '';
     if (isMe && isRead) {
@@ -1512,7 +1513,7 @@ class _ChatDetailViewState extends State<ChatDetailView> {
               _showActionSheet(msgId, isMe, type, text);
             }
           },
-          child: Container(width: 24, height: 24, alignment: Alignment.center, child: const Icon(Icons.more_vert, size: 18, color: Colors.grey)),
+          child: Container(width: 24, height: 24, alignment: Alignment.center, child: Icon(Icons.more_vert, size: 18, color: context.colors.textSecondary)),
         ),
       );
     }
@@ -1528,7 +1529,7 @@ class _ChatDetailViewState extends State<ChatDetailView> {
           child: Column(
             crossAxisAlignment: isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
             children: [
-              if (senderName.isNotEmpty) Padding(padding: const EdgeInsets.only(left: 8, bottom: 2), child: Text(senderName, style: const TextStyle(fontSize: 11, color: Colors.grey))),
+              if (senderName.isNotEmpty) Padding(padding: const EdgeInsets.only(left: 8, bottom: 2), child: Text(senderName, style: TextStyle(fontSize: 11, color: context.colors.textSecondary))),
               Row(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.end,
@@ -1536,13 +1537,13 @@ class _ChatDetailViewState extends State<ChatDetailView> {
                   if (isMe) ...[
                     if (isDesktop) menuButton(isHovering),
                     if (isDesktop) const SizedBox(width: 4),
-                    Column(crossAxisAlignment: CrossAxisAlignment.end, children: [if (readText.isNotEmpty) Text(readText, style: const TextStyle(fontSize: 10, color: Colors.grey)), Text(timeStr, style: const TextStyle(fontSize: 10, color: Colors.grey))]),
+                    Column(crossAxisAlignment: CrossAxisAlignment.end, children: [if (readText.isNotEmpty) Text(readText, style: TextStyle(fontSize: 10, color: context.colors.textSecondary)), Text(timeStr, style: TextStyle(fontSize: 10, color: context.colors.textSecondary))]),
                     const SizedBox(width: 8),
                   ],
-                  Flexible(child: isImageOnly && replyTo == null ? content : Container(padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9), decoration: BoxDecoration(color: isMe ? const Color(0xFFD6EEFF) : const Color(0xFFF0F0F0), borderRadius: BorderRadius.circular(12)), child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [if (replyTo != null) _buildReplyQuote(replyTo, isMe), content]))),
+                  Flexible(child: isImageOnly && replyTo == null ? content : Container(padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9), decoration: BoxDecoration(color: isMe ? context.colors.chatMyBubble : context.colors.chatOtherBubble, borderRadius: BorderRadius.circular(12)), child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [if (replyTo != null) _buildReplyQuote(replyTo, isMe), content]))),
                   if (!isMe) ...[
                     const SizedBox(width: 8),
-                    Text(timeStr, style: const TextStyle(fontSize: 10, color: Colors.grey)),
+                    Text(timeStr, style: TextStyle(fontSize: 10, color: context.colors.textSecondary)),
                     if (isDesktop) const SizedBox(width: 4),
                     if (isDesktop) menuButton(isHovering),
                   ],
@@ -1665,7 +1666,7 @@ class _ChatDetailViewState extends State<ChatDetailView> {
                 width: 40,
                 height: 40,
                 alignment: Alignment.center,
-                child: Text(e, style: const TextStyle(fontSize: 26)),
+                child: Text(e, style: TextStyle(fontSize: 26)),
               ),
             ),
         ],
@@ -1678,7 +1679,7 @@ class _ChatDetailViewState extends State<ChatDetailView> {
     showDialog(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        backgroundColor: Colors.white,
+        backgroundColor: context.colors.cardBg,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         title: const Text('部分コピー', style: TextStyle(fontSize: 16)),
         content: SizedBox(
@@ -1716,8 +1717,8 @@ class _ChatDetailViewState extends State<ChatDetailView> {
     final bool alreadyReacted = userList.contains(currentUser?.uid);
     return GestureDetector(
       onTap: () => _toggleReaction(msgId, emoji),
-      child: Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), decoration: BoxDecoration(color: alreadyReacted ? AppColors.primary.withOpacity(0.2) : (isMe ? AppColors.primary.withOpacity(0.1) : Colors.blueGrey.shade50), borderRadius: BorderRadius.circular(16), border: Border.all(color: alreadyReacted ? AppColors.primary : Colors.grey.shade300)),
-        child: Row(mainAxisSize: MainAxisSize.min, children: [Text(emoji, style: const TextStyle(fontSize: 14)), if (count > 1) ...[const SizedBox(width: 4), Text('$count', style: const TextStyle(fontSize: 12, color: Colors.grey))]])));
+      child: Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), decoration: BoxDecoration(color: alreadyReacted ? AppColors.primary.withOpacity(0.2) : (isMe ? AppColors.primary.withOpacity(0.1) : context.colors.tagBg), borderRadius: BorderRadius.circular(16), border: Border.all(color: alreadyReacted ? AppColors.primary : context.colors.borderMedium)),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [Text(emoji, style: TextStyle(fontSize: 14)), if (count > 1) ...[SizedBox(width: 4), Text('$count', style: TextStyle(fontSize: 12, color: context.colors.textSecondary))]])));
   }
 
   Future<void> _pickAndUploadImage() async {
@@ -1856,7 +1857,7 @@ class _ChatDetailViewState extends State<ChatDetailView> {
     final emojis = ['👍', '❤️', '😄', '🎉', '🙏', '🆗', '😂', '😢', '✨', '🤔'];
     showDialog(context: context, builder: (dialogContext) => AlertDialog(
       title: const Text('スタンプを選択'),
-      content: Wrap(alignment: WrapAlignment.center, spacing: 8, runSpacing: 8, children: emojis.map((e) => GestureDetector(onTap: () { _toggleReaction(msgId, e); Navigator.of(dialogContext).pop(); }, child: Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: Colors.grey.shade100, borderRadius: BorderRadius.circular(8)), child: Text(e, style: const TextStyle(fontSize: 28))))).toList()),
+      content: Wrap(alignment: WrapAlignment.center, spacing: 8, runSpacing: 8, children: emojis.map((e) => GestureDetector(onTap: () { _toggleReaction(msgId, e); Navigator.of(dialogContext).pop(); }, child: Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: context.colors.chipBg, borderRadius: BorderRadius.circular(8)), child: Text(e, style: TextStyle(fontSize: 28))))).toList()),
       actions: [TextButton(onPressed: () => Navigator.of(dialogContext).pop(), child: const Text('キャンセル'))],
     ));
   }
@@ -1895,7 +1896,7 @@ class _ChatDetailViewState extends State<ChatDetailView> {
   void _showImagePreview(String url) {
     showDialog(
       context: context,
-      barrierColor: Colors.black87,
+      barrierColor: context.colors.textPrimary,
       builder: (_) => Stack(
         children: [
           // 画像表示エリア
@@ -1906,7 +1907,7 @@ class _ChatDetailViewState extends State<ChatDetailView> {
               child: CachedNetworkImage(
                 imageUrl: url,
                 fit: BoxFit.contain,
-                placeholder: (c, u) => const Center(child: CircularProgressIndicator(color: Colors.white)),
+                placeholder: (c, u) => Center(child: CircularProgressIndicator(color: Colors.white)),
                 errorWidget: (c, u, e) => const Icon(Icons.broken_image, color: Colors.white, size: 48),
               ),
             ),
@@ -2100,7 +2101,7 @@ class _VideoPlayerDialogState extends State<VideoPlayerDialog> {
                 ? Text('再生できません: $_error',
                     style: const TextStyle(color: Colors.white))
                 : !_initialized || _controller == null
-                    ? const CircularProgressIndicator(color: Colors.white)
+                    ? CircularProgressIndicator(color: context.colors.cardBg)
                     : AspectRatio(
                         aspectRatio: _controller!.value.aspectRatio,
                         child: Stack(
@@ -2139,7 +2140,7 @@ class _VideoPlayerDialogState extends State<VideoPlayerDialog> {
                                       _controller!.value.isPlaying
                                           ? Icons.pause
                                           : Icons.play_arrow,
-                                      color: Colors.white,
+                                      color: context.colors.cardBg,
                                     ),
                                   ),
                                   Expanded(

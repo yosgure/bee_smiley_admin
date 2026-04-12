@@ -66,10 +66,10 @@ class _ToolMasterScreenState extends State<ToolMasterScreen> {
           const SizedBox(width: 8),
           Text(
             '$headerText行',
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.bold,
-              color: Colors.black87,
+              color: context.colors.textPrimary,
             ),
           ),
         ],
@@ -99,10 +99,10 @@ class _ToolMasterScreenState extends State<ToolMasterScreen> {
       appBar: AppBar(
         title: const Text('教具マスタ'),
         centerTitle: true,
-        backgroundColor: Colors.white,
+        backgroundColor: context.colors.cardBg,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.black87),
+          icon: Icon(Icons.arrow_back, color: context.colors.textPrimary),
           onPressed: () {
             if (widget.onBack != null) {
               widget.onBack!();
@@ -112,21 +112,21 @@ class _ToolMasterScreenState extends State<ToolMasterScreen> {
           },
         ),
       ),
-      backgroundColor: const Color(0xFFF2F2F7),
+      backgroundColor: context.colors.scaffoldBgAlt,
       body: Column(
         children: [
           // 検索窓
           Container(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-            color: Colors.white,
+            color: context.colors.cardBg,
             child: TextField(
               controller: _searchController,
               decoration: InputDecoration(
                 hintText: '教具名で検索...',
-                prefixIcon: const Icon(Icons.search, color: Colors.grey),
+                prefixIcon: Icon(Icons.search, color: context.colors.textSecondary),
                 suffixIcon: _searchQuery.isNotEmpty
                     ? IconButton(
-                        icon: const Icon(Icons.clear, color: Colors.grey),
+                        icon: Icon(Icons.clear, color: context.colors.textSecondary),
                         onPressed: () {
                           setState(() {
                             _searchController.clear();
@@ -137,18 +137,18 @@ class _ToolMasterScreenState extends State<ToolMasterScreen> {
                     : null,
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(8),
-                  borderSide: BorderSide(color: Colors.grey.shade300),
+                  borderSide: BorderSide(color: context.colors.borderMedium),
                 ),
                 enabledBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(8),
-                  borderSide: BorderSide(color: Colors.grey.shade300),
+                  borderSide: BorderSide(color: context.colors.borderMedium),
                 ),
                 focusedBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(8),
                   borderSide: const BorderSide(color: AppColors.accent),
                 ),
                 filled: true,
-                fillColor: Colors.grey.shade50,
+                fillColor: context.colors.tagBg,
                 contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 isDense: true,
               ),
@@ -174,8 +174,8 @@ class _ToolMasterScreenState extends State<ToolMasterScreen> {
                 final docs = List<QueryDocumentSnapshot>.from(snapshot.data!.docs);
 
                 if (docs.isEmpty) {
-                  return const Center(
-                    child: Text('教具が登録されていません。\n右下の「＋」で追加してください。', style: TextStyle(color: Colors.grey)),
+                  return Center(
+                    child: Text('教具が登録されていません。\n右下の「＋」で追加してください。', style: TextStyle(color: context.colors.textSecondary)),
                   );
                 }
 
@@ -208,11 +208,11 @@ class _ToolMasterScreenState extends State<ToolMasterScreen> {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(Icons.search_off, size: 64, color: Colors.grey.shade400),
+                        Icon(Icons.search_off, size: 64, color: context.colors.iconMuted),
                         const SizedBox(height: 16),
                         Text(
                           '「$_searchQuery」に一致する教具がありません',
-                          style: TextStyle(color: Colors.grey.shade600),
+                          style: TextStyle(color: context.colors.textSecondary),
                         ),
                       ],
                     ),
@@ -247,9 +247,9 @@ class _ToolMasterScreenState extends State<ToolMasterScreen> {
                           width: 60,
                           height: 60,
                           decoration: BoxDecoration(
-                            color: Colors.grey.shade200,
+                            color: context.colors.borderLight,
                             borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: Colors.grey.shade300),
+                            border: Border.all(color: context.colors.borderMedium),
                           ),
                           child: data['imageUrl'] != null && (data['imageUrl'] as String).isNotEmpty
                               ? ClipRRect(
@@ -258,16 +258,16 @@ class _ToolMasterScreenState extends State<ToolMasterScreen> {
                                     imageUrl: data['imageUrl'],
                                     fit: BoxFit.cover,
                                     placeholder: (context, url) => const Center(child: CircularProgressIndicator(strokeWidth: 2)),
-                                    errorWidget: (context, url, error) => const Icon(Icons.broken_image, color: Colors.grey),
+                                    errorWidget: (context, url, error) => Icon(Icons.broken_image, color: context.colors.textSecondary),
                                   ),
                                 )
-                              : const Icon(Icons.extension, color: Colors.grey),
+                              : Icon(Icons.extension, color: context.colors.textSecondary),
                         ),
                         title: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             if ((data['furigana'] as String? ?? '').isNotEmpty)
-                              Text(data['furigana'], style: const TextStyle(fontSize: 10, color: Colors.grey)),
+                              Text(data['furigana'], style: TextStyle(fontSize: 10, color: context.colors.textSecondary)),
                             Text(data['name'] ?? '名称未設定', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                           ],
                         ),
@@ -280,7 +280,7 @@ class _ToolMasterScreenState extends State<ToolMasterScreen> {
                               Expanded(
                                 child: Text(
                                   data['task'] ?? '',
-                                  style: const TextStyle(fontSize: 12, color: Colors.black87),
+                                  style: TextStyle(fontSize: 12, color: context.colors.textPrimary),
                                   overflow: TextOverflow.ellipsis,
                                 ),
                               ),
@@ -297,7 +297,7 @@ class _ToolMasterScreenState extends State<ToolMasterScreen> {
                                 onPressed: () => _launchURL(context, data['videoUrl']),
                               ),
                             IconButton(
-                              icon: const Icon(Icons.edit, color: Colors.grey),
+                              icon: Icon(Icons.edit, color: context.colors.textSecondary),
                               onPressed: () => _showEditDialog(doc: doc),
                             ),
                             IconButton(
@@ -395,9 +395,9 @@ class _ToolMasterScreenState extends State<ToolMasterScreen> {
                               width: 100,
                               height: 100,
                               decoration: BoxDecoration(
-                                color: Colors.grey.shade200,
+                                color: context.colors.borderLight,
                                 borderRadius: BorderRadius.circular(12),
-                                border: Border.all(color: Colors.grey.shade300),
+                                border: Border.all(color: context.colors.borderMedium),
                               ),
                               child: pickedImageFile != null
                                   ? ClipRRect(
@@ -414,11 +414,11 @@ class _ToolMasterScreenState extends State<ToolMasterScreen> {
                                             errorWidget: (context, url, error) => const Icon(Icons.broken_image),
                                           ),
                                         )
-                                      : const Column(
+                                      : Column(
                                           mainAxisAlignment: MainAxisAlignment.center,
                                           children: [
-                                            Icon(Icons.add_a_photo, color: Colors.grey),
-                                            Text('写真', style: TextStyle(fontSize: 10, color: Colors.grey)),
+                                            Icon(Icons.add_a_photo, color: context.colors.textSecondary),
+                                            Text('写真', style: TextStyle(fontSize: 10, color: context.colors.textSecondary)),
                                           ],
                                         )),
                             ),
@@ -483,12 +483,12 @@ class _ToolMasterScreenState extends State<ToolMasterScreen> {
       controller: controller,
       decoration: InputDecoration(
         labelText: label,
-        prefixIcon: icon != null ? Icon(icon, color: Colors.grey, size: 20) : null,
+        prefixIcon: icon != null ? Icon(icon, color: context.colors.textSecondary, size: 20) : null,
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
         contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
         isDense: true,
         filled: true,
-        fillColor: Colors.white,
+        fillColor: context.colors.cardBg,
       ),
     );
   }

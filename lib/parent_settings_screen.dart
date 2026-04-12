@@ -6,6 +6,7 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:image/image.dart' as img;
 import 'app_theme.dart';
+import 'main.dart' show themeNotifier, setThemeMode;
 
 class ParentSettingsScreen extends StatefulWidget {
   final Map<String, dynamic>? familyData;
@@ -96,8 +97,15 @@ class _ParentSettingsScreenState extends State<ParentSettingsScreen> {
               const SizedBox(height: 8),
               _buildPhotoSection(),
               
+              const SizedBox(height: 24),
+
+              // テーマ設定
+              _buildSectionTitle('表示設定'),
+              const SizedBox(height: 8),
+              _buildThemeCard(),
+
               const SizedBox(height: 32),
-              
+
               // ログアウト
               _buildLogoutButton(),
               
@@ -114,8 +122,8 @@ class _ParentSettingsScreenState extends State<ParentSettingsScreen> {
       height: 48,
       padding: const EdgeInsets.symmetric(horizontal: 16),
       decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
+        color: context.colors.cardBg,
+        border: Border(bottom: BorderSide(color: context.colors.borderLight)),
       ),
       child: Center(
         child: Text(
@@ -132,7 +140,7 @@ class _ParentSettingsScreenState extends State<ParentSettingsScreen> {
       style: TextStyle(
         fontSize: 13,
         fontWeight: FontWeight.bold,
-        color: Colors.grey.shade600,
+        color: context.colors.textSecondary,
       ),
     );
   }
@@ -151,7 +159,7 @@ class _ParentSettingsScreenState extends State<ParentSettingsScreen> {
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: Colors.grey.shade200),
+        side: BorderSide(color: context.colors.borderLight),
       ),
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -171,7 +179,7 @@ class _ParentSettingsScreenState extends State<ParentSettingsScreen> {
                   leading: CircleAvatar(
                     backgroundColor: isSelected 
                         ? AppColors.primary.withOpacity(0.1) 
-                        : Colors.grey.shade100,
+                        : context.colors.chipBg,
                     backgroundImage: child['photoUrl'] != null 
                         ? NetworkImage(child['photoUrl']) 
                         : null,
@@ -218,7 +226,7 @@ class _ParentSettingsScreenState extends State<ParentSettingsScreen> {
                         const SizedBox(height: 4),
                         Text(
                           _currentChild?['classroom'] ?? '',
-                          style: const TextStyle(color: Colors.grey),
+                          style: TextStyle(color: context.colors.textSecondary),
                         ),
                       ],
                     ),
@@ -237,7 +245,7 @@ class _ParentSettingsScreenState extends State<ParentSettingsScreen> {
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: Colors.grey.shade200),
+        side: BorderSide(color: context.colors.borderLight),
       ),
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -250,12 +258,12 @@ class _ParentSettingsScreenState extends State<ParentSettingsScreen> {
                 children: [
                   CircleAvatar(
                     radius: 50,
-                    backgroundColor: Colors.grey.shade200,
+                    backgroundColor: context.colors.borderLight,
                     backgroundImage: _currentChild?['photoUrl'] != null 
                         ? NetworkImage(_currentChild!['photoUrl']) 
                         : null,
                     child: _currentChild?['photoUrl'] == null
-                        ? const Icon(Icons.person, size: 50, color: Colors.grey)
+                        ? Icon(Icons.person, size: 50, color: context.colors.textSecondary)
                         : null,
                   ),
                   Positioned(
@@ -275,7 +283,7 @@ class _ParentSettingsScreenState extends State<ParentSettingsScreen> {
                     Positioned.fill(
                       child: Container(
                         decoration: BoxDecoration(
-                          color: Colors.black26,
+                          color: context.colors.shadow,
                           shape: BoxShape.circle,
                         ),
                         child: const Center(
@@ -289,7 +297,50 @@ class _ParentSettingsScreenState extends State<ParentSettingsScreen> {
             const SizedBox(height: 12),
             Text(
               'タップして写真を変更',
-              style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
+              style: TextStyle(color: context.colors.textSecondary, fontSize: 13),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildThemeCard() {
+    final currentMode = themeNotifier.value;
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: context.colors.borderLight),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          children: [
+            Icon(
+              context.isDark ? Icons.dark_mode : Icons.light_mode,
+              color: Colors.deepPurple,
+              size: 22,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text('テーマ', style: const TextStyle(fontSize: 15)),
+            ),
+            SegmentedButton<ThemeMode>(
+              segments: const [
+                ButtonSegment(value: ThemeMode.light, icon: Icon(Icons.light_mode, size: 16)),
+                ButtonSegment(value: ThemeMode.system, icon: Icon(Icons.settings_brightness, size: 16)),
+                ButtonSegment(value: ThemeMode.dark, icon: Icon(Icons.dark_mode, size: 16)),
+              ],
+              selected: {currentMode},
+              onSelectionChanged: (selected) {
+                setThemeMode(selected.first);
+                setState(() {});
+              },
+              style: ButtonStyle(
+                visualDensity: VisualDensity.compact,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
             ),
           ],
         ),

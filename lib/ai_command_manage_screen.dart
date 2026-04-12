@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'app_theme.dart';
 
 class AiCommandManageScreen extends StatefulWidget {
   final VoidCallback? onBack;
@@ -88,15 +89,15 @@ class _AiCommandManageScreenState extends State<AiCommandManageScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: context.colors.scaffoldBg,
       appBar: AppBar(
         title: const Text('AI相談コマンド設定', style: TextStyle(fontSize: 16)),
         centerTitle: true,
-        backgroundColor: Colors.white,
+        backgroundColor: context.colors.cardBg,
         elevation: 0,
         surfaceTintColor: Colors.transparent,
         leading: IconButton(
-          icon: Icon(Icons.arrow_back_ios_new_rounded, size: 20, color: Colors.grey.shade700),
+          icon: Icon(Icons.arrow_back_ios_new_rounded, size: 20, color: context.colors.textSecondary),
           onPressed: () {
             if (widget.onBack != null) {
               widget.onBack!();
@@ -107,27 +108,27 @@ class _AiCommandManageScreenState extends State<AiCommandManageScreen> {
         ),
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1),
-          child: Container(color: Colors.grey.shade200, height: 0.5),
+          child: Container(color: context.colors.borderLight, height: 0.5),
         ),
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: _addCommand,
-        backgroundColor: const Color(0xFF7C3AED),
+        backgroundColor: context.colors.aiAccent,
         child: const Icon(Icons.add, color: Colors.white),
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator(color: Color(0xFF7C3AED)))
+          ? Center(child: CircularProgressIndicator(color: context.colors.aiAccent))
           : _commands.isEmpty
               ? Center(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(Icons.tag_rounded, size: 64, color: Colors.grey.shade300),
-                      const SizedBox(height: 16),
-                      Text('コマンドがありません', style: TextStyle(color: Colors.grey.shade500, fontSize: 16)),
-                      const SizedBox(height: 8),
+                      Icon(Icons.tag_rounded, size: 64, color: context.colors.borderMedium),
+                      SizedBox(height: 16),
+                      Text('コマンドがありません', style: TextStyle(color: context.colors.textTertiary, fontSize: 16)),
+                      SizedBox(height: 8),
                       Text('右下の + ボタンから追加してください',
-                          style: TextStyle(color: Colors.grey.shade400, fontSize: 13)),
+                          style: TextStyle(color: context.colors.textHint, fontSize: 13)),
                     ],
                   ),
                 )
@@ -147,7 +148,7 @@ class _AiCommandManageScreenState extends State<AiCommandManageScreen> {
                           elevation: 0,
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(14),
-                            side: BorderSide(color: Colors.grey.shade200),
+                            side: BorderSide(color: context.colors.borderLight),
                           ),
                           child: InkWell(
                             onTap: () => _editCommand(cmd),
@@ -165,22 +166,22 @@ class _AiCommandManageScreenState extends State<AiCommandManageScreen> {
                                             Container(
                                               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                                               decoration: BoxDecoration(
-                                                color: const Color(0xFF7C3AED).withOpacity(0.1),
+                                                color: context.colors.aiAccent.withOpacity(0.1),
                                                 borderRadius: BorderRadius.circular(8),
                                               ),
                                               child: Text(
                                                 '/${cmd['label'] ?? ''}',
-                                                style: const TextStyle(
+                                                style: TextStyle(
                                                   fontSize: 14,
                                                   fontWeight: FontWeight.w600,
-                                                  color: Color(0xFF7C3AED),
+                                                  color: context.colors.aiAccent,
                                                 ),
                                               ),
                                             ),
-                                            const SizedBox(width: 8),
+                                            SizedBox(width: 8),
                                             Text(
                                               cmd['freeform'] == true ? '自由記述' : '${questions.length}問',
-                                              style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+                                              style: TextStyle(fontSize: 12, color: context.colors.textTertiary),
                                             ),
                                           ],
                                         ),
@@ -322,7 +323,7 @@ class _CommandEditDialogState extends State<_CommandEditDialog> {
   @override
   Widget build(BuildContext context) {
     return Dialog(
-      backgroundColor: Colors.white,
+      backgroundColor: context.colors.dialogBg,
       surfaceTintColor: Colors.transparent,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       insetPadding: const EdgeInsets.symmetric(horizontal: 40, vertical: 24),
@@ -335,18 +336,18 @@ class _CommandEditDialogState extends State<_CommandEditDialog> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               decoration: BoxDecoration(
-                border: Border(bottom: BorderSide(color: Colors.grey.shade200, width: 0.5)),
+                border: Border(bottom: BorderSide(color: context.colors.borderLight, width: 0.5)),
               ),
               child: Row(
                 children: [
                   IconButton(
-                    icon: Icon(Icons.close_rounded, size: 20, color: Colors.grey.shade700),
+                    icon: Icon(Icons.close_rounded, size: 20, color: context.colors.textSecondary),
                     onPressed: () => Navigator.pop(context),
                   ),
                   Expanded(
                     child: Text(
                       _isNew ? 'コマンドを追加' : 'コマンドを編集',
-                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
                       textAlign: TextAlign.center,
                     ),
                   ),
@@ -355,7 +356,7 @@ class _CommandEditDialogState extends State<_CommandEditDialog> {
                     child: Text(
                       '保存',
                       style: TextStyle(
-                        color: _isSaving ? Colors.grey : const Color(0xFF7C3AED),
+                        color: _isSaving ? context.colors.textHint : context.colors.aiAccent,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
@@ -384,10 +385,10 @@ class _CommandEditDialogState extends State<_CommandEditDialog> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                 decoration: BoxDecoration(
-                  color: _freeform ? const Color(0xFF7C3AED).withOpacity(0.06) : Colors.grey.shade50,
+                  color: _freeform ? context.colors.aiAccent.withOpacity(0.06) : context.colors.tagBg,
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(
-                    color: _freeform ? const Color(0xFF7C3AED).withOpacity(0.3) : Colors.grey.shade200,
+                    color: _freeform ? context.colors.aiAccent.withOpacity(0.3) : context.colors.borderLight,
                   ),
                 ),
                 child: Row(
@@ -395,9 +396,9 @@ class _CommandEditDialogState extends State<_CommandEditDialog> {
                     Icon(
                       Icons.edit_note_rounded,
                       size: 20,
-                      color: _freeform ? const Color(0xFF7C3AED) : Colors.grey.shade500,
+                      color: _freeform ? context.colors.aiAccent : context.colors.textTertiary,
                     ),
-                    const SizedBox(width: 10),
+                    SizedBox(width: 10),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -407,19 +408,19 @@ class _CommandEditDialogState extends State<_CommandEditDialog> {
                             style: TextStyle(
                               fontSize: 13,
                               fontWeight: FontWeight.w600,
-                              color: _freeform ? const Color(0xFF7C3AED) : Colors.grey.shade700,
+                              color: _freeform ? context.colors.aiAccent : context.colors.textSecondary,
                             ),
                           ),
                           Text(
                             'ONにすると、質問形式ではなく自由記述で入力し、AIが整形する',
-                            style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
+                            style: TextStyle(fontSize: 11, color: context.colors.textTertiary),
                           ),
                         ],
                       ),
                     ),
                     Switch(
                       value: _freeform,
-                      activeColor: const Color(0xFF7C3AED),
+                      activeColor: context.colors.aiAccent,
                       onChanged: (v) => setState(() => _freeform = v),
                     ),
                   ],
@@ -436,8 +437,8 @@ class _CommandEditDialogState extends State<_CommandEditDialog> {
                   TextButton.icon(
                     onPressed: _addQuestion,
                     icon: const Icon(Icons.add_rounded, size: 18),
-                    label: const Text('質問を追加', style: TextStyle(fontSize: 13)),
-                    style: TextButton.styleFrom(foregroundColor: const Color(0xFF7C3AED)),
+                    label: Text('質問を追加', style: TextStyle(fontSize: 13)),
+                    style: TextButton.styleFrom(foregroundColor: context.colors.aiAccent),
                   ),
                 ],
               ),
@@ -446,19 +447,19 @@ class _CommandEditDialogState extends State<_CommandEditDialog> {
                 Container(
                   padding: const EdgeInsets.all(24),
                   decoration: BoxDecoration(
-                    color: Colors.grey.shade50,
+                    color: context.colors.tagBg,
                     borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: Colors.grey.shade200, style: BorderStyle.solid),
+                    border: Border.all(color: context.colors.borderLight, style: BorderStyle.solid),
                   ),
                   child: Column(
                     children: [
-                      Icon(Icons.quiz_outlined, size: 32, color: Colors.grey.shade400),
-                      const SizedBox(height: 8),
+                      Icon(Icons.quiz_outlined, size: 32, color: context.colors.textHint),
+                      SizedBox(height: 8),
                       Text('質問がありません',
-                          style: TextStyle(color: Colors.grey.shade500, fontSize: 14)),
-                      const SizedBox(height: 4),
+                          style: TextStyle(color: context.colors.textTertiary, fontSize: 14)),
+                      SizedBox(height: 4),
                       Text('「質問を追加」から追加してください',
-                          style: TextStyle(color: Colors.grey.shade400, fontSize: 12)),
+                          style: TextStyle(color: context.colors.textHint, fontSize: 12)),
                     ],
                   ),
                 )
@@ -483,7 +484,7 @@ class _CommandEditDialogState extends State<_CommandEditDialog> {
                       elevation: 0,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
-                        side: BorderSide(color: Colors.grey.shade200),
+                        side: BorderSide(color: context.colors.borderLight),
                       ),
                       child: InkWell(
                         onTap: () => _editQuestion(index),
@@ -496,47 +497,47 @@ class _CommandEditDialogState extends State<_CommandEditDialog> {
                                 width: 28,
                                 height: 28,
                                 decoration: BoxDecoration(
-                                  color: const Color(0xFF7C3AED).withOpacity(0.1),
+                                  color: context.colors.aiAccent.withOpacity(0.1),
                                   borderRadius: BorderRadius.circular(8),
                                 ),
                                 child: Center(
                                   child: Text(
                                     '${index + 1}',
-                                    style: const TextStyle(
+                                    style: TextStyle(
                                       fontSize: 13,
                                       fontWeight: FontWeight.bold,
-                                      color: Color(0xFF7C3AED),
+                                      color: context.colors.aiAccent,
                                     ),
                                   ),
                                 ),
                               ),
-                              const SizedBox(width: 12),
+                              SizedBox(width: 12),
                               Expanded(
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(
                                       q['question'] as String? ?? '(未入力)',
-                                      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+                                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
                                     ),
-                                    const SizedBox(height: 2),
+                                    SizedBox(height: 2),
                                     Row(
                                       children: [
                                         Container(
                                           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                           decoration: BoxDecoration(
-                                            color: Colors.grey.shade100,
+                                            color: context.colors.chipBg,
                                             borderRadius: BorderRadius.circular(4),
                                           ),
                                           child: Text(typeLabel,
-                                              style: TextStyle(fontSize: 10, color: Colors.grey.shade600)),
+                                              style: TextStyle(fontSize: 10, color: context.colors.textSecondary)),
                                         ),
                                         if (options.isNotEmpty) ...[
-                                          const SizedBox(width: 6),
+                                          SizedBox(width: 6),
                                           Text('${options.length}択',
-                                              style: TextStyle(fontSize: 10, color: Colors.grey.shade500)),
+                                              style: TextStyle(fontSize: 10, color: context.colors.textTertiary)),
                                         ],
                                       ],
                                     ),
@@ -567,7 +568,7 @@ class _CommandEditDialogState extends State<_CommandEditDialog> {
   Widget _buildSectionTitle(String title) {
     return Text(
       title,
-      style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: Colors.grey.shade800),
+      style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: context.colors.textPrimary),
     );
   }
 
@@ -577,28 +578,28 @@ class _CommandEditDialogState extends State<_CommandEditDialog> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(label,
-            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.grey.shade700)),
-        const SizedBox(height: 6),
+            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: context.colors.textSecondary)),
+        SizedBox(height: 6),
         TextField(
           controller: controller,
           maxLines: maxLines,
           minLines: 1,
           decoration: InputDecoration(
             hintText: hint,
-            hintStyle: TextStyle(fontSize: 13, color: Colors.grey.shade400),
+            hintStyle: TextStyle(fontSize: 13, color: context.colors.textHint),
             filled: true,
-            fillColor: Colors.grey.shade50,
+            fillColor: context.colors.tagBg,
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide(color: Colors.grey.shade300),
+              borderSide: BorderSide(color: context.colors.borderMedium),
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: Color(0xFF7C3AED)),
+              borderSide: BorderSide(color: context.colors.aiAccent),
             ),
             contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           ),
-          style: const TextStyle(fontSize: 14),
+          style: TextStyle(fontSize: 14),
         ),
       ],
     );
@@ -664,7 +665,7 @@ class _QuestionEditDialogState extends State<_QuestionEditDialog> {
   @override
   Widget build(BuildContext context) {
     return Dialog(
-      backgroundColor: Colors.white,
+      backgroundColor: context.colors.dialogBg,
       surfaceTintColor: Colors.transparent,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       insetPadding: const EdgeInsets.symmetric(horizontal: 40, vertical: 24),
@@ -677,12 +678,12 @@ class _QuestionEditDialogState extends State<_QuestionEditDialog> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               decoration: BoxDecoration(
-                border: Border(bottom: BorderSide(color: Colors.grey.shade200, width: 0.5)),
+                border: Border(bottom: BorderSide(color: context.colors.borderLight, width: 0.5)),
               ),
               child: Row(
                 children: [
                   IconButton(
-                    icon: Icon(Icons.close_rounded, size: 20, color: Colors.grey.shade700),
+                    icon: Icon(Icons.close_rounded, size: 20, color: context.colors.textSecondary),
                     onPressed: () => Navigator.pop(context),
                   ),
                   const Expanded(
@@ -694,8 +695,8 @@ class _QuestionEditDialogState extends State<_QuestionEditDialog> {
                   ),
                   TextButton(
                     onPressed: _save,
-                    child: const Text('完了',
-                        style: TextStyle(color: Color(0xFF7C3AED), fontWeight: FontWeight.w600)),
+                    child: Text('完了',
+                        style: TextStyle(color: context.colors.aiAccent, fontWeight: FontWeight.w600)),
                   ),
                 ],
               ),
@@ -707,22 +708,22 @@ class _QuestionEditDialogState extends State<_QuestionEditDialog> {
                 children: [
               // 質問テキスト
               Text('質問テキスト',
-                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.grey.shade700)),
-              const SizedBox(height: 6),
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: context.colors.textSecondary)),
+              SizedBox(height: 6),
               TextField(
                 controller: _questionController,
                 decoration: InputDecoration(
                   hintText: '例: 今日の様子は？',
-                  hintStyle: TextStyle(fontSize: 13, color: Colors.grey.shade400),
+                  hintStyle: TextStyle(fontSize: 13, color: context.colors.textHint),
                   filled: true,
-                  fillColor: Colors.grey.shade50,
+                  fillColor: context.colors.tagBg,
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide(color: Colors.grey.shade300),
+                    borderSide: BorderSide(color: context.colors.borderMedium),
                   ),
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
-                    borderSide: const BorderSide(color: Color(0xFF7C3AED)),
+                    borderSide: BorderSide(color: context.colors.aiAccent),
                   ),
                 ),
               ),
@@ -730,7 +731,7 @@ class _QuestionEditDialogState extends State<_QuestionEditDialog> {
 
               // 回答タイプ
               Text('回答タイプ',
-                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.grey.shade700)),
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: context.colors.textSecondary)),
               const SizedBox(height: 8),
               Wrap(
                 spacing: 8,
@@ -745,25 +746,25 @@ class _QuestionEditDialogState extends State<_QuestionEditDialog> {
               // 選択肢（select or select_or_text の場合）
               if (_type == 'select' || _type == 'select_or_text') ...[
                 Text('選択肢',
-                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.grey.shade700)),
-                const SizedBox(height: 8),
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: context.colors.textSecondary)),
+                SizedBox(height: 8),
                 ..._options.asMap().entries.map((entry) {
                   return Container(
                     margin: const EdgeInsets.only(bottom: 6),
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     decoration: BoxDecoration(
-                      color: Colors.grey.shade50,
+                      color: context.colors.tagBg,
                       borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: Colors.grey.shade200),
+                      border: Border.all(color: context.colors.borderLight),
                     ),
                     child: Row(
                       children: [
                         Expanded(
-                          child: Text(entry.value, style: const TextStyle(fontSize: 14)),
+                          child: Text(entry.value, style: TextStyle(fontSize: 14)),
                         ),
                         GestureDetector(
                           onTap: () => setState(() => _options.removeAt(entry.key)),
-                          child: Icon(Icons.close_rounded, size: 18, color: Colors.grey.shade500),
+                          child: Icon(Icons.close_rounded, size: 18, color: context.colors.textTertiary),
                         ),
                       ],
                     ),
@@ -777,26 +778,26 @@ class _QuestionEditDialogState extends State<_QuestionEditDialog> {
                         onSubmitted: (_) => _addOption(),
                         decoration: InputDecoration(
                           hintText: '選択肢を入力...',
-                          hintStyle: TextStyle(fontSize: 13, color: Colors.grey.shade400),
+                          hintStyle: TextStyle(fontSize: 13, color: context.colors.textHint),
                           filled: true,
-                          fillColor: Colors.grey.shade50,
+                          fillColor: context.colors.tagBg,
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12),
-                            borderSide: BorderSide(color: Colors.grey.shade300),
+                            borderSide: BorderSide(color: context.colors.borderMedium),
                           ),
                           focusedBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12),
-                            borderSide: const BorderSide(color: Color(0xFF7C3AED)),
+                            borderSide: BorderSide(color: context.colors.aiAccent),
                           ),
                           contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                         ),
-                        style: const TextStyle(fontSize: 13),
+                        style: TextStyle(fontSize: 13),
                       ),
                     ),
-                    const SizedBox(width: 8),
+                    SizedBox(width: 8),
                     IconButton(
                       onPressed: _addOption,
-                      icon: const Icon(Icons.add_circle, color: Color(0xFF7C3AED)),
+                      icon: Icon(Icons.add_circle, color: context.colors.aiAccent),
                     ),
                   ],
                 ),
@@ -806,22 +807,22 @@ class _QuestionEditDialogState extends State<_QuestionEditDialog> {
               // プレースホルダー（text の場合）
               if (_type == 'text' || _type == 'select_or_text') ...[
                 Text('プレースホルダー',
-                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.grey.shade700)),
-                const SizedBox(height: 6),
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: context.colors.textSecondary)),
+                SizedBox(height: 6),
                 TextField(
                   controller: _placeholderController,
                   decoration: InputDecoration(
                     hintText: '例: 活動内容を入力してください',
-                    hintStyle: TextStyle(fontSize: 13, color: Colors.grey.shade400),
+                    hintStyle: TextStyle(fontSize: 13, color: context.colors.textHint),
                     filled: true,
-                    fillColor: Colors.grey.shade50,
+                    fillColor: context.colors.tagBg,
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide(color: Colors.grey.shade300),
+                      borderSide: BorderSide(color: context.colors.borderMedium),
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: Color(0xFF7C3AED)),
+                      borderSide: BorderSide(color: context.colors.aiAccent),
                     ),
                   ),
                 ),
@@ -832,9 +833,9 @@ class _QuestionEditDialogState extends State<_QuestionEditDialog> {
               SwitchListTile(
                 value: _required,
                 onChanged: (v) => setState(() => _required = v),
-                title: const Text('必須項目', style: TextStyle(fontSize: 14)),
-                subtitle: Text('この質問は回答必須にする', style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
-                activeColor: const Color(0xFF7C3AED),
+                title: Text('必須項目', style: TextStyle(fontSize: 14)),
+                subtitle: Text('この質問は回答必須にする', style: TextStyle(fontSize: 12, color: context.colors.textTertiary)),
+                activeColor: context.colors.aiAccent,
                 contentPadding: EdgeInsets.zero,
               ),
             ],
@@ -853,17 +854,17 @@ class _QuestionEditDialogState extends State<_QuestionEditDialog> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
         decoration: BoxDecoration(
-          color: selected ? const Color(0xFF7C3AED) : Colors.white,
+          color: selected ? context.colors.aiAccent : Colors.white,
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
-            color: selected ? const Color(0xFF7C3AED) : Colors.grey.shade300,
+            color: selected ? context.colors.aiAccent : context.colors.borderMedium,
           ),
         ),
         child: Text(
           label,
           style: TextStyle(
             fontSize: 13,
-            color: selected ? Colors.white : Colors.black87,
+            color: selected ? Colors.white : context.colors.textPrimary,
             fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
           ),
         ),

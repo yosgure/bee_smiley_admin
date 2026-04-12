@@ -17,13 +17,13 @@ class _NotificationScreenState extends State<NotificationScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: context.colors.scaffoldBg,
       appBar: AppBar(
         title: const Text('お知らせ'),
         centerTitle: true,
-        backgroundColor: Colors.white,
+        backgroundColor: context.colors.cardBg,
         elevation: 0,
-        foregroundColor: AppColors.textMain,
+        foregroundColor: context.colors.textPrimary,
       ),
       body: Align(
         alignment: Alignment.topCenter,
@@ -42,10 +42,10 @@ class _NotificationScreenState extends State<NotificationScreen> {
           final docs = snapshot.data!.docs;
 
           if (docs.isEmpty) {
-            return const Center(
+            return Center(
               child: Text(
                 'お知らせはありません',
-                style: TextStyle(color: AppColors.textSub),
+                style: TextStyle(color: context.colors.textSecondary),
               ),
             );
           }
@@ -76,12 +76,12 @@ class _NotificationScreenState extends State<NotificationScreen> {
               return Container(
                 margin: const EdgeInsets.only(bottom: 20),
                 decoration: BoxDecoration(
-                  color: Colors.white,
+                  color: context.colors.cardBg,
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.grey.shade200),
+                  border: Border.all(color: context.colors.borderLight),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.04),
+                      color: context.colors.shadow,
                       blurRadius: 8,
                       offset: const Offset(0, 2),
                     ),
@@ -101,16 +101,16 @@ class _NotificationScreenState extends State<NotificationScreen> {
                             Expanded(
                               child: Text(
                                 data['title'] ?? '(タイトルなし)',
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontSize: 18,
                                   fontWeight: FontWeight.bold,
-                                  color: AppColors.textMain,
+                                  color: context.colors.textPrimary,
                                 ),
                                 overflow: TextOverflow.ellipsis,
                               ),
                             ),
                             IconButton(
-                              icon: Icon(Icons.delete_outline, color: Colors.grey.shade400, size: 20),
+                              icon: Icon(Icons.delete_outline, color: context.colors.iconMuted, size: 20),
                               onPressed: () => _deleteNotification(doc.id),
                               padding: EdgeInsets.zero,
                               constraints: const BoxConstraints(),
@@ -120,23 +120,23 @@ class _NotificationScreenState extends State<NotificationScreen> {
                         const SizedBox(height: 12),
                         Row(
                           children: [
-                            const Icon(Icons.schedule, size: 16, color: AppColors.textSub),
+                            Icon(Icons.schedule, size: 16, color: context.colors.textSecondary),
                             const SizedBox(width: 6),
                             Text(
                               dateStr,
-                              style: const TextStyle(color: AppColors.textSub, fontSize: 13),
+                              style: TextStyle(color: context.colors.textSecondary, fontSize: 13),
                             ),
                           ],
                         ),
                         const SizedBox(height: 6),
                         Row(
                           children: [
-                            const Icon(Icons.groups_outlined, size: 16, color: AppColors.textSub),
+                            Icon(Icons.groups_outlined, size: 16, color: context.colors.textSecondary),
                             const SizedBox(width: 6),
                             Expanded(
                               child: Text(
                                 '対象: $targetStr',
-                                style: const TextStyle(color: AppColors.textSub, fontSize: 13),
+                                style: TextStyle(color: context.colors.textSecondary, fontSize: 13),
                                 overflow: TextOverflow.ellipsis,
                               ),
                             ),
@@ -147,7 +147,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
                           data['body'] ?? data['detail'] ?? '',
                           maxLines: 3,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(color: AppColors.textMain, fontSize: 14, height: 1.5),
+                          style: TextStyle(color: context.colors.textPrimary, fontSize: 14, height: 1.5),
                         ),
                       ],
                     ),
@@ -164,7 +164,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
       floatingActionButton: FloatingActionButton(
         heroTag: null, 
         onPressed: () => _openEditScreen(null),
-        backgroundColor: Colors.white,
+        backgroundColor: context.colors.cardBg,
         elevation: 4,
         shape: const CircleBorder(),
         child: Padding(
@@ -412,14 +412,14 @@ class _NotificationEditScreenState extends State<NotificationEditScreen> {
                   width: double.infinity,
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: Colors.white,
-                    border: Border.all(color: Colors.grey.shade300),
+                    color: context.colors.cardBg,
+                    border: Border.all(color: context.colors.borderMedium),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: _isLoadingClassrooms
                       ? const Center(child: CircularProgressIndicator())
                       : _classroomOptions.isEmpty
-                          ? const Text('教室データがありません', style: TextStyle(color: Colors.grey))
+                          ? Text('教室データがありません', style: TextStyle(color: context.colors.textSecondary))
                           : Column(
                               children: _classroomOptions.map((roomName) {
                                 return CheckboxListTile(

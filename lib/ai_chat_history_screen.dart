@@ -16,7 +16,7 @@ class AiChatHistoryScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: context.colors.scaffoldBg,
       appBar: AppBar(
         title: Row(
           mainAxisSize: MainAxisSize.min,
@@ -24,26 +24,26 @@ class AiChatHistoryScreen extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(6),
               decoration: BoxDecoration(
-                color: const Color(0xFF7C3AED).withOpacity(0.1),
+                color: context.colors.aiAccent.withOpacity(0.1),
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: const Icon(Icons.history_rounded, color: Color(0xFF7C3AED), size: 16),
+              child: Icon(Icons.history_rounded, color: context.colors.aiAccent, size: 16),
             ),
             const SizedBox(width: 10),
-            Text('$studentName - 相談履歴', style: const TextStyle(fontSize: 16)),
+            Text('$studentName - 相談履歴', style: TextStyle(fontSize: 16, color: context.colors.textPrimary)),
           ],
         ),
         centerTitle: true,
-        backgroundColor: Colors.white,
+        backgroundColor: context.colors.scaffoldBg,
         elevation: 0,
         surfaceTintColor: Colors.transparent,
         leading: IconButton(
-          icon: Icon(Icons.arrow_back_ios_new_rounded, size: 20, color: Colors.grey.shade700),
+          icon: Icon(Icons.arrow_back_ios_new_rounded, size: 20, color: context.colors.textSecondary),
           onPressed: () => Navigator.pop(context),
         ),
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1),
-          child: Container(color: Colors.grey.shade200, height: 0.5),
+          child: Container(color: context.colors.borderLight, height: 0.5),
         ),
       ),
       body: StreamBuilder<QuerySnapshot>(
@@ -66,8 +66,8 @@ class AiChatHistoryScreen extends StatelessWidget {
           }
 
           if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(
-              child: CircularProgressIndicator(color: Color(0xFF7C3AED)),
+            return Center(
+              child: CircularProgressIndicator(color: context.colors.aiAccent),
             );
           }
 
@@ -78,11 +78,11 @@ class AiChatHistoryScreen extends StatelessWidget {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.history_rounded, size: 64, color: Colors.grey.shade300),
+                  Icon(Icons.history_rounded, size: 64, color: context.colors.borderMedium),
                   const SizedBox(height: 16),
                   Text(
                     'まだ相談履歴がありません',
-                    style: TextStyle(color: Colors.grey.shade500, fontSize: 16),
+                    style: TextStyle(color: context.colors.textTertiary, fontSize: 16),
                   ),
                 ],
               ),
@@ -126,7 +126,7 @@ class AiChatHistoryScreen extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 10),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.grey.shade200),
+        border: Border.all(color: context.colors.borderLight),
       ),
       child: InkWell(
         onTap: () => _openSessionDetail(context, sessionId, data),
@@ -142,8 +142,8 @@ class AiChatHistoryScreen extends StatelessWidget {
                     width: 28,
                     height: 28,
                     decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        colors: [Color(0xFF7C3AED), Color(0xFFEC4899)],
+                      gradient: LinearGradient(
+                        colors: [context.colors.aiGradientStart, context.colors.aiGradientEnd],
                       ),
                       borderRadius: BorderRadius.circular(8),
                     ),
@@ -152,27 +152,27 @@ class AiChatHistoryScreen extends StatelessWidget {
                   const SizedBox(width: 10),
                   Text(
                     dateStr,
-                    style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+                    style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: context.colors.textPrimary),
                   ),
                   const Spacer(),
                   Text(
                     '$messageCount件',
-                    style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
+                    style: TextStyle(fontSize: 11, color: context.colors.textTertiary),
                   ),
                   const SizedBox(width: 4),
-                  Icon(Icons.chevron_right_rounded, color: Colors.grey.shade400, size: 20),
+                  Icon(Icons.chevron_right_rounded, color: context.colors.iconMuted, size: 20),
                 ],
               ),
               const SizedBox(height: 10),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
-                  color: Colors.grey.shade100,
+                  color: context.colors.chipBg,
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: Text(
                   staffName,
-                  style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                  style: TextStyle(fontSize: 11, color: context.colors.textSecondary),
                 ),
               ),
               if (summary != null && summary.isNotEmpty) ...[
@@ -180,14 +180,14 @@ class AiChatHistoryScreen extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF7C3AED).withOpacity(0.04),
+                    color: context.colors.aiAccent.withOpacity(0.04),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Icon(Icons.summarize_rounded, size: 14,
-                          color: const Color(0xFF7C3AED).withOpacity(0.5)),
+                          color: context.colors.aiAccent.withOpacity(0.5)),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
@@ -196,7 +196,7 @@ class AiChatHistoryScreen extends StatelessWidget {
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
                             fontSize: 12,
-                            color: Colors.grey.shade700,
+                            color: context.colors.textSecondary,
                             height: 1.4,
                           ),
                         ),
@@ -210,7 +210,7 @@ class AiChatHistoryScreen extends StatelessWidget {
                   lastMessage,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+                  style: TextStyle(fontSize: 13, color: context.colors.textSecondary),
                 ),
               ],
             ],
@@ -260,20 +260,20 @@ class AiChatSessionDetailScreen extends StatelessWidget {
     }
 
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: context.colors.scaffoldBg,
       appBar: AppBar(
-        title: Text('$studentName - $dateStr', style: const TextStyle(fontSize: 15)),
+        title: Text('$studentName - $dateStr', style: TextStyle(fontSize: 15, color: context.colors.textPrimary)),
         centerTitle: true,
-        backgroundColor: Colors.white,
+        backgroundColor: context.colors.scaffoldBg,
         elevation: 0,
         surfaceTintColor: Colors.transparent,
         leading: IconButton(
-          icon: Icon(Icons.arrow_back_ios_new_rounded, size: 20, color: Colors.grey.shade700),
+          icon: Icon(Icons.arrow_back_ios_new_rounded, size: 20, color: context.colors.textSecondary),
           onPressed: () => Navigator.pop(context),
         ),
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1),
-          child: Container(color: Colors.grey.shade200, height: 0.5),
+          child: Container(color: context.colors.borderLight, height: 0.5),
         ),
       ),
       body: StreamBuilder<QuerySnapshot>(
@@ -289,8 +289,8 @@ class AiChatSessionDetailScreen extends StatelessWidget {
           }
 
           if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(
-              child: CircularProgressIndicator(color: Color(0xFF7C3AED)),
+            return Center(
+              child: CircularProgressIndicator(color: context.colors.aiAccent),
             );
           }
 
@@ -341,12 +341,12 @@ class AiChatSessionDetailScreen extends StatelessWidget {
               ),
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               decoration: BoxDecoration(
-                color: const Color(0xFFF3F4F6),
+                color: context.colors.chatMyBubble,
                 borderRadius: BorderRadius.circular(20),
               ),
               child: SelectableText(
                 content,
-                style: const TextStyle(fontSize: 15, color: Colors.black87, height: 1.5),
+                style: TextStyle(fontSize: 15, color: context.colors.chatMyBubbleText, height: 1.5),
               ),
             ),
             if (timeStr.isNotEmpty)
@@ -354,7 +354,7 @@ class AiChatSessionDetailScreen extends StatelessWidget {
                 padding: const EdgeInsets.only(top: 4, right: 4),
                 child: Text(
                   timeStr,
-                  style: TextStyle(fontSize: 11, color: Colors.grey.shade400),
+                  style: TextStyle(fontSize: 11, color: context.colors.textHint),
                 ),
               ),
           ],
@@ -371,8 +371,8 @@ class AiChatSessionDetailScreen extends StatelessWidget {
             width: 32,
             height: 32,
             decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [Color(0xFF7C3AED), Color(0xFFEC4899)],
+              gradient: LinearGradient(
+                colors: [context.colors.aiGradientStart, context.colors.aiGradientEnd],
               ),
               borderRadius: BorderRadius.circular(10),
             ),
@@ -385,9 +385,9 @@ class AiChatSessionDetailScreen extends StatelessWidget {
               children: [
                 SelectableText(
                   content,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 15,
-                    color: Colors.black87,
+                    color: context.colors.textPrimary,
                     height: 1.6,
                   ),
                 ),
@@ -396,7 +396,7 @@ class AiChatSessionDetailScreen extends StatelessWidget {
                     padding: const EdgeInsets.only(top: 6),
                     child: Text(
                       timeStr,
-                      style: TextStyle(fontSize: 11, color: Colors.grey.shade400),
+                      style: TextStyle(fontSize: 11, color: context.colors.textHint),
                     ),
                   ),
               ],

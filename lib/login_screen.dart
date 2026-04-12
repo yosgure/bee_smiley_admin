@@ -63,7 +63,7 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: context.colors.scaffoldBg,
       body: Center(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(32.0),
@@ -97,7 +97,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             borderSide: BorderSide.none,
                           ),
                           filled: true,
-                          fillColor: Colors.grey.shade100,
+                          fillColor: context.colors.inputFill,
                         ),
                         validator: (v) => (v == null || v.trim().isEmpty) ? 'ログインIDを入力してください' : null,
                         textInputAction: TextInputAction.next,
@@ -120,7 +120,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             borderSide: BorderSide.none,
                           ),
                           filled: true,
-                          fillColor: Colors.grey.shade100,
+                          fillColor: context.colors.inputFill,
                         ),
                         validator: (v) => (v == null || v.trim().isEmpty) ? 'パスワードを入力してください' : null,
                         onFieldSubmitted: (_) => _login(),

@@ -62,13 +62,13 @@ class _AssessmentDetailScreenState extends State<AssessmentDetailScreen> {
     final classroom = _data['classroom'] ?? '';
 
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: context.colors.cardBg,
       appBar: AppBar(
         title: Text(isWeekly ? '週次アセスメント詳細' : '月次サマリ詳細'),
-        backgroundColor: Colors.white,
+        backgroundColor: context.colors.cardBg,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios, color: AppColors.textMain),
+          icon: Icon(Icons.arrow_back_ios, color: context.colors.textPrimary),
           onPressed: () => Navigator.pop(context),
         ),
         actions: [
@@ -165,7 +165,7 @@ class _AssessmentDetailScreenState extends State<AssessmentDetailScreen> {
                 ),
                 const SizedBox(height: 8),
                 if (classroom.isNotEmpty)
-                  Text('クラス: $classroom', style: const TextStyle(color: Colors.grey)),
+                  Text('クラス: $classroom', style: TextStyle(color: context.colors.textSecondary)),
                 
                 const SizedBox(height: 24),
                 const Divider(),
@@ -191,7 +191,7 @@ class _AssessmentDetailScreenState extends State<AssessmentDetailScreen> {
     final entries = List<Map<String, dynamic>>.from(data['entries'] ?? []);
 
     if (entries.isEmpty) {
-      return const Center(child: Text('記録がありません', style: TextStyle(color: Colors.grey)));
+      return Center(child: Text('記録がありません', style: TextStyle(color: context.colors.textSecondary)));
     }
 
     return Column(
@@ -203,10 +203,10 @@ class _AssessmentDetailScreenState extends State<AssessmentDetailScreen> {
           margin: const EdgeInsets.only(bottom: 24),
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: context.colors.cardBg,
             borderRadius: AppStyles.radius,
-            border: Border.all(color: Colors.grey.shade200),
-            boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 8, offset: const Offset(0, 2))],
+            border: Border.all(color: context.colors.borderLight),
+            boxShadow: [BoxShadow(color: context.colors.shadow, blurRadius: 8, offset: const Offset(0, 2))],
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -231,7 +231,7 @@ class _AssessmentDetailScreenState extends State<AssessmentDetailScreen> {
                   padding: const EdgeInsets.only(left: 28),
                   child: Text(
                     task,
-                    style: TextStyle(fontSize: 13, color: Colors.grey.shade500),
+                    style: TextStyle(fontSize: 13, color: context.colors.textTertiary),
                   ),
                 ),
               ],
@@ -240,20 +240,20 @@ class _AssessmentDetailScreenState extends State<AssessmentDetailScreen> {
               // 評価と時間
               Row(
                 children: [
-                  Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), decoration: BoxDecoration(color: Colors.grey.shade100, borderRadius: BorderRadius.circular(8)), child: Text('評価: ${entry['rating'] ?? '-'}', style: const TextStyle(fontSize: 12))),
+                  Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), decoration: BoxDecoration(color: context.colors.chipBg, borderRadius: BorderRadius.circular(8)), child: Text('評価: ${entry['rating'] ?? '-'}', style: TextStyle(fontSize: 12))),
                 ],
               ),
               const SizedBox(height: 16),
 
               // コメント
               if ((entry['comment'] ?? '').isNotEmpty) ...[
-                const Text('コメント', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.grey)),
+                Text('コメント', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: context.colors.textSecondary)),
                 const SizedBox(height: 4),
                 Container(
                   width: double.infinity,
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: AppColors.inputFill,
+                    color: context.colors.inputFill,
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Text(
@@ -277,9 +277,9 @@ class _AssessmentDetailScreenState extends State<AssessmentDetailScreen> {
                       child: Image.network(
                         entry['photoUrl'],
                         fit: BoxFit.contain,
-                        errorBuilder: (c, o, s) => const SizedBox(
+                        errorBuilder: (c, o, s) => SizedBox(
                           height: 100, 
-                          child: Center(child: Icon(Icons.broken_image, color: Colors.grey)),
+                          child: Center(child: Icon(Icons.broken_image, color: context.colors.textSecondary)),
                         ),
                       ),
                     ),
@@ -331,9 +331,9 @@ class _AssessmentDetailScreenState extends State<AssessmentDetailScreen> {
                       child: Text.rich(
                         TextSpan(
                           children: [
-                            TextSpan(text: '${e['category'] ?? ''}', style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.textMain)),
+                            TextSpan(text: '${e['category'] ?? ''}', style: TextStyle(fontWeight: FontWeight.bold, color: context.colors.textPrimary)),
                             const TextSpan(text: ' : '),
-                            TextSpan(text: e['skill'] ?? '', style: const TextStyle(color: AppColors.textSub)),
+                            TextSpan(text: e['skill'] ?? '', style: TextStyle(color: context.colors.textSecondary)),
                           ],
                         ),
                         style: const TextStyle(fontSize: 14, height: 1.4),
@@ -373,7 +373,7 @@ class _AssessmentDetailScreenState extends State<AssessmentDetailScreen> {
                             shape: BoxShape.circle,
                           ),
                         ),
-                        Text(period, style: const TextStyle(fontSize: 14, color: AppColors.textMain)),
+                        Text(period, style: TextStyle(fontSize: 14, color: context.colors.textPrimary)),
                       ],
                     ),
                   );
@@ -392,7 +392,7 @@ class _AssessmentDetailScreenState extends State<AssessmentDetailScreen> {
                           shape: BoxShape.circle,
                         ),
                       ),
-                      Text(period, style: const TextStyle(fontSize: 14, color: AppColors.textMain)),
+                      Text(period, style: TextStyle(fontSize: 14, color: context.colors.textPrimary)),
                     ],
                   ),
                 )),
@@ -403,7 +403,7 @@ class _AssessmentDetailScreenState extends State<AssessmentDetailScreen> {
                   const SizedBox(height: 12),
                   Text(
                     sensitivePeriodComment,
-                    style: const TextStyle(height: 1.5, fontSize: 14, color: AppColors.textSub),
+                    style: TextStyle(height: 1.5, fontSize: 14, color: context.colors.textSecondary),
                   ),
                 ],
               ],
@@ -419,7 +419,7 @@ class _AssessmentDetailScreenState extends State<AssessmentDetailScreen> {
           iconColor: AppColors.primary,
           child: Text(
             summary.isEmpty ? 'なし' : summary,
-            style: const TextStyle(height: 1.6, fontSize: 14, color: AppColors.textMain),
+            style: TextStyle(height: 1.6, fontSize: 14, color: context.colors.textPrimary),
           ),
         ),
 
@@ -460,12 +460,12 @@ class _AssessmentDetailScreenState extends State<AssessmentDetailScreen> {
       width: double.infinity,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: context.colors.cardBg,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey.shade200),
+        border: Border.all(color: context.colors.borderLight),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.03),
+            color: context.colors.shadow,
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -499,13 +499,13 @@ class _AssessmentDetailScreenState extends State<AssessmentDetailScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border.all(color: Colors.grey.shade300),
+        color: context.colors.cardBg,
+        border: Border.all(color: context.colors.borderMedium),
         borderRadius: BorderRadius.circular(6),
       ),
       child: Row(
         children: [
-          Icon(icon, size: 14, color: Colors.grey),
+          Icon(icon, size: 14, color: context.colors.textSecondary),
           const SizedBox(width: 4),
           Text(text, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
         ],

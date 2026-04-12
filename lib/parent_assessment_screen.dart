@@ -55,8 +55,8 @@ class _ParentAssessmentScreenState extends State<ParentAssessmentScreen> with Si
   @override
   Widget build(BuildContext context) {
     if (widget.childId == null) {
-      return const Center(
-        child: Text('お子さまの情報がありません', style: TextStyle(color: Colors.grey)),
+      return Center(
+        child: Text('お子さまの情報がありません', style: TextStyle(color: context.colors.textSecondary)),
       );
     }
 
@@ -70,11 +70,11 @@ class _ParentAssessmentScreenState extends State<ParentAssessmentScreen> with Si
       children: [
         _buildHeader(),
         Container(
-          color: Colors.white,
+          color: context.colors.cardBg,
           child: TabBar(
             controller: _tabController,
             labelColor: AppColors.primary,
-            unselectedLabelColor: Colors.grey,
+            unselectedLabelColor: context.colors.textSecondary,
             indicatorColor: AppColors.primary,
             indicatorWeight: 3,
             tabs: const [
@@ -103,8 +103,8 @@ Widget _buildHeader({bool showBack = false}) {
     height: 48,
     padding: const EdgeInsets.symmetric(horizontal: 16),
     decoration: BoxDecoration(
-      color: Colors.white,
-      border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
+      color: context.colors.cardBg,
+      border: Border(bottom: BorderSide(color: context.colors.borderLight)),
     ),
     child: Row(
       children: [
@@ -142,7 +142,7 @@ Widget _buildHeader({bool showBack = false}) {
                 // 詳細画面: 週次アセスメント or 月次サマリ
                 Text(
                   _selectedType == 'weekly' ? '週次アセスメント' : '月次サマリ',
-                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.normal),
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.normal),
                 )
               else if (hasMultipleChildren)
                 // 一覧画面（複数の子ども）: ドロップダウン
@@ -156,10 +156,10 @@ Widget _buildHeader({bool showBack = false}) {
                     children: [
                       Text(
                         '${widget.childName}のアセスメント',
-                        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.normal),
+                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.normal),
                       ),
-                      const SizedBox(width: 4),
-                      const Icon(Icons.arrow_drop_down, color: Colors.grey),
+                      SizedBox(width: 4),
+                      Icon(Icons.arrow_drop_down, color: context.colors.iconMuted),
                     ],
                   ),
                   itemBuilder: (context) {
@@ -205,7 +205,7 @@ Widget _buildHeader({bool showBack = false}) {
                 // 一覧画面（子ども1人）: シンプルなテキスト
                 Text(
                   '${widget.childName}のアセスメント',
-                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.normal),
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.normal),
                 ),
             ],
           ),
@@ -233,7 +233,7 @@ Widget _buildHeader({bool showBack = false}) {
               padding: const EdgeInsets.all(16.0),
               child: Text(
                 'データの取得に失敗しました\n${snapshot.error}',
-                style: const TextStyle(color: Colors.red, fontSize: 12),
+                style: TextStyle(color: Colors.red, fontSize: 12),
                 textAlign: TextAlign.center,
               ),
             ),
@@ -252,12 +252,12 @@ Widget _buildHeader({bool showBack = false}) {
                 Icon(
                   type == 'weekly' ? Icons.assignment_outlined : Icons.summarize_outlined,
                   size: 64,
-                  color: Colors.grey.shade300,
+                  color: context.colors.borderMedium,
                 ),
-                const SizedBox(height: 16),
+                SizedBox(height: 16),
                 Text(
                   type == 'weekly' ? '週次アセスメントはまだありません' : '月次サマリはまだありません',
-                  style: const TextStyle(color: Colors.grey),
+                  style: TextStyle(color: context.colors.textSecondary),
                 ),
               ],
             ),
@@ -305,7 +305,7 @@ Widget _buildHeader({bool showBack = false}) {
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: Colors.grey.shade200),
+        side: BorderSide(color: context.colors.borderLight),
       ),
       child: ListTile(
         onTap: () => setState(() {
@@ -326,13 +326,13 @@ Widget _buildHeader({bool showBack = false}) {
         ),
         title: Text(
           dateStr,
-          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
         ),
         subtitle: Text(
           subtitle,
-          style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
+          style: TextStyle(color: context.colors.textSecondary, fontSize: 13),
         ),
-        trailing: const Icon(Icons.chevron_right, color: Colors.grey),
+        trailing: Icon(Icons.chevron_right, color: context.colors.iconMuted),
       ),
     );
   }
@@ -395,7 +395,7 @@ Widget _buildHeader({bool showBack = false}) {
                 const SizedBox(width: 8),
                 Text(
                   dateStr,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontWeight: FontWeight.bold,
                     color: AppColors.primary,
                   ),
@@ -409,10 +409,10 @@ Widget _buildHeader({bool showBack = false}) {
           ...entries.map((entry) => _buildWeeklyEntryCard(entry)),
           
           if (entries.isEmpty)
-            const Center(
+            Center(
               child: Padding(
                 padding: EdgeInsets.all(32),
-                child: Text('活動記録がありません', style: TextStyle(color: Colors.grey)),
+                child: Text('活動記録がありません', style: TextStyle(color: context.colors.textSecondary)),
               ),
             ),
         ],
@@ -433,7 +433,7 @@ Widget _buildHeader({bool showBack = false}) {
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: Colors.grey.shade200),
+        side: BorderSide(color: context.colors.borderLight),
       ),
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -448,7 +448,7 @@ Widget _buildHeader({bool showBack = false}) {
                 Expanded(
                   child: Text(
                     tool,
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                   ),
                 ),
               ],
@@ -458,38 +458,38 @@ Widget _buildHeader({bool showBack = false}) {
             if (task.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.only(top: 4),
-                child: Text(task, style: TextStyle(fontSize: 13, color: Colors.grey.shade600)),
+                child: Text(task, style: TextStyle(fontSize: 13, color: context.colors.textSecondary)),
               ),
             
             // 評価と時間
-            const SizedBox(height: 8),
+            SizedBox(height: 8),
             Wrap(
               spacing: 8,
               runSpacing: 6,
               children: [
-                Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), decoration: BoxDecoration(color: Colors.grey.shade100, borderRadius: BorderRadius.circular(8)), child: Text('評価: $rating', style: const TextStyle(fontSize: 12))),
+                Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), decoration: BoxDecoration(color: context.colors.chipBg, borderRadius: BorderRadius.circular(8)), child: Text('評価: $rating', style: TextStyle(fontSize: 12))),
                 if (duration.toString().isNotEmpty)
-                  Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), decoration: BoxDecoration(color: Colors.grey.shade100, borderRadius: BorderRadius.circular(8)), child: Row(mainAxisSize: MainAxisSize.min, children: [const Icon(Icons.timer_outlined, size: 14, color: Colors.grey), const SizedBox(width: 4), Text(duration.toString(), style: const TextStyle(fontSize: 12))])),
+                  Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), decoration: BoxDecoration(color: context.colors.chipBg, borderRadius: BorderRadius.circular(8)), child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.timer_outlined, size: 14, color: context.colors.iconMuted), SizedBox(width: 4), Text(duration.toString(), style: TextStyle(fontSize: 12))])),
               ],
             ),
             
             // コメント
             if (comment.isNotEmpty) ...[
-              const SizedBox(height: 12),
+              SizedBox(height: 12),
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: Colors.grey.shade50,
+                  color: context.colors.tagBg,
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: Text(comment, style: const TextStyle(fontSize: 14, height: 1.5)),
+                child: Text(comment, style: TextStyle(fontSize: 14, height: 1.5)),
               ),
             ],
             
             // 写真
             if (photoUrl != null && photoUrl.isNotEmpty) ...[
-              const SizedBox(height: 12),
+              SizedBox(height: 12),
               GestureDetector(
                 onTap: () => _showImagePreview(photoUrl),
                 child: ClipRRect(
@@ -500,12 +500,12 @@ Widget _buildHeader({bool showBack = false}) {
                     fit: BoxFit.contain,
                     placeholder: (c, u) => Container(
                       height: 150,
-                      color: Colors.grey.shade100,
+                      color: context.colors.chipBg,
                       child: const Center(child: SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2))),
                     ),
                     errorWidget: (c, u, e) => Container(
                       height: 100,
-                      color: Colors.grey.shade200,
+                      color: context.colors.borderLight,
                       child: const Icon(Icons.broken_image),
                     ),
                   ),
@@ -545,7 +545,7 @@ Widget _buildHeader({bool showBack = false}) {
                 const SizedBox(width: 8),
                 Text(
                   dateStr,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontWeight: FontWeight.bold,
                     color: AppColors.primary,
                   ),
@@ -561,14 +561,14 @@ Widget _buildHeader({bool showBack = false}) {
               '非認知能力・伸びている力',
               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: AppColors.primary),
             ),
-            const SizedBox(height: 12),
+            SizedBox(height: 12),
             ...monthlyEntries.map((e) => Container(
               margin: const EdgeInsets.only(bottom: 8),
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: context.colors.cardBg,
                 borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: Colors.grey.shade200),
+                border: Border.all(color: context.colors.borderLight),
               ),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -581,12 +581,12 @@ Widget _buildHeader({bool showBack = false}) {
                         children: [
                           TextSpan(
                             text: '${e['category'] ?? ''}: ',
-                            style: const TextStyle(fontWeight: FontWeight.bold),
+                            style: TextStyle(fontWeight: FontWeight.bold),
                           ),
                           TextSpan(text: e['skill'] ?? ''),
                         ],
                       ),
-                      style: const TextStyle(fontSize: 14),
+                      style: TextStyle(fontSize: 14),
                     ),
                   ),
                 ],
@@ -606,7 +606,7 @@ Widget _buildHeader({bool showBack = false}) {
               spacing: 8,
               runSpacing: 8,
               children: sensitivePeriods.map((tag) => Chip(
-                label: Text(tag, style: const TextStyle(fontSize: 12, color: Colors.white)),
+                label: Text(tag, style: TextStyle(fontSize: 12, color: Colors.white)),
                 backgroundColor: Colors.green,
                 padding: EdgeInsets.zero,
                 materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
@@ -620,17 +620,17 @@ Widget _buildHeader({bool showBack = false}) {
             '今月の様子・総評',
             style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: AppColors.primary),
           ),
-          const SizedBox(height: 12),
+          SizedBox(height: 12),
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: Colors.grey.shade50,
+              color: context.colors.tagBg,
               borderRadius: BorderRadius.circular(12),
             ),
             child: Text(
               summary.isEmpty ? 'なし' : summary,
-              style: const TextStyle(height: 1.6, fontSize: 15),
+              style: TextStyle(height: 1.6, fontSize: 15),
             ),
           ),
         ],

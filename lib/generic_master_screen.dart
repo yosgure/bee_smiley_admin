@@ -31,10 +31,10 @@ class _GenericMasterScreenState extends State<GenericMasterScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.title),
-        backgroundColor: Colors.white,
+        backgroundColor: context.colors.cardBg,
         elevation: 0,
       ),
-      backgroundColor: const Color(0xFFF2F2F7),
+      backgroundColor: context.colors.scaffoldBgAlt,
       body: ListView.builder(
         padding: const EdgeInsets.all(16),
         itemCount: _items.length,
@@ -45,7 +45,7 @@ class _GenericMasterScreenState extends State<GenericMasterScreen> {
             child: ListTile(
               title: Text(_items[index], style: const TextStyle(fontWeight: FontWeight.bold)),
               trailing: IconButton(
-                icon: const Icon(Icons.delete, color: Colors.grey),
+                icon: Icon(Icons.delete, color: context.colors.textSecondary),
                 onPressed: () => _deleteItem(index),
               ),
               onTap: () => _showEditDialog(index: index),

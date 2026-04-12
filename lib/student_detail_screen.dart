@@ -168,30 +168,30 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> with SingleTi
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF2F2F7),
+      backgroundColor: context.colors.scaffoldBgAlt,
       appBar: AppBar(
         title: Text(widget.studentName),
         centerTitle: true,
-        backgroundColor: Colors.white,
+        backgroundColor: context.colors.cardBg,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios, color: Colors.black54),
+          icon: Icon(Icons.arrow_back_ios, color: context.colors.textSecondary),
           onPressed: () => Navigator.pop(context),
         ),
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1),
-          child: Container(color: Colors.grey.shade300, height: 1),
+          child: Container(color: context.colors.borderMedium, height: 1),
         ),
       ),
       body: Column(
         children: [
           _buildStudentHeader(),
           Container(
-            color: Colors.white,
+            color: context.colors.cardBg,
             child: TabBar(
               controller: _tabController,
               labelColor: AppColors.primary,
-              unselectedLabelColor: Colors.grey,
+              unselectedLabelColor: context.colors.textSecondary,
               indicatorColor: AppColors.primary,
               indicatorWeight: 3,
               labelStyle: const TextStyle(fontWeight: FontWeight.bold),
@@ -239,7 +239,7 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> with SingleTi
 
   Widget _buildStudentHeader() {
     return Container(
-      color: Colors.white,
+      color: context.colors.cardBg,
       padding: const EdgeInsets.all(16),
       margin: const EdgeInsets.only(bottom: 1),
       child: Row(
@@ -266,7 +266,7 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> with SingleTi
                       const SizedBox(width: 8),
                       _buildInfoTag(Icons.wc, _gender),
                       const SizedBox(width: 8),
-                      Text(_birthDateStr, style: const TextStyle(color: Colors.grey, fontSize: 12)),
+                      Text(_birthDateStr, style: TextStyle(color: context.colors.textSecondary, fontSize: 12)),
                     ],
                   ),
               ],
@@ -293,12 +293,12 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> with SingleTi
     if (text.isEmpty) return const SizedBox.shrink();
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-      decoration: BoxDecoration(color: Colors.grey.shade100, borderRadius: BorderRadius.circular(4)),
+      decoration: BoxDecoration(color: context.colors.chipBg, borderRadius: BorderRadius.circular(4)),
       child: Row(
         children: [
-          Icon(icon, size: 12, color: Colors.black54),
+          Icon(icon, size: 12, color: context.colors.textSecondary),
           const SizedBox(width: 4),
-          Text(text, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.black87)),
+          Text(text, style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: context.colors.textPrimary)),
         ],
       ),
     );
@@ -332,7 +332,7 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> with SingleTi
           return Center(
             child: Text(
               type == 'weekly' ? '週次アセスメントはまだありません' : '月次サマリはまだありません',
-              style: const TextStyle(color: Colors.grey),
+              style: TextStyle(color: context.colors.textSecondary),
             ),
           );
         }
@@ -372,7 +372,7 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> with SingleTi
                   margin: const EdgeInsets.only(bottom: 12),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
-                    side: BorderSide(color: Colors.grey.shade200),
+                    side: BorderSide(color: context.colors.borderLight),
                   ),
                   child: InkWell(
                     onTap: () {
@@ -397,7 +397,7 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> with SingleTi
                                 dateStr,
                                 style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                               ),
-                              const Icon(Icons.chevron_right, color: Colors.grey),
+                              Icon(Icons.chevron_right, color: context.colors.textSecondary),
                             ],
                           ),
                           if (subtitle.isNotEmpty) ...[
@@ -406,7 +406,7 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> with SingleTi
                               subtitle,
                               maxLines: 2,
                               overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(color: Colors.black87, fontSize: 14),
+                              style: TextStyle(color: context.colors.textPrimary, fontSize: 14),
                             ),
                           ],
                         ],

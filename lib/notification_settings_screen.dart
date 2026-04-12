@@ -94,10 +94,10 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
       appBar: AppBar(
         title: const Text('通知設定'),
      centerTitle: true,
-  backgroundColor: Colors.white,
+  backgroundColor: context.colors.cardBg,
   elevation: 0,
   leading: IconButton(
-    icon: const Icon(Icons.arrow_back, color: Colors.black87),
+    icon: Icon(Icons.arrow_back, color: context.colors.textPrimary),
     onPressed: () {
       if (widget.onBack != null) {
         widget.onBack!();
@@ -113,12 +113,12 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
           : ListView(
               padding: const EdgeInsets.all(16),
               children: [
-                const Text(
+                Text(
                   'プッシュ通知の受信設定',
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
-                    color: Colors.grey,
+                    color: context.colors.textSecondary,
                   ),
                 ),
                 const SizedBox(height: 16),

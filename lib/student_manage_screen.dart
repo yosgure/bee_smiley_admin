@@ -109,13 +109,13 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
               borderRadius: BorderRadius.circular(2),
             ),
           ),
-          const SizedBox(width: 8),
+          SizedBox(width: 8),
           Text(
             '$headerText行',
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.bold,
-              color: Colors.black87,
+              color: context.colors.textPrimary,
             ),
           ),
         ],
@@ -129,10 +129,10 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
       appBar: AppBar(
         title: const Text('保護者・児童管理'),
         centerTitle: true,
-        backgroundColor: Colors.white,
+        backgroundColor: context.colors.cardBg,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.black87),
+          icon: Icon(Icons.arrow_back, color: context.colors.textPrimary),
           onPressed: () {
             if (widget.onBack != null) {
               widget.onBack!();
@@ -142,7 +142,7 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
           },
         ),
       ),
-      backgroundColor: const Color(0xFFF2F2F7),
+      backgroundColor: context.colors.scaffoldBgAlt,
       body: Column(
         children: [
           // 検索窓 + 教室フィルター
@@ -156,10 +156,10 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
                     controller: _searchController,
                     decoration: InputDecoration(
                       hintText: '名前で検索...',
-                      prefixIcon: const Icon(Icons.search, color: Colors.grey),
+                      prefixIcon: Icon(Icons.search, color: context.colors.iconMuted),
                       suffixIcon: _searchQuery.isNotEmpty
                           ? IconButton(
-                              icon: const Icon(Icons.clear, color: Colors.grey),
+                              icon: Icon(Icons.clear, color: context.colors.iconMuted),
                               onPressed: () {
                                 setState(() {
                                   _searchController.clear();
@@ -170,18 +170,18 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
                           : null,
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(8),
-                        borderSide: BorderSide(color: Colors.grey.shade300),
+                        borderSide: BorderSide(color: context.colors.borderMedium),
                       ),
                       enabledBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(8),
-                        borderSide: BorderSide(color: Colors.grey.shade300),
+                        borderSide: BorderSide(color: context.colors.borderMedium),
                       ),
                       focusedBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(8),
                         borderSide: const BorderSide(color: Colors.blue),
                       ),
                       filled: true,
-                      fillColor: Colors.grey.shade50,
+                      fillColor: context.colors.tagBg,
                       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                       isDense: true,
                     ),
@@ -192,13 +192,13 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
                     },
                   ),
                 ),
-                const SizedBox(width: 12),
+                SizedBox(width: 12),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12),
                   decoration: BoxDecoration(
-                    border: Border.all(color: Colors.grey.shade300),
+                    border: Border.all(color: context.colors.borderMedium),
                     borderRadius: BorderRadius.circular(8),
-                    color: Colors.grey.shade50,
+                    color: context.colors.tagBg,
                   ),
                   child: DropdownButtonHideUnderline(
                     child: DropdownButton<String>(
@@ -235,8 +235,8 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
                 final docs = List<QueryDocumentSnapshot>.from(snapshot.data!.docs);
 
                 if (docs.isEmpty) {
-                  return const Center(
-                    child: Text('データがありません。\n右下のマークで追加してください。', style: TextStyle(color: Colors.grey)),
+                  return Center(
+                    child: Text('データがありません。\n右下のマークで追加してください。', style: TextStyle(color: context.colors.textSecondary)),
                   );
                 }
 
@@ -294,11 +294,11 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(Icons.search_off, size: 64, color: Colors.grey.shade400),
-                        const SizedBox(height: 16),
+                        Icon(Icons.search_off, size: 64, color: context.colors.iconMuted),
+                        SizedBox(height: 16),
                         Text(
                           '「$_searchQuery」に一致する結果がありません',
-                          style: TextStyle(color: Colors.grey.shade600),
+                          style: TextStyle(color: context.colors.textSecondary),
                         ),
                       ],
                     ),
@@ -371,7 +371,7 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
                             Expanded(
                               child: Text(
                                 parentFullName.trim().isEmpty ? '名称未設定' : parentFullName,
-                                style: const TextStyle(fontWeight: FontWeight.bold),
+                                style: TextStyle(fontWeight: FontWeight.bold),
                               ),
                             ),
                             if (hasAccount)
@@ -393,12 +393,12 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
                               Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                 decoration: BoxDecoration(
-                                  color: Colors.grey.shade200,
+                                  color: context.colors.borderLight,
                                   borderRadius: BorderRadius.circular(4),
                                 ),
                                 child: Text(
                                   '未登録',
-                                  style: TextStyle(fontSize: 10, color: Colors.grey.shade600),
+                                  style: TextStyle(fontSize: 10, color: context.colors.textSecondary),
                                 ),
                               ),
                           ],
@@ -411,21 +411,21 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 const Divider(),
-                                const Text('【保護者情報】', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)),
+                                Text('【保護者情報】', style: TextStyle(fontWeight: FontWeight.bold, color: context.colors.textSecondary)),
                                 _buildInfoRow('ふりがな', parentKanaName),
                                 _buildInfoRow('続柄', data['relation'] ?? ''),
                                 _buildInfoRow('電話番号', data['phone'] ?? ''),
                                 _buildInfoRow('メール', data['email'] ?? ''),
                                 _buildInfoRow('住所', fullAddress),
-                                const SizedBox(height: 8),
-                                const Text('【緊急連絡先】', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)),
+                                SizedBox(height: 8),
+                                Text('【緊急連絡先】', style: TextStyle(fontWeight: FontWeight.bold, color: context.colors.textSecondary)),
                                 _buildInfoRow('氏名', data['emergencyName'] ?? ''),
                                 _buildInfoRow('続柄', data['emergencyRelation'] ?? ''),
                                 _buildInfoRow('電話', data['emergencyPhone'] ?? ''),
                                 
-                                const SizedBox(height: 12),
-                                const Text('【児童詳細】', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)),
-                                if (children.isEmpty) const Text('登録なし', style: TextStyle(color: Colors.grey)),
+                                SizedBox(height: 12),
+                                Text('【児童詳細】', style: TextStyle(fontWeight: FontWeight.bold, color: context.colors.textSecondary)),
+                                if (children.isEmpty) Text('登録なし', style: TextStyle(color: context.colors.textSecondary)),
                                 ...children.map((child) => _buildChildCard(child)),
 
                                 const SizedBox(height: 16),
@@ -482,7 +482,7 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
       floatingActionButton: FloatingActionButton(
         heroTag: null, 
         onPressed: () => _showEditDialog(),
-        backgroundColor: Colors.white,
+        backgroundColor: context.colors.cardBg,
         elevation: 4,
         shape: const CircleBorder(),
         child: Padding(
@@ -503,8 +503,8 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SizedBox(width: 90, child: Text(label, style: const TextStyle(color: Colors.grey, fontSize: 12))),
-          Expanded(child: Text(value, style: const TextStyle(fontSize: 13))),
+          SizedBox(width: 90, child: Text(label, style: TextStyle(color: context.colors.textSecondary, fontSize: 12))),
+          Expanded(child: Text(value, style: TextStyle(fontSize: 13))),
         ],
       ),
     );
@@ -533,15 +533,15 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
         children: [
           Text(
             '$displayName  ${child['gender']}',
-            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
           ),
           const SizedBox(height: 4),
-          Text('誕生日: ${child['birthDate']}', style: const TextStyle(fontSize: 12)),
-          Text('所属: $classInfo', style: const TextStyle(fontSize: 12)),
+          Text('誕生日: ${child['birthDate']}', style: TextStyle(fontSize: 12)),
+          Text('所属: $classInfo', style: TextStyle(fontSize: 12)),
           if ((child['allergy'] ?? '').isNotEmpty)
-            Text('特記事項: ${child['allergy']}', style: const TextStyle(fontSize: 12, color: Colors.red)),
+            Text('特記事項: ${child['allergy']}', style: TextStyle(fontSize: 12, color: Colors.red)),
           if ((child['profileUrl'] ?? '').isNotEmpty)
-            Text('URL: ${child['profileUrl']}', style: const TextStyle(fontSize: 12, color: Colors.blue)),
+            Text('URL: ${child['profileUrl']}', style: TextStyle(fontSize: 12, color: Colors.blue)),
         ],
       ),
     );
@@ -827,7 +827,7 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
                             margin: const EdgeInsets.only(bottom: 16),
                             padding: const EdgeInsets.all(12),
                             decoration: BoxDecoration(
-                              border: Border.all(color: Colors.grey.shade300),
+                              border: Border.all(color: context.colors.borderMedium),
                               borderRadius: BorderRadius.circular(8),
                               color: Colors.white,
                             ),
@@ -836,7 +836,7 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
                                 Row(
                                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                   children: [
-                                    Text('児童 ${i + 1}', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)),
+                                    Text('児童 ${i + 1}', style: TextStyle(fontWeight: FontWeight.bold, color: context.colors.textSecondary)),
                                     if (children.length > 1)
                                       IconButton(
                                         icon: const Icon(Icons.close, color: Colors.red, size: 20),
@@ -854,7 +854,7 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
                                     Expanded(
                                       child: TextFormField(
                                         initialValue: child['firstName'],
-                                        decoration: const InputDecoration(labelText: '名前 (名のみ)', isDense: true, border: OutlineInputBorder()),
+                                        decoration: InputDecoration(labelText: '名前 (名のみ)', isDense: true, border: OutlineInputBorder()),
                                         onChanged: (val) => child['firstName'] = val,
                                       ),
                                     ),
@@ -862,7 +862,7 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
                                     Expanded(
                                       child: TextFormField(
                                         initialValue: child['firstNameKana'],
-                                        decoration: const InputDecoration(labelText: 'ふりがな', isDense: true, border: OutlineInputBorder()),
+                                        decoration: InputDecoration(labelText: 'ふりがな', isDense: true, border: OutlineInputBorder()),
                                         onChanged: (val) => child['firstNameKana'] = val,
                                       ),
                                     ),
@@ -874,7 +874,7 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
                                     Expanded(
                                       child: DropdownButtonFormField<String>(
                                         value: _genders.contains(child['gender']) ? child['gender'] : _genders[0],
-                                        decoration: const InputDecoration(labelText: '性別', isDense: true, border: OutlineInputBorder()),
+                                        decoration: InputDecoration(labelText: '性別', isDense: true, border: OutlineInputBorder()),
                                         items: _genders.map((g) => DropdownMenuItem(value: g, child: Text(g))).toList(),
                                         onChanged: (val) => setStateDialog(() => child['gender'] = val),
                                       ),
@@ -906,7 +906,7 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
                                           }
                                         },
                                         child: InputDecorator(
-                                          decoration: const InputDecoration(labelText: '生年月日', isDense: true, border: OutlineInputBorder()),
+                                          decoration: InputDecoration(labelText: '生年月日', isDense: true, border: OutlineInputBorder()),
                                           child: Text(child['birthDate']?.isEmpty ?? true ? 'YYYY/MM/DD' : child['birthDate']),
                                         ),
                                       ),
@@ -920,8 +920,8 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
                                       ? child['classroom'] 
                                       : (_classroomList.isNotEmpty ? _classroomList[0] : null),
                                   isExpanded: true,
-                                  decoration: const InputDecoration(labelText: '教室', isDense: true, border: OutlineInputBorder()),
-                                  items: _classroomList.map((c) => DropdownMenuItem(value: c, child: Text(c, style: const TextStyle(fontSize: 12)))).toList(),
+                                  decoration: InputDecoration(labelText: '教室', isDense: true, border: OutlineInputBorder()),
+                                  items: _classroomList.map((c) => DropdownMenuItem(value: c, child: Text(c, style: TextStyle(fontSize: 12)))).toList(),
                                   onChanged: (val) => setStateDialog(() => child['classroom'] = val),
                                 ),
                                 
@@ -929,20 +929,20 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
                                 DropdownButtonFormField<String>(
                                   value: _allCourses.contains(child['course']) ? child['course'] : _allCourses[0],
                                   isExpanded: true,
-                                  decoration: const InputDecoration(labelText: 'コース', isDense: true, border: OutlineInputBorder()),
-                                  items: _allCourses.map((c) => DropdownMenuItem(value: c, child: Text(c, style: const TextStyle(fontSize: 12)))).toList(),
+                                  decoration: InputDecoration(labelText: 'コース', isDense: true, border: OutlineInputBorder()),
+                                  items: _allCourses.map((c) => DropdownMenuItem(value: c, child: Text(c, style: TextStyle(fontSize: 12)))).toList(),
                                   onChanged: (val) => setStateDialog(() => child['course'] = val),
                                 ),
                                 const SizedBox(height: 8),
                                 TextFormField(
                                   initialValue: child['allergy'],
-                                  decoration: const InputDecoration(labelText: 'アレルギー・特記事項', isDense: true, border: OutlineInputBorder()),
+                                  decoration: InputDecoration(labelText: 'アレルギー・特記事項', isDense: true, border: OutlineInputBorder()),
                                   onChanged: (val) => child['allergy'] = val,
                                 ),
                                 const SizedBox(height: 8),
                                 TextFormField(
                                   initialValue: child['profileUrl'] ?? '',
-                                  decoration: const InputDecoration(
+                                  decoration: InputDecoration(
                                     labelText: 'プロフィールURL',
                                     hintText: 'https://...',
                                     isDense: true,
@@ -967,13 +967,13 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
                                         children: [
                                           SizedBox(
                                             width: 160,
-                                            child: Text(labels[urlIndex], style: const TextStyle(fontSize: 13)),
+                                            child: Text(labels[urlIndex], style: TextStyle(fontSize: 13)),
                                           ),
                                           const SizedBox(width: 8),
                                           Expanded(
                                             child: TextFormField(
                                               initialValue: urlData['url'] ?? '',
-                                              decoration: const InputDecoration(
+                                              decoration: InputDecoration(
                                                 hintText: 'https://...',
                                                 isDense: true,
                                                 border: OutlineInputBorder(),
@@ -1112,7 +1112,7 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
       child: Row(
         children: [
           Container(width: 4, height: 16, color: Colors.blue, margin: const EdgeInsets.only(right: 8)),
-          Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+          Text(title, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
         ],
       ),
     );
@@ -1125,10 +1125,10 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
       enabled: enabled,
       decoration: InputDecoration(
         labelText: label,
-        prefixIcon: icon != null ? Icon(icon, color: Colors.grey, size: 20) : null,
+        prefixIcon: icon != null ? Icon(icon, color: context.colors.iconMuted, size: 20) : null,
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
         filled: true,
-        fillColor: enabled ? Colors.white : Colors.grey.shade200,
+        fillColor: enabled ? Colors.white : context.colors.borderLight,
         contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
         isDense: true,
       ),

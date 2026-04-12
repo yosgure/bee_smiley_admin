@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
 import 'ai_chat_screen.dart';
+import 'app_theme.dart';
 
 class AiChatMainScreen extends StatefulWidget {
   final Map<String, dynamic>? initialStudent;
@@ -211,7 +212,7 @@ class _AiChatMainScreenState extends State<AiChatMainScreen> {
     final isWide = screenWidth >= 768;
 
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: context.colors.scaffoldBg,
       body: Row(
         children: [
           // サイドバー（PC: 常に表示、モバイル: 切り替え）
@@ -243,9 +244,9 @@ class _AiChatMainScreenState extends State<AiChatMainScreen> {
   Widget _buildSidebar(bool isWide) {
     return Container(
       decoration: BoxDecoration(
-        color: const Color(0xFFF9FAFB),
+        color: context.colors.hoverBg,
         border: Border(
-          right: BorderSide(color: Colors.grey.shade200, width: 0.5),
+          right: BorderSide(color: context.colors.borderLight, width: 0.5),
         ),
       ),
       child: Column(
@@ -261,16 +262,16 @@ class _AiChatMainScreenState extends State<AiChatMainScreen> {
                       width: 32,
                       height: 32,
                       decoration: BoxDecoration(
-                        gradient: const LinearGradient(
-                          colors: [Color(0xFF7C3AED), Color(0xFFEC4899)],
+                        gradient: LinearGradient(
+                          colors: [context.colors.aiGradientStart, context.colors.aiGradientEnd],
                         ),
                         borderRadius: BorderRadius.circular(10),
                       ),
                       child: const Icon(Icons.auto_awesome, color: Colors.white, size: 16),
                     ),
                     const SizedBox(width: 10),
-                    const Text('AI相談',
-                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                    Text('AI相談',
+                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: context.colors.textPrimary)),
                     const Spacer(),
                     // 新規フリーチャット
                     GestureDetector(
@@ -279,10 +280,10 @@ class _AiChatMainScreenState extends State<AiChatMainScreen> {
                         width: 32,
                         height: 32,
                         decoration: BoxDecoration(
-                          color: Colors.grey.shade200,
+                          color: context.colors.borderLight,
                           borderRadius: BorderRadius.circular(8),
                         ),
-                        child: Icon(Icons.edit_outlined, size: 16, color: Colors.grey.shade600),
+                        child: Icon(Icons.edit_outlined, size: 16, color: context.colors.textSecondary),
                       ),
                     ),
                   ],
@@ -295,7 +296,7 @@ class _AiChatMainScreenState extends State<AiChatMainScreen> {
             margin: const EdgeInsets.symmetric(horizontal: 12),
             padding: const EdgeInsets.all(3),
             decoration: BoxDecoration(
-              color: Colors.grey.shade200,
+              color: context.colors.borderLight,
               borderRadius: BorderRadius.circular(10),
             ),
             child: Row(
@@ -323,23 +324,23 @@ class _AiChatMainScreenState extends State<AiChatMainScreen> {
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 7),
           decoration: BoxDecoration(
-            color: selected ? Colors.white : Colors.transparent,
+            color: selected ? context.colors.cardBg : Colors.transparent,
             borderRadius: BorderRadius.circular(8),
             boxShadow: selected
-                ? [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 4)]
+                ? [BoxShadow(color: context.colors.shadow.withOpacity(0.05), blurRadius: 4)]
                 : null,
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Icon(icon, size: 14,
-                  color: selected ? const Color(0xFF7C3AED) : Colors.grey.shade500),
+                  color: selected ? context.colors.aiAccent : context.colors.textTertiary),
               const SizedBox(width: 4),
               Text(label,
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
-                    color: selected ? const Color(0xFF7C3AED) : Colors.grey.shade600,
+                    color: selected ? context.colors.aiAccent : context.colors.textSecondary,
                   )),
             ],
           ),
@@ -357,16 +358,16 @@ class _AiChatMainScreenState extends State<AiChatMainScreen> {
           child: Container(
             height: 36,
             decoration: BoxDecoration(
-              color: Colors.grey.shade200,
+              color: context.colors.borderLight,
               borderRadius: BorderRadius.circular(8),
             ),
             child: TextField(
               controller: _searchController,
-              style: const TextStyle(fontSize: 13),
+              style: TextStyle(fontSize: 13, color: context.colors.textPrimary),
               decoration: InputDecoration(
                 hintText: '検索...',
-                hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 13),
-                prefixIcon: Icon(Icons.search_rounded, color: Colors.grey.shade400, size: 16),
+                hintStyle: TextStyle(color: context.colors.textHint, fontSize: 13),
+                prefixIcon: Icon(Icons.search_rounded, color: context.colors.textHint, size: 16),
                 filled: false,
                 border: InputBorder.none,
                 contentPadding: const EdgeInsets.symmetric(vertical: 8),
@@ -379,7 +380,7 @@ class _AiChatMainScreenState extends State<AiChatMainScreen> {
         // 生徒一覧
         Expanded(
           child: _isLoading
-              ? const Center(child: CircularProgressIndicator(color: Color(0xFF7C3AED)))
+              ? Center(child: CircularProgressIndicator(color: context.colors.aiAccent))
               : ListView.builder(
                   padding: const EdgeInsets.symmetric(horizontal: 8),
                   itemCount: _filteredStudents.length,
@@ -410,10 +411,10 @@ class _AiChatMainScreenState extends State<AiChatMainScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.history_rounded, size: 40, color: Colors.grey.shade300),
+            Icon(Icons.history_rounded, size: 40, color: context.colors.borderMedium),
             const SizedBox(height: 8),
             Text('履歴がありません',
-                style: TextStyle(color: Colors.grey.shade500, fontSize: 13)),
+                style: TextStyle(color: context.colors.textTertiary, fontSize: 13)),
           ],
         ),
       );
@@ -456,7 +457,7 @@ class _AiChatMainScreenState extends State<AiChatMainScreen> {
     return Container(
       margin: const EdgeInsets.only(bottom: 2),
       decoration: BoxDecoration(
-        color: isActive ? const Color(0xFF7C3AED).withOpacity(0.08) : Colors.transparent,
+        color: isActive ? context.colors.aiAccentBg : Colors.transparent,
         borderRadius: BorderRadius.circular(10),
       ),
       child: InkWell(
@@ -475,21 +476,21 @@ class _AiChatMainScreenState extends State<AiChatMainScreen> {
                       style: TextStyle(
                         fontSize: 13,
                         fontWeight: isActive ? FontWeight.w600 : FontWeight.w500,
-                        color: isActive ? const Color(0xFF7C3AED) : Colors.black87,
+                        color: isActive ? context.colors.aiAccent : context.colors.textPrimary,
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
                   Text(dateStr,
-                      style: TextStyle(fontSize: 10, color: Colors.grey.shade500)),
+                      style: TextStyle(fontSize: 10, color: context.colors.textTertiary)),
                 ],
               ),
               if (displayText.isNotEmpty) ...[
                 const SizedBox(height: 2),
                 Text(
                   displayText,
-                  style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
+                  style: TextStyle(fontSize: 11, color: context.colors.textTertiary),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -510,15 +511,15 @@ class _AiChatMainScreenState extends State<AiChatMainScreen> {
             width: 72,
             height: 72,
             decoration: BoxDecoration(
-              gradient: const LinearGradient(
+              gradient: LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
-                colors: [Color(0xFF7C3AED), Color(0xFFEC4899)],
+                colors: [context.colors.aiGradientStart, context.colors.aiGradientEnd],
               ),
               borderRadius: BorderRadius.circular(20),
               boxShadow: [
                 BoxShadow(
-                  color: const Color(0xFF7C3AED).withOpacity(0.3),
+                  color: context.colors.aiAccent.withOpacity(0.3),
                   blurRadius: 20,
                   offset: const Offset(0, 8),
                 ),
@@ -528,8 +529,8 @@ class _AiChatMainScreenState extends State<AiChatMainScreen> {
           ),
           const SizedBox(height: 24),
           ShaderMask(
-            shaderCallback: (bounds) => const LinearGradient(
-              colors: [Color(0xFF7C3AED), Color(0xFFEC4899)],
+            shaderCallback: (bounds) => LinearGradient(
+              colors: [context.colors.aiGradientStart, context.colors.aiGradientEnd],
             ).createShader(bounds),
             child: const Text(
               'AI相談',
@@ -538,7 +539,7 @@ class _AiChatMainScreenState extends State<AiChatMainScreen> {
           ),
           const SizedBox(height: 8),
           Text('左の生徒を選んで相談を始めましょう',
-              style: TextStyle(fontSize: 14, color: Colors.grey.shade500)),
+              style: TextStyle(fontSize: 14, color: context.colors.textTertiary)),
         ],
       ),
     );
@@ -577,9 +578,9 @@ class _HoverableStudentItemState extends State<_HoverableStudentItem> {
           margin: const EdgeInsets.only(bottom: 2),
           decoration: BoxDecoration(
             color: widget.isActive
-                ? const Color(0xFF7C3AED).withOpacity(0.08)
+                ? context.colors.aiAccentBg
                 : _isHovered
-                    ? Colors.grey.shade100
+                    ? context.colors.chipBg
                     : Colors.transparent,
             borderRadius: BorderRadius.circular(10),
           ),
@@ -591,10 +592,10 @@ class _HoverableStudentItemState extends State<_HoverableStudentItem> {
                 height: 30,
                 decoration: BoxDecoration(
                   color: widget.isActive
-                      ? const Color(0xFF7C3AED).withOpacity(0.15)
+                      ? context.colors.aiAccent.withOpacity(0.15)
                       : _isHovered
-                          ? Colors.grey.shade300
-                          : Colors.grey.shade200,
+                          ? context.colors.borderMedium
+                          : context.colors.borderLight,
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Center(
@@ -604,8 +605,8 @@ class _HoverableStudentItemState extends State<_HoverableStudentItem> {
                       fontSize: 13,
                       fontWeight: FontWeight.bold,
                       color: widget.isActive
-                          ? const Color(0xFF7C3AED)
-                          : Colors.grey.shade600,
+                          ? context.colors.aiAccent
+                          : context.colors.textSecondary,
                     ),
                   ),
                 ),
@@ -618,8 +619,8 @@ class _HoverableStudentItemState extends State<_HoverableStudentItem> {
                     fontSize: 13,
                     fontWeight: isHighlighted ? FontWeight.w600 : FontWeight.normal,
                     color: widget.isActive
-                        ? const Color(0xFF7C3AED)
-                        : Colors.black87,
+                        ? context.colors.aiAccent
+                        : context.colors.textPrimary,
                   ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
