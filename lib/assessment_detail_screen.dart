@@ -92,7 +92,7 @@ class _AssessmentDetailScreenState extends State<AssessmentDetailScreen> {
               Navigator.pushReplacement(
                 context,
                 MaterialPageRoute(
-                  builder: (context) => AssessmentEditScreen(
+                  builder: (_) => AssessmentEditScreen(
                     studentId: _data['studentId'] ?? '',
                     studentName: studentName,
                     type: type,

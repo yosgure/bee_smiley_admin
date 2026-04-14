@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import 'assessment_edit_screen.dart';
 import 'assessment_detail_screen.dart';
 import 'app_theme.dart';
+import 'main.dart';
 
 class AssessmentScreen extends StatefulWidget {
   // ★追加: カレンダーなど外部から生徒指定で開く場合に使用
@@ -205,16 +206,30 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
       );
       return;
     }
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => AssessmentEditScreen(
+    final type = _currentTabIndex == 0 ? 'weekly' : 'monthly';
+    final isWide = MediaQuery.of(context).size.width >= 600;
+    if (isWide) {
+      AdminShell.showOverlay(
+        context,
+        AssessmentEditScreen(
           studentId: _selectedStudentId!,
           studentName: _selectedStudentName,
-          type: _currentTabIndex == 0 ? 'weekly' : 'monthly',
+          type: type,
+          onClose: () => AdminShell.hideOverlay(context),
         ),
-      ),
-    );
+      );
+    } else {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => AssessmentEditScreen(
+            studentId: _selectedStudentId!,
+            studentName: _selectedStudentName,
+            type: type,
+          ),
+        ),
+      );
+    }
   }
 
   @override
