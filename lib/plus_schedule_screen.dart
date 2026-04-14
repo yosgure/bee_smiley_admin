@@ -826,15 +826,27 @@ Map<String, dynamic>? _getCellMemo(DateTime date, int slotIndex) {
     final firstName = student['firstName'] as String? ?? '';
     if (familyUid.isEmpty || firstName.isEmpty) return;
     final studentId = '${familyUid}_$firstName';
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => StudentDetailScreen(
+    final isWide = MediaQuery.of(context).size.width >= 600;
+    if (isWide) {
+      AdminShell.showOverlay(
+        context,
+        StudentDetailScreen(
           studentId: studentId,
           studentName: studentName,
+          onClose: () => AdminShell.hideOverlay(context),
         ),
-      ),
-    );
+      );
+    } else {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => StudentDetailScreen(
+            studentId: studentId,
+            studentName: studentName,
+          ),
+        ),
+      );
+    }
   }
 
   // familiesコレクションから全児童リストを取得（プラスのみ）

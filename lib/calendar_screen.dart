@@ -10,6 +10,7 @@ import 'student_detail_screen.dart';
 import 'plus_schedule_screen.dart';
 import 'bee_dashboard_screen.dart';
 import 'app_theme.dart';
+import 'main.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'classroom_utils.dart';
 
@@ -1792,9 +1793,10 @@ Future<void> _saveDisplayDate(DateTime date) async {
   }
 
   void _showRichAppointmentDetail(DocumentSnapshot doc) {
+    final outerContext = context; // AdminShellが見えるcontext
     showDialog(
       context: context,
-      builder: (context) {
+      builder: (dialogContext) {
         return StreamBuilder<DocumentSnapshot>(
           stream: doc.reference.snapshots(),
           builder: (context, snapshot) {
@@ -1923,7 +1925,20 @@ Future<void> _saveDisplayDate(DateTime date) async {
                                       children: [
                                         InkWell(
                                           onTap: () {
-                                            Navigator.push(context, MaterialPageRoute(builder: (_) => StudentDetailScreen(studentId: id, studentName: name)));
+                                            Navigator.pop(context); // ポップアップを閉じる
+                                            final isWide = MediaQuery.of(outerContext).size.width >= 600;
+                                            if (isWide) {
+                                              AdminShell.showOverlay(
+                                                outerContext,
+                                                StudentDetailScreen(
+                                                  studentId: id,
+                                                  studentName: name,
+                                                  onClose: () => AdminShell.hideOverlay(outerContext),
+                                                ),
+                                              );
+                                            } else {
+                                              Navigator.push(outerContext, MaterialPageRoute(builder: (_) => StudentDetailScreen(studentId: id, studentName: name)));
+                                            }
                                           },
                                           child: Container(
                                             decoration: BoxDecoration(

@@ -16,6 +16,7 @@ class AssessmentEditScreen extends StatefulWidget {
   final String type;
   final String? docId;
   final Map<String, dynamic>? initialData;
+  final VoidCallback? onClose;
 
   const AssessmentEditScreen({
     super.key,
@@ -24,6 +25,7 @@ class AssessmentEditScreen extends StatefulWidget {
     required this.type,
     this.docId,
     this.initialData,
+    this.onClose,
   });
 
   @override
@@ -33,9 +35,17 @@ class AssessmentEditScreen extends StatefulWidget {
 class _AssessmentEditScreenState extends State<AssessmentEditScreen> {
   final _formKey = GlobalKey<FormState>();
   late Future<void> _initializationFuture;
-  
+
   DateTime _selectedDate = DateTime.now();
   bool _isSaving = false;
+
+  void _close() {
+    if (widget.onClose != null) {
+      widget.onClose!();
+    } else {
+      Navigator.pop(context);
+    }
+  }
 
   List<Map<String, dynamic>> _weeklyEntries = [];
   List<Map<String, String>> _toolList = [];
@@ -333,7 +343,7 @@ class _AssessmentEditScreenState extends State<AssessmentEditScreen> {
         await FirebaseFirestore.instance.collection('assessments').add(data);
       }
 
-      if (mounted) Navigator.pop(context);
+      if (mounted) _close();
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('エラー: $e')));
@@ -368,7 +378,7 @@ class _AssessmentEditScreenState extends State<AssessmentEditScreen> {
         title: Text(widget.type == 'weekly' ? '週次アセスメント編集' : '月次サマリ編集'),
         leading: IconButton(
           icon: const Icon(Icons.close),
-          onPressed: () => Navigator.pop(context),
+          onPressed: _close,
         ),
         actions: [
           // 公開済みでない場合は「下書き保存」ボタンを表示

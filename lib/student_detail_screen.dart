@@ -10,11 +10,13 @@ import 'classroom_utils.dart';
 class StudentDetailScreen extends StatefulWidget {
   final String studentId;
   final String studentName;
+  final VoidCallback? onClose;
 
   const StudentDetailScreen({
     super.key,
     required this.studentId,
     required this.studentName,
+    this.onClose,
   });
 
   @override
@@ -177,7 +179,13 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> with SingleTi
         elevation: 0,
         leading: IconButton(
           icon: Icon(Icons.arrow_back_ios, color: context.colors.textSecondary),
-          onPressed: () => Navigator.pop(context),
+          onPressed: () {
+            if (widget.onClose != null) {
+              widget.onClose!();
+            } else {
+              Navigator.pop(context);
+            }
+          },
         ),
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1),
@@ -271,18 +279,6 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> with SingleTi
                     ],
                   ),
               ],
-            ),
-          ),
-          const SizedBox(width: 8),
-          ElevatedButton.icon(
-            onPressed: _openAiChat,
-            icon: const Icon(Icons.smart_toy, size: 18),
-            label: const Text('AIに相談'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.purple.shade600,
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
             ),
           ),
         ],

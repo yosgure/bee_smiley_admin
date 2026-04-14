@@ -248,6 +248,18 @@ class _ForceLogoutState extends State<_ForceLogout> {
 class AdminShell extends StatefulWidget {
   const AdminShell({super.key});
 
+  /// コンテンツエリア内にオーバーレイ画面を表示（サイドバーを残す）
+  static void showOverlay(BuildContext context, Widget screen) {
+    final state = context.findAncestorStateOfType<_AdminShellState>();
+    state?.setState(() => state._contentOverlay = screen);
+  }
+
+  /// オーバーレイ画面を閉じる
+  static void hideOverlay(BuildContext context) {
+    final state = context.findAncestorStateOfType<_AdminShellState>();
+    state?.setState(() => state._contentOverlay = null);
+  }
+
   /// AI相談タブに遷移して生徒を選択
   static void navigateToAiChat(BuildContext context, {
     required String studentId,
@@ -276,6 +288,9 @@ class _AdminShellState extends State<AdminShell> {
   
   // Web版で右側に表示する管理詳細画面を保持する変数
   Widget? _adminDetailScreen;
+
+  // コンテンツエリア内のオーバーレイ画面（サイドバーを残して表示）
+  Widget? _contentOverlay;
 
   // AI相談に生徒情報付きでジャンプする用
   Map<String, dynamic>? _pendingAiChatStudent;
@@ -710,6 +725,7 @@ class _AdminShellState extends State<AdminShell> {
               setState(() {
                 _selectedIndex = i;
                 _adminDetailScreen = null;
+                _contentOverlay = null;
                 if (i == 0) _hasUnreadSchedule = false;
               });
               _saveIndex(i); // 保存
@@ -740,15 +756,22 @@ class _AdminShellState extends State<AdminShell> {
           ),
           if (isWebLayout) const VerticalDivider(thickness: 1, width: 1),
           Expanded(
-            child: AnimatedSwitcher(
-              duration: const Duration(milliseconds: 300),
-              switchInCurve: Curves.easeOut,
-              switchOutCurve: Curves.easeIn,
-              child: KeyedSubtree(
-                key: ValueKey('$_selectedIndex${_adminDetailScreen?.runtimeType}'),
-                child: _getScreen(safeIndex),
-              ),
-            ),
+            child: _contentOverlay != null
+              ? Navigator(
+                  key: ValueKey('overlay_${_contentOverlay.hashCode}'),
+                  onGenerateRoute: (_) => MaterialPageRoute(
+                    builder: (_) => _contentOverlay!,
+                  ),
+                )
+              : AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 300),
+                  switchInCurve: Curves.easeOut,
+                  switchOutCurve: Curves.easeIn,
+                  child: KeyedSubtree(
+                    key: ValueKey('$_selectedIndex${_adminDetailScreen?.runtimeType}'),
+                    child: _getScreen(safeIndex),
+                  ),
+                ),
           ),
         ],
       ),
