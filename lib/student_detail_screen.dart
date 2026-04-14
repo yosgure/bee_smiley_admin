@@ -5,6 +5,7 @@ import 'assessment_edit_screen.dart';
 import 'assessment_detail_screen.dart';
 import 'app_theme.dart';
 import 'ai_chat_screen.dart';
+import 'main.dart';
 import 'classroom_utils.dart';
 
 class StudentDetailScreen extends StatefulWidget {
@@ -181,7 +182,7 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> with SingleTi
           icon: Icon(Icons.arrow_back_ios, color: context.colors.textSecondary),
           onPressed: () {
             if (widget.onClose != null) {
-              widget.onClose!();
+              AdminShell.hideOverlay(context);
             } else {
               Navigator.pop(context);
             }

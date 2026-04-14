@@ -9,6 +9,7 @@ import 'package:intl/intl.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:image/image.dart' as img;
 import 'app_theme.dart';
+import 'main.dart';
 
 class AssessmentEditScreen extends StatefulWidget {
   final String studentId;
@@ -41,7 +42,7 @@ class _AssessmentEditScreenState extends State<AssessmentEditScreen> {
 
   void _close() {
     if (widget.onClose != null) {
-      widget.onClose!();
+      AdminShell.hideOverlay(context);
     } else {
       Navigator.pop(context);
     }
