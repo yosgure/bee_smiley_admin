@@ -106,7 +106,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
         MaterialPageRoute(
           builder: (_) => Scaffold(
             appBar: PreferredSize(
-              preferredSize: const Size.fromHeight(40),
+              preferredSize: const Size.fromHeight(56),
               child: SafeArea(
                 child: _buildCommonHeader(
                   roomName,
@@ -208,23 +208,29 @@ class _ChatListScreenState extends State<ChatListScreen> {
 
   Widget _buildCommonHeader(String title, {bool isLeftPane = false, List<Widget>? actions, bool showBackButton = false}) {
     return Container(
-      height: 40,
+      height: 56,
       padding: const EdgeInsets.symmetric(horizontal: 8),
       decoration: BoxDecoration(
         color: context.colors.cardBg,
         border: Border(bottom: BorderSide(color: context.colors.borderMedium, width: 1)),
       ),
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          Center(child: Text(title, style: TextStyle(fontSize: 18, fontWeight: FontWeight.normal), overflow: TextOverflow.ellipsis)),
-          if (showBackButton)
-            Positioned(left: 0, child: IconButton(icon: Icon(Icons.arrow_back_ios, color: context.colors.textSecondary), onPressed: () => Navigator.pop(context))),
-          Positioned(
-            right: 0,
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
+      child: showBackButton
+        ? Row(
+            children: [
+              IconButton(icon: Icon(Icons.arrow_back_ios, size: 20, color: context.colors.textSecondary), onPressed: () => Navigator.pop(context)),
+              Expanded(child: Text(title, style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis)),
+              Row(mainAxisSize: MainAxisSize.min, children: [
+                if (actions != null) ...actions,
+              ]),
+            ],
+          )
+        : Stack(
+            alignment: Alignment.center,
+            children: [
+              Center(child: Text(title, style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis)),
+              Positioned(
+                right: 0,
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
                 if (actions != null) ...actions,
                 if (isLeftPane)
                   IconButton(
@@ -242,7 +248,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
                             Navigator.push(context, MaterialPageRoute(
                               builder: (_) => Scaffold(
                                 appBar: PreferredSize(
-                                  preferredSize: const Size.fromHeight(40),
+                                  preferredSize: const Size.fromHeight(56),
                                   child: SafeArea(child: _buildCommonHeader(name, showBackButton: true, actions: [_buildChatMenu(roomId, isGroup, memberNames, false)])),
                                 ),
                                 body: ChatDetailView(roomId: roomId, roomName: name, isGroup: isGroup, memberNames: memberNames, showAppBar: false),
@@ -255,9 +261,9 @@ class _ChatListScreenState extends State<ChatListScreen> {
                   ),
               ],
             ),
+              ),
+            ],
           ),
-        ],
-      ),
     );
   }
 
@@ -282,7 +288,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
 
         return Scaffold(
           appBar: PreferredSize(
-            preferredSize: const Size.fromHeight(40),
+            preferredSize: const Size.fromHeight(56),
             child: _buildCommonHeader(roomName, actions: [_buildChatMenu(_selectedRoomId!, isGroup, memberNames, true)]),
           ),
           body: ChatDetailView(
@@ -393,7 +399,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
                   Navigator.push(context, MaterialPageRoute(
                     builder: (context) => Scaffold(
                       appBar: PreferredSize(
-                        preferredSize: const Size.fromHeight(40),
+                        preferredSize: const Size.fromHeight(56),
                         child: SafeArea(child: _buildCommonHeader(roomName, showBackButton: true, actions: [_buildChatMenu(roomId, isGroup, memberNames, false)])),
                       ),
                       body: ChatDetailView(roomId: roomId, roomName: roomName, isGroup: isGroup, memberNames: memberNames, showAppBar: false),
@@ -937,6 +943,12 @@ class _ChatDetailViewState extends State<ChatDetailView> {
   // 返信対象: {messageId, senderName, preview, type}
   Map<String, dynamic>? _replyTo;
 
+  // @メンション用
+  bool _showMentionOverlay = false;
+  List<MapEntry<String, dynamic>> _filteredMembers = [];
+  int _mentionStartIndex = -1;
+  List<String> _mentionedUids = [];
+
   void _startReply(String msgId, String type, String text) {
     final senderId = _lastMessageCache[msgId]?['senderId'] as String?;
     final senderName = senderId == currentUser?.uid
@@ -984,11 +996,91 @@ class _ChatDetailViewState extends State<ChatDetailView> {
         setState(() => _iconsExpanded = false);
       }
       widget.onDraftChanged?.call(_textController.text);
+      // @メンション検知（グループチャットのみ）
+      if (widget.isGroup) _checkMention();
     });
   }
 
   @override
   void dispose() { _textController.dispose(); _scrollController.dispose(); _focusNode.dispose(); super.dispose(); }
+
+  void _checkMention() {
+    final text = _textController.text;
+    final selection = _textController.selection;
+    if (!selection.isValid || selection.baseOffset != selection.extentOffset) {
+      if (_showMentionOverlay) setState(() => _showMentionOverlay = false);
+      return;
+    }
+    final cursorPos = selection.baseOffset;
+    // カーソル位置から後ろに遡り@を探す
+    int atIndex = -1;
+    for (int i = cursorPos - 1; i >= 0; i--) {
+      final ch = text[i];
+      if (ch == '@') { atIndex = i; break; }
+      if (ch == ' ' || ch == '\n' || ch == '\u3000') break;
+    }
+    if (atIndex < 0) {
+      if (_showMentionOverlay) setState(() => _showMentionOverlay = false);
+      return;
+    }
+    final query = text.substring(atIndex + 1, cursorPos).toLowerCase();
+    final myUid = currentUser?.uid;
+    final filtered = widget.memberNames.entries
+        .where((e) => e.key != myUid && e.value.toString().toLowerCase().contains(query))
+        .toList();
+    setState(() {
+      _mentionStartIndex = atIndex;
+      _filteredMembers = filtered;
+      _showMentionOverlay = filtered.isNotEmpty;
+    });
+  }
+
+  void _insertMention(String uid, String name) {
+    final text = _textController.text;
+    final cursorPos = _textController.selection.baseOffset;
+    final before = text.substring(0, _mentionStartIndex);
+    final after = text.substring(cursorPos);
+    final mention = '@$name ';
+    _textController.text = '$before$mention$after';
+    _textController.selection = TextSelection.collapsed(offset: before.length + mention.length);
+    if (!_mentionedUids.contains(uid)) _mentionedUids.add(uid);
+    setState(() => _showMentionOverlay = false);
+  }
+
+  Widget _buildMentionOverlay() {
+    if (!_showMentionOverlay || _filteredMembers.isEmpty) return const SizedBox.shrink();
+    return Container(
+      constraints: const BoxConstraints(maxHeight: 160),
+      margin: const EdgeInsets.symmetric(horizontal: 12),
+      decoration: BoxDecoration(
+        color: context.colors.cardBg,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: context.colors.borderMedium),
+        boxShadow: [BoxShadow(color: context.colors.shadow, blurRadius: 8, offset: const Offset(0, -2))],
+      ),
+      child: ListView.builder(
+        shrinkWrap: true,
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        itemCount: _filteredMembers.length,
+        itemBuilder: (context, index) {
+          final entry = _filteredMembers[index];
+          return InkWell(
+            onTap: () => _insertMention(entry.key, entry.value.toString()),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              child: Row(
+                children: [
+                  Icon(Icons.person, size: 20, color: context.colors.textSecondary),
+                  const SizedBox(width: 10),
+                  Text(entry.value.toString(), style: TextStyle(fontSize: 15, color: context.colors.textPrimary)),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
 
   void _dismissKeyboard() { _focusNode.unfocus(); }
 
@@ -1000,10 +1092,10 @@ class _ChatDetailViewState extends State<ChatDetailView> {
         children: [
           if (widget.showAppBar) ...[
             Container(
-              height: 40, padding: const EdgeInsets.symmetric(horizontal: 16),
+              height: 56, padding: const EdgeInsets.symmetric(horizontal: 16),
               decoration: BoxDecoration(color: context.colors.cardBg, border: Border(bottom: BorderSide(color: context.colors.borderMedium, width: 1))),
               child: Row(children: [
-                Expanded(child: Text(widget.roomName, style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis)),
+                Expanded(child: Text(widget.roomName, style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis)),
                 PopupMenuButton<String>(
                   icon: Icon(Icons.more_vert, color: context.colors.textSecondary),
                   onSelected: (value) { if (value == 'delete') _deleteChat(); if (value == 'members') _showMembers(); },
@@ -1062,6 +1154,7 @@ class _ChatDetailViewState extends State<ChatDetailView> {
               ),
             ),
           ),
+          _buildMentionOverlay(),
           _buildInputArea(),
         ],
       ),
@@ -1302,12 +1395,19 @@ class _ChatDetailViewState extends State<ChatDetailView> {
 
   List<InlineSpan> _buildTextSpansWithLinks(String text, {BuildContext? ctx}) {
     final textStyle = ctx != null ? _chatTextStyleOf(ctx) : const TextStyle(fontSize: 15, height: 1.5, color: Colors.black87, fontFamily: 'NotoSansJP', fontFamilyFallback: ['Hiragino Sans', 'Roboto', 'sans-serif']);
-    final urlPattern = RegExp(r'https?://[^\s\u3000]+', caseSensitive: false);
+    final mentionStyle = TextStyle(fontSize: 15, height: 1.5, color: AppColors.primary, fontWeight: FontWeight.bold, fontFamily: 'NotoSansJP', fontFamilyFallback: const ['Hiragino Sans', 'Roboto', 'sans-serif']);
+    // URL と @メンション両方をマッチ
+    final combinedPattern = RegExp(r'https?://[^\s\u3000]+|@[^\s\u3000@]+', caseSensitive: false);
     final spans = <InlineSpan>[]; int lastEnd = 0;
-    for (final match in urlPattern.allMatches(text)) {
+    for (final match in combinedPattern.allMatches(text)) {
       if (match.start > lastEnd) spans.add(TextSpan(text: text.substring(lastEnd, match.start), style: textStyle));
-      final url = match.group(0)!;
-      spans.add(TextSpan(text: url, style: _chatLinkStyle, recognizer: TapGestureRecognizer()..onTap = () async { final uri = Uri.tryParse(url); if (uri != null && await canLaunchUrl(uri)) await launchUrl(uri, mode: LaunchMode.externalApplication); }));
+      final matched = match.group(0)!;
+      if (matched.startsWith('http')) {
+        spans.add(TextSpan(text: matched, style: _chatLinkStyle, recognizer: TapGestureRecognizer()..onTap = () async { final uri = Uri.tryParse(matched); if (uri != null && await canLaunchUrl(uri)) await launchUrl(uri, mode: LaunchMode.externalApplication); }));
+      } else {
+        // @メンション
+        spans.add(TextSpan(text: matched, style: mentionStyle));
+      }
       lastEnd = match.end;
     }
     if (lastEnd < text.length) spans.add(TextSpan(text: text.substring(lastEnd), style: textStyle));
@@ -1826,14 +1926,20 @@ class _ChatDetailViewState extends State<ChatDetailView> {
     if (thumbnailUrl != null) data['thumbnailUrl'] = thumbnailUrl;
     if (durationMs != null) data['durationMs'] = durationMs;
     if (_replyTo != null) data['replyTo'] = _replyTo;
+    if (_mentionedUids.isNotEmpty) data['mentions'] = _mentionedUids.toList();
     await roomRef.collection('messages').add(data);
     String lastMsg = msgText;
     if (type == 'image') lastMsg = '画像を送信しました';
     if (type == 'file') lastMsg = 'ファイルを送信しました';
     if (type == 'video') lastMsg = '動画を送信しました';
     await roomRef.update({'lastMessage': lastMsg, 'lastMessageTime': FieldValue.serverTimestamp()});
-    // 返信状態をクリア
-    if (_replyTo != null) setState(() => _replyTo = null);
+    // 返信・メンション状態をクリア
+    if (_replyTo != null || _mentionedUids.isNotEmpty) {
+      setState(() {
+        _replyTo = null;
+        _mentionedUids = [];
+      });
+    }
   }
 
   Future<void> _toggleReaction(String msgId, String emoji) async {

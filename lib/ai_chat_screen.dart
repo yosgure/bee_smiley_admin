@@ -1155,26 +1155,9 @@ class _AiChatScreenState extends State<AiChatScreen> {
                 onPressed: widget.onBackPressed ?? () => Navigator.pop(context),
               )
             : null,
-        title: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 28,
-              height: 28,
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [context.colors.aiGradientStart, context.colors.aiGradientEnd],
-                ),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: const Icon(Icons.auto_awesome, color: Colors.white, size: 16),
-            ),
-            const SizedBox(width: 10),
-            Text(
-              widget.studentName,
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: context.colors.textPrimary),
-            ),
-          ],
+        title: Text(
+          widget.studentName,
+          style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600, color: context.colors.textPrimary),
         ),
         centerTitle: true,
         actions: [
@@ -2750,7 +2733,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
                       const SizedBox(width: 10),
                       Text(
                         '${widget.studentName} - 相談履歴',
-                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: context.colors.textPrimary),
+                        style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600, color: context.colors.textPrimary),
                       ),
                     ],
                   ),

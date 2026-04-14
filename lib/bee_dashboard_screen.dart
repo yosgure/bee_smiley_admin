@@ -771,25 +771,31 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
                               ),
                               padding: const EdgeInsets.symmetric(vertical: 4),
                               child: teachers.isNotEmpty
-                                  ? Column(
-                                      mainAxisAlignment: MainAxisAlignment.start,
-                                      children: teachers.map((t) {
-                                        final name = t['name'] as String;
-                                        return Padding(
-                                          padding: const EdgeInsets.only(bottom: 4),
-                                          child: Column(
-                                            children: name.split('').map((char) => Text(
-                                              char,
-                                              style: TextStyle(
-                                                fontSize: 12,
-                                                fontWeight: FontWeight.bold,
-                                                color: Colors.blue.shade700,
-                                                height: 1.15,
-                                              ),
-                                            )).toList(),
-                                          ),
-                                        );
-                                      }).toList(),
+                                  ? SingleChildScrollView(
+                                      child: Column(
+                                        mainAxisAlignment: MainAxisAlignment.start,
+                                        children: teachers.map((t) {
+                                          final name = t['name'] as String;
+                                          // 苗字のみ表示（スペース区切りの場合は前半、なければ先頭2文字）
+                                          final parts = name.split(RegExp(r'[\s\u3000]'));
+                                          final lastName = parts.first;
+                                          final displayName = lastName.length > 2 ? lastName.substring(0, 2) : lastName;
+                                          return Padding(
+                                            padding: const EdgeInsets.only(bottom: 4),
+                                            child: Column(
+                                              children: displayName.split('').map((char) => Text(
+                                                char,
+                                                style: TextStyle(
+                                                  fontSize: 12,
+                                                  fontWeight: FontWeight.bold,
+                                                  color: Colors.blue.shade700,
+                                                  height: 1.15,
+                                                ),
+                                              )).toList(),
+                                            ),
+                                          );
+                                        }).toList(),
+                                      ),
                                     )
                                   : const SizedBox.shrink(),
                             ),
@@ -799,42 +805,42 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
                                 children: [
                                   Padding(
                                     padding: const EdgeInsets.fromLTRB(5, 6, 4, 20),
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: students.map((s) {
-                                        final name = s['name'] as String;
-                                        final note = s['note'] as String? ?? '';
-                                        return Padding(
-                                          padding: const EdgeInsets.only(bottom: 4),
-                                          child: Row(
-                                            children: [
-                                              Flexible(
-                                                child: Text(
+                                    child: SingleChildScrollView(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: students.map((s) {
+                                          final name = s['name'] as String;
+                                          final note = s['note'] as String? ?? '';
+                                          return Padding(
+                                            padding: const EdgeInsets.only(bottom: 2),
+                                            child: Column(
+                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              children: [
+                                                Text(
                                                   name,
                                                   style: TextStyle(
                                                     fontSize: 13,
                                                     fontWeight: FontWeight.w500,
                                                     color: context.colors.textPrimary,
-                                                    height: 1.4,
+                                                    height: 1.3,
                                                   ),
                                                   overflow: TextOverflow.ellipsis,
                                                 ),
-                                              ),
-                                              if (note.isNotEmpty)
-                                                Padding(
-                                                  padding: const EdgeInsets.only(left: 1),
-                                                  child: Text(
-                                                    '($note)',
+                                                if (note.isNotEmpty)
+                                                  Text(
+                                                    note,
                                                     style: TextStyle(
-                                                      fontSize: 12,
+                                                      fontSize: 10,
                                                       color: Colors.orange.shade600,
+                                                      height: 1.2,
                                                     ),
+                                                    overflow: TextOverflow.ellipsis,
                                                   ),
-                                                ),
-                                            ],
-                                          ),
-                                        );
-                                      }).toList(),
+                                              ],
+                                            ),
+                                          );
+                                        }).toList(),
+                                      ),
                                     ),
                                   ),
                                   // 残席数（右下固定）
@@ -842,16 +848,20 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
                                     Positioned(
                                       right: 4,
                                       bottom: 2,
-                                      child: Text(
-                                        '残席$remainingSeats',
-                                        style: TextStyle(
-                                          fontSize: 12,
-                                          color: remainingSeats <= 0
-                                              ? Colors.red.shade600
-                                              : context.colors.textTertiary,
-                                          fontWeight: remainingSeats <= 0
-                                              ? FontWeight.bold
-                                              : FontWeight.normal,
+                                      child: Container(
+                                        color: context.colors.cardBg,
+                                        padding: const EdgeInsets.only(left: 2),
+                                        child: Text(
+                                          '残席$remainingSeats',
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            color: remainingSeats <= 0
+                                                ? Colors.red.shade600
+                                                : context.colors.textTertiary,
+                                            fontWeight: remainingSeats <= 0
+                                                ? FontWeight.bold
+                                                : FontWeight.normal,
+                                          ),
                                         ),
                                       ),
                                     ),
@@ -982,7 +992,7 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
             title: Container(
               padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
               decoration: BoxDecoration(
-                color: isDisabled ? context.colors.borderMedium : Colors.blue.shade50,
+                color: isDisabled ? context.colors.borderMedium : AppColors.primary.withValues(alpha: 0.1),
                 borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
               ),
               child: Column(

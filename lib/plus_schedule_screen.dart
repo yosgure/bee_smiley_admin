@@ -1652,8 +1652,8 @@ void _goToPage(int page) {
                             child: Text(
                               dateStr,
                               style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w500,
+                                fontSize: 17,
+                                fontWeight: FontWeight.w600,
                                 color: context.colors.textPrimary,
                               ),
                             ),

@@ -322,8 +322,8 @@ ThemeData getAppTheme() {
       surfaceTintColor: Colors.transparent,
       iconTheme: IconThemeData(color: c.textPrimary),
       titleTextStyle: TextStyle(
-        fontSize: 18,
-        fontWeight: FontWeight.normal,
+        fontSize: 17,
+        fontWeight: FontWeight.w600,
         color: c.textPrimary,
         fontFamily: 'NotoSansJP',
       ),
@@ -422,8 +422,8 @@ ThemeData getDarkTheme() {
       surfaceTintColor: Colors.transparent,
       iconTheme: IconThemeData(color: c.textPrimary),
       titleTextStyle: TextStyle(
-        fontSize: 18,
-        fontWeight: FontWeight.normal,
+        fontSize: 17,
+        fontWeight: FontWeight.w600,
         color: c.textPrimary,
         fontFamily: 'NotoSansJP',
       ),
