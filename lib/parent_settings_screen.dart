@@ -7,6 +7,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:image/image.dart' as img;
 import 'app_theme.dart';
 import 'main.dart' show themeNotifier, setThemeMode;
+import 'classroom_utils.dart';
 
 class ParentSettingsScreen extends StatefulWidget {
   final Map<String, dynamic>? familyData;
@@ -193,7 +194,7 @@ class _ParentSettingsScreenState extends State<ParentSettingsScreen> {
                       fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
                     ),
                   ),
-                  subtitle: Text(child['classroom'] ?? ''),
+                  subtitle: Text(classroomsDisplayText(child)),
                   trailing: isSelected 
                       ? const Icon(Icons.check_circle, color: AppColors.primary)
                       : null,
@@ -225,7 +226,7 @@ class _ParentSettingsScreenState extends State<ParentSettingsScreen> {
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          _currentChild?['classroom'] ?? '',
+                          _currentChild != null ? classroomsDisplayText(_currentChild!) : '',
                           style: TextStyle(color: context.colors.textSecondary),
                         ),
                       ],

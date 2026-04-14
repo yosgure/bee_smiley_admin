@@ -16,6 +16,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:video_player/video_player.dart';
 import 'app_theme.dart';
 import 'notification_service.dart';
+import 'classroom_utils.dart';
 
 // ==========================================
 // 1. メイン画面 (ChatListScreen)
@@ -722,7 +723,7 @@ class _NewChatDialogState extends State<NewChatDialog> with SingleTickerProvider
         final kana = '${(d['lastNameKana'] ?? '').toString().trim()} ${(d['firstNameKana'] ?? '').toString().trim()}'.trim();
         final children = List<Map<String, dynamic>>.from(d['children'] ?? []);
         String? classroom; String? childPhotoUrl;
-        if (children.isNotEmpty) { classroom = children.first['classroom']; childPhotoUrl = children.first['photoUrl'] as String?; }
+        if (children.isNotEmpty) { classroom = getChildClassrooms(children.first).join(', '); childPhotoUrl = children.first['photoUrl'] as String?; }
         tempFamilies.add({'uid': d['uid'] ?? doc.id, 'name': name.isEmpty ? '名称未設定' : name, 'kana': kana.isEmpty ? name : kana, 'photoUrl': childPhotoUrl, 'classroom': classroom});
       }
       final staffSnap = await FirebaseFirestore.instance.collection('staffs').get();

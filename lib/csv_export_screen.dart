@@ -10,6 +10,7 @@ import 'package:share_plus/share_plus.dart';
 // Web用の条件付きインポート
 import 'csv_export_web.dart' if (dart.library.io) 'csv_export_stub.dart' as web_helper;
 import 'app_theme.dart';
+import 'classroom_utils.dart';
 
 // ==========================================
 // CSVエクスポート共通クラス
@@ -381,7 +382,7 @@ class _FamilyCsvExportScreenState extends State<FamilyCsvExportScreen> {
               CsvExporter.escapeCsvValue(child['firstNameKana']),
               CsvExporter.escapeCsvValue(child['gender']),
               CsvExporter.escapeCsvValue(birthDate),
-              CsvExporter.escapeCsvValue(child['classroom']),
+              CsvExporter.escapeCsvValue(classroomsDisplayText(child)),
               CsvExporter.escapeCsvValue(child['course']),
               CsvExporter.escapeCsvValue(child['allergy']),
             ]);

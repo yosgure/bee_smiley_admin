@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import 'assessment_edit_screen.dart';
 import 'assessment_detail_screen.dart';
 import 'app_theme.dart';
+import 'classroom_utils.dart';
 
 class AssessmentScreen extends StatefulWidget {
   // ★追加: カレンダーなど外部から生徒指定で開く場合に使用
@@ -66,15 +67,17 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
           
           final fullName = '$lastName $firstName';
           final fullKana = '$lastNameKana $firstNameKana';
-          final classroom = child['classroom'] ?? '';
-          
-          final id = '${uid}_$firstName'; 
+          final classrooms = getChildClassrooms(child);
+          final classroom = classrooms.join(', ');
+
+          final id = '${uid}_$firstName';
 
           studentList.add({
             'id': id,
             'name': fullName,
-            'kana': fullKana, 
+            'kana': fullKana,
             'classroom': classroom,
+            'classrooms': classrooms,
           });
         }
       }
@@ -120,10 +123,10 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
         _filteredStudents = List.from(_allStudents);
       } else {
         _filteredStudents = _allStudents
-            .where((s) => s['classroom'] == _selectedClassroom)
+            .where((s) => (s['classrooms'] as List<String>?)?.contains(_selectedClassroom) ?? false)
             .toList();
       }
-      
+
       if (_filteredStudents.isNotEmpty) {
         _selectedStudentId = _filteredStudents.first['id'] as String;
         _selectedStudentName = _filteredStudents.first['name'] as String;
@@ -141,7 +144,7 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
         _filteredStudents = List.from(_allStudents);
       } else {
         _filteredStudents = _allStudents
-            .where((s) => s['classroom'] == _selectedClassroom)
+            .where((s) => (s['classrooms'] as List<String>?)?.contains(_selectedClassroom) ?? false)
             .toList();
       }
     });

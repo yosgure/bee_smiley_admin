@@ -118,7 +118,7 @@ class _FamilyCsvImportScreenState extends State<FamilyCsvImportScreen> {
           final childKana = row[colIndex + 1].toString().trim();
           final gender = row[colIndex + 2].toString().trim();
           String birthDate = row[colIndex + 3].toString().trim();
-          final classroom = row[colIndex + 4].toString().trim();
+          final classroomStr = row[colIndex + 4].toString().trim();
           final course = row[colIndex + 5].toString().trim();
           final allergy = row[colIndex + 6].toString().trim();
 
@@ -129,7 +129,7 @@ class _FamilyCsvImportScreenState extends State<FamilyCsvImportScreen> {
             'firstNameKana': childKana,
             'gender': gender,
             'birthDate': birthDate,
-            'classroom': classroom,
+            'classrooms': classroomStr.isNotEmpty ? [classroomStr] : <String>[],
             'course': course,
             'allergy': allergy,
             'photoUrl': '',
@@ -247,12 +247,13 @@ class _FamilyCsvImportScreenState extends State<FamilyCsvImportScreen> {
           String birthDate = row.length > 17 ? row[17].toString().trim() : '';
           birthDate = birthDate.replaceAll('-', '/').replaceAll('年', '/').replaceAll('月', '/').replaceAll('日', '');
 
+          final classroomVal2 = row.length > 18 ? row[18].toString().trim() : '';
           children.add({
             'firstName': childName,
             'firstNameKana': row.length > 15 ? row[15].toString().trim() : '',
             'gender': row.length > 16 ? row[16].toString().trim() : '',
             'birthDate': birthDate,
-            'classroom': row.length > 18 ? row[18].toString().trim() : '',
+            'classrooms': classroomVal2.isNotEmpty ? [classroomVal2] : <String>[],
             'course': row.length > 19 ? row[19].toString().trim() : '',
             'allergy': row.length > 20 ? row[20].toString().trim() : '',
             'photoUrl': '',
@@ -383,12 +384,13 @@ class _FamilyCsvImportScreenState extends State<FamilyCsvImportScreen> {
           String birthDate = row.length > 17 ? row[17].toString().trim() : '';
           birthDate = birthDate.replaceAll('-', '/').replaceAll('年', '/').replaceAll('月', '/').replaceAll('日', '');
 
+          final classroomVal3 = row.length > 18 ? row[18].toString().trim() : '';
           children.add({
             'firstName': childName,
             'firstNameKana': row.length > 15 ? row[15].toString().trim() : '',
             'gender': row.length > 16 ? row[16].toString().trim() : '',
             'birthDate': birthDate,
-            'classroom': row.length > 18 ? row[18].toString().trim() : '',
+            'classrooms': classroomVal3.isNotEmpty ? [classroomVal3] : <String>[],
             'course': row.length > 19 ? row[19].toString().trim() : '',
             'allergy': row.length > 20 ? row[20].toString().trim() : '',
             'photoUrl': '',

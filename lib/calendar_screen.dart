@@ -11,6 +11,7 @@ import 'plus_schedule_screen.dart';
 import 'bee_dashboard_screen.dart';
 import 'app_theme.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'classroom_utils.dart';
 
 class CalendarScreen extends StatefulWidget {
   const CalendarScreen({super.key});
@@ -680,11 +681,12 @@ Future<void> _saveDisplayDate(DateTime date) async {
                       final parentLastName = data['lastName'] ?? '';
 
                       for (var child in children) {
-                        final classroom = child['classroom'] as String?;
-                        if (classroom == null || !_myClassrooms.contains(classroom)) continue;
+                        final childClassrooms = getChildClassrooms(child);
+                        if (childClassrooms.isEmpty || !childClassrooms.any((c) => _myClassrooms.contains(c))) continue;
 
                         // 教室フィルタとの連動チェック
-                        if (_classroomFilters.containsKey(classroom) && _classroomFilters[classroom] != true) {
+                        final matchedClassroom = childClassrooms.firstWhere((c) => _myClassrooms.contains(c), orElse: () => '');
+                        if (matchedClassroom.isNotEmpty && _classroomFilters.containsKey(matchedClassroom) && _classroomFilters[matchedClassroom] != true) {
                           continue;
                         }
 

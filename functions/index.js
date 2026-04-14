@@ -280,9 +280,11 @@ exports.onNotificationCreated = onDocumentCreated(
 
         if (target === "specific" && targetClassrooms.length > 0) {
           const children = familyData.children || [];
-          const isTarget = children.some((child) =>
-            targetClassrooms.includes(child.classroom)
-          );
+          const isTarget = children.some((child) => {
+            // classrooms(配列)と旧classroom(文字列)の両方に対応
+            const cls = child.classrooms || (child.classroom ? [child.classroom] : []);
+            return cls.some((c) => targetClassrooms.includes(c));
+          });
           if (!isTarget) continue;
         }
 
@@ -2635,3 +2637,39 @@ exports.syncToHugScheduled = onSchedule(
   }
 );
 
+// ==========================================
+// マイグレーション: classroom → classrooms 配列
+// デプロイ後にFlutterアプリからonCallで呼び出す
+// ==========================================
+exports.migrateClassroomToClassrooms = onCall(
+  { region: "asia-northeast1" },
+  async (request) => {
+    const snapshot = await db.collection("families").get();
+    let updated = 0;
+    let skipped = 0;
+
+    for (const doc of snapshot.docs) {
+      const data = doc.data();
+      const children = data.children || [];
+      let needsUpdate = false;
+
+      const updatedChildren = children.map((child) => {
+        if (child.classrooms && Array.isArray(child.classrooms) && child.classrooms.length > 0) {
+          return child;
+        }
+        const classroom = child.classroom || "";
+        needsUpdate = true;
+        return { ...child, classrooms: classroom ? [classroom] : [] };
+      });
+
+      if (needsUpdate) {
+        await doc.ref.update({ children: updatedChildren });
+        updated++;
+      } else {
+        skipped++;
+      }
+    }
+
+    return { updated, skipped, total: snapshot.size };
+  }
+);

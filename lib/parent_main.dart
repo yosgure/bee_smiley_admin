@@ -10,6 +10,7 @@ import 'parent_event_screen.dart';
 import 'parent_settings_screen.dart';
 import 'app_theme.dart';
 import 'notification_service.dart';
+import 'classroom_utils.dart';
 
 class ParentMainScreen extends StatefulWidget {
   const ParentMainScreen({super.key});
@@ -246,7 +247,7 @@ class _ParentMainScreenState extends State<ParentMainScreen> {
       const ParentNotificationScreen(),
       ParentEventScreen(
         childId: _currentChildId,
-        classroom: _currentChild?['classroom'],
+        classroom: _currentChild != null ? getChildClassrooms(_currentChild!).isNotEmpty ? getChildClassrooms(_currentChild!).first : null : null,
       ),
       ParentSettingsScreen(
         familyData: _familyData,
