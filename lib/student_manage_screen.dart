@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'app_theme.dart';
+import 'classroom_utils.dart';
 
 class StudentManageScreen extends StatefulWidget {
   final VoidCallback? onBack;
@@ -256,7 +257,7 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
                         final data = doc.data() as Map<String, dynamic>;
                         final children = List<Map<String, dynamic>>.from(data['children'] ?? []);
                         return children.any((child) =>
-                          (child['classroom'] as String? ?? '') == _selectedClassroomFilter);
+                          childBelongsToClassroom(child, _selectedClassroomFilter));
                       }).toList();
 
                 // 検索フィルタリング
@@ -516,7 +517,7 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
       displayName += ' (${child['firstNameKana']})';
     }
 
-    String classInfo = child['classroom'] ?? '';
+    String classInfo = classroomsDisplayText(child);
     if (child['course'] != null && child['course'].isNotEmpty) {
       classInfo += ' / ${child['course']}';
     }
@@ -525,7 +526,7 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
       margin: const EdgeInsets.only(top: 8),
       padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(
-        color: Colors.blue.shade50,
+        color: AppColors.primary.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Column(
@@ -692,7 +693,7 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
         'firstNameKana': '',
         'gender': '男',
         'birthDate': '',
-        'classroom': _classroomList.isNotEmpty ? _classroomList[0] : '',
+        'classrooms': _classroomList.isNotEmpty ? [_classroomList[0]] : <String>[],
         'course': _allCourses[0],
         'allergy': '',
       });
@@ -722,9 +723,9 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
                             padding: const EdgeInsets.all(12),
                             margin: const EdgeInsets.only(bottom: 16),
                             decoration: BoxDecoration(
-                              color: Colors.blue.shade50,
+                              color: AppColors.primary.withValues(alpha: 0.08),
                               borderRadius: BorderRadius.circular(8),
-                              border: Border.all(color: Colors.blue.shade200),
+                              border: Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
                             ),
                             child: const Row(
                               children: [
@@ -809,7 +810,7 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
                                     'firstNameKana': '',
                                     'gender': '男',
                                     'birthDate': '',
-                                    'classroom': _classroomList.isNotEmpty ? _classroomList[0] : '',
+                                    'classrooms': _classroomList.isNotEmpty ? [_classroomList[0]] : <String>[],
                                     'course': _allCourses[0],
                                     'allergy': '',
                                   });
@@ -915,14 +916,36 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
                                 ),
                                 const SizedBox(height: 8),
                                 
-                                DropdownButtonFormField<String>(
-                                  value: _classroomList.contains(child['classroom']) 
-                                      ? child['classroom'] 
-                                      : (_classroomList.isNotEmpty ? _classroomList[0] : null),
-                                  isExpanded: true,
+                                // 教室（複数選択）
+                                InputDecorator(
                                   decoration: InputDecoration(labelText: '教室', isDense: true, border: OutlineInputBorder()),
-                                  items: _classroomList.map((c) => DropdownMenuItem(value: c, child: Text(c, style: TextStyle(fontSize: 12)))).toList(),
-                                  onChanged: (val) => setStateDialog(() => child['classroom'] = val),
+                                  child: Wrap(
+                                    spacing: 6,
+                                    runSpacing: 4,
+                                    children: [
+                                      ...(_classroomList).map((c) {
+                                        final selected = getChildClassrooms(child).contains(c);
+                                        return FilterChip(
+                                          label: Text(c, style: TextStyle(fontSize: 11)),
+                                          selected: selected,
+                                          selectedColor: AppColors.primary.withValues(alpha: 0.2),
+                                          checkmarkColor: AppColors.primary,
+                                          onSelected: (val) {
+                                            setStateDialog(() {
+                                              final current = List<String>.from(getChildClassrooms(child));
+                                              if (val) {
+                                                if (!current.contains(c)) current.add(c);
+                                              } else {
+                                                current.remove(c);
+                                              }
+                                              child['classrooms'] = current;
+                                              child.remove('classroom'); // 旧フィールド削除
+                                            });
+                                          },
+                                        );
+                                      }),
+                                    ],
+                                  ),
                                 ),
                                 
                                 const SizedBox(height: 8),
@@ -951,7 +974,7 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
                                   onChanged: (val) => child['profileUrl'] = val,
                                 ),
                                 // 策定会議URL（プラス湘南藤沢の生徒のみ）
-                                if ((child['classroom'] as String? ?? '').contains('プラス湘南藤沢')) ...[
+                                if (getChildClassrooms(child).any((c) => c.contains('プラス'))) ...[
                                   const SizedBox(height: 16),
                                   const Text('策定会議URL', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
                                   const SizedBox(height: 8),
@@ -1128,7 +1151,7 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
         prefixIcon: icon != null ? Icon(icon, color: context.colors.iconMuted, size: 20) : null,
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
         filled: true,
-        fillColor: enabled ? Colors.white : context.colors.borderLight,
+        fillColor: enabled ? context.colors.cardBg : context.colors.borderLight,
         contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
         isDense: true,
       ),

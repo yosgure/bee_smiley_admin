@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'app_theme.dart';
+import 'classroom_utils.dart';
 
 /// プラスダッシュボードのコンテンツウィジェット
 class PlusDashboardContent extends StatefulWidget {
@@ -107,10 +108,11 @@ class _PlusDashboardContentState extends State<PlusDashboardContent> {
         
         for (var child in children) {
           final firstName = child['firstName'] as String? ?? '';
-          final classroom = child['classroom'] as String? ?? '';
-          
+          final classrooms = getChildClassrooms(child);
+          final classroom = classrooms.join(', ');
+
           // プラスの教室のみ
-          if (firstName.isNotEmpty && classroom.contains('プラス')) {
+          if (firstName.isNotEmpty && classrooms.any((c) => c.contains('プラス'))) {
             students.add({
               'name': '$lastName $firstName'.trim(),
               'firstName': firstName,

@@ -8,6 +8,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:intl/intl.dart';
 import 'package:image_picker/image_picker.dart';
+import 'classroom_utils.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
@@ -118,9 +119,7 @@ class _ParentChatScreenState extends State<ParentChatScreen> {
       final children = List<Map<String, dynamic>>.from(widget.familyData!['children'] ?? []);
       Set<String> classrooms = {};
       for (var child in children) {
-        if (child['classroom'] != null && child['classroom'].toString().isNotEmpty) {
-          classrooms.add(child['classroom']);
-        }
+        classrooms.addAll(getChildClassrooms(child));
       }
 
       // 該当教室を担当する全スタッフを取得

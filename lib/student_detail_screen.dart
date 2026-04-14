@@ -5,6 +5,7 @@ import 'assessment_edit_screen.dart';
 import 'assessment_detail_screen.dart';
 import 'app_theme.dart';
 import 'ai_chat_screen.dart';
+import 'classroom_utils.dart';
 
 class StudentDetailScreen extends StatefulWidget {
   final String studentId;
@@ -82,7 +83,7 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> with SingleTi
               _gender = child['gender'] ?? '';
               _birthDateStr = birthDate;
               _ageStr = _calculateAge(birthDate);
-              _classroom = child['classroom'] ?? '';
+              _classroom = classroomsDisplayText(child);
               _diagnosis = child['diagnosis'] ?? '';
               _isLoadingInfo = false;
             });

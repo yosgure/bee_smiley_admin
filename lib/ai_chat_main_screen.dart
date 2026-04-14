@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
 import 'ai_chat_screen.dart';
 import 'app_theme.dart';
+import 'classroom_utils.dart';
 
 class AiChatMainScreen extends StatefulWidget {
   final Map<String, dynamic>? initialStudent;
@@ -87,9 +88,10 @@ class _AiChatMainScreenState extends State<AiChatMainScreen> {
 
         for (var child in children) {
           final firstName = child['firstName'] as String? ?? '';
-          final classroom = child['classroom'] as String? ?? '';
+          final classrooms = getChildClassrooms(child);
+          final classroom = classrooms.join(', ');
 
-          if (firstName.isNotEmpty && classroom.contains('プラス')) {
+          if (firstName.isNotEmpty && classrooms.any((c) => c.contains('プラス'))) {
             final studentId = child['studentId'] ?? '${familyUid}_$firstName';
             students.add({
               'name': '$lastName $firstName'.trim(),

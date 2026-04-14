@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'app_theme.dart';
 import 'plus_dashboard_screen.dart';
+import 'classroom_utils.dart';
 import 'plus_shift_request_dialog.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/gestures.dart';
@@ -854,10 +855,11 @@ Map<String, dynamic>? _getCellMemo(DateTime date, int slotIndex) {
 
         for (var child in children) {
           final firstName = child['firstName'] as String? ?? '';
-          final classroom = child['classroom'] as String? ?? '';
+          final classrooms = getChildClassrooms(child);
+          final classroom = classrooms.join(', ');
 
           // プラスの教室のみ
-          if (firstName.isNotEmpty && classroom.contains('プラス')) {
+          if (firstName.isNotEmpty && classrooms.any((c) => c.contains('プラス'))) {
             // studentIdを生成（childにstudentIdがあればそれを使用）
             final studentId = child['studentId'] ?? '${familyUid}_$firstName';
             students.add({

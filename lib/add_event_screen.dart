@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'app_theme.dart';
+import 'classroom_utils.dart';
 import 'time_list_picker.dart';
 
 class AddEventDialog extends StatefulWidget {
@@ -1807,7 +1808,7 @@ class _PersonSelectSheetState extends State<_PersonSelectSheet> {
           final children = List<Map<String, dynamic>>.from(data['children'] ?? []);
           
           for (var child in children) {
-            if (widget.filterKey != null && child['classroom'] != widget.filterKey) continue;
+            if (widget.filterKey != null && !childBelongsToClassroom(child, widget.filterKey!)) continue;
             final childName = child['firstName'] ?? '';
             final fullName = '$parentLastName $childName';
             final uniqueId = '${data['uid']}_$childName';

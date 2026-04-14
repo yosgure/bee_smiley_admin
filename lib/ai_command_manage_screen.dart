@@ -854,7 +854,7 @@ class _QuestionEditDialogState extends State<_QuestionEditDialog> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
         decoration: BoxDecoration(
-          color: selected ? context.colors.aiAccent : Colors.white,
+          color: selected ? context.colors.aiAccent : context.colors.cardBg,
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
             color: selected ? context.colors.aiAccent : context.colors.borderMedium,

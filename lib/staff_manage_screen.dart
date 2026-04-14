@@ -776,7 +776,7 @@ appBar: AppBar(
                                       child: Container(
                                         padding: const EdgeInsets.symmetric(vertical: 10),
                                         decoration: BoxDecoration(
-                                          color: showInSchedule ? Colors.green.shade50 : Colors.white,
+                                          color: showInSchedule ? Colors.green.withValues(alpha: 0.1) : context.colors.cardBg,
                                           borderRadius: BorderRadius.circular(6),
                                           border: Border.all(
                                             color: showInSchedule ? Colors.green : context.colors.borderMedium,
@@ -812,7 +812,7 @@ appBar: AppBar(
                                       child: Container(
                                         padding: const EdgeInsets.symmetric(vertical: 10),
                                         decoration: BoxDecoration(
-                                          color: !showInSchedule ? context.colors.borderLight : Colors.white,
+                                          color: !showInSchedule ? context.colors.borderLight : context.colors.cardBg,
                                           borderRadius: BorderRadius.circular(6),
                                           border: Border.all(
                                             color: !showInSchedule ? context.colors.textTertiary : context.colors.borderMedium,

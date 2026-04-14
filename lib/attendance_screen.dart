@@ -229,7 +229,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
       margin: const EdgeInsets.only(bottom: 16),
       elevation: 2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      color: isExpired ? context.colors.chipBg : Colors.white,
+      color: isExpired ? context.colors.chipBg : context.colors.cardBg,
       child: Padding(
         padding: const EdgeInsets.all(20),
         child: Column(

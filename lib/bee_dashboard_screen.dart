@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import 'app_theme.dart';
+import 'classroom_utils.dart';
 
 /// ビースマイリーダッシュボードのコンテンツウィジェット
 class BeeDashboardContent extends StatefulWidget {
@@ -208,7 +209,8 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
 
         for (var child in children) {
           final firstName = child['firstName'] as String? ?? '';
-          final classroom = child['classroom'] as String? ?? '';
+          final classrooms = getChildClassrooms(child);
+          final classroom = classrooms.join(', ');
           final fullName = '$lastName $firstName'.trim();
 
           // 全生徒の名前マップ（教室フィルタなし）
@@ -216,7 +218,7 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
             nameMap[fullName.replaceAll(' ', '')] = fullName;
           }
 
-          if (firstName.isNotEmpty && classroom.contains(_selectedClassroom)) {
+          if (firstName.isNotEmpty && classrooms.any((c) => c.contains(_selectedClassroom))) {
             students.add({
               'name': fullName,
               'firstName': firstName,
