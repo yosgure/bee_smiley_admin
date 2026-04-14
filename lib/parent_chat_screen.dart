@@ -306,7 +306,7 @@ class _ParentChatScreenState extends State<ParentChatScreen> {
       child: Center(
         child: Text(
           title,
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.normal),
+          style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
         ),
       ),
     );

@@ -468,7 +468,7 @@ Future<void> _saveDisplayDate(DateTime date) async {
                         Text(
                           _headerText,
                           style: TextStyle(
-                            color: context.colors.textPrimary, fontSize: 20, fontWeight: FontWeight.w400,
+                            color: context.colors.textPrimary, fontSize: 17, fontWeight: FontWeight.w600,
                           ),
                         ),
                       ],
@@ -756,7 +756,10 @@ Future<void> _saveDisplayDate(DateTime date) async {
                                 highlightColor: Colors.transparent,
                                 splashColor: Colors.transparent,
                               ),
-                              child: SfCalendarTheme(
+                              child: Builder(
+                              builder: (context) {
+                              final isMobile = MediaQuery.of(context).size.width < AppBreakpoints.tablet;
+                              return SfCalendarTheme(
                               data: SfCalendarThemeData(
                                 selectionBorderColor: Colors.transparent,
                                 // 現在時刻ライン色（Google風の赤）。今日の日付ハイライトもこの色になる
@@ -783,19 +786,19 @@ Future<void> _saveDisplayDate(DateTime date) async {
                                 backgroundColor: context.colors.cardBg,
                                 cellBorderColor: context.colors.borderMedium,
                                 headerHeight: 0,
-                                viewHeaderHeight: 60,
+                                viewHeaderHeight: isMobile ? 48 : 60,
                                 allowViewNavigation: false,
                                 selectionDecoration: const BoxDecoration(
                                   color: Colors.transparent,
                                   border: null,
                                 ),
                                 viewHeaderStyle: ViewHeaderStyle(
-                                  dayTextStyle: TextStyle(fontSize: 11, color: context.colors.textSecondary, fontWeight: FontWeight.w500, letterSpacing: 0.5),
-                                  dateTextStyle: TextStyle(fontSize: 18, color: context.colors.textPrimary, fontWeight: FontWeight.w400),
+                                  dayTextStyle: TextStyle(fontSize: isMobile ? 10 : 11, color: context.colors.textSecondary, fontWeight: FontWeight.w500, letterSpacing: 0.5),
+                                  dateTextStyle: TextStyle(fontSize: isMobile ? 14 : 18, color: context.colors.textPrimary, fontWeight: FontWeight.w400),
                                 ),
                                 monthViewSettings: MonthViewSettings(
                                   appointmentDisplayMode: MonthAppointmentDisplayMode.appointment,
-                                  appointmentDisplayCount: 5,
+                                  appointmentDisplayCount: isMobile ? 3 : 5,
                                   showAgenda: false,
                                   monthCellStyle: MonthCellStyle(
                                     textStyle: TextStyle(fontSize: 12, color: context.colors.textPrimary),
@@ -944,16 +947,16 @@ Future<void> _saveDisplayDate(DateTime date) async {
                                     ),
                                     alignment: isMonthView ? Alignment.centerLeft : Alignment.topLeft,
                                     padding: isMonthView
-                                        ? const EdgeInsets.symmetric(horizontal: 4)
+                                        ? EdgeInsets.symmetric(horizontal: isMobile ? 2 : 4)
                                         : (isCompact
-                                            ? const EdgeInsets.fromLTRB(8, 4, 8, 4)
-                                            : const EdgeInsets.fromLTRB(8, 6, 8, 6)),
+                                            ? EdgeInsets.fromLTRB(isMobile ? 3 : 8, 2, isMobile ? 2 : 8, 2)
+                                            : EdgeInsets.fromLTRB(isMobile ? 3 : 8, 4, isMobile ? 2 : 8, 4)),
                                     child: isMonthView
                                         ? Text(
                                             appointment.subject,
                                             style: TextStyle(
                                               color: Colors.white,
-                                              fontSize: 12,
+                                              fontSize: isMobile ? 10 : 12,
                                               height: 1.0,
                                             ),
                                             maxLines: 1,
@@ -961,10 +964,10 @@ Future<void> _saveDisplayDate(DateTime date) async {
                                           )
                                         : isCompact
                                             ? Text(
-                                                '${appointment.subject}、$timeText',
+                                                isMobile ? appointment.subject : '${appointment.subject}、$timeText',
                                                 style: TextStyle(
                                                   color: Colors.white,
-                                                  fontSize: 12,
+                                                  fontSize: isMobile ? 10 : 12,
                                                   fontWeight: FontWeight.w400,
                                                   height: 1.2,
                                                 ),
@@ -979,13 +982,14 @@ Future<void> _saveDisplayDate(DateTime date) async {
                                                     appointment.subject,
                                                     style: TextStyle(
                                                       color: Colors.white,
-                                                      fontSize: 12,
+                                                      fontSize: isMobile ? 10 : 12,
                                                       fontWeight: FontWeight.w400,
                                                       height: 1.2,
                                                     ),
                                                     maxLines: 1,
                                                     overflow: TextOverflow.ellipsis,
                                                   ),
+                                                  if (!isMobile) ...[
                                                   const SizedBox(height: 2),
                                                   Text(
                                                     timeText,
@@ -998,15 +1002,16 @@ Future<void> _saveDisplayDate(DateTime date) async {
                                                     maxLines: 1,
                                                     overflow: TextOverflow.clip,
                                                   ),
+                                                  ],
                                                 ],
                                               ),
                                   );
                                 },
                                 timeSlotViewSettings: TimeSlotViewSettings(
-                                  timeIntervalHeight: 60,
-                                  timeRulerSize: 64,
+                                  timeIntervalHeight: isMobile ? 50 : 60,
+                                  timeRulerSize: isMobile ? 40 : 64,
                                   // Google風の時間表記（例: 午前9時, 午後12時）
-                                  timeFormat: 'a h時',
+                                  timeFormat: isMobile ? 'H時' : 'a h時',
                                   // 時間グリッドは1時間単位
                                   timeInterval: Duration(minutes: 60),
                                   timeTextStyle: TextStyle(color: context.colors.textSecondary, fontSize: 11),
@@ -1030,7 +1035,9 @@ Future<void> _saveDisplayDate(DateTime date) async {
                                 ),
                               ),
                               ),
-                            ),
+                              );
+                              },
+                              ),
                             ),
                           ],
                         ),

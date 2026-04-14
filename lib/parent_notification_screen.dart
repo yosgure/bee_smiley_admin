@@ -55,7 +55,7 @@ class _ParentNotificationScreenState extends State<ParentNotificationScreen> {
           Center(
             child: Text(
               title,
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.normal),
+              style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
             ),
           ),
         ],

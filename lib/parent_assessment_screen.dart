@@ -142,7 +142,7 @@ Widget _buildHeader({bool showBack = false}) {
                 // 詳細画面: 週次アセスメント or 月次サマリ
                 Text(
                   _selectedType == 'weekly' ? '週次アセスメント' : '月次サマリ',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.normal),
+                  style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
                 )
               else if (hasMultipleChildren)
                 // 一覧画面（複数の子ども）: ドロップダウン
@@ -156,7 +156,7 @@ Widget _buildHeader({bool showBack = false}) {
                     children: [
                       Text(
                         '${widget.childName}のアセスメント',
-                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.normal),
+                        style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
                       ),
                       SizedBox(width: 4),
                       Icon(Icons.arrow_drop_down, color: context.colors.iconMuted),
@@ -205,7 +205,7 @@ Widget _buildHeader({bool showBack = false}) {
                 // 一覧画面（子ども1人）: シンプルなテキスト
                 Text(
                   '${widget.childName}のアセスメント',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.normal),
+                  style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
                 ),
             ],
           ),

@@ -256,23 +256,14 @@ class _AiChatMainScreenState extends State<AiChatMainScreen> {
             padding: EdgeInsets.fromLTRB(16, MediaQuery.of(context).padding.top + 12, 16, 12),
             child: Column(
               children: [
-                Row(
+                Stack(
+                  alignment: Alignment.center,
                   children: [
-                    Container(
-                      width: 32,
-                      height: 32,
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [context.colors.aiGradientStart, context.colors.aiGradientEnd],
-                        ),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: const Icon(Icons.auto_awesome, color: Colors.white, size: 16),
+                    Center(
+                      child: Text('AI相談',
+                          style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600, color: context.colors.textPrimary)),
                     ),
-                    const SizedBox(width: 10),
-                    Text('AI相談',
-                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: context.colors.textPrimary)),
-                    const Spacer(),
+                    Positioned(right: 0, child: Row(mainAxisSize: MainAxisSize.min, children: [
                     // 新規フリーチャット
                     GestureDetector(
                       onTap: _openFreeChat,
@@ -286,7 +277,8 @@ class _AiChatMainScreenState extends State<AiChatMainScreen> {
                         child: Icon(Icons.edit_outlined, size: 16, color: context.colors.textSecondary),
                       ),
                     ),
-                  ],
+                  ])),
+                ],
                 ),
               ],
             ),
