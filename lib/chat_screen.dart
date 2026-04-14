@@ -308,7 +308,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
       icon: Icon(Icons.more_vert, color: context.colors.textSecondary),
       onSelected: (value) {
         if (value == 'delete') _deleteChat(roomId, isWide);
-        if (value == 'members') _showMemberList(memberNames);
+        if (value == 'members') _showMemberList(roomId, memberNames);
       },
       itemBuilder: (BuildContext context) => [
         const PopupMenuItem(value: 'members', child: Text('メンバー一覧')),
@@ -339,22 +339,10 @@ class _ChatListScreenState extends State<ChatListScreen> {
     );
   }
 
-  void _showMemberList(Map<String, dynamic> names) {
+  void _showMemberList(String roomId, Map<String, dynamic> names) {
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('メンバー一覧'),
-        content: SizedBox(
-          width: 300, height: 300,
-          child: ListView(
-            children: names.entries.map((e) {
-              final name = e.key == currentUser!.uid ? '${e.value} (自分)' : e.value;
-              return ListTile(leading: const Icon(Icons.person), title: Text(name));
-            }).toList(),
-          ),
-        ),
-        actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('閉じる'))],
-      ),
+      builder: (ctx) => _TeamMemberDialog(roomId: roomId, names: names, currentUid: currentUser!.uid),
     );
   }
 
@@ -1170,11 +1158,10 @@ class _ChatDetailViewState extends State<ChatDetailView> {
   }
 
   void _showMembers() {
-    showDialog(context: context, builder: (ctx) => AlertDialog(
-      title: const Text('メンバー一覧'),
-      content: SizedBox(width: 300, height: 300, child: ListView(children: widget.memberNames.entries.map((e) { final name = e.key == currentUser!.uid ? '${e.value} (自分)' : e.value; return ListTile(leading: const Icon(Icons.person), title: Text(name)); }).toList())),
-      actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('閉じる'))],
-    ));
+    showDialog(
+      context: context,
+      builder: (ctx) => _TeamMemberDialog(roomId: widget.roomId, names: widget.memberNames, currentUid: currentUser!.uid),
+    );
   }
 
   Widget _buildInputArea() {
@@ -2312,6 +2299,221 @@ class _VideoPlayerDialogState extends State<VideoPlayerDialog> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+// ─── チームチャット メンバー一覧ダイアログ ───
+class _TeamMemberDialog extends StatefulWidget {
+  final String roomId;
+  final Map<String, dynamic> names;
+  final String currentUid;
+  const _TeamMemberDialog({required this.roomId, required this.names, required this.currentUid});
+  @override
+  State<_TeamMemberDialog> createState() => _TeamMemberDialogState();
+}
+
+class _TeamMemberDialogState extends State<_TeamMemberDialog> {
+  late Map<String, dynamic> _names;
+  bool _isEditing = false;
+  bool _isLoadingStaff = false;
+  List<Map<String, dynamic>> _allStaff = [];
+  String? _groupPhotoUrl;
+  String? _groupName;
+  bool _isSavingPhoto = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _names = Map<String, dynamic>.from(widget.names);
+    _loadRoomInfo();
+  }
+
+  Future<void> _loadRoomInfo() async {
+    final doc = await FirebaseFirestore.instance.collection('chat_rooms').doc(widget.roomId).get();
+    if (doc.exists && mounted) {
+      setState(() {
+        _groupPhotoUrl = doc.data()?['photoUrl'];
+        _groupName = doc.data()?['groupName'];
+      });
+    }
+  }
+
+  Future<void> _loadStaff() async {
+    if (_allStaff.isNotEmpty) return;
+    setState(() => _isLoadingStaff = true);
+    final snap = await FirebaseFirestore.instance.collection('staffs').get();
+    final list = <Map<String, dynamic>>[];
+    for (var doc in snap.docs) {
+      final d = doc.data();
+      final uid = d['uid'] ?? doc.id;
+      String name = (d['name'] ?? '').toString().trim();
+      if (name.isEmpty) name = '${(d['lastName'] ?? '').toString().trim()} ${(d['firstName'] ?? '').toString().trim()}'.trim();
+      if (name.isEmpty) name = 'スタッフ';
+      list.add({'uid': uid, 'name': name, 'photoUrl': d['photoUrl']});
+    }
+    list.sort((a, b) => a['name'].compareTo(b['name']));
+    if (mounted) setState(() { _allStaff = list; _isLoadingStaff = false; });
+  }
+
+  Future<void> _addMember(String uid, String name) async {
+    final roomRef = FirebaseFirestore.instance.collection('chat_rooms').doc(widget.roomId);
+    final doc = await roomRef.get();
+    if (!doc.exists) return;
+    final data = doc.data()!;
+    final members = List<String>.from(data['members'] ?? []);
+    final names = Map<String, dynamic>.from(data['names'] ?? {});
+    if (members.contains(uid)) return;
+    members.add(uid);
+    names[uid] = name;
+    await roomRef.update({'members': members, 'names': names});
+    if (mounted) setState(() => _names = names);
+  }
+
+  Future<void> _removeMember(String uid) async {
+    if (uid == widget.currentUid) return;
+    final roomRef = FirebaseFirestore.instance.collection('chat_rooms').doc(widget.roomId);
+    final doc = await roomRef.get();
+    if (!doc.exists) return;
+    final data = doc.data()!;
+    final members = List<String>.from(data['members'] ?? []);
+    final names = Map<String, dynamic>.from(data['names'] ?? {});
+    members.remove(uid);
+    names.remove(uid);
+    await roomRef.update({'members': members, 'names': names});
+    if (mounted) setState(() => _names = names);
+  }
+
+  Future<void> _changeGroupPhoto() async {
+    try {
+      final picker = ImagePicker();
+      final picked = await picker.pickImage(source: ImageSource.gallery, maxWidth: 512, maxHeight: 512, imageQuality: 80);
+      if (picked == null) return;
+      setState(() => _isSavingPhoto = true);
+      final bytes = await picked.readAsBytes();
+      final ref = FirebaseStorage.instance.ref().child('group_photos/${widget.roomId}.jpg');
+      await ref.putData(bytes, SettableMetadata(contentType: 'image/jpeg'));
+      final url = await ref.getDownloadURL();
+      await FirebaseFirestore.instance.collection('chat_rooms').doc(widget.roomId).update({'photoUrl': url});
+      if (mounted) setState(() { _groupPhotoUrl = url; _isSavingPhoto = false; });
+    } catch (e) {
+      if (mounted) setState(() => _isSavingPhoto = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 360, maxHeight: 500),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // ヘッダー
+            Padding(
+              padding: const EdgeInsets.fromLTRB(4, 4, 4, 0),
+              child: Row(
+                children: [
+                  IconButton(
+                    icon: Icon(Icons.close, color: context.colors.textSecondary),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                  const Expanded(child: Text('メンバー一覧', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold), textAlign: TextAlign.center)),
+                  IconButton(
+                    icon: Icon(_isEditing ? Icons.check : Icons.edit, color: _isEditing ? AppColors.primary : context.colors.textSecondary),
+                    onPressed: () {
+                      if (!_isEditing) _loadStaff();
+                      setState(() => _isEditing = !_isEditing);
+                    },
+                  ),
+                ],
+              ),
+            ),
+            const Divider(height: 1),
+            // グループアイコン変更
+            if (_isEditing) ...[
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                child: GestureDetector(
+                  onTap: _isSavingPhoto ? null : _changeGroupPhoto,
+                  child: Stack(
+                    children: [
+                      CircleAvatar(
+                        radius: 36,
+                        backgroundColor: AppColors.primary.withOpacity(0.15),
+                        backgroundImage: _groupPhotoUrl != null && _groupPhotoUrl!.isNotEmpty ? NetworkImage(_groupPhotoUrl!) : null,
+                        child: _isSavingPhoto
+                          ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2))
+                          : (_groupPhotoUrl == null || _groupPhotoUrl!.isEmpty)
+                            ? Text(_groupName != null && _groupName!.isNotEmpty ? _groupName![0] : 'G', style: const TextStyle(fontSize: 24, color: AppColors.primary, fontWeight: FontWeight.bold))
+                            : null,
+                      ),
+                      Positioned(
+                        bottom: 0, right: 0,
+                        child: Container(
+                          padding: const EdgeInsets.all(4),
+                          decoration: const BoxDecoration(color: AppColors.primary, shape: BoxShape.circle),
+                          child: const Icon(Icons.camera_alt, size: 14, color: Colors.white),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const Divider(height: 1),
+            ],
+            // メンバーリスト
+            Flexible(
+              child: ListView(
+                shrinkWrap: true,
+                children: [
+                  ..._names.entries.map((e) {
+                    final uid = e.key;
+                    final name = uid == widget.currentUid ? '${e.value} (自分)' : e.value.toString();
+                    final initial = name.isNotEmpty ? name[0] : '?';
+                    return ListTile(
+                      leading: CircleAvatar(
+                        backgroundColor: AppColors.primary.withOpacity(0.15),
+                        child: Text(initial, style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold)),
+                      ),
+                      title: Text(name),
+                      trailing: _isEditing && uid != widget.currentUid
+                        ? IconButton(
+                            icon: const Icon(Icons.remove_circle, color: Colors.red),
+                            onPressed: () => _removeMember(uid),
+                          )
+                        : null,
+                    );
+                  }),
+                  // 編集モード: メンバー追加
+                  if (_isEditing) ...[
+                    const Divider(height: 1),
+                    if (_isLoadingStaff)
+                      const Padding(padding: EdgeInsets.all(16), child: Center(child: CircularProgressIndicator()))
+                    else
+                      ..._allStaff.where((s) => !_names.containsKey(s['uid'])).map((staff) {
+                        final name = staff['name'] as String;
+                        final initial = name.isNotEmpty ? name[0] : '?';
+                        return ListTile(
+                          leading: CircleAvatar(
+                            backgroundColor: Colors.grey.withOpacity(0.15),
+                            child: Text(initial, style: const TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)),
+                          ),
+                          title: Text(name, style: TextStyle(color: context.colors.textSecondary)),
+                          trailing: IconButton(
+                            icon: const Icon(Icons.add_circle, color: AppColors.primary),
+                            onPressed: () => _addMember(staff['uid'], name),
+                          ),
+                        );
+                      }),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
