@@ -148,7 +148,7 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
           // 検索窓 + 教室フィルター
           Container(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-            color: Colors.white,
+            color: context.colors.cardBg,
             child: Row(
               children: [
                 Expanded(
@@ -829,7 +829,7 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
                             decoration: BoxDecoration(
                               border: Border.all(color: context.colors.borderMedium),
                               borderRadius: BorderRadius.circular(8),
-                              color: Colors.white,
+                              color: context.colors.cardBg,
                             ),
                             child: Column(
                               children: [
