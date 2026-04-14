@@ -1343,7 +1343,7 @@ class _ChatDetailViewState extends State<ChatDetailView> {
       margin: const EdgeInsets.only(bottom: 6),
       padding: const EdgeInsets.fromLTRB(10, 6, 6, 6),
       decoration: BoxDecoration(
-        color: Colors.blue.shade50,
+        color: AppColors.primary.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(8),
         border: const Border(
           left: BorderSide(color: AppColors.primary, width: 3),

@@ -525,7 +525,7 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
       margin: const EdgeInsets.only(top: 8),
       padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(
-        color: Colors.blue.shade50,
+        color: AppColors.primary.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Column(
@@ -722,9 +722,9 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
                             padding: const EdgeInsets.all(12),
                             margin: const EdgeInsets.only(bottom: 16),
                             decoration: BoxDecoration(
-                              color: Colors.blue.shade50,
+                              color: AppColors.primary.withValues(alpha: 0.08),
                               borderRadius: BorderRadius.circular(8),
-                              border: Border.all(color: Colors.blue.shade200),
+                              border: Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
                             ),
                             child: const Row(
                               children: [
@@ -1128,7 +1128,7 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
         prefixIcon: icon != null ? Icon(icon, color: context.colors.iconMuted, size: 20) : null,
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
         filled: true,
-        fillColor: enabled ? Colors.white : context.colors.borderLight,
+        fillColor: enabled ? context.colors.cardBg : context.colors.borderLight,
         contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
         isDense: true,
       ),

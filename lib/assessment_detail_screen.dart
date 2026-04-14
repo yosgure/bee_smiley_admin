@@ -137,7 +137,7 @@ class _AssessmentDetailScreenState extends State<AssessmentDetailScreen> {
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                       decoration: BoxDecoration(
-                        color: isPublished ? Colors.green.shade50 : AppColors.accent.shade50,
+                        color: isPublished ? Colors.green.withValues(alpha: 0.1) : AppColors.accent.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(4),
                         border: Border.all(
                           color: isPublished ? Colors.green : AppColors.accent,
