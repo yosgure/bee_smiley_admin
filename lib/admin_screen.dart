@@ -146,46 +146,6 @@ void _navigateTo(BuildContext context, Widget screen) {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          // マイグレーションボタン（一時的）
-          Card(
-            color: Colors.orange.shade800,
-            child: ListTile(
-              leading: const Icon(Icons.update, color: Colors.white),
-              title: const Text('教室データ移行', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-              subtitle: const Text('classroom → classrooms 配列に変換', style: TextStyle(color: Colors.white70, fontSize: 12)),
-              onTap: () async {
-                final confirm = await showDialog<bool>(
-                  context: context,
-                  builder: (ctx) => AlertDialog(
-                    title: const Text('データ移行を実行しますか？'),
-                    content: const Text('全familiesのclassroomフィールドをclassrooms配列に変換します。'),
-                    actions: [
-                      TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('キャンセル')),
-                      ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('実行')),
-                    ],
-                  ),
-                );
-                if (confirm != true) return;
-                try {
-                  final result = await FirebaseFunctions.instanceFor(region: 'asia-northeast1')
-                      .httpsCallable('migrateClassroomToClassrooms')
-                      .call();
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('移行完了: ${result.data}')),
-                    );
-                  }
-                } catch (e) {
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('エラー: $e'), backgroundColor: Colors.red),
-                    );
-                  }
-                }
-              },
-            ),
-          ),
-          const SizedBox(height: 16),
           _buildSettingsSection(
             context,
             'ヒトの管理',

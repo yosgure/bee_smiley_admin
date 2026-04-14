@@ -128,6 +128,11 @@ class _HugMappingScreenState extends State<HugMappingScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
+        leading: IconButton(
+          icon: Icon(Icons.arrow_back_ios, color: context.colors.textPrimary),
+          onPressed: () => Navigator.pop(context),
+        ),
+        centerTitle: true,
         title: const Text('hug連携設定'),
         bottom: TabBar(
           controller: _tabController,

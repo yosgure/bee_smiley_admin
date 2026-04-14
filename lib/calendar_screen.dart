@@ -1820,6 +1820,7 @@ Future<void> _saveDisplayDate(DateTime date) async {
             final transferMap = data['studentTransferDates'] as Map<String, dynamic>? ?? {};
 
             return Dialog(
+              backgroundColor: context.colors.dialogBg,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
               insetPadding: const EdgeInsets.symmetric(horizontal: 40, vertical: 24),
               elevation: 6,
@@ -1835,18 +1836,18 @@ Future<void> _saveDisplayDate(DateTime date) async {
                       child: Row(
                         children: [
                           IconButton(
-                            icon: const Icon(Icons.close, size: 22, color: Colors.black54),
+                            icon: Icon(Icons.close, size: 22, color: context.colors.textSecondary),
                             tooltip: '閉じる',
                             onPressed: () => Navigator.pop(context),
                           ),
                           const Spacer(),
                           IconButton(
-                            icon: const Icon(Icons.edit_outlined, size: 22, color: Colors.black54),
+                            icon: Icon(Icons.edit_outlined, size: 22, color: context.colors.textSecondary),
                             tooltip: '編集',
                             onPressed: () => _confirmEdit(doc),
                           ),
                           IconButton(
-                            icon: const Icon(Icons.delete_outline, size: 22, color: Colors.black54),
+                            icon: Icon(Icons.delete_outline, size: 22, color: context.colors.textSecondary),
                             tooltip: '削除',
                             onPressed: () => _confirmDelete(doc),
                           ),
