@@ -1479,7 +1479,7 @@ class _ChatDetailViewState extends State<ChatDetailView> {
     if (type == 'image') {
       content = Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         GestureDetector(onTap: () => _showImagePreview(msg['url']), child: ClipRRect(borderRadius: BorderRadius.circular(12), child: CachedNetworkImage(imageUrl: msg['url'], width: 200, fit: BoxFit.cover, placeholder: (c, u) => Container(width: 200, height: 150, decoration: BoxDecoration(color: context.colors.borderLight, borderRadius: BorderRadius.circular(12)), child: Center(child: SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2)))), errorWidget: (c, u, e) => Icon(Icons.broken_image)))),
-        if (text.isNotEmpty) ...[const SizedBox(height: 8), Text.rich(TextSpan(children: _buildTextSpansWithLinks(text, ctx: context)))]
+        if (text.isNotEmpty) ...[const SizedBox(height: 8), SelectableText.rich(TextSpan(children: _buildTextSpansWithLinks(text, ctx: context)))]
       ]);
     } else if (type == 'video') {
       final vUrl = (msg['url'] ?? '') as String;
@@ -1506,7 +1506,7 @@ class _ChatDetailViewState extends State<ChatDetailView> {
             ),
           ),
         ),
-        if (text.isNotEmpty) ...[const SizedBox(height: 8), Text.rich(TextSpan(children: _buildTextSpansWithLinks(text, ctx: context)))]
+        if (text.isNotEmpty) ...[const SizedBox(height: 8), SelectableText.rich(TextSpan(children: _buildTextSpansWithLinks(text, ctx: context)))]
       ]);
     } else if (type == 'file') {
       final String fName = msg['fileName'] ?? 'ファイル';
@@ -1568,7 +1568,7 @@ class _ChatDetailViewState extends State<ChatDetailView> {
                 ],
               ),
             ),
-            if (text.isNotEmpty) ...[const SizedBox(height: 8), Text.rich(TextSpan(children: _buildTextSpansWithLinks(text, ctx: context)))],
+            if (text.isNotEmpty) ...[const SizedBox(height: 8), SelectableText.rich(TextSpan(children: _buildTextSpansWithLinks(text, ctx: context)))],
             const SizedBox(height: 6),
             Divider(height: 1, color: context.colors.borderMedium),
             const SizedBox(height: 4),
@@ -1590,7 +1590,7 @@ class _ChatDetailViewState extends State<ChatDetailView> {
           ],
         ),
       );
-    } else { content = Text.rich(TextSpan(children: _buildTextSpansWithLinks(text, ctx: context))); }
+    } else { content = SelectableText.rich(TextSpan(children: _buildTextSpansWithLinks(text, ctx: context))); }
 
     String readText = '';
     if (isMe && isRead) {
