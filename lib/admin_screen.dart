@@ -114,6 +114,8 @@ void _navigateTo(BuildContext context, Widget screen) {
       screenWithBack = ToolCsvExportScreen(onBack: widget.onCloseWebScreen);
     } else if (screen is AiCommandManageScreen) {
       screenWithBack = AiCommandManageScreen(onBack: widget.onCloseWebScreen);
+    } else if (screen is HugMappingScreen) {
+      screenWithBack = HugMappingScreen(onBack: widget.onCloseWebScreen);
     } else {
       screenWithBack = screen;
     }
@@ -195,7 +197,7 @@ void _navigateTo(BuildContext context, Widget screen) {
               _MenuData(
                 title: 'hug連携設定',
                 icon: Icons.sync_alt,
-                color: const Color(0xFF0891B2),
+                color: Colors.teal,
                 description: '児童・スタッフのhug IDマッピング',
                 destination: const HugMappingScreen(),
               ),

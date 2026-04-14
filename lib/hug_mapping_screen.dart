@@ -6,7 +6,8 @@ import 'app_theme.dart';
 /// hug連携のIDマッピング管理画面
 /// Firestoreの hug_settings/child_mapping, hug_settings/staff_mapping を管理
 class HugMappingScreen extends StatefulWidget {
-  const HugMappingScreen({super.key});
+  final VoidCallback? onBack;
+  const HugMappingScreen({super.key, this.onBack});
 
   @override
   State<HugMappingScreen> createState() => _HugMappingScreenState();
@@ -130,7 +131,7 @@ class _HugMappingScreenState extends State<HugMappingScreen>
       appBar: AppBar(
         leading: IconButton(
           icon: Icon(Icons.arrow_back_ios, color: context.colors.textPrimary),
-          onPressed: () => Navigator.pop(context),
+          onPressed: widget.onBack ?? () => Navigator.pop(context),
         ),
         centerTitle: true,
         title: const Text('hug連携設定'),
