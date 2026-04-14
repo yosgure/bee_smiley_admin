@@ -404,7 +404,7 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
                               ),
                           ],
                         ),
-                        subtitle: Text('児童数: ${children.length}名 / ID: ${data['loginId'] ?? "未設定"}'),
+                        subtitle: Text('ID: ${data['loginId'] ?? "未設定"}'),
                         children: [
                           Padding(
                             padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
