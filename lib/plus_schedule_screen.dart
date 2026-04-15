@@ -3460,8 +3460,9 @@ final plusStaff = _staffList.where((s) =>
         .where('date', isGreaterThanOrEqualTo: Timestamp.fromDate(startDate))
         .get();
 
-    // 日付ごとのコマ（teachers配列）を集計（欠席除外、過去のみ）
+    // 日付ごとのコマ（teachers配列）を集計（欠席除外）
     final lessonsByDate = <String, List<List<String>>>{};
+    final futureLessonsByDate = <String, List<List<String>>>{};
     // スケジュール期限を特定（対象スタッフがアサインされている最後の日）
     DateTime scheduleHorizon = today;
     for (final doc in lessonsSnap.docs) {
@@ -3480,7 +3481,9 @@ final plusStaff = _staffList.where((s) =>
         // 実績（昨日まで）
         lessonsByDate.putIfAbsent(key, () => []).add(teachers);
       } else {
-        // 未来: 対象スタッフがアサインされていればスケジュール期限を更新
+        // 未来: 実際にアサインされたレッスンを記録
+        futureLessonsByDate.putIfAbsent(key, () => []).add(teachers);
+        // 対象スタッフがアサインされていればスケジュール期限を更新
         for (final staffId in targetStaff.keys) {
           final info = targetStaff[staffId]!;
           final fullNameNormalized = (info['name'] as String).replaceAll(RegExp(r'[\s\u3000]'), '');
@@ -3581,8 +3584,10 @@ final plusStaff = _staffList.where((s) =>
       d = d.add(const Duration(days: 1));
     }
 
-    // 予定（未来）: dailySlotTarget × 未来の出勤日数（シフト調整済み）
+    // 予定（未来）: 実際にアサインされているレッスン数をカウント
     final futureLessonsByStaff = <String, int>{for (final id in targetStaff.keys) id: 0};
+    // 未来の目標（slotTarget × 出勤日数）も別途計算
+    final futureTargetByStaff = <String, int>{for (final id in targetStaff.keys) id: 0};
     {
       var fd = today;
       while (!fd.isAfter(scheduleHorizon)) {
@@ -3590,15 +3595,24 @@ final plusStaff = _staffList.where((s) =>
           fd = fd.add(const Duration(days: 1));
           continue;
         }
+        final dateKey = DateFormat('yyyy-MM-dd').format(fd);
+        final dayLessons = futureLessonsByDate[dateKey] ?? const <List<String>>[];
         for (final staffId in targetStaff.keys) {
           final info = targetStaff[staffId]!;
+          final fullNameNormalized = (info['name'] as String).replaceAll(RegExp(r'[\s\u3000]'), '');
           final slotTarget = info['slotTarget'] as int;
           final status = _getShiftStatus(staffId, fd);
           if (status != 'off') {
             final dayTarget = status == 'half' ? (slotTarget - 1) : slotTarget;
             if (dayTarget > 0) {
-              futureLessonsByStaff[staffId] = futureLessonsByStaff[staffId]! + dayTarget;
+              futureTargetByStaff[staffId] = futureTargetByStaff[staffId]! + dayTarget;
             }
+            // 実際にアサインされているコマ数をカウント
+            int futureActual = 0;
+            for (final teachers in dayLessons) {
+              if (teachers.contains(fullNameNormalized)) futureActual++;
+            }
+            futureLessonsByStaff[staffId] = futureLessonsByStaff[staffId]! + futureActual;
           }
         }
         fd = fd.add(const Duration(days: 1));
@@ -3629,8 +3643,9 @@ final plusStaff = _staffList.where((s) =>
               final target = targetCounts[staffId] ?? 0;
               final futureSlots = futureLessonsByStaff[staffId] ?? 0;
               rawShortages[staffId] = target - actual;
-              // 予定込み: (目標+未来目標) - (実績+予定) = 目標 - 実績（予定=未来目標なので相殺）
-              rawShortagesWithFuture[staffId] = (target + futureSlots) - (actual + futureSlots);
+              final futureTarget = futureTargetByStaff[staffId] ?? 0;
+              // 予定込み: (目標+未来目標) - (実績+実際の予定コマ数)
+              rawShortagesWithFuture[staffId] = (target + futureTarget) - (actual + futureSlots);
             }
             final minShortage = rawShortages.values.isEmpty ? 0 : rawShortages.values.reduce((a, b) => a < b ? a : b);
             final minShortageWithFuture = rawShortagesWithFuture.values.isEmpty ? 0 : rawShortagesWithFuture.values.reduce((a, b) => a < b ? a : b);
@@ -3736,9 +3751,10 @@ final plusStaff = _staffList.where((s) =>
                       final actual = actualCounts[staffId] ?? 0;
                       final target = targetCounts[staffId] ?? 0;
                       final futureSlots = futureLessonsByStaff[staffId] ?? 0;
-                      // 予定込み: 実績+予定 vs 目標+未来目標
+                      final futureTarget = futureTargetByStaff[staffId] ?? 0;
+                      // 予定込み: 実績+実際の予定 vs 目標+未来目標
                       final displayActual = showWithFuture ? actual + futureSlots : actual;
-                      final displayTarget = showWithFuture ? target + futureSlots : target;
+                      final displayTarget = showWithFuture ? target + futureTarget : target;
                       final rawDiff = displayTarget - displayActual;
                       final shortage = rawShortages[staffId]! - minShortage;
                       final shortageWithFuture = rawShortagesWithFuture[staffId]! - minShortageWithFuture;
@@ -3929,7 +3945,7 @@ final plusStaff = _staffList.where((s) =>
                         preferBelow: true,
                         verticalOffset: 20,
                         textStyle: const TextStyle(color: Colors.white, fontSize: 12, height: 1.5),
-                        decoration: BoxDecoration(color: context.colors.textPrimary, borderRadius: BorderRadius.circular(8)),
+                        decoration: BoxDecoration(color: Colors.grey[800], borderRadius: BorderRadius.circular(8)),
                         waitDuration: const Duration(milliseconds: 300),
                         child: dateWidget,
                       );
