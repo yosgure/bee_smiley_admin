@@ -269,14 +269,10 @@ class _AiChatMainScreenState extends State<AiChatMainScreen> {
                     // 新規フリーチャット
                     GestureDetector(
                       onTap: _openFreeChat,
-                      child: Container(
+                      child: SizedBox(
                         width: 32,
                         height: 32,
-                        decoration: BoxDecoration(
-                          color: context.colors.borderLight,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Icon(Icons.edit_outlined, size: 16, color: context.colors.textSecondary),
+                        child: Icon(Icons.edit_outlined, size: 18, color: context.colors.textSecondary),
                       ),
                     ),
                   ])),
@@ -375,18 +371,45 @@ class _AiChatMainScreenState extends State<AiChatMainScreen> {
         Expanded(
           child: _isLoading
               ? Center(child: CircularProgressIndicator(color: context.colors.aiAccent))
-              : ListView.builder(
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                  itemCount: _filteredStudents.length,
-                  itemBuilder: (context, index) {
-                    final student = _filteredStudents[index];
-                    final isActive = _activeStudentId == student['studentId'];
-                    return _buildStudentItem(student, isActive);
-                  },
-                ),
+              : _buildStudentListWithIndex(_filteredStudents),
         ),
       ],
     );
+  }
+
+  static String _getKanaHeader(String kana) {
+    if (kana.isEmpty) return '他';
+    final c = kana.codeUnitAt(0);
+    if (c >= 0x3042 && c <= 0x304A) return 'あ';
+    if (c >= 0x304B && c <= 0x3054) return 'か';
+    if (c >= 0x3055 && c <= 0x305E) return 'さ';
+    if (c >= 0x305F && c <= 0x3069) return 'た';
+    if (c >= 0x306A && c <= 0x306E) return 'な';
+    if (c >= 0x306F && c <= 0x307D) return 'は';
+    if (c >= 0x307E && c <= 0x3082) return 'ま';
+    if (c >= 0x3083 && c <= 0x3088) return 'や';
+    if (c >= 0x3089 && c <= 0x308D) return 'ら';
+    if (c >= 0x308E && c <= 0x3093) return 'わ';
+    return '他';
+  }
+
+  Widget _buildStudentListWithIndex(List<Map<String, dynamic>> students) {
+    final items = <Widget>[];
+    String lastHeader = '';
+    for (final student in students) {
+      final kana = (student['lastNameKana'] as String? ?? '');
+      final header = _getKanaHeader(kana);
+      if (header != lastHeader) {
+        items.add(Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+          child: Text(header, style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: context.colors.aiAccent)),
+        ));
+        lastHeader = header;
+      }
+      final isActive = _activeStudentId == student['studentId'];
+      items.add(_buildStudentItem(student, isActive));
+    }
+    return ListView(padding: const EdgeInsets.symmetric(horizontal: 8), children: items);
   }
 
   Widget _buildStudentItem(Map<String, dynamic> student, bool isActive) {

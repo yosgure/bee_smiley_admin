@@ -232,7 +232,7 @@ Future<void> _saveDisplayDate(DateTime date) async {
     
     // タスクや誕生日は移動不可
     if (appointment.notes == _taskNoteMarker || 
-        appointment.notes == 'BIRTHDAY' || 
+        appointment.notes == 'BIRTHDAY' ||
         appointment.notes == 'PENDING_TASKS' ||
         appointment.id == _pendingTasksId) {
       return;
@@ -304,7 +304,7 @@ Future<void> _saveDisplayDate(DateTime date) async {
     
     // タスクや誕生日はリサイズ不可
     if (appointment.notes == _taskNoteMarker || 
-        appointment.notes == 'BIRTHDAY' || 
+        appointment.notes == 'BIRTHDAY' ||
         appointment.notes == 'PENDING_TASKS' ||
         appointment.id == _pendingTasksId) {
       return;
@@ -888,39 +888,7 @@ Future<void> _saveDisplayDate(DateTime date) async {
                                   
                                   // 誕生日
                                   if (isBirthday) {
-                                    // Syncfusion月表示で同一誕生日が2回レンダリングされるバグ回避
-                                    // フレームごとにSetをリセットし、同一フレーム内の2回目をスキップ
-                                    if (!_birthdayFrameResetScheduled) {
-                                      _birthdayFrameResetScheduled = true;
-                                      WidgetsBinding.instance.addPostFrameCallback((_) {
-                                        _birthdayRenderedThisFrame.clear();
-                                        _birthdayFrameResetScheduled = false;
-                                      });
-                                    }
-                                    final birthdayKey = '${appointment.id}_${appointment.startTime.day}';
-                                    if (_birthdayRenderedThisFrame.contains(birthdayKey)) {
-                                      return const SizedBox.shrink();
-                                    }
-                                    _birthdayRenderedThisFrame.add(birthdayKey);
-                                    return Container(
-                                      margin: const EdgeInsets.symmetric(vertical: 1),
-                                      decoration: BoxDecoration(
-                                        color: Colors.pink.shade300,
-                                        borderRadius: BorderRadius.circular(2),
-                                      ),
-                                      padding: const EdgeInsets.symmetric(horizontal: 2),
-                                      alignment: Alignment.centerLeft,
-                                      child: Text(
-                                        appointment.subject,
-                                        style: TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 12,
-                                          height: 1.0,
-                                        ),
-                                        maxLines: 1,
-                                        overflow: TextOverflow.clip,
-                                      ),
-                                    );
+                                    return _buildBirthdayAppointment(context, appointment);
                                   }
                                   
                                   // 通常イベント
@@ -1368,6 +1336,36 @@ Future<void> _saveDisplayDate(DateTime date) async {
             Expanded(child: Text(title, style: TextStyle(fontSize: 13, color: context.colors.textPrimary))),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildBirthdayAppointment(BuildContext context, Appointment appointment) {
+    if (!_birthdayFrameResetScheduled) {
+      _birthdayFrameResetScheduled = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _birthdayRenderedThisFrame.clear();
+        _birthdayFrameResetScheduled = false;
+      });
+    }
+    final birthdayKey = '${appointment.id}_${appointment.startTime.day}';
+    if (_birthdayRenderedThisFrame.contains(birthdayKey)) {
+      return const SizedBox.shrink();
+    }
+    _birthdayRenderedThisFrame.add(birthdayKey);
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 1),
+      decoration: BoxDecoration(
+        color: Colors.pink.shade300,
+        borderRadius: BorderRadius.circular(2),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 2),
+      alignment: Alignment.centerLeft,
+      child: Text(
+        appointment.subject,
+        style: const TextStyle(color: Colors.white, fontSize: 12, height: 1.0),
+        maxLines: 1,
+        overflow: TextOverflow.clip,
       ),
     );
   }

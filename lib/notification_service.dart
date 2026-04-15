@@ -7,6 +7,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_app_badger/flutter_app_badger.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 // バックグラウンドメッセージハンドラ（トップレベル関数である必要がある）
 @pragma('vm:entry-point')
@@ -230,12 +231,16 @@ class NotificationService {
     }
   }
 
-  /// ユーザーのトークンを保存（他ユーザーから同じトークンを削除してから保存）
+  /// ユーザーのトークンを保存（古いトークンを削除してから新しいトークンを追加）
   Future<void> _saveTokenForUser(String uid, String token) async {
     final firestore = FirebaseFirestore.instance;
 
     // 他のユーザーから同じトークンを削除（同一デバイスで別アカウントログイン時の重複防止）
     await _removeTokenFromOtherUsers(uid, token);
+
+    // 前回保存したトークンを取得（デバイスローカル）
+    final prefs = await SharedPreferences.getInstance();
+    final oldToken = prefs.getString('fcm_token');
 
     final staffSnap = await firestore
         .collection('staffs')
@@ -244,10 +249,18 @@ class NotificationService {
         .get();
 
     if (staffSnap.docs.isNotEmpty) {
-      await staffSnap.docs.first.reference.update({
+      final updates = <String, dynamic>{
         'fcmTokens': FieldValue.arrayUnion([token]),
         'lastTokenUpdate': FieldValue.serverTimestamp(),
-      });
+      };
+      // 前回のトークンが異なる場合は古いトークンを削除
+      if (oldToken != null && oldToken != token) {
+        await staffSnap.docs.first.reference.update({
+          'fcmTokens': FieldValue.arrayRemove([oldToken]),
+        });
+      }
+      await staffSnap.docs.first.reference.update(updates);
+      await prefs.setString('fcm_token', token);
       return;
     }
 
@@ -258,10 +271,17 @@ class NotificationService {
         .get();
 
     if (familySnap.docs.isNotEmpty) {
-      await familySnap.docs.first.reference.update({
+      final updates = <String, dynamic>{
         'fcmTokens': FieldValue.arrayUnion([token]),
         'lastTokenUpdate': FieldValue.serverTimestamp(),
-      });
+      };
+      if (oldToken != null && oldToken != token) {
+        await familySnap.docs.first.reference.update({
+          'fcmTokens': FieldValue.arrayRemove([oldToken]),
+        });
+      }
+      await familySnap.docs.first.reference.update(updates);
+      await prefs.setString('fcm_token', token);
       return;
     }
   }
@@ -347,7 +367,11 @@ class NotificationService {
       
       // バッジもクリア
       await clearBadge();
-      
+
+      // ローカルに保存したトークンもクリア
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('fcm_token');
+
     } catch (e) {
       // エラー時は何もしない
     }

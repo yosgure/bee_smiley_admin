@@ -8,7 +8,6 @@ import 'classroom_utils.dart';
 import 'main.dart';
 
 class AssessmentScreen extends StatefulWidget {
-  // ★追加: カレンダーなど外部から生徒指定で開く場合に使用
   final String? initialStudentId;
   final String? initialStudentName;
 
@@ -24,52 +23,79 @@ class AssessmentScreen extends StatefulWidget {
 
 class _AssessmentScreenState extends State<AssessmentScreen> {
   List<String> _classrooms = [];
-  String? _selectedClassroom;
+  String? _selectedClassroom; // null = 全教室
 
   List<Map<String, dynamic>> _allStudents = [];
-  List<Map<String, dynamic>> _filteredStudents = [];
-  
+
   String? _selectedStudentId;
   String _selectedStudentName = '';
 
   int _currentTabIndex = 0;
+  bool _isLoading = true;
 
-  // ★追加: 外部から生徒指定で開いた場合は教室選択を非表示にするフラグ
-  bool _isDirectAccess = false;
+  String _searchQuery = '';
+  final _searchController = TextEditingController();
+
+  // モバイル用サイドバー表示
+  bool _showSidebar = true;
 
   @override
   void initState() {
     super.initState();
-    _isDirectAccess = widget.initialStudentId != null;
     _fetchData();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  List<Map<String, dynamic>> get _filteredStudents {
+    var list = _allStudents;
+    // 教室フィルタ
+    if (_selectedClassroom != null) {
+      list = list
+          .where((s) => (s['classrooms'] as List<String>?)?.contains(_selectedClassroom) ?? false)
+          .toList();
+    }
+    // 検索フィルタ
+    if (_searchQuery.isNotEmpty) {
+      final q = _searchQuery.toLowerCase();
+      list = list.where((s) {
+        final name = (s['name'] as String? ?? '').toLowerCase();
+        final kana = (s['kana'] as String? ?? '').toLowerCase();
+        return name.contains(q) || kana.contains(q);
+      }).toList();
+    }
+    return list;
   }
 
   Future<void> _fetchData() async {
     try {
-      final classSnap = await FirebaseFirestore.instance.collection('classrooms').get();
-      final classList = classSnap.docs
-          .where((d) => d.data()['category'] == '幼児教室')
-          .map((d) => d['name'] as String)
-          .toList();
-      
+      const classList = ['ビースマイリー湘南藤沢', 'ビースマイリー湘南台'];
+
       final familySnap = await FirebaseFirestore.instance.collection('families').get();
       final List<Map<String, dynamic>> studentList = [];
 
       for (var doc in familySnap.docs) {
         final data = doc.data();
         final children = List<Map<String, dynamic>>.from(data['children'] ?? []);
-        
+
         for (var child in children) {
           final uid = data['uid'];
           final firstName = child['firstName'] ?? '';
           final lastName = data['lastName'] ?? '';
           final firstNameKana = child['firstNameKana'] ?? '';
           final lastNameKana = data['lastNameKana'] ?? '';
-          
+
           final fullName = '$lastName $firstName';
           final fullKana = '$lastNameKana $firstNameKana';
           final classrooms = getChildClassrooms(child);
           final classroom = classrooms.join(', ');
+
+          // アセスメント対象教室に所属する子だけ
+          if (!classrooms.any((c) => classList.contains(c))) continue;
 
           final id = '${uid}_$firstName';
 
@@ -89,117 +115,38 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
         setState(() {
           _classrooms = classList;
           _allStudents = studentList;
-          
-          // ★修正: 外部から生徒指定で開いた場合はその生徒を選択
-          if (_isDirectAccess && widget.initialStudentId != null) {
+          _isLoading = false;
+
+          // 外部から生徒指定で開いた場合
+          if (widget.initialStudentId != null) {
             _selectedStudentId = widget.initialStudentId;
             _selectedStudentName = widget.initialStudentName ?? '';
-            
-            // その生徒の教室を選択状態にする
             final student = _allStudents.firstWhere(
               (s) => s['id'] == widget.initialStudentId,
               orElse: () => {},
             );
             if (student.isNotEmpty) {
-              _selectedClassroom = student['classroom'] as String?;
               _selectedStudentName = student['name'] as String;
             }
-            _filterStudentsKeepSelection();
-          } else {
-            if (_classrooms.isNotEmpty) {
-              _selectedClassroom = _classrooms.first;
-            }
-            _filterStudents();
+            _showSidebar = false; // 直接アクセス時はコンテンツ表示
           }
         });
       }
     } catch (e) {
       debugPrint('Error: $e');
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
-  void _filterStudents() {
+  void _selectStudent(Map<String, dynamic> student) {
     setState(() {
-      if (_selectedClassroom == null) {
-        _filteredStudents = List.from(_allStudents);
-      } else {
-        _filteredStudents = _allStudents
-            .where((s) => (s['classrooms'] as List<String>?)?.contains(_selectedClassroom) ?? false)
-            .toList();
-      }
-
-      if (_filteredStudents.isNotEmpty) {
-        _selectedStudentId = _filteredStudents.first['id'] as String;
-        _selectedStudentName = _filteredStudents.first['name'] as String;
-      } else {
-        _selectedStudentId = null;
-        _selectedStudentName = '';
+      _selectedStudentId = student['id'] as String;
+      _selectedStudentName = student['name'] as String;
+      // モバイルではコンテンツ表示に切り替え
+      if (MediaQuery.of(context).size.width < 768) {
+        _showSidebar = false;
       }
     });
-  }
-
-  // ★追加: 選択中の生徒を維持したままフィルタ
-  void _filterStudentsKeepSelection() {
-    setState(() {
-      if (_selectedClassroom == null) {
-        _filteredStudents = List.from(_allStudents);
-      } else {
-        _filteredStudents = _allStudents
-            .where((s) => (s['classrooms'] as List<String>?)?.contains(_selectedClassroom) ?? false)
-            .toList();
-      }
-    });
-  }
-
-  String _getIndexHeader(String kana) {
-    if (kana.isEmpty) return '他';
-    final c = kana.codeUnitAt(0);
-    if (c >= 0x3042 && c <= 0x304A) return 'あ';
-    if (c >= 0x304B && c <= 0x3054) return 'か';
-    if (c >= 0x3055 && c <= 0x305E) return 'さ';
-    if (c >= 0x305F && c <= 0x3069) return 'た';
-    if (c >= 0x306A && c <= 0x306E) return 'な';
-    if (c >= 0x306F && c <= 0x307D) return 'は';
-    if (c >= 0x307E && c <= 0x3082) return 'ま';
-    if (c >= 0x3083 && c <= 0x3088) return 'や';
-    if (c >= 0x3089 && c <= 0x308D) return 'ら';
-    if (c >= 0x308E && c <= 0x3093) return 'わ';
-    return '他';
-  }
-
-  List<DropdownMenuItem<String>> _buildStudentDropdownItems() {
-    List<DropdownMenuItem<String>> items = [];
-    String lastHeader = '';
-
-    for (var s in _filteredStudents) {
-      final kana = s['kana'] as String? ?? '';
-      final header = _getIndexHeader(kana);
-
-      if (header != lastHeader) {
-        items.add(DropdownMenuItem<String>(
-          value: 'HEADER_$header',
-          enabled: false,
-          child: Container(
-            alignment: Alignment.centerLeft,
-            padding: const EdgeInsets.only(top: 8, bottom: 4),
-            decoration: BoxDecoration(
-              border: Border(bottom: BorderSide(color: context.colors.textSecondary, width: 0.5)),
-            ),
-            child: Text(
-              header,
-              style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary),
-            ),
-          ),
-        ));
-        lastHeader = header;
-      }
-
-      items.add(DropdownMenuItem<String>(
-        value: s['id'] as String,
-        child: Text(s['name'] as String),
-      ));
-    }
-    return items;
   }
 
   void _onAddPressed() {
@@ -237,22 +184,125 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDesktop = MediaQuery.of(context).size.width >= 768;
+
+    return Scaffold(
+      backgroundColor: context.colors.cardBg,
+      body: Row(
+        children: [
+          // 左サイドバー
+          if (isDesktop || _showSidebar)
+            SizedBox(
+              width: isDesktop ? 280 : MediaQuery.of(context).size.width,
+              child: _buildSidebar(context),
+            ),
+          if (isDesktop) VerticalDivider(thickness: 1, width: 1, color: context.colors.borderLight),
+          // 右コンテンツ
+          if (isDesktop || !_showSidebar)
+            Expanded(child: _buildContent(context, isDesktop)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSidebar(BuildContext context) {
+    final students = _filteredStudents;
+    return Column(
+      children: [
+        // ヘッダー
+        Container(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+          child: const Text(
+            'アセスメント',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            textAlign: TextAlign.center,
+          ),
+        ),
+        // 教室フィルタ
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            decoration: BoxDecoration(
+              color: context.colors.inputFill,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: DropdownButtonHideUnderline(
+              child: DropdownButton<String>(
+                value: _selectedClassroom,
+                isExpanded: true,
+                hint: const Text('全教室', style: TextStyle(fontSize: 13)),
+                style: TextStyle(fontSize: 13, color: context.colors.textPrimary),
+                icon: Icon(Icons.expand_more, size: 18, color: context.colors.textSecondary),
+                items: [
+                  DropdownMenuItem<String>(
+                    value: null,
+                    child: Text('全教室', style: TextStyle(fontSize: 13, color: context.colors.textPrimary)),
+                  ),
+                  ..._classrooms.map((c) => DropdownMenuItem(
+                    value: c,
+                    child: Text(c, style: TextStyle(fontSize: 13, color: context.colors.textPrimary)),
+                  )),
+                ],
+                onChanged: (val) => setState(() => _selectedClassroom = val),
+              ),
+            ),
+          ),
+        ),
+        // 検索バー
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+          child: TextField(
+            controller: _searchController,
+            style: const TextStyle(fontSize: 14),
+            decoration: InputDecoration(
+              hintText: '検索...',
+              hintStyle: TextStyle(fontSize: 13, color: context.colors.textTertiary),
+              prefixIcon: Icon(Icons.search, size: 18, color: context.colors.textTertiary),
+              filled: true,
+              fillColor: context.colors.inputFill,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: BorderSide.none,
+              ),
+              contentPadding: const EdgeInsets.symmetric(vertical: 8),
+              isDense: true,
+            ),
+            onChanged: (val) => setState(() => _searchQuery = val),
+          ),
+        ),
+        const SizedBox(height: 4),
+        // 生徒一覧
+        Expanded(
+          child: _isLoading
+              ? const Center(child: CircularProgressIndicator())
+              : students.isEmpty
+                  ? Center(child: Text('該当する児童がいません', style: TextStyle(color: context.colors.textSecondary, fontSize: 13)))
+                  : _buildStudentListWithIndex(students),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildContent(BuildContext context, bool isDesktop) {
     return DefaultTabController(
       length: 2,
       child: Scaffold(
         backgroundColor: context.colors.cardBg,
         appBar: AppBar(
-          title: Text(_isDirectAccess ? _selectedStudentName : 'アセスメント'),
+          title: Text(
+            _selectedStudentId != null ? _selectedStudentName : 'アセスメント',
+            style: const TextStyle(fontSize: 16),
+          ),
           centerTitle: true,
           backgroundColor: context.colors.cardBg,
           elevation: 0,
-          // ★修正: 外部から開いた場合は戻るボタンを表示
-          leading: _isDirectAccess 
-            ? IconButton(
-                icon: Icon(Icons.arrow_back_ios, color: context.colors.textPrimary),
-                onPressed: () => Navigator.pop(context),
-              )
-            : null,
+          leading: !isDesktop
+              ? IconButton(
+                  icon: Icon(Icons.arrow_back_ios, color: context.colors.textPrimary, size: 20),
+                  onPressed: () => setState(() => _showSidebar = true),
+                )
+              : null,
           bottom: TabBar(
             onTap: (index) => setState(() => _currentTabIndex = index),
             labelColor: AppColors.primary,
@@ -264,108 +314,38 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
             ],
           ),
         ),
-        body: Column(
-          children: [
-            // ★修正: 外部から生徒指定で開いた場合はフィルタエリアを非表示
-            if (!_isDirectAccess)
-              Container(
-                color: context.colors.cardBg,
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                child: Center(
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 500),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('教室', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: context.colors.textSecondary)),
-                          const SizedBox(height: 4),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 12),
-                            margin: const EdgeInsets.only(bottom: 12),
-                            decoration: BoxDecoration(
-                              color: context.colors.inputFill,
-                              borderRadius: AppStyles.radiusSmall,
-                            ),
-                            child: DropdownButtonHideUnderline(
-                              child: DropdownButton<String>(
-                                value: _selectedClassroom,
-                                isExpanded: true,
-                                hint: const Text('教室を選択'),
-                                items: _classrooms.map((c) {
-                                  return DropdownMenuItem(value: c, child: Text(c));
-                                }).toList(),
-                                onChanged: (val) {
-                                  setState(() {
-                                    _selectedClassroom = val;
-                                    _filterStudents();
-                                  });
-                                },
-                              ),
-                            ),
-                          ),
-
-                          Text('対象児童', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: context.colors.textSecondary)),
-                          const SizedBox(height: 4),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 12),
-                            decoration: BoxDecoration(
-                              color: context.colors.inputFill,
-                              borderRadius: AppStyles.radiusSmall,
-                            ),
-                            child: DropdownButtonHideUnderline(
-                              child: DropdownButton<String>(
-                                value: _selectedStudentId,
-                                isExpanded: true,
-                                hint: const Text('児童を選択してください'),
-                                menuMaxHeight: 400,
-                                items: _buildStudentDropdownItems(),
-                                onChanged: (val) {
-                                  if (val != null && val.startsWith('HEADER_')) return;
-                                  final name = _filteredStudents.firstWhere((s) => s['id'] == val)['name'] as String;
-                                  setState(() {
-                                    _selectedStudentId = val;
-                                    _selectedStudentName = name;
-                                  });
-                                },
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
+        body: _selectedStudentId == null
+            ? Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.assignment_outlined, size: 64, color: context.colors.textTertiary),
+                    const SizedBox(height: 16),
+                    Text('左の生徒を選んでアセスメントを表示',
+                        style: TextStyle(color: context.colors.textSecondary)),
+                  ],
                 ),
+              )
+            : TabBarView(
+                physics: const NeverScrollableScrollPhysics(),
+                children: [
+                  _buildWeeklyList(),
+                  _buildMonthlyList(),
+                ],
               ),
-            
-            if (!_isDirectAccess) const Divider(height: 1),
-            
-            // リスト本体（中央寄せ・幅制限）
-            Expanded(
-              child: _selectedStudentId == null
-                  ? Center(child: Text('児童を選択してください', style: TextStyle(color: context.colors.textSecondary)))
-                  : TabBarView(
-                      physics: const NeverScrollableScrollPhysics(),
-                      children: [
-                        _buildWeeklyList(),
-                        _buildMonthlyList(),
-                      ],
-                    ),
-            ),
-          ],
-        ),
-        floatingActionButton: FloatingActionButton.extended(
-          heroTag: null, 
-          onPressed: _onAddPressed,
-          backgroundColor: AppColors.primary,
-          elevation: 4,
-          icon: const Icon(Icons.edit, color: Colors.white),
-          label: Text(
-            _currentTabIndex == 0 ? '週次アセスメント作成' : '月次サマリ作成',
-            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-          ),
-        ),
+        floatingActionButton: _selectedStudentId != null
+            ? FloatingActionButton.extended(
+                heroTag: null,
+                onPressed: _onAddPressed,
+                backgroundColor: AppColors.primary,
+                elevation: 4,
+                icon: const Icon(Icons.edit, color: Colors.white),
+                label: Text(
+                  _currentTabIndex == 0 ? '週次アセスメント作成' : '月次サマリ作成',
+                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                ),
+              )
+            : null,
       ),
     );
   }
@@ -400,18 +380,14 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
                 final data = doc.data() as Map<String, dynamic>;
                 final date = (data['date'] as Timestamp).toDate();
                 final records = List<Map<String, dynamic>>.from(data['entries'] ?? []);
-                
                 final toolNames = records.map((r) => r['tool'] as String? ?? '不明').join('、');
 
                 return Card(
                   child: InkWell(
                     onTap: () {
-                       Navigator.push(
-                         context,
-                         MaterialPageRoute(
-                           builder: (context) => AssessmentDetailScreen(doc: doc),
-                         ),
-                       );
+                      Navigator.push(context, MaterialPageRoute(
+                        builder: (context) => AssessmentDetailScreen(doc: doc),
+                      ));
                     },
                     borderRadius: AppStyles.radius,
                     child: Padding(
@@ -426,7 +402,6 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
                                 style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                               ),
                               const SizedBox(width: 8),
-                              // 下書き/公開バッジ
                               _buildStatusBadge(data['isPublished'] == true),
                               const Spacer(),
                               Icon(Icons.chevron_right, color: context.colors.textSecondary),
@@ -485,12 +460,9 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
                 return Card(
                   child: InkWell(
                     onTap: () {
-                       Navigator.push(
-                         context,
-                         MaterialPageRoute(
-                           builder: (context) => AssessmentDetailScreen(doc: doc),
-                         ),
-                       );
+                      Navigator.push(context, MaterialPageRoute(
+                        builder: (context) => AssessmentDetailScreen(doc: doc),
+                      ));
                     },
                     borderRadius: AppStyles.radius,
                     child: Padding(
@@ -505,7 +477,6 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
                                 style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                               ),
                               const SizedBox(width: 8),
-                              // 下書き/公開バッジ
                               _buildStatusBadge(data['isPublished'] == true),
                               const Spacer(),
                               Icon(Icons.chevron_right, color: context.colors.textSecondary),
@@ -531,7 +502,46 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
     );
   }
 
-  // ステータスバッジ
+  static String _getKanaHeader(String kana) {
+    if (kana.isEmpty) return '他';
+    final c = kana.codeUnitAt(0);
+    if (c >= 0x3042 && c <= 0x304A) return 'あ';
+    if (c >= 0x304B && c <= 0x3054) return 'か';
+    if (c >= 0x3055 && c <= 0x305E) return 'さ';
+    if (c >= 0x305F && c <= 0x3069) return 'た';
+    if (c >= 0x306A && c <= 0x306E) return 'な';
+    if (c >= 0x306F && c <= 0x307D) return 'は';
+    if (c >= 0x307E && c <= 0x3082) return 'ま';
+    if (c >= 0x3083 && c <= 0x3088) return 'や';
+    if (c >= 0x3089 && c <= 0x308D) return 'ら';
+    if (c >= 0x308E && c <= 0x3093) return 'わ';
+    return '他';
+  }
+
+  Widget _buildStudentListWithIndex(List<Map<String, dynamic>> students) {
+    // 五十音ヘッダー付きリストを構築
+    final items = <Widget>[];
+    String lastHeader = '';
+    for (final student in students) {
+      final kana = student['kana'] as String? ?? '';
+      final header = _getKanaHeader(kana);
+      if (header != lastHeader) {
+        items.add(Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+          child: Text(header, style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.primary)),
+        ));
+        lastHeader = header;
+      }
+      final isActive = student['id'] == _selectedStudentId;
+      items.add(_HoverableStudentItem(
+        name: student['name'] as String? ?? '',
+        isActive: isActive,
+        onTap: () => _selectStudent(student),
+      ));
+    }
+    return ListView(children: items);
+  }
+
   Widget _buildStatusBadge(bool isPublished) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
@@ -549,6 +559,75 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
           fontSize: 11,
           fontWeight: FontWeight.bold,
           color: isPublished ? Colors.green.shade700 : AppColors.accent.shade700,
+        ),
+      ),
+    );
+  }
+}
+
+class _HoverableStudentItem extends StatefulWidget {
+  final String name;
+  final bool isActive;
+  final VoidCallback onTap;
+
+  const _HoverableStudentItem({
+    required this.name,
+    required this.isActive,
+    required this.onTap,
+  });
+
+  @override
+  State<_HoverableStudentItem> createState() => _HoverableStudentItemState();
+}
+
+class _HoverableStudentItemState extends State<_HoverableStudentItem> {
+  bool _isHovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final firstChar = widget.name.isNotEmpty ? widget.name[0] : '?';
+    return MouseRegion(
+      onEnter: (_) => setState(() => _isHovered = true),
+      onExit: (_) => setState(() => _isHovered = false),
+      child: GestureDetector(
+        onTap: widget.onTap,
+        behavior: HitTestBehavior.opaque,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          color: widget.isActive
+              ? AppColors.primary.withValues(alpha: 0.12)
+              : _isHovered
+                  ? context.colors.hoverBg
+                  : Colors.transparent,
+          child: Row(
+            children: [
+              CircleAvatar(
+                radius: 16,
+                backgroundColor: widget.isActive
+                    ? AppColors.primary.withValues(alpha: 0.2)
+                    : context.colors.chipBg,
+                child: Text(
+                  firstChar,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                    color: widget.isActive ? AppColors.primary : context.colors.textSecondary,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  widget.name,
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: widget.isActive ? FontWeight.bold : FontWeight.normal,
+                    color: widget.isActive ? AppColors.primary : context.colors.textPrimary,
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

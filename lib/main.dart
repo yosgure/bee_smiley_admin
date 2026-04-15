@@ -742,10 +742,10 @@ class _AdminShellState extends State<AdminShell> {
                 width: 50,
                 height: 50,
                 decoration: BoxDecoration(
-                  color: Colors.white,
+                  color: context.isDark ? Colors.transparent : Colors.white,
                   shape: BoxShape.circle,
                   boxShadow: context.isDark
-                      ? [BoxShadow(color: Colors.black.withOpacity(0.3), blurRadius: 4)]
+                      ? []
                       : [],
                 ),
                 padding: const EdgeInsets.all(4),
