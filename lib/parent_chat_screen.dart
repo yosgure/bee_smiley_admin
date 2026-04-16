@@ -719,25 +719,41 @@ class _ChatMessageListState extends State<_ChatMessageList> {
   }
 
   Widget _buildStampChip(String msgId, String emoji, dynamic count, bool isMe) {
+    final List<String> userList = count is List ? List<String>.from(count) : [];
     final int c = count is int ? count : (count is List ? count.length : 1);
-    return GestureDetector(
-      onTap: () => _toggleStamp(msgId, emoji),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-        decoration: BoxDecoration(
-          color: isMe ? AppColors.primary.withOpacity(0.1) : context.colors.chipBg,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: context.colors.borderMedium),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(emoji, style: TextStyle(fontSize: 12)),
-            if (c > 1) ...[
-              const SizedBox(width: 2),
-              Text('$c', style: TextStyle(fontSize: 10, color: context.colors.textSecondary)),
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    final bool alreadyReacted = userList.contains(uid);
+    // uidから名前を解決
+    final names = userList.map((u) {
+      final name = widget.memberNames[u];
+      if (name is String && name.isNotEmpty) return name;
+      return u == uid ? 'あなた' : u;
+    }).toList();
+    final tooltipText = names.join('、');
+    return Tooltip(
+      message: tooltipText,
+      waitDuration: const Duration(milliseconds: 300),
+      textStyle: const TextStyle(color: Colors.white, fontSize: 12),
+      decoration: BoxDecoration(color: Colors.grey[800], borderRadius: BorderRadius.circular(8)),
+      child: GestureDetector(
+        onTap: () => _toggleStamp(msgId, emoji),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+          decoration: BoxDecoration(
+            color: alreadyReacted ? AppColors.primary.withOpacity(0.2) : (isMe ? AppColors.primary.withOpacity(0.1) : context.colors.chipBg),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: alreadyReacted ? AppColors.primary : context.colors.borderMedium),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(emoji, style: TextStyle(fontSize: 12)),
+              if (c > 1) ...[
+                const SizedBox(width: 2),
+                Text('$c', style: TextStyle(fontSize: 10, color: context.colors.textSecondary)),
+              ],
             ],
-          ],
+          ),
         ),
       ),
     );

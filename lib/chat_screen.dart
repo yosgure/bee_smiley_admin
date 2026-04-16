@@ -1647,12 +1647,49 @@ class _ChatDetailViewState extends State<ChatDetailView> {
 
   void _showPopupMenu(Offset position, String msgId, bool isMe, String type, String text) {
     final RenderBox overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
+    const quickEmojis = ['👍', '❤️', '😄', '🎉', '🙏', '🆗'];
     showMenu<String>(
       context: context,
       position: RelativeRect.fromLTRB(position.dx, position.dy, overlay.size.width - position.dx, overlay.size.height - position.dy),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       items: [
-        const PopupMenuItem(value: 'stamp', height: 36, padding: EdgeInsets.symmetric(horizontal: 12), child: Row(children: [Icon(Icons.emoji_emotions_outlined, size: 18), SizedBox(width: 8), Text('スタンプ', style: TextStyle(fontSize: 14))])),
+        // クイックスタンプバー
+        PopupMenuItem(
+          enabled: false,
+          height: 48,
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              for (final e in quickEmojis)
+                InkWell(
+                  borderRadius: BorderRadius.circular(8),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _toggleReaction(msgId, e);
+                  },
+                  child: Container(
+                    width: 36, height: 36,
+                    alignment: Alignment.center,
+                    child: Text(e, style: const TextStyle(fontSize: 22)),
+                  ),
+                ),
+              InkWell(
+                borderRadius: BorderRadius.circular(8),
+                onTap: () {
+                  Navigator.pop(context);
+                  _showEmojiPicker(msgId);
+                },
+                child: Container(
+                  width: 36, height: 36,
+                  alignment: Alignment.center,
+                  child: Icon(Icons.add, size: 20, color: context.colors.textSecondary),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const PopupMenuDivider(height: 1),
         const PopupMenuItem(value: 'reply', height: 36, padding: EdgeInsets.symmetric(horizontal: 12), child: Row(children: [Icon(Icons.reply, size: 18), SizedBox(width: 8), Text('返信', style: TextStyle(fontSize: 14))])),
         if (isMe && type == 'text') const PopupMenuItem(value: 'edit', height: 36, padding: EdgeInsets.symmetric(horizontal: 12), child: Row(children: [Icon(Icons.edit, size: 18), SizedBox(width: 8), Text('編集', style: TextStyle(fontSize: 14))])),
         if (isMe) const PopupMenuItem(value: 'delete', height: 36, padding: EdgeInsets.symmetric(horizontal: 12), child: Row(children: [Icon(Icons.delete, size: 18, color: Colors.red), SizedBox(width: 8), Text('削除', style: TextStyle(fontSize: 14, color: Colors.red))])),
@@ -1660,7 +1697,6 @@ class _ChatDetailViewState extends State<ChatDetailView> {
     ).then((value) {
       if (value == null) return;
       switch (value) {
-        case 'stamp': _showEmojiPicker(msgId); break;
         case 'reply': _startReply(msgId, type, text); break;
         case 'edit': _showEditDialog(msgId, text); break;
         case 'delete': _deleteMessage(msgId); break;
@@ -1803,10 +1839,24 @@ class _ChatDetailViewState extends State<ChatDetailView> {
     final List<String> userList = users is List ? List<String>.from(users) : [];
     final int count = users is List ? users.length : (users is int ? users : 1);
     final bool alreadyReacted = userList.contains(currentUser?.uid);
-    return GestureDetector(
-      onTap: () => _toggleReaction(msgId, emoji),
-      child: Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), decoration: BoxDecoration(color: alreadyReacted ? AppColors.primary.withOpacity(0.2) : (isMe ? AppColors.primary.withOpacity(0.1) : context.colors.tagBg), borderRadius: BorderRadius.circular(16), border: Border.all(color: alreadyReacted ? AppColors.primary : context.colors.borderMedium)),
-        child: Row(mainAxisSize: MainAxisSize.min, children: [Text(emoji, style: TextStyle(fontSize: 14)), if (count > 1) ...[SizedBox(width: 4), Text('$count', style: TextStyle(fontSize: 12, color: context.colors.textSecondary))]])));
+    // uidから名前を解決
+    final names = userList.map((uid) {
+      final name = widget.memberNames[uid];
+      if (name is String && name.isNotEmpty) return name;
+      return uid == currentUser?.uid ? 'あなた' : uid;
+    }).toList();
+    final tooltipText = names.join('、');
+    return Tooltip(
+      message: tooltipText,
+      waitDuration: const Duration(milliseconds: 300),
+      textStyle: const TextStyle(color: Colors.white, fontSize: 12),
+      decoration: BoxDecoration(color: Colors.grey[800], borderRadius: BorderRadius.circular(8)),
+      child: GestureDetector(
+        onTap: () => _toggleReaction(msgId, emoji),
+        child: Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), decoration: BoxDecoration(color: alreadyReacted ? AppColors.primary.withOpacity(0.2) : (isMe ? AppColors.primary.withOpacity(0.1) : context.colors.tagBg), borderRadius: BorderRadius.circular(16), border: Border.all(color: alreadyReacted ? AppColors.primary : context.colors.borderMedium)),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [Text(emoji, style: TextStyle(fontSize: 14)), if (count > 1) ...[SizedBox(width: 4), Text('$count', style: TextStyle(fontSize: 12, color: context.colors.textSecondary))]])),
+      ),
+    );
   }
 
   Future<void> _pickAndUploadImage() async {
