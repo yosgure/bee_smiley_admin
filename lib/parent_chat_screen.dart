@@ -718,6 +718,14 @@ class _ChatMessageListState extends State<_ChatMessageList> {
     );
   }
 
+  // スタンプ表示ウィジェット（bee=ロゴ画像、それ以外=テキスト絵文字）
+  static Widget _stampWidget(String stamp, {double size = 22}) {
+    if (stamp == 'bee') {
+      return Image.asset('assets/logo_beesmileymark.png', width: size, height: size);
+    }
+    return Text(stamp, style: TextStyle(fontSize: size));
+  }
+
   Widget _buildStampChip(String msgId, String emoji, dynamic count, bool isMe) {
     final List<String> userList = count is List ? List<String>.from(count) : [];
     final int c = count is int ? count : (count is List ? count.length : 1);
@@ -747,7 +755,7 @@ class _ChatMessageListState extends State<_ChatMessageList> {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(emoji, style: TextStyle(fontSize: 12)),
+              _stampWidget(emoji, size: 12),
               if (c > 1) ...[
                 const SizedBox(width: 2),
                 Text('$c', style: TextStyle(fontSize: 10, color: context.colors.textSecondary)),
@@ -820,7 +828,7 @@ class _ChatMessageListState extends State<_ChatMessageList> {
   }
 
   Widget _buildQuickReactionBar(BuildContext sheetContext, String msgId) {
-    const quickEmojis = ['👍', '❤️', '😄', '🎉', '🙏', '🆗'];
+    const quickEmojis = ['👍', '❤️', '😄', '🎉', '🙏', 'bee'];
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
@@ -837,7 +845,7 @@ class _ChatMessageListState extends State<_ChatMessageList> {
                 width: 40,
                 height: 40,
                 alignment: Alignment.center,
-                child: Text(e, style: TextStyle(fontSize: 26)),
+                child: _stampWidget(e, size: 26),
               ),
             ),
         ],
@@ -877,7 +885,7 @@ class _ChatMessageListState extends State<_ChatMessageList> {
   }
 
   void _showEmojiPicker(String msgId) {
-    final emojis = ['👍', '❤️', '😄', '🎉', '🙏', '🆗', '😂', '😢', '✨', '🤔'];
+    final emojis = ['👍', '❤️', '😄', '🎉', '🙏', 'bee', '😂', '😢', '✨', '🤔'];
     showDialog(
       context: context,
       barrierDismissible: true,
@@ -898,7 +906,7 @@ class _ChatMessageListState extends State<_ChatMessageList> {
                 color: context.colors.chipBg,
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: Text(e, style: TextStyle(fontSize: 28)),
+              child: _stampWidget(e, size: 28),
             ),
           )).toList(),
         ),
