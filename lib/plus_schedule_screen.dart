@@ -3152,8 +3152,7 @@ final plusStaff = _staffList.where((s) =>
           // 近日の誕生日バナー（ヘッダー内、集計ボタンの左）
           _buildBirthdayHeaderBadge(),
           // 集計ボタン
-          if (_viewMode == 0)
-            Padding(
+          Padding(
               padding: const EdgeInsets.only(right: 8),
               child: SizedBox(
                 height: 32,
@@ -3688,7 +3687,7 @@ final plusStaff = _staffList.where((s) =>
                                   borderRadius: BorderRadius.circular(6),
                                 ),
                                 child: Text(
-                                  '不足(現在)',
+                                  '現在',
                                   textAlign: TextAlign.center,
                                   style: TextStyle(
                                     fontSize: 13,
@@ -3709,7 +3708,7 @@ final plusStaff = _staffList.where((s) =>
                                   borderRadius: BorderRadius.circular(6),
                                 ),
                                 child: Text(
-                                  '不足(予定込)',
+                                  '予定',
                                   textAlign: TextAlign.center,
                                   style: TextStyle(
                                     fontSize: 13,

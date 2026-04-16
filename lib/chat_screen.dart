@@ -1980,11 +1980,66 @@ class _ChatDetailViewState extends State<ChatDetailView> {
 
   void _showEditDialog(String msgId, String currentText) {
     final ctrl = TextEditingController(text: currentText);
-    showDialog(context: context, builder: (dialogContext) => AlertDialog(
-      title: const Text('メッセージを編集'),
-      content: TextField(controller: ctrl, maxLines: 3, autofocus: true, decoration: const InputDecoration(border: OutlineInputBorder(), hintText: 'メッセージを入力')),
-      actions: [TextButton(onPressed: () => Navigator.of(dialogContext).pop(), child: const Text('キャンセル')), ElevatedButton(onPressed: () async { await FirebaseFirestore.instance.collection('chat_rooms').doc(widget.roomId).collection('messages').doc(msgId).update({'text': ctrl.text}); Navigator.of(dialogContext).pop(); }, style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, foregroundColor: Colors.white), child: const Text('保存'))],
-    ));
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (dialogContext) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: Container(
+          width: 400,
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('メッセージを編集', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: context.colors.textPrimary)),
+              const SizedBox(height: 16),
+              TextField(
+                controller: ctrl,
+                maxLines: null,
+                minLines: 2,
+                autofocus: true,
+                decoration: InputDecoration(
+                  hintText: 'メッセージを入力',
+                  filled: true,
+                  fillColor: context.colors.chipBg,
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed: () => Navigator.of(dialogContext).pop(),
+                    child: Text('キャンセル', style: TextStyle(color: context.colors.textSecondary)),
+                  ),
+                  const SizedBox(width: 8),
+                  ElevatedButton(
+                    onPressed: () async {
+                      await FirebaseFirestore.instance
+                          .collection('chat_rooms')
+                          .doc(widget.roomId)
+                          .collection('messages')
+                          .doc(msgId)
+                          .update({'text': ctrl.text});
+                      Navigator.of(dialogContext).pop();
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
+                    child: const Text('保存'),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   void _showImagePreview(String url) {

@@ -939,43 +939,65 @@ class _ChatMessageListState extends State<_ChatMessageList> {
     showDialog(
       context: context,
       barrierDismissible: true,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('メッセージを編集'),
-        content: TextField(
-          controller: controller,
-          maxLines: 3,
-          autofocus: true,
-          decoration: InputDecoration(
-            border: OutlineInputBorder(),
-            hintText: 'メッセージを入力',
+      builder: (dialogContext) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: Container(
+          width: 400,
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('メッセージを編集', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: context.colors.textPrimary)),
+              const SizedBox(height: 16),
+              TextField(
+                controller: controller,
+                maxLines: null,
+                minLines: 2,
+                autofocus: true,
+                decoration: InputDecoration(
+                  hintText: 'メッセージを入力',
+                  filled: true,
+                  fillColor: context.colors.chipBg,
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed: () => Navigator.of(dialogContext).pop(),
+                    child: Text('キャンセル', style: TextStyle(color: context.colors.textSecondary)),
+                  ),
+                  const SizedBox(width: 8),
+                  ElevatedButton(
+                    onPressed: () async {
+                      try {
+                        await FirebaseFirestore.instance
+                            .collection('chat_rooms')
+                            .doc(widget.roomId)
+                            .collection('messages')
+                            .doc(msgId)
+                            .update({'text': controller.text});
+                      } catch (e) {
+                        debugPrint('編集エラー: $e');
+                      }
+                      Navigator.of(dialogContext).pop();
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
+                    child: const Text('保存'),
+                  ),
+                ],
+              ),
+            ],
           ),
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text('キャンセル'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              try {
-                await FirebaseFirestore.instance
-                    .collection('chat_rooms')
-                    .doc(widget.roomId)
-                    .collection('messages')
-                    .doc(msgId)
-                    .update({'text': controller.text});
-              } catch (e) {
-                debugPrint('編集エラー: $e');
-              }
-              Navigator.of(dialogContext).pop();
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.primary,
-              foregroundColor: Colors.white,
-            ),
-            child: const Text('保存'),
-          ),
-        ],
       ),
     );
   }
