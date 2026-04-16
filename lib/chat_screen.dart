@@ -1648,7 +1648,8 @@ class _ChatDetailViewState extends State<ChatDetailView> {
   // スタンプ表示ウィジェット（bee=ロゴ画像、それ以外=テキスト絵文字）
   static Widget _stampWidget(String stamp, {double size = 22}) {
     if (stamp == 'bee') {
-      return Image.asset('assets/logo_beesmileymark.png', width: size, height: size);
+      // ロゴは絵文字より大きめに表示（絵文字は周囲に余白があるため）
+      return Image.asset('assets/logo_beesmileymark.png', width: size * 1.4, height: size * 1.4);
     }
     return Text(stamp, style: TextStyle(fontSize: size));
   }
@@ -1664,16 +1665,10 @@ class _ChatDetailViewState extends State<ChatDetailView> {
       items: [
         // クイックスタンプバー
         PopupMenuItem(
-          enabled: false,
-          height: 52,
+          height: 48,
           padding: const EdgeInsets.symmetric(horizontal: 8),
-          child: Container(
-            padding: const EdgeInsets.symmetric(vertical: 4),
-            decoration: BoxDecoration(
-              color: context.colors.chipBg,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Row(
+          onTap: () {},
+          child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
               for (final e in quickEmojis)
@@ -1702,7 +1697,6 @@ class _ChatDetailViewState extends State<ChatDetailView> {
                 ),
               ),
             ],
-          ),
           ),
         ),
         const PopupMenuDivider(height: 1),
@@ -1854,7 +1848,6 @@ class _ChatDetailViewState extends State<ChatDetailView> {
   Widget _buildReactionChip(String msgId, String emoji, dynamic users, bool isMe) {
     final List<String> userList = users is List ? List<String>.from(users) : [];
     final int count = users is List ? users.length : (users is int ? users : 1);
-    final bool alreadyReacted = userList.contains(currentUser?.uid);
     // uidから名前を解決
     final names = userList.map((uid) {
       final name = widget.memberNames[uid];
@@ -1869,8 +1862,13 @@ class _ChatDetailViewState extends State<ChatDetailView> {
       decoration: BoxDecoration(color: Colors.grey[800], borderRadius: BorderRadius.circular(8)),
       child: GestureDetector(
         onTap: () => _toggleReaction(msgId, emoji),
-        child: Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), decoration: BoxDecoration(color: alreadyReacted ? AppColors.primary.withOpacity(0.2) : (isMe ? AppColors.primary.withOpacity(0.1) : context.colors.tagBg), borderRadius: BorderRadius.circular(16), border: Border.all(color: alreadyReacted ? AppColors.primary : context.colors.borderMedium)),
-          child: Row(mainAxisSize: MainAxisSize.min, children: [_stampWidget(emoji, size: 14), if (count > 1) ...[SizedBox(width: 4), Text('$count', style: TextStyle(fontSize: 12, color: context.colors.textSecondary))]])),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: List.generate(count, (_) => Padding(
+            padding: const EdgeInsets.only(right: 2),
+            child: _stampWidget(emoji, size: 16),
+          )),
+        ),
       ),
     );
   }

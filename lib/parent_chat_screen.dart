@@ -721,7 +721,7 @@ class _ChatMessageListState extends State<_ChatMessageList> {
   // スタンプ表示ウィジェット（bee=ロゴ画像、それ以外=テキスト絵文字）
   static Widget _stampWidget(String stamp, {double size = 22}) {
     if (stamp == 'bee') {
-      return Image.asset('assets/logo_beesmileymark.png', width: size, height: size);
+      return Image.asset('assets/logo_beesmileymark.png', width: size * 1.4, height: size * 1.4);
     }
     return Text(stamp, style: TextStyle(fontSize: size));
   }
@@ -745,23 +745,12 @@ class _ChatMessageListState extends State<_ChatMessageList> {
       decoration: BoxDecoration(color: Colors.grey[800], borderRadius: BorderRadius.circular(8)),
       child: GestureDetector(
         onTap: () => _toggleStamp(msgId, emoji),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-          decoration: BoxDecoration(
-            color: alreadyReacted ? AppColors.primary.withOpacity(0.2) : (isMe ? AppColors.primary.withOpacity(0.1) : context.colors.chipBg),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: alreadyReacted ? AppColors.primary : context.colors.borderMedium),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _stampWidget(emoji, size: 12),
-              if (c > 1) ...[
-                const SizedBox(width: 2),
-                Text('$c', style: TextStyle(fontSize: 10, color: context.colors.textSecondary)),
-              ],
-            ],
-          ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: List.generate(c, (_) => Padding(
+            padding: const EdgeInsets.only(right: 2),
+            child: _stampWidget(emoji, size: 16),
+          )),
         ),
       ),
     );
