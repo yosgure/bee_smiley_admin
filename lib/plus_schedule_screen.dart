@@ -5714,8 +5714,8 @@ for (var staff in _staffList.where((s) => s['showInSchedule'] != false)) {
                         final staffId = sortedStaffIds[index];
                         final data = staffShifts[staffId]!;
                         final status = data['shiftStatus'] as String? ?? 'full';
-                        // 半休時は時刻フィールドを隠して「半休」ラベルを表示
-                        final isWorking = status == 'full';
+                        // 半休時も時刻・備考を入力可能（休みのみ入力不可）
+                        final isWorking = status != 'off';
 
                         return Container(
                           padding: const EdgeInsets.symmetric(vertical: 10),

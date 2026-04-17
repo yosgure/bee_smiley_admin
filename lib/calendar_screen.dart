@@ -1008,8 +1008,9 @@ Future<void> _saveDisplayDate(DateTime date) async {
                                                           fontWeight: FontWeight.w400,
                                                           height: 1.2,
                                                         ),
-                                                        maxLines: 1,
-                                                        overflow: TextOverflow.ellipsis,
+                                                        softWrap: true,
+                                                        maxLines: 100,
+                                                        overflow: TextOverflow.clip,
                                                       ),
                                                       const SizedBox(height: 2),
                                                       Text(
