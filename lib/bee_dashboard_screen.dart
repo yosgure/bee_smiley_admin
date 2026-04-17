@@ -38,6 +38,9 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
   // (familyId|firstName) → 現在のフルネーム。スケジュールのスチューデント解決用。
   Map<String, String> _studentsByFamilyChild = {};
 
+  // (familyId|firstName) → コース名。キッズコース(1h/2h)の表示判定用。
+  Map<String, String> _courseByFamilyChild = {};
+
   // firstName → マッチする生徒情報のリスト。レガシーデータ向けのfallback照合用。
   Map<String, List<Map<String, dynamic>>> _studentsByFirstName = {};
 
@@ -208,6 +211,7 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
       final students = <Map<String, dynamic>>[];
       final nameMap = <String, String>{};
       final byFamilyChild = <String, String>{};
+      final courseByFamilyChild = <String, String>{};
       final byFirstName = <String, List<Map<String, dynamic>>>{};
       for (var doc in snapshot.docs) {
         final data = doc.data();
@@ -226,6 +230,7 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
           if (firstName.isNotEmpty) {
             nameMap[fullName.replaceAll(' ', '')] = fullName;
             byFamilyChild['$familyId|$firstName'] = fullName;
+            courseByFamilyChild['$familyId|$firstName'] = (child['course'] as String?) ?? '';
             byFirstName.putIfAbsent(firstName, () => []).add({
               'familyId': familyId,
               'firstName': firstName,
@@ -248,6 +253,7 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
       }
       _allStudentNameMap = nameMap;
       _studentsByFamilyChild = byFamilyChild;
+      _courseByFamilyChild = courseByFamilyChild;
       _studentsByFirstName = byFirstName;
 
       students.sort((a, b) {
@@ -1348,7 +1354,9 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
 
     if (familyId != null && firstName != null && firstName.isNotEmpty) {
       final resolved = _studentsByFamilyChild['$familyId|$firstName'];
-      if (resolved != null) return resolved;
+      if (resolved != null) {
+        return '$resolved${_courseSuffix(familyId, firstName)}';
+      }
     }
 
     final storedName = (entry['name'] as String? ?? '').replaceAll('　', ' ').trim();
@@ -1364,11 +1372,22 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
       final fName = parts.last;
       final candidates = _studentsByFirstName[fName] ?? const [];
       if (candidates.length == 1) {
-        return candidates.first['name'] as String;
+        final match = candidates.first;
+        return '${match['name']}${_courseSuffix(match['familyId'] as String?, fName)}';
       }
     }
 
     return storedName;
+  }
+
+  // キッズコース(1h/2h)の場合は "(1h)" / "(2h)" を返す。それ以外は空文字。
+  String _courseSuffix(String? familyId, String? firstName) {
+    if (familyId == null || firstName == null || firstName.isEmpty) return '';
+    final course = _courseByFamilyChild['$familyId|$firstName'];
+    if (course == null) return '';
+    if (course == 'キッズコース（1h）') return '(1h)';
+    if (course == 'キッズコース（2h）') return '(2h)';
+    return '';
   }
 
   // ===== 人物追加ダイアログ（講師/生徒切替あり） =====
@@ -2960,13 +2979,370 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
   }
 
   Widget _buildMobileScheduleView() {
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
+    const courseColumnWidth = 80.0;
+    const headerHeight = 40.0;
+    const footerHeight = 40.0;
+    const daysWidth = 600.0; // 6日 × 100
+
+    return Padding(
       padding: const EdgeInsets.fromLTRB(8, 4, 8, 8),
-      child: SizedBox(
-        width: 800,
-        child: _buildScheduleGrid(),
+      child: Container(
+        decoration: BoxDecoration(
+          color: context.colors.cardBg,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: context.colors.borderMedium),
+          boxShadow: [
+            BoxShadow(
+              color: context.colors.shadow,
+              blurRadius: 4,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(7),
+          child: _courses.isEmpty
+              ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.add_circle_outline, size: 48, color: context.colors.borderMedium),
+                      const SizedBox(height: 12),
+                      Text('コースを追加してください',
+                          style: TextStyle(color: context.colors.textSecondary, fontSize: 14)),
+                      const SizedBox(height: 8),
+                      TextButton.icon(
+                        onPressed: _showCourseConfigDialog,
+                        icon: const Icon(Icons.settings, size: 16),
+                        label: const Text('コース設定'),
+                      ),
+                    ],
+                  ),
+                )
+              : Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    // 左固定列: 設定アイコン + コース名 + 計
+                    SizedBox(
+                      width: courseColumnWidth,
+                      child: _buildMobileCourseColumn(courseColumnWidth, headerHeight, footerHeight),
+                    ),
+                    // 右スクロール: 曜日ヘッダー + 曜日セル + 曜日別合計
+                    Expanded(
+                      child: SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: SizedBox(
+                          width: daysWidth,
+                          child: _buildMobileDaysArea(headerHeight, footerHeight),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+        ),
       ),
+    );
+  }
+
+  Widget _buildMobileCourseColumn(double width, double headerHeight, double footerHeight) {
+    return Column(
+      children: [
+        // ヘッダー（設定アイコン）
+        Container(
+          height: headerHeight,
+          color: AppColors.primary,
+          child: IconButton(
+            onPressed: _showCourseConfigDialog,
+            icon: const Icon(Icons.settings, size: 16),
+            color: Colors.white70,
+            tooltip: 'コース設定',
+          ),
+        ),
+        // コース名セル（Expandedで各行の高さを均等に）
+        Expanded(
+          child: Column(
+            children: _courses.map((course) {
+              final courseName = course['courseName'] as String;
+              final startTime = course['startTime'] as String;
+              final endTime = course['endTime'] as String;
+              return Expanded(
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: context.colors.tagBg,
+                    border: Border(
+                      top: BorderSide(color: context.colors.borderMedium),
+                      right: BorderSide(color: context.colors.borderMedium),
+                    ),
+                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        courseName,
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          color: context.colors.textPrimary,
+                        ),
+                        textAlign: TextAlign.center,
+                        softWrap: true,
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        '$startTime〜$endTime',
+                        style: TextStyle(
+                          fontSize: 9,
+                          color: context.colors.textTertiary,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+        ),
+        // フッター「計」
+        Container(
+          height: footerHeight,
+          decoration: BoxDecoration(
+            color: context.colors.tagBg,
+            border: Border(right: BorderSide(color: context.colors.borderMedium)),
+          ),
+          child: const Center(
+            child: Text('計', style: TextStyle(fontSize: 12)),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildMobileDaysArea(double headerHeight, double footerHeight) {
+    return Column(
+      children: [
+        // 曜日ヘッダー
+        Container(
+          height: headerHeight,
+          color: AppColors.primary,
+          child: Row(
+            children: List.generate(_weekDays.length, (index) {
+              final day = _weekDays[index];
+              final isSaturday = day == '土';
+              return Expanded(
+                child: Center(
+                  child: Text(
+                    day,
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 15,
+                      color: isSaturday ? Colors.lightBlue.shade100 : context.colors.cardBg,
+                    ),
+                  ),
+                ),
+              );
+            }),
+          ),
+        ),
+        // 曜日セル（Expandedで各行高さを均等に）
+        Expanded(
+          child: Column(
+            children: _courses.map((course) {
+              final courseName = course['courseName'] as String;
+              final defaultCapacity = course['capacity'] as int;
+              return Expanded(
+                child: Container(
+                  decoration: BoxDecoration(
+                    border: Border(top: BorderSide(color: context.colors.borderMedium)),
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: List.generate(6, (dayIndex) {
+                      final day = _weekDays[dayIndex];
+                      final cellEntries = _schedule[courseName]?[day] ?? [];
+                      final students = cellEntries.where((e) => e['type'] == 'student').toList();
+                      final teachers = cellEntries.where((e) => e['type'] == 'teacher').toList();
+                      final cellCapacityEntry = cellEntries.firstWhere(
+                        (e) => e['type'] == 'capacity',
+                        orElse: () => <String, dynamic>{},
+                      );
+                      final cellCapacity = cellCapacityEntry.isNotEmpty
+                          ? (cellCapacityEntry['value'] as int? ?? defaultCapacity)
+                          : defaultCapacity;
+                      final remainingSeats = cellCapacity - students.length;
+                      final hasContent = students.isNotEmpty || teachers.isNotEmpty;
+                      final isDisabled = cellEntries.any((e) => e['type'] == 'disabled');
+                      final isLastDay = dayIndex == 5;
+
+                      if (isDisabled) {
+                        return Expanded(
+                          child: GestureDetector(
+                            behavior: HitTestBehavior.translucent,
+                            onTap: () => _showCellEditDialog(courseName, day, cellCapacity),
+                            child: Container(
+                              decoration: BoxDecoration(
+                                color: context.colors.borderLight,
+                                border: isLastDay ? null : Border(
+                                  right: BorderSide(color: context.colors.borderMedium),
+                                ),
+                              ),
+                            ),
+                          ),
+                        );
+                      }
+
+                      return Expanded(
+                        child: GestureDetector(
+                          behavior: HitTestBehavior.translucent,
+                          onTap: () => _showCellEditDialog(courseName, day, cellCapacity),
+                          child: Container(
+                            decoration: BoxDecoration(
+                              border: isLastDay ? null : Border(
+                                right: BorderSide(color: context.colors.borderMedium),
+                              ),
+                            ),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                // 講師エリア
+                                Container(
+                                  width: 26,
+                                  decoration: BoxDecoration(
+                                    border: Border(
+                                      right: BorderSide(color: context.colors.borderMedium),
+                                    ),
+                                  ),
+                                  padding: const EdgeInsets.symmetric(vertical: 4),
+                                  child: teachers.isNotEmpty
+                                      ? SingleChildScrollView(
+                                          child: Column(
+                                            children: teachers.map((t) {
+                                              final name = t['name'] as String;
+                                              final parts = name.split(RegExp(r'[\s\u3000]'));
+                                              final lastName = parts.first;
+                                              final displayName = lastName.length > 2 ? lastName.substring(0, 2) : lastName;
+                                              return Padding(
+                                                padding: const EdgeInsets.only(bottom: 4),
+                                                child: Column(
+                                                  children: displayName.split('').map((char) => Text(
+                                                        char,
+                                                        style: TextStyle(
+                                                          fontSize: 12,
+                                                          fontWeight: FontWeight.bold,
+                                                          color: Colors.blue.shade700,
+                                                          height: 1.15,
+                                                        ),
+                                                      )).toList(),
+                                                ),
+                                              );
+                                            }).toList(),
+                                          ),
+                                        )
+                                      : const SizedBox.shrink(),
+                                ),
+                                // 生徒名 + 残席
+                                Expanded(
+                                  child: Stack(
+                                    children: [
+                                      Padding(
+                                        padding: const EdgeInsets.fromLTRB(5, 6, 4, 20),
+                                        child: SingleChildScrollView(
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: students.map((s) {
+                                              final displayName = _resolveStudentName(s);
+                                              final note = s['note'] as String? ?? '';
+                                              return Padding(
+                                                padding: const EdgeInsets.only(bottom: 2),
+                                                child: Column(
+                                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                                  children: [
+                                                    Text(
+                                                      displayName,
+                                                      style: TextStyle(
+                                                        fontSize: 13,
+                                                        fontWeight: FontWeight.w500,
+                                                        color: context.colors.textPrimary,
+                                                        height: 1.3,
+                                                      ),
+                                                      overflow: TextOverflow.ellipsis,
+                                                    ),
+                                                    if (note.isNotEmpty)
+                                                      Text(
+                                                        note,
+                                                        style: TextStyle(
+                                                          fontSize: 10,
+                                                          color: Colors.orange.shade600,
+                                                          height: 1.2,
+                                                        ),
+                                                        overflow: TextOverflow.ellipsis,
+                                                      ),
+                                                  ],
+                                                ),
+                                              );
+                                            }).toList(),
+                                          ),
+                                        ),
+                                      ),
+                                      if (hasContent && cellCapacity > 0)
+                                        Positioned(
+                                          right: 4,
+                                          bottom: 2,
+                                          child: Container(
+                                            color: context.colors.cardBg,
+                                            padding: const EdgeInsets.only(left: 2),
+                                            child: Text(
+                                              '残席$remainingSeats',
+                                              style: TextStyle(
+                                                fontSize: 12,
+                                                color: remainingSeats <= 0
+                                                    ? Colors.red.shade600
+                                                    : context.colors.textTertiary,
+                                                fontWeight: remainingSeats <= 0
+                                                    ? FontWeight.bold
+                                                    : FontWeight.normal,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      );
+                    }),
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+        ),
+        // 曜日別フッター（合計）
+        Container(
+          height: footerHeight,
+          decoration: BoxDecoration(color: context.colors.tagBg),
+          child: Row(
+            children: List.generate(_weekDays.length, (index) {
+              final day = _weekDays[index];
+              int count = 0;
+              for (var course in _courses) {
+                final courseName = course['courseName'] as String;
+                final entries = _schedule[courseName]?[day] ?? [];
+                count += entries.where((e) => e['type'] == 'student').length;
+              }
+              return Expanded(
+                child: Center(
+                  child: Text('$count', style: const TextStyle(fontSize: 13)),
+                ),
+              );
+            }),
+          ),
+        ),
+      ],
     );
   }
 

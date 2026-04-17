@@ -132,7 +132,42 @@ Future<void> _saveDisplayDate(DateTime date) async {
     await Future.wait([
       _fetchStaffInfo(),
       _fetchClassroomColors(),
+      _fetchStudentCourses(),
     ]);
+  }
+
+  // studentId (uid_firstName) → コース名 のマップ
+  Map<String, String> _studentCourseMap = {};
+
+  Future<void> _fetchStudentCourses() async {
+    try {
+      final snapshot = await FirebaseFirestore.instance.collection('families').get();
+      final Map<String, String> courseMap = {};
+      for (var doc in snapshot.docs) {
+        final data = doc.data();
+        final uid = data['uid'] as String? ?? '';
+        final children = List<Map<String, dynamic>>.from(data['children'] ?? []);
+        for (var child in children) {
+          final firstName = child['firstName'] as String? ?? '';
+          final course = child['course'] as String? ?? '';
+          if (uid.isNotEmpty && firstName.isNotEmpty) {
+            courseMap['${uid}_$firstName'] = course;
+          }
+        }
+      }
+      if (mounted) {
+        setState(() => _studentCourseMap = courseMap);
+      }
+    } catch (e) {
+      debugPrint('Error fetching student courses: $e');
+    }
+  }
+
+  String _courseSuffix(String studentId) {
+    final course = _studentCourseMap[studentId];
+    if (course == 'キッズコース（1h）') return '(1h)';
+    if (course == 'キッズコース（2h）') return '(2h)';
+    return '';
   }
 
   Future<void> _fetchClassroomColors() async {
@@ -789,7 +824,7 @@ Future<void> _saveDisplayDate(DateTime date) async {
                                 backgroundColor: context.colors.cardBg,
                                 cellBorderColor: context.colors.borderMedium,
                                 headerHeight: 0,
-                                viewHeaderHeight: isMobile ? 48 : 60,
+                                viewHeaderHeight: isMobile ? 56 : 60,
                                 allowViewNavigation: false,
                                 selectionDecoration: const BoxDecoration(
                                   color: Colors.transparent,
@@ -801,14 +836,14 @@ Future<void> _saveDisplayDate(DateTime date) async {
                                 ),
                                 monthViewSettings: MonthViewSettings(
                                   appointmentDisplayMode: MonthAppointmentDisplayMode.appointment,
-                                  appointmentDisplayCount: isMobile ? 3 : 5,
+                                  appointmentDisplayCount: isMobile ? 5 : 5,
                                   showAgenda: false,
                                   monthCellStyle: MonthCellStyle(
-                                    textStyle: TextStyle(fontSize: 12, color: context.colors.textPrimary),
-                                    trailingDatesTextStyle: TextStyle(fontSize: 12, color: context.colors.textSecondary),
-                                    leadingDatesTextStyle: TextStyle(fontSize: 12, color: context.colors.textSecondary),
-                                    todayBackgroundColor: Colors.transparent, 
-                                    todayTextStyle: TextStyle(fontSize: 12, color: AppColors.primary, fontWeight: FontWeight.bold),
+                                    textStyle: TextStyle(fontSize: isMobile ? 11 : 12, color: context.colors.textPrimary, height: 1.0),
+                                    trailingDatesTextStyle: TextStyle(fontSize: isMobile ? 11 : 12, color: context.colors.textSecondary, height: 1.0),
+                                    leadingDatesTextStyle: TextStyle(fontSize: isMobile ? 11 : 12, color: context.colors.textSecondary, height: 1.0),
+                                    todayBackgroundColor: Colors.transparent,
+                                    todayTextStyle: TextStyle(fontSize: isMobile ? 9 : 11, color: Colors.white, fontWeight: FontWeight.w600, height: 1.0),
                                   ),
                                 ),
                                 appointmentBuilder: (context, calendarAppointmentDetails) {
@@ -910,15 +945,15 @@ Future<void> _saveDisplayDate(DateTime date) async {
 
                                   return Container(
                                     margin: isMonthView
-                                        ? const EdgeInsets.symmetric(vertical: 1)
-                                        : const EdgeInsets.only(top: 1, bottom: 1, right: 6),
+                                        ? (isMobile ? const EdgeInsets.symmetric(vertical: 0.5) : const EdgeInsets.symmetric(vertical: 1))
+                                        : EdgeInsets.only(top: 1, bottom: 1, right: isMobile ? 1 : 6),
                                     decoration: BoxDecoration(
                                       color: appointment.color,
                                       borderRadius: BorderRadius.circular(3),
                                     ),
                                     alignment: isMonthView ? Alignment.centerLeft : Alignment.topLeft,
                                     padding: isMonthView
-                                        ? EdgeInsets.symmetric(horizontal: isMobile ? 2 : 4)
+                                        ? EdgeInsets.symmetric(horizontal: isMobile ? 1 : 4)
                                         : (isCompact
                                             ? EdgeInsets.fromLTRB(isMobile ? 3 : 8, 2, isMobile ? 2 : 8, 2)
                                             : EdgeInsets.fromLTRB(isMobile ? 3 : 8, 4, isMobile ? 2 : 8, 4)),
@@ -927,62 +962,76 @@ Future<void> _saveDisplayDate(DateTime date) async {
                                             appointment.subject,
                                             style: TextStyle(
                                               color: Colors.white,
-                                              fontSize: isMobile ? 10 : 12,
+                                              fontSize: isMobile ? 9.5 : 12,
                                               height: 1.0,
+                                              letterSpacing: -0.3,
                                             ),
                                             maxLines: 1,
                                             overflow: TextOverflow.clip,
                                           )
-                                        : isCompact
+                                        : isMobile
+                                            // 週/日ビュー（モバイル）: Googleカレンダー風に折り返し全表示
                                             ? Text(
-                                                isMobile ? appointment.subject : '${appointment.subject}、$timeText',
-                                                style: TextStyle(
+                                                appointment.subject,
+                                                style: const TextStyle(
                                                   color: Colors.white,
-                                                  fontSize: isMobile ? 10 : 12,
+                                                  fontSize: 10,
                                                   fontWeight: FontWeight.w400,
-                                                  height: 1.2,
+                                                  height: 1.15,
+                                                  letterSpacing: -0.3,
                                                 ),
-                                                maxLines: 1,
+                                                softWrap: true,
+                                                maxLines: 100,
                                                 overflow: TextOverflow.clip,
                                               )
-                                            : Column(
-                                                crossAxisAlignment: CrossAxisAlignment.start,
-                                                mainAxisSize: MainAxisSize.min,
-                                                children: [
-                                                  Text(
-                                                    appointment.subject,
-                                                    style: TextStyle(
+                                            : isCompact
+                                                ? Text(
+                                                    '${appointment.subject}、$timeText',
+                                                    style: const TextStyle(
                                                       color: Colors.white,
-                                                      fontSize: isMobile ? 10 : 12,
-                                                      fontWeight: FontWeight.w400,
-                                                      height: 1.2,
-                                                    ),
-                                                    maxLines: 1,
-                                                    overflow: TextOverflow.ellipsis,
-                                                  ),
-                                                  if (!isMobile) ...[
-                                                  const SizedBox(height: 2),
-                                                  Text(
-                                                    timeText,
-                                                    style: TextStyle(
-                                                      color: Colors.white.withOpacity(0.9),
-                                                      fontSize: 11,
+                                                      fontSize: 12,
                                                       fontWeight: FontWeight.w400,
                                                       height: 1.2,
                                                     ),
                                                     maxLines: 1,
                                                     overflow: TextOverflow.clip,
+                                                  )
+                                                : Column(
+                                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                                    mainAxisSize: MainAxisSize.min,
+                                                    children: [
+                                                      Text(
+                                                        appointment.subject,
+                                                        style: const TextStyle(
+                                                          color: Colors.white,
+                                                          fontSize: 12,
+                                                          fontWeight: FontWeight.w400,
+                                                          height: 1.2,
+                                                        ),
+                                                        maxLines: 1,
+                                                        overflow: TextOverflow.ellipsis,
+                                                      ),
+                                                      const SizedBox(height: 2),
+                                                      Text(
+                                                        timeText,
+                                                        style: TextStyle(
+                                                          color: Colors.white.withOpacity(0.9),
+                                                          fontSize: 11,
+                                                          fontWeight: FontWeight.w400,
+                                                          height: 1.2,
+                                                        ),
+                                                        maxLines: 1,
+                                                        overflow: TextOverflow.clip,
+                                                      ),
+                                                    ],
                                                   ),
-                                                  ],
-                                                ],
-                                              ),
                                   );
                                 },
                                 timeSlotViewSettings: TimeSlotViewSettings(
                                   timeIntervalHeight: isMobile ? 50 : 60,
-                                  timeRulerSize: isMobile ? 40 : 64,
-                                  // Google風の時間表記（例: 午前9時, 午後12時）
-                                  timeFormat: isMobile ? 'H時' : 'a h時',
+                                  timeRulerSize: isMobile ? 44 : 64,
+                                  // Google風の時間表記（例: 9:00 / 13:00）
+                                  timeFormat: 'H:mm',
                                   // 時間グリッドは1時間単位
                                   timeInterval: Duration(minutes: 60),
                                   timeTextStyle: TextStyle(color: context.colors.textSecondary, fontSize: 11),
@@ -1353,17 +1402,23 @@ Future<void> _saveDisplayDate(DateTime date) async {
       return const SizedBox.shrink();
     }
     _birthdayRenderedThisFrame.add(birthdayKey);
+    final isMobile = MediaQuery.of(context).size.width < 600;
     return Container(
-      margin: const EdgeInsets.symmetric(vertical: 1),
+      margin: isMobile ? const EdgeInsets.symmetric(vertical: 0.5) : const EdgeInsets.symmetric(vertical: 1),
       decoration: BoxDecoration(
         color: Colors.pink.shade300,
         borderRadius: BorderRadius.circular(2),
       ),
-      padding: const EdgeInsets.symmetric(horizontal: 2),
+      padding: EdgeInsets.symmetric(horizontal: isMobile ? 1 : 2),
       alignment: Alignment.centerLeft,
       child: Text(
         appointment.subject,
-        style: const TextStyle(color: Colors.white, fontSize: 12, height: 1.0),
+        style: TextStyle(
+          color: Colors.white,
+          fontSize: isMobile ? 9.5 : 12,
+          height: 1.0,
+          letterSpacing: isMobile ? -0.3 : 0,
+        ),
         maxLines: 1,
         overflow: TextOverflow.clip,
       ),
@@ -1818,6 +1873,7 @@ Future<void> _saveDisplayDate(DateTime date) async {
             final staffNames = List<String>.from(data['staffNames'] ?? []);
             final absentIds = List<String>.from(data['absentStudentIds'] ?? []);
             final transferMap = data['studentTransferDates'] as Map<String, dynamic>? ?? {};
+            final trialStudentNames = List<String>.from(data['trialStudentNames'] ?? []);
 
             return Dialog(
               backgroundColor: context.colors.dialogBg,
@@ -1894,7 +1950,7 @@ Future<void> _saveDisplayDate(DateTime date) async {
                       if (staffNames.isNotEmpty)
                         _buildDetailList(Icons.badge_outlined, staffNames),
                       
-                      if (studentNames.isNotEmpty) ...[
+                      if (studentNames.isNotEmpty || trialStudentNames.isNotEmpty) ...[
                         SizedBox(height: 16),
                         Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -1904,11 +1960,12 @@ Future<void> _saveDisplayDate(DateTime date) async {
                             Expanded(
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
-                                children: List.generate(studentIds.length, (index) {
+                                children: [
+                                  ...List.generate(studentIds.length, (index) {
                                   if (index >= studentNames.length) return const SizedBox();
                                   final id = studentIds[index];
                                   final name = studentNames[index];
-                                  final displayName = name;
+                                  final displayName = '$name${_courseSuffix(id)}';
                                   
                                   final isAbsent = absentIds.contains(id);
                                   final transferDate = transferMap[id] != null 
@@ -1955,6 +2012,18 @@ Future<void> _saveDisplayDate(DateTime date) async {
                                     ),
                                   );
                                 }),
+                                  ...trialStudentNames.map((trialName) => Padding(
+                                        padding: const EdgeInsets.only(bottom: 6.0),
+                                        child: Text(
+                                          '$trialName（体）',
+                                          style: TextStyle(
+                                            fontSize: 14,
+                                            height: 1.1,
+                                            color: AppColors.accent,
+                                          ),
+                                        ),
+                                      )),
+                                ],
                               ),
                             ),
                           ],

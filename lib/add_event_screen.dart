@@ -63,6 +63,8 @@ class _AddEventDialogState extends State<AddEventDialog> {
   final Map<String, String> _staffNamesMap = {};
   final Map<String, DateTime> _studentTransferDates = {};
   final Set<String> _absentStudentIds = {};
+  final List<String> _trialStudentNames = [];
+  final TextEditingController _trialInputController = TextEditingController();
 
   late DateTime _taskDate;
 
@@ -197,6 +199,7 @@ class _AddEventDialogState extends State<AddEventDialog> {
       if (value is Timestamp) _studentTransferDates[key] = value.toDate();
     });
     _absentStudentIds.addAll(List<String>.from(data['absentStudentIds'] ?? []));
+    _trialStudentNames.addAll(List<String>.from(data['trialStudentNames'] ?? []));
 
     // 元データを保存（変更検知用）
     _originalSubject = _subjectController.text;
@@ -369,6 +372,7 @@ class _AddEventDialogState extends State<AddEventDialog> {
     _subjectController.dispose();
     _notesController.dispose();
     _locationController.dispose();
+    _trialInputController.dispose();
     super.dispose();
   }
 
@@ -463,6 +467,7 @@ class _AddEventDialogState extends State<AddEventDialog> {
     'staffNames': _selectedStaffIds.map((id) => _staffNamesMap[id] ?? '').toList(),
     'studentTransferDates': _studentTransferDates.map((k, v) => MapEntry(k, Timestamp.fromDate(v))),
     'absentStudentIds': _absentStudentIds.toList(),
+    'trialStudentNames': _trialStudentNames,
     'updatedAt': FieldValue.serverTimestamp(),
   };
 
@@ -722,6 +727,7 @@ Future<void> _deleteRecurrenceGroup(String recurrenceGroupId) async {
         'staffNames': _selectedStaffIds.map((id) => _staffNamesMap[id] ?? '').toList(),
         'studentTransferDates': <String, dynamic>{},
         'absentStudentIds': <String>[],
+        'trialStudentNames': _trialStudentNames,
         'createdAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
         'exceptionDates': [],
@@ -1166,10 +1172,10 @@ Future<void> _deleteRecurrenceGroup(String recurrenceGroupId) async {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(
-                        _selectedStaffIds.isEmpty ? '担当者を追加' : '${_selectedStaffIds.length}名選択中',
+                        '担当者を追加',
                         style: TextStyle(
                           fontSize: 16,
-                          color: _selectedStaffIds.isEmpty ? context.colors.textHint : context.colors.textPrimary,
+                          color: context.colors.textHint,
                         ),
                       ),
                       Icon(Icons.chevron_right, color: context.colors.iconMuted),
@@ -1212,14 +1218,12 @@ Future<void> _deleteRecurrenceGroup(String recurrenceGroupId) async {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Text(
-                          _selectedStudentIds.isEmpty
-                              ? ((_selectedClassroom == null && !_isManualLocation) ? '先に教室を選択' : '生徒を追加')
-                              : '${_selectedStudentIds.length}名選択中',
+                          (_selectedClassroom == null && !_isManualLocation) ? '先に教室を選択' : '生徒を追加',
                           style: TextStyle(
                             fontSize: 16,
                             color: (_selectedClassroom == null && !_isManualLocation)
                                 ? context.colors.borderMedium
-                                : (_selectedStudentIds.isEmpty ? context.colors.textHint : context.colors.textPrimary),
+                                : context.colors.textHint,
                           ),
                         ),
                         Icon(Icons.chevron_right, color: context.colors.iconMuted),
@@ -1227,33 +1231,80 @@ Future<void> _deleteRecurrenceGroup(String recurrenceGroupId) async {
                     ),
                   ),
                 ),
-                if (_selectedStudentIds.isNotEmpty)
+                if (_selectedStudentIds.isNotEmpty || _trialStudentNames.isNotEmpty)
                   Padding(
                     padding: const EdgeInsets.only(bottom: 12),
                     child: Wrap(
                       spacing: 8,
                       runSpacing: 8,
-                      children: _selectedStudentIds.map((id) {
-                        final mapped = _studentNamesMap[id];
-                        final name = (mapped == null || mapped.isEmpty) ? '不明' : mapped;
-                        final isAbsent = _absentStudentIds.contains(id);
-                        return GestureDetector(
-                          onTap: () => _showStudentActionSheet(id),
-                          child: Chip(
-                            label: Text(
-                              name,
-                              style: TextStyle(
-                                fontSize: 12,
-                                decoration: isAbsent ? TextDecoration.lineThrough : null,
+                      children: [
+                        ..._selectedStudentIds.map((id) {
+                          final mapped = _studentNamesMap[id];
+                          final name = (mapped == null || mapped.isEmpty) ? '不明' : mapped;
+                          final isAbsent = _absentStudentIds.contains(id);
+                          return GestureDetector(
+                            onTap: () => _showStudentActionSheet(id),
+                            child: Chip(
+                              label: Text(
+                                name,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  decoration: isAbsent ? TextDecoration.lineThrough : null,
+                                ),
                               ),
+                              backgroundColor: isAbsent ? context.colors.borderLight : context.colors.chipBg,
+                              side: BorderSide.none,
                             ),
-                            backgroundColor: isAbsent ? context.colors.borderLight : context.colors.chipBg,
-                            side: BorderSide.none,
-                          ),
-                        );
-                      }).toList(),
+                          );
+                        }),
+                        ..._trialStudentNames.map((trialName) => Chip(
+                              label: Text(
+                                '$trialName（体）',
+                                style: const TextStyle(fontSize: 12),
+                              ),
+                              backgroundColor: AppColors.accent.withOpacity(0.15),
+                              side: BorderSide.none,
+                              deleteIcon: const Icon(Icons.close, size: 14),
+                              onDeleted: () => setState(() => _trialStudentNames.remove(trialName)),
+                            )),
+                      ],
                     ),
                   ),
+                // 体験レッスン入力欄
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: _trialInputController,
+                          decoration: InputDecoration(
+                            hintText: '体験の生徒名を入力',
+                            hintStyle: TextStyle(color: context.colors.textHint, fontSize: 14),
+                            isDense: true,
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8),
+                              borderSide: BorderSide(color: context.colors.borderLight),
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8),
+                              borderSide: BorderSide(color: context.colors.borderLight),
+                            ),
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                          ),
+                          style: const TextStyle(fontSize: 14),
+                          onSubmitted: (_) => _addTrialStudent(),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      TextButton.icon(
+                        onPressed: _addTrialStudent,
+                        icon: const Icon(Icons.add, size: 16),
+                        label: const Text('体験を追加', style: TextStyle(fontSize: 12)),
+                      ),
+                    ],
+                  ),
+                ),
               ],
             ),
           ),
@@ -1553,6 +1604,19 @@ Future<void> _deleteRecurrenceGroup(String recurrenceGroupId) async {
         ),
       ],
     );
+  }
+
+  void _addTrialStudent() {
+    final name = _trialInputController.text.trim();
+    if (name.isEmpty) return;
+    if (_trialStudentNames.contains(name)) {
+      _trialInputController.clear();
+      return;
+    }
+    setState(() {
+      _trialStudentNames.add(name);
+      _trialInputController.clear();
+    });
   }
 
   void _showStudentActionSheet(String studentId) {

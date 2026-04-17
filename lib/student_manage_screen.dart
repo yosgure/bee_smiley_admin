@@ -36,10 +36,15 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
   String? _currentExpandedId;
 
   final List<String> _allCourses = [
-    'プリスクール',
-    'キッズコース',
     'ベビーコース',
-    'その他',
+    'プレキッズコース',
+    'プリスクール',
+    'キッズコース（1h）',
+    'キッズコース（1.5h）',
+    'キッズコース（2h）',
+    '小学生',
+    '運動（0.6〜1.0）',
+    '運動（1.0〜1.6）',
   ];
 
   final List<String> _genders = ['男', '女', 'その他'];
