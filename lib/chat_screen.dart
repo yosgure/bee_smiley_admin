@@ -13,6 +13,8 @@ import 'package:image_picker/image_picker.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/gestures.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
+import 'pdf_preview_stub.dart' if (dart.library.js_interop) 'pdf_preview_web.dart';
 import 'package:video_player/video_player.dart';
 import 'app_theme.dart';
 import 'notification_service.dart';
@@ -180,7 +182,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
             width: 320,
             child: Column(
               children: [
-                _buildCommonHeader('チャット一覧', isLeftPane: true),
+                _buildCommonHeader('チャット', isLeftPane: true),
                 Expanded(child: _buildFirestoreRoomList(isWide: true)),
               ],
             ),
@@ -200,7 +202,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
     return Scaffold(
       body: Column(
         children: [
-          SafeArea(bottom: false, child: _buildCommonHeader('チャット一覧', isLeftPane: true)),
+          SafeArea(bottom: false, child: _buildCommonHeader('チャット', isLeftPane: true)),
           Expanded(child: _buildFirestoreRoomList(isWide: false)),
         ],
       ),
@@ -2195,11 +2197,69 @@ class _ChatDetailViewState extends State<ChatDetailView> {
       return;
     }
 
-    // PDFはブラウザで開く（Web/Android共通）
-    final uri = Uri.parse(url);
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-    }
+    // PDFはアプリ内でプレビュー
+    _showPdfPreview(url, fileName);
+  }
+
+  void _showPdfPreview(String url, String fileName) {
+    showDialog(
+      context: context,
+      barrierColor: Colors.black,
+      builder: (_) => Dialog.fullscreen(
+        backgroundColor: Colors.black,
+        child: SafeArea(
+          child: Column(
+            children: [
+              Container(
+                height: 48,
+                color: Colors.black,
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                child: Row(
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.close, color: Colors.white),
+                      onPressed: () => Navigator.pop(context),
+                    ),
+                    Expanded(
+                      child: Text(
+                        fileName,
+                        style: const TextStyle(color: Colors.white, fontSize: 14),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    IconButton(
+                      icon: Icon(
+                        kIsWeb ? Icons.download : Icons.open_in_new,
+                        color: Colors.white,
+                      ),
+                      tooltip: kIsWeb ? 'ダウンロード' : '他のアプリで開く',
+                      onPressed: () async {
+                        final uri = Uri.parse(url);
+                        if (await canLaunchUrl(uri)) {
+                          await launchUrl(uri, mode: LaunchMode.externalApplication);
+                        }
+                      },
+                    ),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: Container(
+                  color: Colors.grey[900],
+                  child: kIsWeb
+                      ? buildWebPdfViewer(url)
+                      : SfPdfViewer.network(
+                          url,
+                          canShowScrollHead: true,
+                          canShowScrollStatus: true,
+                        ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
 

@@ -215,6 +215,23 @@ class _AiChatMainScreenState extends State<AiChatMainScreen> {
 
     return Scaffold(
       backgroundColor: context.colors.scaffoldBg,
+      appBar: (!isWide && _showSidebar)
+          ? AppBar(
+              title: const Text('AI相談'),
+              centerTitle: true,
+              backgroundColor: context.colors.cardBg,
+              elevation: 0,
+              foregroundColor: context.colors.textPrimary,
+              automaticallyImplyLeading: false,
+              actions: [
+                IconButton(
+                  icon: const Icon(Icons.edit_outlined, size: 22),
+                  tooltip: '新規フリーチャット',
+                  onPressed: _openFreeChat,
+                ),
+              ],
+            )
+          : null,
       body: Row(
         children: [
           // サイドバー（PC: 常に表示、モバイル: 切り替え）
@@ -253,34 +270,35 @@ class _AiChatMainScreenState extends State<AiChatMainScreen> {
       ),
       child: Column(
         children: [
-          // ヘッダー
-          Container(
-            padding: EdgeInsets.fromLTRB(16, MediaQuery.of(context).padding.top + 12, 16, 12),
-            child: Column(
-              children: [
-                Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    Center(
-                      child: Text('AI相談',
-                          style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600, color: context.colors.textPrimary)),
-                    ),
-                    Positioned(right: 0, child: Row(mainAxisSize: MainAxisSize.min, children: [
-                    // 新規フリーチャット
-                    GestureDetector(
-                      onTap: _openFreeChat,
-                      child: SizedBox(
-                        width: 32,
-                        height: 32,
-                        child: Icon(Icons.edit_outlined, size: 18, color: context.colors.textSecondary),
+          // ヘッダー（デスクトップのみ、モバイルはAppBarが担当）
+          if (isWide)
+            Container(
+              padding: EdgeInsets.fromLTRB(16, MediaQuery.of(context).padding.top + 12, 16, 12),
+              child: Column(
+                children: [
+                  Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      Center(
+                        child: Text('AI相談',
+                            style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600, color: context.colors.textPrimary)),
                       ),
-                    ),
-                  ])),
+                      Positioned(right: 0, child: Row(mainAxisSize: MainAxisSize.min, children: [
+                      // 新規フリーチャット
+                      GestureDetector(
+                        onTap: _openFreeChat,
+                        child: SizedBox(
+                          width: 32,
+                          height: 32,
+                          child: Icon(Icons.edit_outlined, size: 18, color: context.colors.textSecondary),
+                        ),
+                      ),
+                    ])),
+                  ],
+                  ),
                 ],
-                ),
-              ],
+              ),
             ),
-          ),
           // タブ切り替え
           Container(
             margin: const EdgeInsets.symmetric(horizontal: 12),

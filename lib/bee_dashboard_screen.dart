@@ -35,6 +35,12 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
   // 全生徒の名前マップ（スペースなし→スペースあり、教室フィルタなし）
   Map<String, String> _allStudentNameMap = {};
 
+  // (familyId|firstName) → 現在のフルネーム。スケジュールのスチューデント解決用。
+  Map<String, String> _studentsByFamilyChild = {};
+
+  // firstName → マッチする生徒情報のリスト。レガシーデータ向けのfallback照合用。
+  Map<String, List<Map<String, dynamic>>> _studentsByFirstName = {};
+
   // 講師リスト（staffsから取得、教室でフィルタ）
   List<Map<String, dynamic>> _staffList = [];
 
@@ -201,8 +207,11 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
 
       final students = <Map<String, dynamic>>[];
       final nameMap = <String, String>{};
+      final byFamilyChild = <String, String>{};
+      final byFirstName = <String, List<Map<String, dynamic>>>{};
       for (var doc in snapshot.docs) {
         final data = doc.data();
+        final familyId = doc.id;
         final lastName = data['lastName'] as String? ?? '';
         final lastNameKana = data['lastNameKana'] as String? ?? '';
         final children = List<Map<String, dynamic>>.from(data['children'] ?? []);
@@ -216,10 +225,17 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
           // 全生徒の名前マップ（教室フィルタなし）
           if (firstName.isNotEmpty) {
             nameMap[fullName.replaceAll(' ', '')] = fullName;
+            byFamilyChild['$familyId|$firstName'] = fullName;
+            byFirstName.putIfAbsent(firstName, () => []).add({
+              'familyId': familyId,
+              'firstName': firstName,
+              'name': fullName,
+            });
           }
 
           if (firstName.isNotEmpty && classrooms.any((c) => c.contains(_selectedClassroom))) {
             students.add({
+              'familyId': familyId,
               'name': fullName,
               'firstName': firstName,
               'lastName': lastName,
@@ -231,6 +247,8 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
         }
       }
       _allStudentNameMap = nameMap;
+      _studentsByFamilyChild = byFamilyChild;
+      _studentsByFirstName = byFirstName;
 
       students.sort((a, b) {
         final kanaA = (a['lastNameKana'] as String?) ?? '';
@@ -888,7 +906,7 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
       Map<String, dynamic> person,
       {bool isTeacher = false}) {
     final rawName = person['name'] as String;
-    final name = isTeacher ? rawName : _normalizeStudentName(rawName);
+    final name = isTeacher ? rawName : _resolveStudentName(person);
     final note = person['note'] as String? ?? '';
 
     return Padding(
@@ -1125,6 +1143,8 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
                                 'name': name,
                                 'type': 'student',
                                 'note': '',
+                                if (student['familyId'] != null) 'familyId': student['familyId'],
+                                if (student['firstName'] != null) 'firstName': student['firstName'],
                               });
                               _saveScheduleToFirestore();
                               setState(() {});
@@ -1224,9 +1244,10 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
     required bool isTeacher,
     required VoidCallback onChanged,
   }) {
-    final name = person['name'] as String;
-    final note = person['note'] as String? ?? '';
+    final rawName = person['name'] as String;
     final type = person['type'] as String;
+    final name = type == 'student' ? _resolveStudentName(person) : rawName;
+    final note = person['note'] as String? ?? '';
 
     return Padding(
       padding: const EdgeInsets.only(left: 8, bottom: 4),
@@ -1316,6 +1337,38 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
     }
 
     return normalized;
+  }
+
+  // スケジュールのstudentエントリから現在の表示名を解決する。
+  // 新形式: familyId + firstName で families の現在データを参照。
+  // 旧形式: name のみ → 名前マップ/firstName fallbackで可能な限り解決。
+  String _resolveStudentName(Map<String, dynamic> entry) {
+    final familyId = entry['familyId'] as String?;
+    final firstName = entry['firstName'] as String?;
+
+    if (familyId != null && firstName != null && firstName.isNotEmpty) {
+      final resolved = _studentsByFamilyChild['$familyId|$firstName'];
+      if (resolved != null) return resolved;
+    }
+
+    final storedName = (entry['name'] as String? ?? '').replaceAll('　', ' ').trim();
+    if (storedName.isEmpty) return storedName;
+
+    // 旧形式：フルネーム一致を優先
+    final fullMatch = _allStudentNameMap[storedName.replaceAll(' ', '')];
+    if (fullMatch != null) return fullMatch;
+
+    // 旧形式のfallback：firstName が一意にマッチすれば解決
+    final parts = storedName.split(RegExp(r'\s+'));
+    if (parts.length >= 2) {
+      final fName = parts.last;
+      final candidates = _studentsByFirstName[fName] ?? const [];
+      if (candidates.length == 1) {
+        return candidates.first['name'] as String;
+      }
+    }
+
+    return storedName;
   }
 
   // ===== 人物追加ダイアログ（講師/生徒切替あり） =====
@@ -1484,11 +1537,19 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
               ElevatedButton(
                 onPressed: canSave
                     ? () {
-                        final newEntry = {
+                        final newEntry = <String, dynamic>{
                           'name': selectedPerson!['name'] as String,
                           'type': inputMode,
                           'note': noteController.text,
                         };
+                        if (inputMode == 'student') {
+                          if (selectedPerson!['familyId'] != null) {
+                            newEntry['familyId'] = selectedPerson!['familyId'];
+                          }
+                          if (selectedPerson!['firstName'] != null) {
+                            newEntry['firstName'] = selectedPerson!['firstName'];
+                          }
+                        }
                         _schedule.putIfAbsent(courseName, () => {});
                         _schedule[courseName]!
                             .putIfAbsent(day, () => []);

@@ -459,8 +459,8 @@ class _AddEventDialogState extends State<AddEventDialog> {
     'classroom': _locationValue,
     'studentIds': _selectedStudentIds.toList(),
     'staffIds': _selectedStaffIds.toList(),
-    'studentNames': _selectedStudentIds.map((id) => _studentNamesMap[id] ?? '').where((s) => s.isNotEmpty).toList(),
-    'staffNames': _selectedStaffIds.map((id) => _staffNamesMap[id] ?? '').where((s) => s.isNotEmpty).toList(),
+    'studentNames': _selectedStudentIds.map((id) => _studentNamesMap[id] ?? '').toList(),
+    'staffNames': _selectedStaffIds.map((id) => _staffNamesMap[id] ?? '').toList(),
     'studentTransferDates': _studentTransferDates.map((k, v) => MapEntry(k, Timestamp.fromDate(v))),
     'absentStudentIds': _absentStudentIds.toList(),
     'updatedAt': FieldValue.serverTimestamp(),
@@ -718,8 +718,8 @@ Future<void> _deleteRecurrenceGroup(String recurrenceGroupId) async {
         'recurrenceType': '第1・2・3週(月次)',
         'studentIds': _selectedStudentIds.toList(),
         'staffIds': _selectedStaffIds.toList(),
-        'studentNames': _selectedStudentIds.map((id) => _studentNamesMap[id] ?? '').where((s) => s.isNotEmpty).toList(),
-        'staffNames': _selectedStaffIds.map((id) => _staffNamesMap[id] ?? '').where((s) => s.isNotEmpty).toList(),
+        'studentNames': _selectedStudentIds.map((id) => _studentNamesMap[id] ?? '').toList(),
+        'staffNames': _selectedStaffIds.map((id) => _staffNamesMap[id] ?? '').toList(),
         'studentTransferDates': <String, dynamic>{},
         'absentStudentIds': <String>[],
         'createdAt': FieldValue.serverTimestamp(),
@@ -1234,7 +1234,8 @@ Future<void> _deleteRecurrenceGroup(String recurrenceGroupId) async {
                       spacing: 8,
                       runSpacing: 8,
                       children: _selectedStudentIds.map((id) {
-                        final name = _studentNamesMap[id] ?? '不明';
+                        final mapped = _studentNamesMap[id];
+                        final name = (mapped == null || mapped.isEmpty) ? '不明' : mapped;
                         final isAbsent = _absentStudentIds.contains(id);
                         return GestureDetector(
                           onTap: () => _showStudentActionSheet(id),
@@ -1808,20 +1809,25 @@ class _PersonSelectSheetState extends State<_PersonSelectSheet> {
           final children = List<Map<String, dynamic>>.from(data['children'] ?? []);
           
           for (var child in children) {
-            if (widget.filterKey != null && !childBelongsToClassroom(child, widget.filterKey!)) continue;
             final childName = child['firstName'] ?? '';
             final fullName = '$parentLastName $childName';
             final uniqueId = '${data['uid']}_$childName';
             final kana = parentLastNameKana;
+
+            // 選択済みIDは教室フィルタ外でも名前を解決する（保存データが壊れるのを防ぐ）
+            if (_selectedMap.containsKey(uniqueId)) {
+              _selectedMap[uniqueId] = fullName;
+            }
+
+            // 教室フィルタ外はリスト表示はスキップ
+            if (widget.filterKey != null && !childBelongsToClassroom(child, widget.filterKey!)) continue;
+
             loaded.add({
               'id': uniqueId,
               'name': fullName,
               'kana': kana,
               'group': _getGroup(kana),
             });
-            if (_selectedMap.containsKey(uniqueId)) {
-              _selectedMap[uniqueId] = fullName;
-            }
           }
         }
      } else {

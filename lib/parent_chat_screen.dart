@@ -14,6 +14,8 @@ import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 import 'package:gal/gal.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
+import 'pdf_preview_stub.dart' if (dart.library.js_interop) 'pdf_preview_web.dart';
 import 'package:flutter/cupertino.dart';
 import 'app_theme.dart';
 import 'skeleton_loading.dart';
@@ -1120,14 +1122,81 @@ class _ChatMessageListState extends State<_ChatMessageList> {
   void _showFilePreview(String url, String fileName) {
     final ext = fileName.split('.').last.toLowerCase();
     final isImage = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'].contains(ext);
+    final isPdf = ext == 'pdf';
 
     if (isImage) {
       _showImagePreview(url);
       return;
     }
 
-    // PDF・その他のファイルは外部ブラウザで開く
+    if (isPdf) {
+      _showPdfPreview(url, fileName);
+      return;
+    }
+
+    // その他のファイルは外部ブラウザで開く
     launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+  }
+
+  void _showPdfPreview(String url, String fileName) {
+    showDialog(
+      context: context,
+      barrierColor: Colors.black,
+      builder: (_) => Dialog.fullscreen(
+        backgroundColor: Colors.black,
+        child: SafeArea(
+          child: Column(
+            children: [
+              Container(
+                height: 48,
+                color: Colors.black,
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                child: Row(
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.close, color: Colors.white),
+                      onPressed: () => Navigator.pop(context),
+                    ),
+                    Expanded(
+                      child: Text(
+                        fileName,
+                        style: const TextStyle(color: Colors.white, fontSize: 14),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    IconButton(
+                      icon: Icon(
+                        kIsWeb ? Icons.download : Icons.open_in_new,
+                        color: Colors.white,
+                      ),
+                      tooltip: kIsWeb ? 'ダウンロード' : '他のアプリで開く',
+                      onPressed: () async {
+                        final uri = Uri.parse(url);
+                        if (await canLaunchUrl(uri)) {
+                          await launchUrl(uri, mode: LaunchMode.externalApplication);
+                        }
+                      },
+                    ),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: Container(
+                  color: Colors.grey[900],
+                  child: kIsWeb
+                      ? buildWebPdfViewer(url)
+                      : SfPdfViewer.network(
+                          url,
+                          canShowScrollHead: true,
+                          canShowScrollStatus: true,
+                        ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   Future<void> _saveImageToGallery(String url, BuildContext dialogContext) async {

@@ -188,6 +188,16 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
 
     return Scaffold(
       backgroundColor: context.colors.cardBg,
+      appBar: (!isDesktop && _showSidebar)
+          ? AppBar(
+              title: const Text('アセスメント'),
+              centerTitle: true,
+              backgroundColor: context.colors.cardBg,
+              elevation: 0,
+              foregroundColor: context.colors.textPrimary,
+              automaticallyImplyLeading: false,
+            )
+          : null,
       body: Row(
         children: [
           // 左サイドバー
@@ -206,18 +216,20 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
   }
 
   Widget _buildSidebar(BuildContext context) {
+    final isDesktop = MediaQuery.of(context).size.width >= 768;
     final students = _filteredStudents;
     return Column(
       children: [
-        // ヘッダー
-        Container(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-          child: const Text(
-            'アセスメント',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            textAlign: TextAlign.center,
+        // ヘッダー（デスクトップのみ、モバイルはAppBarがタイトルを担当）
+        if (isDesktop)
+          Container(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+            child: const Text(
+              'アセスメント',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              textAlign: TextAlign.center,
+            ),
           ),
-        ),
         // 教室フィルタ
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
@@ -291,7 +303,7 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
         backgroundColor: context.colors.cardBg,
         appBar: AppBar(
           title: Text(
-            _selectedStudentId != null ? _selectedStudentName : 'アセスメント',
+            _selectedStudentId != null ? _selectedStudentName : '',
             style: const TextStyle(fontSize: 16),
           ),
           centerTitle: true,

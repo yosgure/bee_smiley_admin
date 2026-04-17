@@ -1628,13 +1628,9 @@ void _goToPage(int page) {
       padding: const EdgeInsets.symmetric(horizontal: 4),
       decoration: BoxDecoration(
         color: context.colors.cardBg,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 2,
-            offset: const Offset(0, 1),
-          ),
-        ],
+        border: Border(
+          bottom: BorderSide(color: context.colors.borderLight),
+        ),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
