@@ -546,7 +546,7 @@ class _AddEventDialogState extends State<AddEventDialog> {
 
     case 'all':
       if (originalRecurrenceGroupId != null) {
-        await _updateAllEvents(originalRecurrenceGroupId, eventData, recurrenceTypeChanged);
+        await _updateAllEvents(originalRecurrenceGroupId, originalStartTime, eventData, recurrenceTypeChanged);
       } else {
         eventData['recurrenceGroupId'] = null;
         await widget.appointment!.reference.update(eventData);
@@ -623,39 +623,31 @@ class _AddEventDialogState extends State<AddEventDialog> {
 }
 
   Future<void> _updateAllEvents(
-  String recurrenceGroupId, 
+  String recurrenceGroupId,
+  DateTime editedOriginalStart,
   Map<String, dynamic> eventData,
   bool recurrenceTypeChanged,
 ) async {
   final collection = FirebaseFirestore.instance.collection('calendar_events');
   final query = await collection.where('recurrenceGroupId', isEqualTo: recurrenceGroupId).get();
-  
+
   if (recurrenceTypeChanged) {
     final batch = FirebaseFirestore.instance.batch();
     for (var doc in query.docs) {
       batch.delete(doc.reference);
     }
     await batch.commit();
-    
+
     eventData['recurrenceGroupId'] = null;
     eventData['createdAt'] = FieldValue.serverTimestamp();
     eventData['exceptionDates'] = [];
     await collection.add(eventData);
     return;
   }
-  
-  final sortedDocs = query.docs.toList()
-    ..sort((a, b) {
-      final aTime = (a.data()['startTime'] as Timestamp).toDate();
-      final bTime = (b.data()['startTime'] as Timestamp).toDate();
-      return aTime.compareTo(bTime);
-    });
-  
-  if (sortedDocs.isEmpty) return;
-  
-  final firstDocData = sortedDocs.first.data();
-  final firstStartTime = (firstDocData['startTime'] as Timestamp).toDate();
-  final originalStartDate = DateTime(firstStartTime.year, firstStartTime.month, firstStartTime.day);
+
+  if (query.docs.isEmpty) return;
+
+  final originalStartDate = DateTime(editedOriginalStart.year, editedOriginalStart.month, editedOriginalStart.day);
   final newStartDate = DateTime(_startDate.year, _startDate.month, _startDate.day);
   final dateDiff = newStartDate.difference(originalStartDate);
   
