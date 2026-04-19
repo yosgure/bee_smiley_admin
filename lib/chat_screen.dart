@@ -2084,12 +2084,27 @@ class _ChatDetailViewState extends State<ChatDetailView> {
                   const SizedBox(width: 8),
                   ElevatedButton(
                     onPressed: () async {
-                      await FirebaseFirestore.instance
+                      final roomRef = FirebaseFirestore.instance
                           .collection('chat_rooms')
-                          .doc(widget.roomId)
+                          .doc(widget.roomId);
+                      await roomRef
                           .collection('messages')
                           .doc(msgId)
                           .update({'text': ctrl.text});
+                      // 編集対象が最新メッセージだった場合、一覧プレビューも更新
+                      final latest = await roomRef
+                          .collection('messages')
+                          .orderBy('createdAt', descending: true)
+                          .limit(1)
+                          .get();
+                      if (latest.docs.isNotEmpty && latest.docs.first.id == msgId) {
+                        final d = latest.docs.first.data();
+                        String lastMsg = ctrl.text;
+                        if (d['type'] == 'image') lastMsg = '画像を送信しました';
+                        if (d['type'] == 'file') lastMsg = 'ファイルを送信しました';
+                        if (d['type'] == 'video') lastMsg = '動画を送信しました';
+                        await roomRef.update({'lastMessage': lastMsg});
+                      }
                       Navigator.of(dialogContext).pop();
                     },
                     style: ElevatedButton.styleFrom(
