@@ -835,10 +835,7 @@ Future<void> _saveDisplayDate(DateTime date) async {
                                 headerHeight: 0,
                                 viewHeaderHeight: isMobile ? 56 : 60,
                                 allowViewNavigation: false,
-                                selectionDecoration: BoxDecoration(
-                                  color: Colors.transparent,
-                                  border: Border.all(color: Colors.transparent, width: 0),
-                                ),
+                                selectionDecoration: const BoxDecoration(),
                                 viewHeaderStyle: ViewHeaderStyle(
                                   dayTextStyle: TextStyle(fontSize: isMobile ? 10 : 11, color: context.colors.textSecondary, fontWeight: FontWeight.w500, letterSpacing: 0.5),
                                   dateTextStyle: TextStyle(fontSize: isMobile ? 14 : 18, color: context.colors.textPrimary, fontWeight: FontWeight.w400),
