@@ -65,6 +65,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
 void initState() {
   super.initState();
   _loadSavedDisplayDate();
+  _loadFilterPrefs();
   _initData();
 
   // クリック後に残るセル選択枠を常時クリア
@@ -110,6 +111,44 @@ Future<void> _loadSavedDisplayDate() async {
   }
   final now = DateTime.now();
   _controller.displayDate = DateTime(now.year, now.month, now.day, 8, 0);
+}
+
+// フィルタチェックの読込
+Future<void> _loadFilterPrefs() async {
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    final mySchedule = prefs.getBool('calFilter_mySchedule');
+    final myTasks = prefs.getBool('calFilter_myTasks');
+    final birthdays = prefs.getBool('calFilter_birthdays');
+    final classroomKeys = prefs.getStringList('calFilter_classroomKeys') ?? [];
+    if (!mounted) return;
+    setState(() {
+      if (mySchedule != null) _showMySchedule = mySchedule;
+      if (myTasks != null) _showMyTasks = myTasks;
+      if (birthdays != null) _showBirthdays = birthdays;
+      for (final k in classroomKeys) {
+        final v = prefs.getBool('calFilter_classroom_$k');
+        if (v != null) _classroomFilters[k] = v;
+      }
+    });
+  } catch (e) {
+    debugPrint('Error loading filter prefs: $e');
+  }
+}
+
+Future<void> _saveFilterPrefs() async {
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('calFilter_mySchedule', _showMySchedule);
+    await prefs.setBool('calFilter_myTasks', _showMyTasks);
+    await prefs.setBool('calFilter_birthdays', _showBirthdays);
+    await prefs.setStringList('calFilter_classroomKeys', _classroomFilters.keys.toList());
+    for (final entry in _classroomFilters.entries) {
+      await prefs.setBool('calFilter_classroom_${entry.key}', entry.value);
+    }
+  } catch (e) {
+    debugPrint('Error saving filter prefs: $e');
+  }
 }
 
 // 表示月を保存
@@ -1204,9 +1243,9 @@ Future<void> _saveDisplayDate(DateTime date) async {
         Expanded(
           child: ListView(
             children: [
-              _buildFilterCheckbox('マイカレンダー', _showMySchedule, (val) => setState(() => _showMySchedule = val), AppColors.primary),
-              _buildFilterCheckbox('マイタスク', _showMyTasks, (val) => setState(() => _showMyTasks = val), AppColors.secondary),
-              _buildFilterCheckbox('誕生日', _showBirthdays, (val) => setState(() => _showBirthdays = val), Colors.pink.shade300),
+              _buildFilterCheckbox('マイカレンダー', _showMySchedule, (val) { setState(() => _showMySchedule = val); _saveFilterPrefs(); }, AppColors.primary),
+              _buildFilterCheckbox('マイタスク', _showMyTasks, (val) { setState(() => _showMyTasks = val); _saveFilterPrefs(); }, AppColors.secondary),
+              _buildFilterCheckbox('誕生日', _showBirthdays, (val) { setState(() => _showBirthdays = val); _saveFilterPrefs(); }, Colors.pink.shade300),
               const SizedBox(height: 8),
               if (_myClassrooms.isEmpty)
                 Padding(
@@ -1219,7 +1258,7 @@ Future<void> _saveDisplayDate(DateTime date) async {
                   return _buildFilterCheckbox(
                     roomName,
                     _classroomFilters[roomName] ?? true,
-                    (val) => setState(() => _classroomFilters[roomName] = val),
+                    (val) { setState(() => _classroomFilters[roomName] = val); _saveFilterPrefs(); },
                     color, 
                   );
                 }),
@@ -1237,9 +1276,9 @@ Future<void> _saveDisplayDate(DateTime date) async {
         Expanded(
           child: ListView(
             children: [
-              _buildFilterCheckbox('マイカレンダー', _showMySchedule, (val) => setState(() => _showMySchedule = val), AppColors.primary),
-              _buildFilterCheckbox('マイタスク', _showMyTasks, (val) => setState(() => _showMyTasks = val), AppColors.secondary),
-              _buildFilterCheckbox('誕生日', _showBirthdays, (val) => setState(() => _showBirthdays = val), Colors.pink.shade300),
+              _buildFilterCheckbox('マイカレンダー', _showMySchedule, (val) { setState(() => _showMySchedule = val); _saveFilterPrefs(); }, AppColors.primary),
+              _buildFilterCheckbox('マイタスク', _showMyTasks, (val) { setState(() => _showMyTasks = val); _saveFilterPrefs(); }, AppColors.secondary),
+              _buildFilterCheckbox('誕生日', _showBirthdays, (val) { setState(() => _showBirthdays = val); _saveFilterPrefs(); }, Colors.pink.shade300),
               const SizedBox(height: 8),
               if (_myClassrooms.isEmpty)
                 Padding(
@@ -1252,7 +1291,7 @@ Future<void> _saveDisplayDate(DateTime date) async {
                   return _buildFilterCheckbox(
                     roomName,
                     _classroomFilters[roomName] ?? true,
-                    (val) => setState(() => _classroomFilters[roomName] = val),
+                    (val) { setState(() => _classroomFilters[roomName] = val); _saveFilterPrefs(); },
                     color, 
                   );
                 }),
