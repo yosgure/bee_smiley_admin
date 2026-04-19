@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'assessment_edit_screen.dart';
 import 'app_theme.dart';
 
@@ -21,6 +22,13 @@ class _AssessmentDetailScreenState extends State<AssessmentDetailScreen> {
   void initState() {
     super.initState();
     _data = widget.doc.data() as Map<String, dynamic>;
+  }
+
+  Future<void> _launchUrl(String url) async {
+    final uri = Uri.tryParse(url);
+    if (uri != null) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
   }
 
   Future<void> _publish() async {
@@ -264,28 +272,52 @@ class _AssessmentDetailScreenState extends State<AssessmentDetailScreen> {
                 const SizedBox(height: 16),
               ],
 
-              // 写真（サイズ調整）
-              if (entry['photoUrl'] != null && (entry['photoUrl'] as String).isNotEmpty) ...[
-                Center(
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(
-                      maxWidth: 400,
-                      maxHeight: 300,
-                    ),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(12),
-                      child: Image.network(
-                        entry['photoUrl'],
-                        fit: BoxFit.contain,
-                        errorBuilder: (c, o, s) => SizedBox(
-                          height: 100, 
-                          child: Center(child: Icon(Icons.broken_image, color: context.colors.textSecondary)),
+              // 写真・動画（mediaItems があれば全て、なければ photoUrl 単体にフォールバック）
+              ...(() {
+                final List<Map<String, dynamic>> mediaItems = [];
+                final raw = entry['mediaItems'] as List<dynamic>?;
+                if (raw != null && raw.isNotEmpty) {
+                  for (final m in raw) {
+                    if (m is Map) mediaItems.add({'type': m['type'] ?? 'image', 'url': m['url']});
+                  }
+                } else if (entry['photoUrl'] != null && (entry['photoUrl'] as String).isNotEmpty) {
+                  mediaItems.add({'type': 'image', 'url': entry['photoUrl']});
+                }
+                if (mediaItems.isEmpty) return <Widget>[];
+                return [
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: mediaItems.map((m) {
+                      final url = m['url'] as String?;
+                      if (url == null || url.isEmpty) return const SizedBox.shrink();
+                      if (m['type'] == 'video') {
+                        return GestureDetector(
+                          onTap: () => _launchUrl(url),
+                          child: Container(
+                            width: 160, height: 120,
+                            decoration: BoxDecoration(color: Colors.black87, borderRadius: BorderRadius.circular(12)),
+                            alignment: Alignment.center,
+                            child: const Icon(Icons.play_circle_fill, color: Colors.white, size: 40),
+                          ),
+                        );
+                      }
+                      return ClipRRect(
+                        borderRadius: BorderRadius.circular(12),
+                        child: Image.network(
+                          url,
+                          width: 160, height: 120, fit: BoxFit.cover,
+                          errorBuilder: (c, o, s) => Container(
+                            width: 160, height: 120,
+                            color: context.colors.inputFill,
+                            child: Icon(Icons.broken_image, color: context.colors.textSecondary),
+                          ),
                         ),
-                      ),
-                    ),
+                      );
+                    }).toList(),
                   ),
-                ),
-              ],
+                ];
+              })(),
             ],
           ),
         );

@@ -427,6 +427,16 @@ Widget _buildHeader({bool showBack = false}) {
     final comment = entry['comment'] ?? '';
     final photoUrl = entry['photoUrl'] as String?;
     final task = entry['task'] ?? '';
+    // mediaItems があればそちら、なければ photoUrl を1件として表示
+    final List<Map<String, dynamic>> mediaItems = [];
+    final rawMedia = entry['mediaItems'] as List<dynamic>?;
+    if (rawMedia != null && rawMedia.isNotEmpty) {
+      for (final m in rawMedia) {
+        if (m is Map) mediaItems.add({'type': m['type'] ?? 'image', 'url': m['url']});
+      }
+    } else if (photoUrl != null && photoUrl.isNotEmpty) {
+      mediaItems.add({'type': 'image', 'url': photoUrl});
+    }
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
@@ -487,29 +497,39 @@ Widget _buildHeader({bool showBack = false}) {
               ),
             ],
             
-            // 写真
-            if (photoUrl != null && photoUrl.isNotEmpty) ...[
+            // 写真・動画
+            if (mediaItems.isNotEmpty) ...[
               SizedBox(height: 12),
-              GestureDetector(
-                onTap: () => _showImagePreview(photoUrl),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(8),
-                  child: CachedNetworkImage(
-                    imageUrl: photoUrl,
-                    width: double.infinity,
-                    fit: BoxFit.contain,
-                    placeholder: (c, u) => Container(
-                      height: 150,
-                      color: context.colors.chipBg,
-                      child: const Center(child: SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2))),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: mediaItems.map((m) {
+                  final url = m['url'] as String?;
+                  if (url == null || url.isEmpty) return const SizedBox.shrink();
+                  if (m['type'] == 'video') {
+                    return GestureDetector(
+                      onTap: () => _launchUrl(url),
+                      child: Container(
+                        width: 160, height: 120,
+                        decoration: BoxDecoration(color: Colors.black87, borderRadius: BorderRadius.circular(8)),
+                        alignment: Alignment.center,
+                        child: const Icon(Icons.play_circle_fill, color: Colors.white, size: 40),
+                      ),
+                    );
+                  }
+                  return GestureDetector(
+                    onTap: () => _showImagePreview(url),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: CachedNetworkImage(
+                        imageUrl: url,
+                        width: 160, height: 120, fit: BoxFit.cover,
+                        placeholder: (c, u) => Container(width: 160, height: 120, color: context.colors.chipBg, child: const Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)))),
+                        errorWidget: (c, u, e) => Container(width: 160, height: 120, color: context.colors.borderLight, child: const Icon(Icons.broken_image)),
+                      ),
                     ),
-                    errorWidget: (c, u, e) => Container(
-                      height: 100,
-                      color: context.colors.borderLight,
-                      child: const Icon(Icons.broken_image),
-                    ),
-                  ),
-                ),
+                  );
+                }).toList(),
               ),
             ],
           ],
@@ -636,6 +656,13 @@ Widget _buildHeader({bool showBack = false}) {
         ],
       ),
     );
+  }
+
+  Future<void> _launchUrl(String url) async {
+    final uri = Uri.tryParse(url);
+    if (uri != null) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
   }
 
   void _showImagePreview(String url) {

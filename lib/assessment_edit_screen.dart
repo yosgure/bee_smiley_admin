@@ -140,13 +140,28 @@ class _AssessmentEditScreenState extends State<AssessmentEditScreen> {
     if (widget.type == 'weekly') {
       final entries = List<Map<String, dynamic>>.from(data['entries'] ?? []);
       for (var entry in entries) {
+        // 既存データのマイグレーション: mediaItems > photoUrl > [] の優先順
+        final List<Map<String, dynamic>> media = [];
+        final mediaItemsRaw = entry['mediaItems'] as List<dynamic>?;
+        if (mediaItemsRaw != null && mediaItemsRaw.isNotEmpty) {
+          for (var m in mediaItemsRaw) {
+            if (m is Map) {
+              media.add({
+                'type': m['type'] ?? 'image',
+                'url': m['url'],
+                'localFile': null,
+              });
+            }
+          }
+        } else if (entry['photoUrl'] != null && (entry['photoUrl'] as String).isNotEmpty) {
+          media.add({'type': 'image', 'url': entry['photoUrl'], 'localFile': null});
+        }
         _weeklyEntries.add({
           'tool': entry['tool'] ?? '',
           'rating': entry['rating'] ?? '○',
           'duration': entry['duration'],
           'comment': entry['comment'] ?? '',
-          'photoUrl': entry['photoUrl'],
-          'localPhoto': null,
+          'media': media,
         });
       }
       if (_weeklyEntries.isEmpty) _addWeeklyEntry();
@@ -171,8 +186,7 @@ class _AssessmentEditScreenState extends State<AssessmentEditScreen> {
         'rating': '○',
         'duration': null,
         'comment': '',
-        'photoUrl': null,
-        'localPhoto': null,
+        'media': <Map<String, dynamic>>[],
       });
     });
   }
@@ -183,14 +197,35 @@ class _AssessmentEditScreenState extends State<AssessmentEditScreen> {
     });
   }
 
-  Future<void> _pickImage(int index) async {
+  Future<void> _pickImages(int index) async {
     final picker = ImagePicker();
-    final XFile? image = await picker.pickImage(source: ImageSource.gallery);
-    if (image != null) {
+    final List<XFile> images = await picker.pickMultiImage();
+    if (images.isNotEmpty) {
       setState(() {
-        _weeklyEntries[index]['localPhoto'] = image;
+        final media = _weeklyEntries[index]['media'] as List<Map<String, dynamic>>;
+        for (final img in images) {
+          media.add({'type': 'image', 'url': null, 'localFile': img});
+        }
       });
     }
+  }
+
+  Future<void> _pickVideo(int index) async {
+    final picker = ImagePicker();
+    final XFile? video = await picker.pickVideo(source: ImageSource.gallery);
+    if (video != null) {
+      setState(() {
+        final media = _weeklyEntries[index]['media'] as List<Map<String, dynamic>>;
+        media.add({'type': 'video', 'url': null, 'localFile': video});
+      });
+    }
+  }
+
+  void _removeMedia(int entryIndex, int mediaIndex) {
+    setState(() {
+      final media = _weeklyEntries[entryIndex]['media'] as List<Map<String, dynamic>>;
+      media.removeAt(mediaIndex);
+    });
   }
 
   void _addMonthlyEntry() {
@@ -212,16 +247,34 @@ class _AssessmentEditScreenState extends State<AssessmentEditScreen> {
   Future<String?> _uploadImage(XFile file) async {
     try {
       Uint8List fileBytes = await file.readAsBytes();
-      
+
       // 画像を圧縮
       fileBytes = await _compressImage(fileBytes);
-      
+
       final String fileName = '${DateTime.now().millisecondsSinceEpoch}_${file.name}';
       final ref = FirebaseStorage.instance.ref().child('assessment_photos/$fileName');
       await ref.putData(fileBytes, SettableMetadata(contentType: 'image/jpeg'));
       return await ref.getDownloadURL();
     } catch (e) {
       debugPrint('Error uploading image: $e');
+      return null;
+    }
+  }
+
+  Future<String?> _uploadVideo(XFile file) async {
+    try {
+      final Uint8List bytes = await file.readAsBytes();
+      final String fileName = '${DateTime.now().millisecondsSinceEpoch}_${file.name}';
+      final ref = FirebaseStorage.instance.ref().child('assessment_videos/$fileName');
+      // 拡張子から content type を簡易判定（mp4/mov/webm 等）
+      final lower = file.name.toLowerCase();
+      String contentType = 'video/mp4';
+      if (lower.endsWith('.mov')) contentType = 'video/quicktime';
+      else if (lower.endsWith('.webm')) contentType = 'video/webm';
+      await ref.putData(bytes, SettableMetadata(contentType: contentType));
+      return await ref.getDownloadURL();
+    } catch (e) {
+      debugPrint('Error uploading video: $e');
       return null;
     }
   }
@@ -290,18 +343,35 @@ class _AssessmentEditScreenState extends State<AssessmentEditScreen> {
       if (widget.type == 'weekly') {
         List<Map<String, dynamic>> savedEntries = [];
         for (var entry in _weeklyEntries) {
-          String? photoUrl = entry['photoUrl'];
-          if (entry['localPhoto'] != null) {
-            final url = await _uploadImage(entry['localPhoto']);
-            if (url != null) photoUrl = url;
+          // メディアをアップロードして mediaItems を作る
+          final List<Map<String, dynamic>> mediaInput =
+              List<Map<String, dynamic>>.from(entry['media'] as List);
+          final List<Map<String, dynamic>> mediaItems = [];
+          for (final m in mediaInput) {
+            String? url = m['url'] as String?;
+            final XFile? local = m['localFile'] as XFile?;
+            if (local != null) {
+              if (m['type'] == 'video') {
+                url = await _uploadVideo(local);
+              } else {
+                url = await _uploadImage(local);
+              }
+            }
+            if (url != null && url.isNotEmpty) {
+              mediaItems.add({'type': m['type'] ?? 'image', 'url': url});
+            }
           }
+          // 旧フィールド互換: 先頭の画像URL
+          final firstImageUrl = mediaItems
+              .firstWhere((m) => m['type'] == 'image', orElse: () => <String, dynamic>{})['url'];
 
           savedEntries.add({
             'tool': entry['tool'] ?? '未選択',
             'rating': entry['rating'],
             'duration': entry['duration'],
             'comment': entry['comment'],
-            'photoUrl': photoUrl,
+            'photoUrl': firstImageUrl,
+            'mediaItems': mediaItems,
             'task': _toolList.firstWhere((t) => t['name'] == entry['tool'], orElse: () => {'task': ''})['task'] ?? '',
           });
         }
@@ -431,7 +501,12 @@ class _AssessmentEditScreenState extends State<AssessmentEditScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('対象児童: ${widget.studentName}', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: context.colors.textPrimary)),
+                      Center(
+                        child: Text(
+                          widget.studentName,
+                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: context.colors.textPrimary),
+                        ),
+                      ),
                       const SizedBox(height: 16),
                       
                       _buildDateSelector(),
@@ -445,6 +520,119 @@ class _AssessmentEditScreenState extends State<AssessmentEditScreen> {
             },
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildMediaSection(int entryIndex, Map<String, dynamic> entry) {
+    final media = (entry['media'] as List).cast<Map<String, dynamic>>();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('写真・動画', style: TextStyle(fontSize: 12, color: context.colors.textSecondary, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 8),
+        SizedBox(
+          height: 88,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            itemCount: media.length + 2,
+            separatorBuilder: (_, __) => const SizedBox(width: 8),
+            itemBuilder: (context, i) {
+              if (i == media.length) {
+                return _addMediaButton(
+                  icon: Icons.add_a_photo,
+                  label: '写真',
+                  onTap: () => _pickImages(entryIndex),
+                );
+              }
+              if (i == media.length + 1) {
+                return _addMediaButton(
+                  icon: Icons.videocam,
+                  label: '動画',
+                  onTap: () => _pickVideo(entryIndex),
+                );
+              }
+              final m = media[i];
+              return _mediaThumb(m, () => _removeMedia(entryIndex, i));
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _addMediaButton({required IconData icon, required String label, required VoidCallback onTap}) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        width: 80,
+        height: 80,
+        decoration: BoxDecoration(
+          color: context.colors.inputFill,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: context.colors.borderLight, style: BorderStyle.solid),
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, color: context.colors.textSecondary),
+            const SizedBox(height: 4),
+            Text(label, style: TextStyle(fontSize: 11, color: context.colors.textSecondary)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _mediaThumb(Map<String, dynamic> m, VoidCallback onRemove) {
+    final type = m['type'] as String? ?? 'image';
+    final XFile? local = m['localFile'] as XFile?;
+    final String? url = m['url'] as String?;
+    Widget content;
+    if (type == 'video') {
+      content = Container(
+        color: Colors.black87,
+        alignment: Alignment.center,
+        child: const Icon(Icons.play_circle_fill, color: Colors.white, size: 32),
+      );
+    } else if (local != null) {
+      content = kIsWeb
+          ? Image.network(local.path, fit: BoxFit.cover)
+          : Image.file(File(local.path), fit: BoxFit.cover);
+    } else if (url != null && url.isNotEmpty) {
+      content = Image.network(url, fit: BoxFit.cover);
+    } else {
+      content = Container(color: context.colors.inputFill);
+    }
+    return SizedBox(
+      width: 80,
+      height: 80,
+      child: Stack(
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: SizedBox(width: 80, height: 80, child: content),
+          ),
+          Positioned(
+            top: 0,
+            right: 0,
+            child: InkWell(
+              onTap: onRemove,
+              child: Container(
+                padding: const EdgeInsets.all(2),
+                decoration: const BoxDecoration(color: Colors.black54, shape: BoxShape.circle),
+                child: const Icon(Icons.close, color: Colors.white, size: 14),
+              ),
+            ),
+          ),
+          if (type == 'video')
+            const Positioned(
+              bottom: 4,
+              left: 4,
+              child: Icon(Icons.videocam, color: Colors.white, size: 14),
+            ),
+        ],
       ),
     );
   }
@@ -475,7 +663,7 @@ class _AssessmentEditScreenState extends State<AssessmentEditScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(isWeekly ? '対象日' : '対象月', style: TextStyle(fontWeight: FontWeight.bold, color: context.colors.textSecondary, fontSize: 12)),
+            Text(isWeekly ? 'レッスン日' : '対象月', style: TextStyle(fontWeight: FontWeight.bold, color: context.colors.textSecondary, fontSize: 12)),
             const SizedBox(height: 8),
             Row(
               children: [
@@ -582,31 +770,7 @@ class _AssessmentEditScreenState extends State<AssessmentEditScreen> {
                   ),
                   const SizedBox(height: 16),
                   
-                  Row(
-                    children: [
-                      InkWell(
-                        onTap: () => _pickImage(index),
-                        borderRadius: BorderRadius.circular(8),
-                        child: Container(
-                          width: 80, height: 80,
-                          decoration: BoxDecoration(
-                            color: context.colors.inputFill,
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          clipBehavior: Clip.antiAlias,
-                          child: entry['localPhoto'] != null
-                              ? (kIsWeb 
-                                  ? Image.network(entry['localPhoto'].path, fit: BoxFit.cover)
-                                  : Image.file(File(entry['localPhoto'].path), fit: BoxFit.cover))
-                              : (entry['photoUrl'] != null
-                                  ? Image.network(entry['photoUrl'], fit: BoxFit.cover)
-                                  : Center(child: Icon(Icons.add_a_photo, color: context.colors.textSecondary))),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Text('写真を添付', style: TextStyle(fontSize: 14, color: context.colors.textSecondary)),
-                    ],
-                  ),
+                  _buildMediaSection(index, entry),
                 ],
               ),
             );
