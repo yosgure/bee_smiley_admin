@@ -1625,8 +1625,8 @@ class _ChatDetailViewState extends State<ChatDetailView> {
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   if (isMe) ...[
-                    if (isDesktop) menuButton(isHovering),
-                    if (isDesktop) const SizedBox(width: 4),
+                    menuButton(isDesktop ? isHovering : true),
+                    const SizedBox(width: 4),
                     Column(crossAxisAlignment: CrossAxisAlignment.end, children: [if (readText.isNotEmpty) Text(readText, style: TextStyle(fontSize: 10, color: context.colors.textSecondary)), Text(timeStr, style: TextStyle(fontSize: 10, color: context.colors.textSecondary))]),
                     const SizedBox(width: 8),
                   ],
@@ -1634,8 +1634,8 @@ class _ChatDetailViewState extends State<ChatDetailView> {
                   if (!isMe) ...[
                     const SizedBox(width: 8),
                     Text(timeStr, style: TextStyle(fontSize: 10, color: context.colors.textSecondary)),
-                    if (isDesktop) const SizedBox(width: 4),
-                    if (isDesktop) menuButton(isHovering),
+                    const SizedBox(width: 4),
+                    menuButton(isDesktop ? isHovering : true),
                   ],
                 ],
               ),
@@ -1647,18 +1647,36 @@ class _ChatDetailViewState extends State<ChatDetailView> {
     );
   }
 
-  // スタンプ表示ウィジェット（bee=ロゴ画像、それ以外=テキスト絵文字）
+  // スタンプ表示ウィジェット（bee=ロゴ画像、check=確認しますバッジ、それ以外=テキスト絵文字）
   static Widget _stampWidget(String stamp, {double size = 22}) {
     if (stamp == 'bee') {
       // ロゴは絵文字より大きめに表示（絵文字は周囲に余白があるため）
       return Image.asset('assets/logo_beesmileymark.png', width: size * 1.4, height: size * 1.4);
+    }
+    if (stamp == 'check') {
+      return Container(
+        padding: EdgeInsets.symmetric(horizontal: size * 0.35, vertical: size * 0.15),
+        decoration: BoxDecoration(
+          color: AppColors.primary,
+          borderRadius: BorderRadius.circular(size * 0.4),
+        ),
+        child: Text(
+          '確認します',
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: size * 0.55,
+            fontWeight: FontWeight.bold,
+            height: 1.0,
+          ),
+        ),
+      );
     }
     return Text(stamp, style: TextStyle(fontSize: size));
   }
 
   void _showPopupMenu(Offset position, String msgId, bool isMe, String type, String text) {
     final RenderBox overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
-    const quickEmojis = ['👍', '❤️', '😄', '🎉', '🙏', 'bee'];
+    const quickEmojis = ['👍', '❤️', '😄', '🎉', '🙏', 'bee', 'check'];
     showMenu<String>(
       context: context,
       position: RelativeRect.fromLTRB(position.dx, position.dy, overlay.size.width - position.dx, overlay.size.height - position.dy),
@@ -1785,7 +1803,7 @@ class _ChatDetailViewState extends State<ChatDetailView> {
 
   // クイックスタンプバー: よく使うスタンプをワンタップで送信
   Widget _buildQuickReactionBar(BuildContext sheetContext, String msgId) {
-    const quickEmojis = ['👍', '❤️', '😄', '🎉', '🙏', 'bee'];
+    const quickEmojis = ['👍', '❤️', '😄', '🎉', '🙏', 'bee', 'check'];
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
@@ -2014,7 +2032,7 @@ class _ChatDetailViewState extends State<ChatDetailView> {
   }
 
   void _showEmojiPicker(String msgId) {
-    final emojis = ['👍', '❤️', '😄', '🎉', '🙏', 'bee', '😂', '😢', '✨', '🤔'];
+    final emojis = ['👍', '❤️', '😄', '🎉', '🙏', 'bee', 'check', '😂', '😢', '✨', '🤔'];
     showDialog(context: context, builder: (dialogContext) => AlertDialog(
       title: const Text('スタンプを選択'),
       content: Wrap(alignment: WrapAlignment.center, spacing: 8, runSpacing: 8, children: emojis.map((e) => GestureDetector(onTap: () { _toggleReaction(msgId, e); Navigator.of(dialogContext).pop(); }, child: Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: context.colors.chipBg, borderRadius: BorderRadius.circular(8)), child: _stampWidget(e, size: 28)))).toList()),
