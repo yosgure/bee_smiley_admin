@@ -1647,39 +1647,18 @@ class _ChatDetailViewState extends State<ChatDetailView> {
     );
   }
 
-  // スタンプ表示ウィジェット（bee=ロゴ画像、check=確認しますバッジ、それ以外=テキスト絵文字）
+  // スタンプ表示ウィジェット（bee=ロゴ画像、それ以外=テキスト絵文字）
   static Widget _stampWidget(String stamp, {double size = 22}) {
     if (stamp == 'bee') {
       // ロゴは絵文字より大きめに表示（絵文字は周囲に余白があるため）
       return Image.asset('assets/logo_beesmileymark.png', width: size * 1.4, height: size * 1.4);
-    }
-    if (stamp == 'check') {
-      // 正方形の青いバッジに白の「確」文字
-      return Container(
-        width: size,
-        height: size,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: AppColors.primary,
-          borderRadius: BorderRadius.circular(size * 0.2),
-        ),
-        child: Text(
-          '確',
-          style: TextStyle(
-            color: Colors.white,
-            fontSize: size * 0.7,
-            fontWeight: FontWeight.bold,
-            height: 1.0,
-          ),
-        ),
-      );
     }
     return Text(stamp, style: TextStyle(fontSize: size));
   }
 
   void _showPopupMenu(Offset position, String msgId, bool isMe, String type, String text) {
     final RenderBox overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
-    const quickEmojis = ['👍', '❤️', '😄', '🎉', '🙏', 'bee', 'check'];
+    const quickEmojis = ['👍', '❤️', '😄', '🎉', '🙏', 'bee'];
     showMenu<String>(
       context: context,
       position: RelativeRect.fromLTRB(position.dx, position.dy, overlay.size.width - position.dx, overlay.size.height - position.dy),
@@ -1806,7 +1785,7 @@ class _ChatDetailViewState extends State<ChatDetailView> {
 
   // クイックスタンプバー: よく使うスタンプをワンタップで送信
   Widget _buildQuickReactionBar(BuildContext sheetContext, String msgId) {
-    const quickEmojis = ['👍', '❤️', '😄', '🎉', '🙏', 'bee', 'check'];
+    const quickEmojis = ['👍', '❤️', '😄', '🎉', '🙏', 'bee'];
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
@@ -2035,7 +2014,7 @@ class _ChatDetailViewState extends State<ChatDetailView> {
   }
 
   void _showEmojiPicker(String msgId) {
-    final emojis = ['👍', '❤️', '😄', '🎉', '🙏', 'bee', 'check', '😂', '😢', '✨', '🤔'];
+    final emojis = ['👍', '❤️', '😄', '🎉', '🙏', 'bee', '😂', '😢', '✨', '🤔'];
     showDialog(context: context, builder: (dialogContext) => AlertDialog(
       title: const Text('スタンプを選択'),
       content: Wrap(alignment: WrapAlignment.center, spacing: 8, runSpacing: 8, children: emojis.map((e) => GestureDetector(onTap: () { _toggleReaction(msgId, e); Navigator.of(dialogContext).pop(); }, child: Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: context.colors.chipBg, borderRadius: BorderRadius.circular(8)), child: _stampWidget(e, size: 28)))).toList()),
