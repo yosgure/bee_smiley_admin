@@ -1654,19 +1654,26 @@ class _ChatDetailViewState extends State<ChatDetailView> {
       return Image.asset('assets/logo_beesmileymark.png', width: size * 1.4, height: size * 1.4);
     }
     if (stamp == 'check') {
-      return Container(
-        padding: EdgeInsets.symmetric(horizontal: size * 0.35, vertical: size * 0.15),
-        decoration: BoxDecoration(
-          color: AppColors.primary,
-          borderRadius: BorderRadius.circular(size * 0.4),
-        ),
-        child: Text(
-          '確認します',
-          style: TextStyle(
-            color: Colors.white,
-            fontSize: size * 0.55,
-            fontWeight: FontWeight.bold,
-            height: 1.0,
+      // 絵文字と同じ size×size の正方形領域に「確認/します」を2行で収める
+      return SizedBox(
+        width: size,
+        height: size,
+        child: FittedBox(
+          fit: BoxFit.contain,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+            decoration: BoxDecoration(
+              color: AppColors.primary,
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: const Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('確認', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold, height: 1.0)),
+                SizedBox(height: 1),
+                Text('します', style: TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.w600, height: 1.0)),
+              ],
+            ),
           ),
         ),
       );
