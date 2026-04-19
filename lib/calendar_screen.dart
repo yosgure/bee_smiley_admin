@@ -67,6 +67,15 @@ void initState() {
   _loadSavedDisplayDate();
   _initData();
 
+  // クリック後に残るセル選択枠を常時クリア
+  _controller.addPropertyChangedListener((property) {
+    if (property == 'selectedDate' && _controller.selectedDate != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _controller.selectedDate = null;
+      });
+    }
+  });
+
   Future.delayed(const Duration(seconds: 5), () {
     if (mounted && (_isLoadingStaffInfo || !_isLocaleInitialized)) {
       setState(() {
