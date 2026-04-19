@@ -197,28 +197,27 @@ class _AssessmentEditScreenState extends State<AssessmentEditScreen> {
     });
   }
 
-  Future<void> _pickImages(int index) async {
+  Future<void> _pickMedia(int index) async {
     final picker = ImagePicker();
-    final List<XFile> images = await picker.pickMultiImage();
-    if (images.isNotEmpty) {
+    final List<XFile> files = await picker.pickMultipleMedia();
+    if (files.isNotEmpty) {
       setState(() {
         final media = _weeklyEntries[index]['media'] as List<Map<String, dynamic>>;
-        for (final img in images) {
-          media.add({'type': 'image', 'url': null, 'localFile': img});
+        for (final f in files) {
+          media.add({'type': _detectMediaType(f), 'url': null, 'localFile': f});
         }
       });
     }
   }
 
-  Future<void> _pickVideo(int index) async {
-    final picker = ImagePicker();
-    final XFile? video = await picker.pickVideo(source: ImageSource.gallery);
-    if (video != null) {
-      setState(() {
-        final media = _weeklyEntries[index]['media'] as List<Map<String, dynamic>>;
-        media.add({'type': 'video', 'url': null, 'localFile': video});
-      });
-    }
+  String _detectMediaType(XFile f) {
+    final mime = f.mimeType?.toLowerCase() ?? '';
+    if (mime.startsWith('video/')) return 'video';
+    if (mime.startsWith('image/')) return 'image';
+    final lower = f.name.toLowerCase();
+    const videoExt = ['.mp4', '.mov', '.webm', '.m4v', '.avi', '.mkv', '.3gp'];
+    if (videoExt.any(lower.endsWith)) return 'video';
+    return 'image';
   }
 
   void _removeMedia(int entryIndex, int mediaIndex) {
@@ -535,21 +534,14 @@ class _AssessmentEditScreenState extends State<AssessmentEditScreen> {
           height: 88,
           child: ListView.separated(
             scrollDirection: Axis.horizontal,
-            itemCount: media.length + 2,
+            itemCount: media.length + 1,
             separatorBuilder: (_, __) => const SizedBox(width: 8),
             itemBuilder: (context, i) {
               if (i == media.length) {
                 return _addMediaButton(
-                  icon: Icons.add_a_photo,
-                  label: '写真',
-                  onTap: () => _pickImages(entryIndex),
-                );
-              }
-              if (i == media.length + 1) {
-                return _addMediaButton(
-                  icon: Icons.videocam,
-                  label: '動画',
-                  onTap: () => _pickVideo(entryIndex),
+                  icon: Icons.perm_media,
+                  label: '追加',
+                  onTap: () => _pickMedia(entryIndex),
                 );
               }
               final m = media[i];
