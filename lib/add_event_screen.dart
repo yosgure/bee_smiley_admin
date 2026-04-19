@@ -775,9 +775,51 @@ Future<void> _deleteRecurrenceGroup(String recurrenceGroupId) async {
     return targetDate;
   }
 
+  bool _hasUnsavedInput() {
+    if (_isEditing) return _hasNonInstanceChanges();
+    // 新規作成時: 何か入力されていれば未保存変更ありとみなす
+    if (_subjectController.text.trim().isNotEmpty) return true;
+    if (_notesController.text.trim().isNotEmpty) return true;
+    if (_selectedStudentIds.isNotEmpty) return true;
+    if (_selectedStaffIds.isNotEmpty) return true;
+    return false;
+  }
+
+  Future<bool> _confirmDiscard() async {
+    if (!_hasUnsavedInput()) return true;
+    final result = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: context.colors.dialogBg,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        title: const Text('保存されていない変更を破棄しますか？', style: TextStyle(fontSize: 16)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('キャンセル'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: TextButton.styleFrom(foregroundColor: AppColors.error),
+            child: const Text('破棄'),
+          ),
+        ],
+      ),
+    );
+    return result == true;
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) async {
+        if (didPop) return;
+        final ok = await _confirmDiscard();
+        if (ok && mounted) Navigator.of(context).pop();
+      },
+      child: Scaffold(
       backgroundColor: context.colors.scaffoldBg,
       body: SafeArea(
         child: Form(
@@ -801,7 +843,10 @@ Future<void> _deleteRecurrenceGroup(String recurrenceGroupId) async {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     TextButton(
-                      onPressed: () => Navigator.pop(context),
+                      onPressed: () async {
+                        final ok = await _confirmDiscard();
+                        if (ok && mounted) Navigator.pop(context);
+                      },
                       child: const Text(
                         'キャンセル',
                         style: TextStyle(color: AppColors.primary, fontSize: 16),
@@ -867,6 +912,7 @@ Future<void> _deleteRecurrenceGroup(String recurrenceGroupId) async {
             ],
           ),
         ),
+      ),
       ),
     );
   }
