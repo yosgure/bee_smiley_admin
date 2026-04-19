@@ -24,7 +24,16 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
 
   // スケジュールデータ（bee_dashboard_schedule）
   // structure: { courseName: { day: [ {name, type} ] } }
+  // キーは course id（同名コース重複対応のため）
   Map<String, Map<String, List<Map<String, dynamic>>>> _schedule = {};
+
+  String _courseNameOf(String courseId) {
+    final c = _courses.firstWhere(
+      (c) => c['id'] == courseId,
+      orElse: () => <String, dynamic>{},
+    );
+    return c['courseName'] as String? ?? '';
+  }
 
   // タスクデータ（bee_dashboard_tasks）
   List<Map<String, dynamic>> _tasks = [];
@@ -114,8 +123,10 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
 
   Future<void> _loadDataForClassroom() async {
     debugPrint('[BeeDashboard] _loadDataForClassroom start');
+    // _loadSchedule は _courses の id を参照するので courses 読込後に実行
+    await _loadCourses();
+    debugPrint('[BeeDashboard] courses loaded: ${_courses.length}');
     await Future.wait([
-      _loadCourses().then((_) => debugPrint('[BeeDashboard] courses loaded: ${_courses.length}')),
       _loadSchedule().then((_) => debugPrint('[BeeDashboard] schedule loaded')),
       _loadStudents().then((_) => debugPrint('[BeeDashboard] students loaded: ${_allStudents.length}')),
       _loadStaff().then((_) => debugPrint('[BeeDashboard] staff loaded: ${_staffList.length}')),
@@ -164,22 +175,45 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
         final scheduleData = data?['schedule'] as Map<String, dynamic>? ?? {};
 
         _schedule = {};
-        for (var entry in scheduleData.entries) {
-          final courseName = entry.key;
-          final dayMap = entry.value as Map<String, dynamic>? ?? {};
-          _schedule[courseName] = {};
+        // 全コースの空枠を先に作る
+        for (var course in _courses) {
+          final courseId = course['id'] as String;
+          _schedule[courseId] = {};
           for (var day in _weekDays) {
-            final dayList = dayMap[day] as List<dynamic>? ?? [];
-            _schedule[courseName]![day] = dayList.map((item) {
-              if (item is Map<String, dynamic>) {
-                // 生徒名のスペースを統一
-                if (item['type'] == 'student' && item['name'] != null) {
-                  item['name'] = (item['name'] as String).replaceAll('　', ' ');
+            _schedule[courseId]![day] = [];
+          }
+        }
+        // 既存データ読み込み（キーは course id か旧形式の courseName）
+        for (var entry in scheduleData.entries) {
+          final storedKey = entry.key;
+          final dayMap = entry.value as Map<String, dynamic>? ?? {};
+          // 直接 id 一致するコースを探す。なければ旧形式として courseName で探す。
+          List<String> targetCourseIds;
+          if (_courses.any((c) => c['id'] == storedKey)) {
+            targetCourseIds = [storedKey];
+          } else {
+            // 旧形式: courseName キー。同名コース全てに同じデータを複製。
+            targetCourseIds = _courses
+                .where((c) => c['courseName'] == storedKey)
+                .map((c) => c['id'] as String)
+                .toList();
+          }
+          for (var targetId in targetCourseIds) {
+            _schedule[targetId] ??= {};
+            for (var day in _weekDays) {
+              final dayList = dayMap[day] as List<dynamic>? ?? [];
+              _schedule[targetId]![day] = dayList.map((item) {
+                if (item is Map<String, dynamic>) {
+                  // 生徒名のスペースを統一
+                  final copy = Map<String, dynamic>.from(item);
+                  if (copy['type'] == 'student' && copy['name'] != null) {
+                    copy['name'] = (copy['name'] as String).replaceAll('　', ' ');
+                  }
+                  return copy;
                 }
-                return item;
-              }
-              return <String, dynamic>{};
-            }).toList();
+                return <String, dynamic>{};
+              }).toList();
+            }
           }
         }
       } else {
@@ -194,10 +228,10 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
   void _initializeEmptySchedule() {
     _schedule = {};
     for (var course in _courses) {
-      final courseName = course['courseName'] as String;
-      _schedule[courseName] = {};
+      final courseId = course['id'] as String;
+      _schedule[courseId] = {};
       for (var day in _weekDays) {
-        _schedule[courseName]![day] = [];
+        _schedule[courseId]![day] = [];
       }
     }
   }
@@ -686,6 +720,7 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
   Widget _buildCourseTable(double courseColumnWidth) {
     return Column(
       children: _courses.map((course) {
+        final courseId = course['id'] as String;
         final courseName = course['courseName'] as String;
         final startTime = course['startTime'] as String;
         final endTime = course['endTime'] as String;
@@ -742,7 +777,7 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
                 // 各曜日セル
                 ...List.generate(6, (dayIndex) {
                   final day = _weekDays[dayIndex];
-                  final cellEntries = _schedule[courseName]?[day] ?? [];
+                  final cellEntries = _schedule[courseId]?[day] ?? [];
                   final students = cellEntries.where((e) => e['type'] == 'student').toList();
                   final teachers = cellEntries.where((e) => e['type'] == 'teacher').toList();
                   final cellCapacityEntry = cellEntries.firstWhere(
@@ -761,7 +796,7 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
                     return Expanded(
                       child: GestureDetector(
                         behavior: HitTestBehavior.translucent,
-                        onTap: () => _showCellEditDialog(courseName, day, cellCapacity),
+                        onTap: () => _showCellEditDialog(courseId, day, cellCapacity),
                         child: Container(
                           decoration: BoxDecoration(
                             color: context.colors.borderLight,
@@ -777,7 +812,7 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
                   return Expanded(
                     child: GestureDetector(
                       behavior: HitTestBehavior.translucent,
-                      onTap: () => _showCellEditDialog(courseName, day, cellCapacity),
+                      onTap: () => _showCellEditDialog(courseId, day, cellCapacity),
                       child: Container(
                         decoration: BoxDecoration(
                           border: isLastDay ? null : Border(
@@ -974,8 +1009,8 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
             final day = _weekDays[index];
             int count = 0;
             for (var course in _courses) {
-              final courseName = course['courseName'] as String;
-              final entries = _schedule[courseName]?[day] ?? [];
+              final courseId = course['id'] as String;
+              final entries = _schedule[courseId]?[day] ?? [];
               count +=
                   entries.where((e) => e['type'] == 'student').length;
             }
@@ -992,8 +1027,9 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
 
   // ===== セル編集ダイアログ（統合版：生徒追加・講師追加・メモ・定員） =====
 
-  void _showCellEditDialog(String courseName, String day, int currentCapacity) {
-    final cellEntries = _schedule[courseName]?[day] ?? [];
+  void _showCellEditDialog(String courseId, String day, int currentCapacity) {
+    final courseName = _courseNameOf(courseId);
+    final cellEntries = _schedule[courseId]?[day] ?? [];
     final students = cellEntries.where((e) => e['type'] == 'student').toList();
     final teachers = cellEntries.where((e) => e['type'] == 'teacher').toList();
     final capacityController = TextEditingController(text: '$currentCapacity');
@@ -1003,7 +1039,7 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
       builder: (dialogContext) => StatefulBuilder(
         builder: (dialogContext, setDialogState) {
           // 最新のデータを再取得
-          final latestEntries = _schedule[courseName]?[day] ?? [];
+          final latestEntries = _schedule[courseId]?[day] ?? [];
           final latestStudents = latestEntries.where((e) => e['type'] == 'student').toList();
           final latestTeachers = latestEntries.where((e) => e['type'] == 'teacher').toList();
           final isDisabled = latestEntries.any((e) => e['type'] == 'disabled');
@@ -1043,12 +1079,12 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
                             child: Switch(
                               value: isDisabled,
                               onChanged: (val) {
-                                _schedule.putIfAbsent(courseName, () => {});
-                                _schedule[courseName]!.putIfAbsent(day, () => []);
+                                _schedule.putIfAbsent(courseId, () => {});
+                                _schedule[courseId]!.putIfAbsent(day, () => []);
                                 if (val) {
-                                  _schedule[courseName]![day]!.add({'type': 'disabled'});
+                                  _schedule[courseId]![day]!.add({'type': 'disabled'});
                                 } else {
-                                  _schedule[courseName]![day]!.removeWhere((e) => e['type'] == 'disabled');
+                                  _schedule[courseId]![day]!.removeWhere((e) => e['type'] == 'disabled');
                                 }
                                 _saveScheduleToFirestore();
                                 setState(() {});
@@ -1099,9 +1135,9 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
                           onPressed: () {
                             _showStaffSelectionDialog((staff) {
                               final name = staff['name'] as String;
-                              _schedule.putIfAbsent(courseName, () => {});
-                              _schedule[courseName]!.putIfAbsent(day, () => []);
-                              _schedule[courseName]![day]!.add({
+                              _schedule.putIfAbsent(courseId, () => {});
+                              _schedule[courseId]!.putIfAbsent(day, () => []);
+                              _schedule[courseId]![day]!.add({
                                 'name': name,
                                 'type': 'teacher',
                                 'note': '',
@@ -1127,7 +1163,7 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
                       )
                     else
                       ...latestTeachers.map((t) => _buildCellEditPersonTile(
-                        t, courseName, day, isTeacher: true,
+                        t, courseId, day, isTeacher: true,
                         onChanged: () { setState(() {}); setDialogState(() {}); },
                       )),
                     const Divider(height: 20),
@@ -1143,9 +1179,9 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
                           onPressed: () {
                             _showStudentSelectionDialog((student) {
                               final name = _normalizeStudentName(student['name'] as String);
-                              _schedule.putIfAbsent(courseName, () => {});
-                              _schedule[courseName]!.putIfAbsent(day, () => []);
-                              _schedule[courseName]![day]!.add({
+                              _schedule.putIfAbsent(courseId, () => {});
+                              _schedule[courseId]!.putIfAbsent(day, () => []);
+                              _schedule[courseId]![day]!.add({
                                 'name': name,
                                 'type': 'student',
                                 'note': '',
@@ -1173,7 +1209,7 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
                       )
                     else
                       ...latestStudents.map((s) => _buildCellEditPersonTile(
-                        s, courseName, day, isTeacher: false,
+                        s, courseId, day, isTeacher: false,
                         onChanged: () { setState(() {}); setDialogState(() {}); },
                       )),
                     const Divider(height: 20),
@@ -1217,10 +1253,10 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
                   // 定員保存
                   final value = int.tryParse(capacityController.text) ?? currentCapacity;
                   if (value != currentCapacity) {
-                    _schedule.putIfAbsent(courseName, () => {});
-                    _schedule[courseName]!.putIfAbsent(day, () => []);
-                    _schedule[courseName]![day]!.removeWhere((e) => e['type'] == 'capacity');
-                    _schedule[courseName]![day]!.add({
+                    _schedule.putIfAbsent(courseId, () => {});
+                    _schedule[courseId]!.putIfAbsent(day, () => []);
+                    _schedule[courseId]![day]!.removeWhere((e) => e['type'] == 'capacity');
+                    _schedule[courseId]![day]!.add({
                       'type': 'capacity',
                       'value': value,
                     });
@@ -1245,7 +1281,7 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
   // セル編集ダイアログ内の人物タイル
   Widget _buildCellEditPersonTile(
     Map<String, dynamic> person,
-    String courseName,
+    String courseId,
     String day, {
     required bool isTeacher,
     required VoidCallback onChanged,
@@ -1295,7 +1331,7 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
                     TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('キャンセル')),
                     ElevatedButton(
                       onPressed: () {
-                        final entries = _schedule[courseName]?[day] ?? [];
+                        final entries = _schedule[courseId]?[day] ?? [];
                         final idx = entries.indexWhere((e) => e['name'] == name && e['type'] == type);
                         if (idx != -1) {
                           entries[idx]['note'] = noteCtrl.text;
@@ -1319,7 +1355,7 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
             constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
             tooltip: '削除',
             onPressed: () {
-              _schedule[courseName]?[day]?.removeWhere(
+              _schedule[courseId]?[day]?.removeWhere(
                 (e) => e['name'] == name && e['type'] == type,
               );
               _saveScheduleToFirestore();
@@ -1392,7 +1428,8 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
 
   // ===== 人物追加ダイアログ（講師/生徒切替あり） =====
 
-  void _showAddPersonDialog(String courseName, String day) {
+  void _showAddPersonDialog(String courseId, String day) {
+    final courseName = _courseNameOf(courseId);
     String inputMode = 'student'; // 'student' or 'teacher'
     Map<String, dynamic>? selectedPerson;
     final noteController = TextEditingController();
@@ -1569,10 +1606,10 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
                             newEntry['firstName'] = selectedPerson!['firstName'];
                           }
                         }
-                        _schedule.putIfAbsent(courseName, () => {});
-                        _schedule[courseName]!
+                        _schedule.putIfAbsent(courseId, () => {});
+                        _schedule[courseId]!
                             .putIfAbsent(day, () => []);
-                        _schedule[courseName]![day]!.add(newEntry);
+                        _schedule[courseId]![day]!.add(newEntry);
 
                         _saveScheduleToFirestore();
                         Navigator.pop(dialogContext);
@@ -1594,7 +1631,7 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
 
   // 人物編集ダイアログ
   void _showEditPersonDialog(
-      String courseName, String day, Map<String, dynamic> person) {
+      String courseId, String day, Map<String, dynamic> person) {
     final noteController =
         TextEditingController(text: person['note'] as String? ?? '');
     final name = person['name'] as String;
@@ -1623,7 +1660,7 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
           TextButton(
             onPressed: () {
               Navigator.pop(dialogContext);
-              _showDeletePersonDialog(courseName, day, person);
+              _showDeletePersonDialog(courseId, day, person);
             },
             style: TextButton.styleFrom(foregroundColor: AppColors.error),
             child: const Text('削除'),
@@ -1634,7 +1671,7 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
           ),
           ElevatedButton(
             onPressed: () {
-              final entries = _schedule[courseName]?[day] ?? [];
+              final entries = _schedule[courseId]?[day] ?? [];
               final index = entries.indexWhere(
                   (e) => e['name'] == name && e['type'] == type);
               if (index != -1) {
@@ -1657,7 +1694,8 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
 
   // 人物削除確認
   void _showDeletePersonDialog(
-      String courseName, String day, Map<String, dynamic> person) {
+      String courseId, String day, Map<String, dynamic> person) {
+    final courseName = _courseNameOf(courseId);
     final name = person['name'] as String;
     final type = person['type'] as String? ?? 'student';
 
@@ -1675,7 +1713,7 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
           ),
           TextButton(
             onPressed: () {
-              final entries = _schedule[courseName]?[day] ?? [];
+              final entries = _schedule[courseId]?[day] ?? [];
               entries.removeWhere(
                   (e) => e['name'] == name && e['type'] == type);
               _saveScheduleToFirestore();
@@ -2103,10 +2141,10 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
                 'order': newOrder,
               });
 
-              // スケジュールに空の枠を追加
-              _schedule[nameController.text] = {};
+              // スケジュールに空の枠を追加（キーは新しいコースid）
+              _schedule[docRef.id] = {};
               for (var day in _weekDays) {
-                _schedule[nameController.text]![day] = [];
+                _schedule[docRef.id]![day] = [];
               }
 
               Navigator.pop(dialogContext);
@@ -2201,7 +2239,6 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
               if (nameController.text.isEmpty) return;
 
               final id = course['id'] as String;
-              final oldName = course['courseName'] as String;
               final newName = nameController.text;
 
               await FirebaseFirestore.instance
@@ -2224,12 +2261,7 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
                     endTimeController.text;
               }
 
-              // コース名変更時はスケジュールのキーも更新
-              if (oldName != newName &&
-                  _schedule.containsKey(oldName)) {
-                _schedule[newName] = _schedule.remove(oldName)!;
-                await _saveScheduleToFirestore();
-              }
+              // スケジュールのキーは course id なのでコース名変更による更新は不要
 
               Navigator.pop(dialogContext);
               onComplete();
@@ -2271,7 +2303,7 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
                   .delete();
 
               _courses.removeWhere((c) => c['id'] == id);
-              _schedule.remove(courseName);
+              _schedule.remove(id);
               await _saveScheduleToFirestore();
 
               Navigator.pop(dialogContext);
@@ -3149,7 +3181,7 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
         Expanded(
           child: Column(
             children: _courses.map((course) {
-              final courseName = course['courseName'] as String;
+              final courseId = course['id'] as String;
               final defaultCapacity = course['capacity'] as int;
               return Expanded(
                 child: Container(
@@ -3160,7 +3192,7 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: List.generate(6, (dayIndex) {
                       final day = _weekDays[dayIndex];
-                      final cellEntries = _schedule[courseName]?[day] ?? [];
+                      final cellEntries = _schedule[courseId]?[day] ?? [];
                       final students = cellEntries.where((e) => e['type'] == 'student').toList();
                       final teachers = cellEntries.where((e) => e['type'] == 'teacher').toList();
                       final cellCapacityEntry = cellEntries.firstWhere(
@@ -3179,7 +3211,7 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
                         return Expanded(
                           child: GestureDetector(
                             behavior: HitTestBehavior.translucent,
-                            onTap: () => _showCellEditDialog(courseName, day, cellCapacity),
+                            onTap: () => _showCellEditDialog(courseId, day, cellCapacity),
                             child: Container(
                               decoration: BoxDecoration(
                                 color: context.colors.borderLight,
@@ -3195,7 +3227,7 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
                       return Expanded(
                         child: GestureDetector(
                           behavior: HitTestBehavior.translucent,
-                          onTap: () => _showCellEditDialog(courseName, day, cellCapacity),
+                          onTap: () => _showCellEditDialog(courseId, day, cellCapacity),
                           child: Container(
                             decoration: BoxDecoration(
                               border: isLastDay ? null : Border(
@@ -3330,8 +3362,8 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
               final day = _weekDays[index];
               int count = 0;
               for (var course in _courses) {
-                final courseName = course['courseName'] as String;
-                final entries = _schedule[courseName]?[day] ?? [];
+                final courseId = course['id'] as String;
+                final entries = _schedule[courseId]?[day] ?? [];
                 count += entries.where((e) => e['type'] == 'student').length;
               }
               return Expanded(
