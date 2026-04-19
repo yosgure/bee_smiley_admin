@@ -390,7 +390,19 @@ class _AddEventDialogState extends State<AddEventDialog> {
   String? _resolvedEditScope;
 
   Future<void> _save() async {
-    if (!_formKey.currentState!.validate()) return;
+    // タイトル未入力ならカテゴリ名を自動補完（保存失敗の sigent fail を防ぐ）
+    if (_subjectController.text.trim().isEmpty) {
+      _subjectController.text = _selectedCategory;
+    }
+    if (!_formKey.currentState!.validate()) {
+      // それでもバリデーション失敗時はユーザーに通知
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('入力内容に問題があります。タイトル等を確認してください')),
+        );
+      }
+      return;
+    }
 
     // 繰り返し予定の編集で、スコープ確認が必要な場合のみ最後にダイアログを出す
     if (_isEditing && !_isTaskMode && widget.appointment != null && widget.editScope == null) {
