@@ -347,7 +347,10 @@ class _AddEventDialogState extends State<AddEventDialog> {
   Future<void> _fetchClassrooms() async {
     try {
       final snapshot = await FirebaseFirestore.instance.collection('classrooms').get();
-      final list = snapshot.docs.map((d) => d['name'] as String).toList();
+      final list = snapshot.docs
+          .map((d) => d['name'] as String)
+          .where((name) => !name.contains('プラス'))
+          .toList();
       if (mounted) {
         setState(() {
           _classroomList = list;
@@ -543,7 +546,7 @@ class _AddEventDialogState extends State<AddEventDialog> {
 
     case 'all':
       if (originalRecurrenceGroupId != null) {
-        await _updateAllEvents(originalRecurrenceGroupId, eventData, recurrenceTypeChanged);
+        await _updateAllEvents(originalRecurrenceGroupId, originalStartTime, eventData, recurrenceTypeChanged);
       } else {
         eventData['recurrenceGroupId'] = null;
         await widget.appointment!.reference.update(eventData);
@@ -620,39 +623,31 @@ class _AddEventDialogState extends State<AddEventDialog> {
 }
 
   Future<void> _updateAllEvents(
-  String recurrenceGroupId, 
+  String recurrenceGroupId,
+  DateTime editedOriginalStart,
   Map<String, dynamic> eventData,
   bool recurrenceTypeChanged,
 ) async {
   final collection = FirebaseFirestore.instance.collection('calendar_events');
   final query = await collection.where('recurrenceGroupId', isEqualTo: recurrenceGroupId).get();
-  
+
   if (recurrenceTypeChanged) {
     final batch = FirebaseFirestore.instance.batch();
     for (var doc in query.docs) {
       batch.delete(doc.reference);
     }
     await batch.commit();
-    
+
     eventData['recurrenceGroupId'] = null;
     eventData['createdAt'] = FieldValue.serverTimestamp();
     eventData['exceptionDates'] = [];
     await collection.add(eventData);
     return;
   }
-  
-  final sortedDocs = query.docs.toList()
-    ..sort((a, b) {
-      final aTime = (a.data()['startTime'] as Timestamp).toDate();
-      final bTime = (b.data()['startTime'] as Timestamp).toDate();
-      return aTime.compareTo(bTime);
-    });
-  
-  if (sortedDocs.isEmpty) return;
-  
-  final firstDocData = sortedDocs.first.data();
-  final firstStartTime = (firstDocData['startTime'] as Timestamp).toDate();
-  final originalStartDate = DateTime(firstStartTime.year, firstStartTime.month, firstStartTime.day);
+
+  if (query.docs.isEmpty) return;
+
+  final originalStartDate = DateTime(editedOriginalStart.year, editedOriginalStart.month, editedOriginalStart.day);
   final newStartDate = DateTime(_startDate.year, _startDate.month, _startDate.day);
   final dateDiff = newStartDate.difference(originalStartDate);
   
@@ -826,23 +821,24 @@ Future<void> _deleteRecurrenceGroup(String recurrenceGroupId) async {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Padding(
-                        padding: const EdgeInsets.fromLTRB(56, 8, 16, 8),
+                        padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
                         child: TextFormField(
                           controller: _subjectController,
-                          style: TextStyle(fontSize: 24, color: context.colors.textPrimary),
+                          style: TextStyle(fontSize: 22, fontWeight: FontWeight.w500, color: context.colors.textPrimary),
                           decoration: InputDecoration(
                             hintText: 'タイトルを追加',
-                            hintStyle: TextStyle(color: context.colors.textHint, fontSize: 24),
-                            border: InputBorder.none,
-                            filled: true,
-                            fillColor: context.colors.cardBg,
+                            hintStyle: TextStyle(color: context.colors.textHint, fontSize: 22, fontWeight: FontWeight.w400),
+                            border: UnderlineInputBorder(borderSide: BorderSide(color: context.colors.borderLight)),
+                            enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: context.colors.borderLight)),
+                            focusedBorder: const UnderlineInputBorder(borderSide: BorderSide(color: AppColors.primary, width: 2)),
+                            contentPadding: const EdgeInsets.symmetric(vertical: 8),
                           ),
                           validator: (v) => v == null || v.isEmpty ? '入力してください' : null,
                         ),
                       ),
                       if (!_isEditing)
                         Padding(
-                          padding: const EdgeInsets.fromLTRB(56, 0, 16, 16),
+                          padding: const EdgeInsets.fromLTRB(20, 4, 20, 12),
                           child: Row(
                             children: [
                               _buildModeChip('予定', !_isTaskMode, () => setState(() => _isTaskMode = false)),
@@ -851,7 +847,6 @@ Future<void> _deleteRecurrenceGroup(String recurrenceGroupId) async {
                             ],
                           ),
                         ),
-                      const Divider(height: 1),
                       if (_isTaskMode) _buildTaskContent() else _buildEventContent(),
                     ],
                   ),
@@ -931,150 +926,171 @@ Future<void> _deleteRecurrenceGroup(String recurrenceGroupId) async {
 
   Widget _buildEventContent() {
     final bool allowFreeLocation = _selectedCategory == 'イベント' || _selectedCategory == 'マイカレンダー';
-    
+    final bool sameDay = _startDate.year == _endDate.year &&
+        _startDate.month == _endDate.month &&
+        _startDate.day == _endDate.day;
+
     return Column(
       children: [
+        // ─── 日時 ───
         _buildListTile(
-          icon: Icons.access_time,
+          icon: Icons.schedule,
           child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text('終日', style: TextStyle(fontSize: 16, color: context.colors.textPrimary)),
-                  Switch(
-                    value: _isAllDay,
-                    onChanged: (v) => setState(() => _isAllDay = v),
-                    activeColor: AppColors.primary,
-                  ),
-                ],
-              ),
-             Padding(
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    InkWell(
-                      onTap: () => _pickDate(isStart: true),
-                      child: Text(
-                        DateFormat('M月d日 (E)', 'ja').format(_startDate),
-                        style: TextStyle(fontSize: 16, color: context.colors.textPrimary),
-                      ),
-                    ),
-                    if (!_isAllDay)
-                      InkWell(
-                        onTap: () => _pickTime(isStart: true),
-                        child: Text(
-                          DateFormat('H:mm').format(_startDate),
-                          style: TextStyle(fontSize: 16, color: context.colors.textPrimary),
-                        ),
-                      ),
-                  ],
-                ),
-              ),
+              // 日付行（開始・終了＋終日トグル）
               Padding(
-                padding: const EdgeInsets.symmetric(vertical: 12),
+                padding: const EdgeInsets.symmetric(vertical: 10),
                 child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    InkWell(
-                      onTap: () => _pickDate(isStart: false),
-                      child: Text(
-                        DateFormat('M月d日 (E)', 'ja').format(_endDate),
-                        style: TextStyle(fontSize: 16, color: context.colors.textPrimary),
-                      ),
-                    ),
-                    if (!_isAllDay)
-                      InkWell(
-                        onTap: () => _pickTime(isStart: false),
-                        child: Text(
-                          DateFormat('H:mm').format(_endDate),
-                          style: TextStyle(fontSize: 16, color: context.colors.textPrimary),
+                    Expanded(
+                      child: InkWell(
+                        onTap: () => _pickDate(isStart: true),
+                        borderRadius: BorderRadius.circular(6),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+                          child: Text(
+                            DateFormat('M月d日 (E)', 'ja').format(_startDate),
+                            style: TextStyle(fontSize: 15, color: context.colors.textPrimary, fontWeight: FontWeight.w500),
+                          ),
                         ),
                       ),
+                    ),
+                    Text('終日', style: TextStyle(fontSize: 13, color: context.colors.textSecondary)),
+                    const SizedBox(width: 4),
+                    Transform.scale(
+                      scale: 0.85,
+                      child: Switch(
+                        value: _isAllDay,
+                        onChanged: (v) => setState(() => _isAllDay = v),
+                        activeColor: AppColors.primary,
+                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                    ),
                   ],
                 ),
               ),
-              InkWell(
-                onTap: () => setState(() => _showDetailOptions = !_showDetailOptions),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 12),
+              // 時刻行（同日なら開始→終了を一列に、別日なら終了日別行）
+              if (!_isAllDay)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
                   child: Row(
                     children: [
-                      Text(
-                        '詳細オプション',
-                        style: TextStyle(fontSize: 14, color: context.colors.textSecondary),
+                      _buildTimePill(DateFormat('H:mm').format(_startDate), () => _pickTime(isStart: true)),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 10),
+                        child: Icon(Icons.arrow_forward, size: 16, color: context.colors.iconMuted),
                       ),
-                      Icon(
-                        _showDetailOptions ? Icons.expand_less : Icons.expand_more,
-                        color: context.colors.textSecondary,
+                      if (!sameDay) ...[
+                        InkWell(
+                          onTap: () => _pickDate(isStart: false),
+                          borderRadius: BorderRadius.circular(6),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+                            child: Text(
+                              DateFormat('M/d(E)', 'ja').format(_endDate),
+                              style: TextStyle(fontSize: 14, color: context.colors.textPrimary),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                      ],
+                      _buildTimePill(DateFormat('H:mm').format(_endDate), () => _pickTime(isStart: false)),
+                      if (sameDay) ...[
+                        const Spacer(),
+                        TextButton.icon(
+                          onPressed: () => _pickDate(isStart: false),
+                          icon: Icon(Icons.add, size: 14, color: context.colors.textSecondary),
+                          label: Text('別日', style: TextStyle(fontSize: 11, color: context.colors.textSecondary)),
+                          style: TextButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 6), minimumSize: Size.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              // 繰り返し
+              InkWell(
+                onTap: _showRecurrenceDialog,
+                borderRadius: BorderRadius.circular(6),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  child: Row(
+                    children: [
+                      Icon(Icons.repeat, size: 18, color: _recurrenceType == 'なし' ? context.colors.iconMuted : AppColors.primary),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          _recurrenceType == 'なし' ? '繰り返しなし' : _recurrenceType,
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: _recurrenceType == 'なし' ? context.colors.textSecondary : context.colors.textPrimary,
+                            fontWeight: _recurrenceType == 'なし' ? FontWeight.normal : FontWeight.w500,
+                          ),
+                        ),
                       ),
+                      if (_recurrenceType == '第1・2・3週(月次)')
+                        Text(
+                          '(${_getWeekDayName(_startDate.weekday)})',
+                          style: TextStyle(fontSize: 12, color: context.colors.textSecondary),
+                        ),
                     ],
                   ),
                 ),
               ),
-              if (_showDetailOptions)
-                InkWell(
-                  onTap: _showRecurrenceDialog,
-                  child: Padding(
-                    padding: const EdgeInsets.only(left: 16, top: 8, bottom: 16),
-                    child: Row(
-                      children: [
-                        Icon(Icons.repeat, size: 20, color: context.colors.iconMuted),
-                        SizedBox(width: 16),
-                        Expanded(
-                          child: Text(
-                            _recurrenceType == 'なし' ? '繰り返しなし' : _recurrenceType,
-                            style: TextStyle(fontSize: 14, color: context.colors.textPrimary),
-                          ),
-                        ),
-                        if (_recurrenceType == '第1・2・3週(月次)')
-                          Text(
-                            '(${_getWeekDayName(_startDate.weekday)}曜日)',
-                            style: TextStyle(fontSize: 12, color: context.colors.textSecondary),
-                          ),
-                      ],
-                    ),
-                  ),
-                ),
             ],
           ),
         ),
-        const Divider(height: 1),
-        
+
+        _sectionSpacer(),
+
+        // ─── カテゴリ ───
         _buildListTile(
-          icon: Icons.category,
+          icon: Icons.label_outline,
           child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 8),
+            padding: const EdgeInsets.symmetric(vertical: 10),
             child: Wrap(
               spacing: 8,
+              runSpacing: 6,
               children: _categories.map((cat) {
                 final isSelected = _selectedCategory == cat['label'];
+                final catColor = Color(cat['color']);
                 return GestureDetector(
                   onTap: () => setState(() {
                     _selectedCategory = cat['label'];
                     if (cat['label'] == 'レッスン') {
                       _isManualLocation = false;
                     } else {
-                      // マイカレンダーとイベントは自由入力をデフォルトに
                       _isManualLocation = true;
                     }
                   }),
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
                     decoration: BoxDecoration(
-                      color: isSelected ? Color(cat['color']) : Colors.transparent,
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(
-                        color: isSelected ? Color(cat['color']) : context.colors.iconMuted,
-                      ),
+                      color: isSelected ? catColor : Colors.transparent,
+                      borderRadius: BorderRadius.circular(18),
+                      border: Border.all(color: isSelected ? catColor : context.colors.borderMedium),
                     ),
-                    child: Text(
-                      cat['label'],
-                      style: TextStyle(
-                        color: isSelected ? Colors.white : context.colors.textSecondary,
-                        fontSize: 13,
-                      ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 8,
+                          height: 8,
+                          decoration: BoxDecoration(
+                            color: isSelected ? Colors.white : catColor,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          cat['label'],
+                          style: TextStyle(
+                            color: isSelected ? Colors.white : context.colors.textPrimary,
+                            fontSize: 13,
+                            fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 );
@@ -1082,197 +1098,129 @@ Future<void> _deleteRecurrenceGroup(String recurrenceGroupId) async {
             ),
           ),
         ),
-        const Divider(height: 1),
-        
-        if (allowFreeLocation)
-          _buildListTile(
-            icon: Icons.location_on_outlined,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.only(top: 8, bottom: 8),
-                  child: Row(
-                    children: [
-                      _buildLocationTab('自由入力', _isManualLocation, () => setState(() => _isManualLocation = true)),
-                      const SizedBox(width: 8),
-                      _buildLocationTab('教室から選択', !_isManualLocation, () => setState(() => _isManualLocation = false)),
-                    ],
-                  ),
-                ),
-                if (_isManualLocation)
-                  TextFormField(
-                    controller: _locationController,
-                    decoration: InputDecoration(
-                      hintText: '場所を入力',
-                      hintStyle: TextStyle(color: context.colors.textHint),
-                      border: InputBorder.none,
-                      filled: true,
-                      fillColor: context.colors.cardBg,
-                    ),
-                  )
-                else
-                  InkWell(
-                    onTap: _showClassroomDialog,
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            _selectedClassroom ?? '教室を選択',
-                            style: TextStyle(
-                              fontSize: 16,
-                              color: _selectedClassroom == null ? context.colors.textHint : context.colors.textPrimary,
-                            ),
-                          ),
-                          Icon(Icons.chevron_right, color: context.colors.iconMuted),
-                        ],
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-          )
-        else
-          _buildListTile(
-            icon: Icons.location_on_outlined,
-            child: InkWell(
-              onTap: _showClassroomDialog,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      _selectedClassroom ?? '教室を選択',
-                      style: TextStyle(
-                        fontSize: 16,
-                        color: _selectedClassroom == null ? context.colors.textHint : context.colors.textPrimary,
-                      ),
-                    ),
-                    Icon(Icons.chevron_right, color: context.colors.iconMuted),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        const Divider(height: 1),
-        
+
+        _sectionSpacer(),
+
+        // ─── 場所 ───
         _buildListTile(
-          icon: Icons.person_outline,
+          icon: Icons.location_on_outlined,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              InkWell(
-                onTap: _showStaffSelectSheet,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        '担当者を追加',
-                        style: TextStyle(
-                          fontSize: 16,
-                          color: context.colors.textHint,
-                        ),
-                      ),
-                      Icon(Icons.chevron_right, color: context.colors.iconMuted),
-                    ],
+              if (allowFreeLocation)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8, bottom: 4),
+                  child: _buildSegmented(
+                    options: const ['自由入力', '教室から選択'],
+                    selectedIndex: _isManualLocation ? 0 : 1,
+                    onChanged: (i) => setState(() => _isManualLocation = i == 0),
                   ),
                 ),
-              ),
-              if (_selectedStaffIds.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: _selectedStaffIds.map((id) => GestureDetector(
-                      onTap: () => _showStaffActionSheet(id),
-                      child: Chip(
-                        label: Text(_staffNamesMap[id] ?? '不明', style: TextStyle(fontSize: 12)),
-                        backgroundColor: context.colors.chipBg,
-                        side: BorderSide.none,
-                      ),
-                    )).toList(),
+              if (allowFreeLocation && _isManualLocation)
+                TextFormField(
+                  controller: _locationController,
+                  decoration: InputDecoration(
+                    hintText: '場所を入力',
+                    hintStyle: TextStyle(color: context.colors.textHint, fontSize: 14),
+                    border: InputBorder.none,
+                    isDense: true,
+                    contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                  style: TextStyle(fontSize: 15, color: context.colors.textPrimary),
+                )
+              else
+                InkWell(
+                  onTap: _showClassroomDialog,
+                  borderRadius: BorderRadius.circular(6),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            _selectedClassroom ?? '教室を選択',
+                            style: TextStyle(
+                              fontSize: 15,
+                              color: _selectedClassroom == null ? context.colors.textHint : context.colors.textPrimary,
+                              fontWeight: _selectedClassroom == null ? FontWeight.normal : FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                        Icon(Icons.expand_more, color: context.colors.iconMuted, size: 20),
+                      ],
+                    ),
                   ),
                 ),
             ],
           ),
         ),
-        const Divider(height: 1),
-        
+
+        _sectionSpacer(),
+
+        // ─── 担当者 ───
+        _buildListTile(
+          icon: Icons.person_outline,
+          child: _buildPeoplePicker(
+            hintText: '担当者を追加',
+            onTapAdd: _showStaffSelectSheet,
+            chips: _selectedStaffIds.map((id) => GestureDetector(
+              onTap: () => _showStaffActionSheet(id),
+              child: Chip(
+                label: Text(_staffNamesMap[id] ?? '不明', style: const TextStyle(fontSize: 12)),
+                backgroundColor: context.colors.chipBg,
+                side: BorderSide.none,
+                visualDensity: VisualDensity.compact,
+              ),
+            )).toList(),
+          ),
+        ),
+
+        // ─── 生徒（マイカレンダー以外）───
         if (_selectedCategory != 'マイカレンダー') ...[
+          _sectionSpacer(),
           _buildListTile(
             icon: Icons.face_outlined,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                InkWell(
-                  onTap: (_selectedClassroom == null && !_isManualLocation) ? null : _showStudentSelectSheet,
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          (_selectedClassroom == null && !_isManualLocation) ? '先に教室を選択' : '生徒を追加',
-                          style: TextStyle(
-                            fontSize: 16,
-                            color: (_selectedClassroom == null && !_isManualLocation)
-                                ? context.colors.borderMedium
-                                : context.colors.textHint,
-                          ),
-                        ),
-                        Icon(Icons.chevron_right, color: context.colors.iconMuted),
-                      ],
-                    ),
-                  ),
-                ),
-                if (_selectedStudentIds.isNotEmpty || _trialStudentNames.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 12),
-                    child: Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: [
-                        ..._selectedStudentIds.map((id) {
-                          final mapped = _studentNamesMap[id];
-                          final name = (mapped == null || mapped.isEmpty) ? '不明' : mapped;
-                          final isAbsent = _absentStudentIds.contains(id);
-                          return GestureDetector(
-                            onTap: () => _showStudentActionSheet(id),
-                            child: Chip(
-                              label: Text(
-                                name,
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  decoration: isAbsent ? TextDecoration.lineThrough : null,
-                                ),
-                              ),
-                              backgroundColor: isAbsent ? context.colors.borderLight : context.colors.chipBg,
-                              side: BorderSide.none,
+                _buildPeoplePicker(
+                  hintText: (_selectedClassroom == null && !_isManualLocation) ? '先に教室を選択' : '生徒を追加',
+                  onTapAdd: (_selectedClassroom == null && !_isManualLocation) ? null : _showStudentSelectSheet,
+                  disabled: _selectedClassroom == null && !_isManualLocation,
+                  chips: [
+                    ..._selectedStudentIds.map((id) {
+                      final mapped = _studentNamesMap[id];
+                      final name = (mapped == null || mapped.isEmpty) ? '不明' : mapped;
+                      final isAbsent = _absentStudentIds.contains(id);
+                      return GestureDetector(
+                        onTap: () => _showStudentActionSheet(id),
+                        child: Chip(
+                          label: Text(
+                            name,
+                            style: TextStyle(
+                              fontSize: 12,
+                              decoration: isAbsent ? TextDecoration.lineThrough : null,
                             ),
-                          );
-                        }),
-                        ..._trialStudentNames.map((trialName) => Chip(
-                              label: Text(
-                                '$trialName（体）',
-                                style: const TextStyle(fontSize: 12),
-                              ),
-                              backgroundColor: AppColors.accent.withOpacity(0.15),
-                              side: BorderSide.none,
-                              deleteIcon: const Icon(Icons.close, size: 14),
-                              onDeleted: () => setState(() => _trialStudentNames.remove(trialName)),
-                            )),
-                      ],
-                    ),
-                  ),
-                // 体験レッスン入力欄
+                          ),
+                          backgroundColor: isAbsent ? context.colors.borderLight : context.colors.chipBg,
+                          side: BorderSide.none,
+                          visualDensity: VisualDensity.compact,
+                        ),
+                      );
+                    }),
+                    ..._trialStudentNames.map((trialName) => Chip(
+                          label: Text('$trialName（体）', style: const TextStyle(fontSize: 12)),
+                          backgroundColor: AppColors.accent.withOpacity(0.15),
+                          side: BorderSide.none,
+                          visualDensity: VisualDensity.compact,
+                          deleteIcon: const Icon(Icons.close, size: 14),
+                          onDeleted: () => setState(() => _trialStudentNames.remove(trialName)),
+                        )),
+                  ],
+                ),
+                // 体験レッスン入力
                 Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
+                  padding: const EdgeInsets.only(top: 8, bottom: 8),
                   child: Row(
                     children: [
                       Expanded(
@@ -1280,7 +1228,7 @@ Future<void> _deleteRecurrenceGroup(String recurrenceGroupId) async {
                           controller: _trialInputController,
                           decoration: InputDecoration(
                             hintText: '体験の生徒名を入力',
-                            hintStyle: TextStyle(color: context.colors.textHint, fontSize: 14),
+                            hintStyle: TextStyle(color: context.colors.textHint, fontSize: 13),
                             isDense: true,
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(8),
@@ -1292,15 +1240,16 @@ Future<void> _deleteRecurrenceGroup(String recurrenceGroupId) async {
                             ),
                             contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                           ),
-                          style: const TextStyle(fontSize: 14),
+                          style: const TextStyle(fontSize: 13),
                           onSubmitted: (_) => _addTrialStudent(),
                         ),
                       ),
-                      const SizedBox(width: 8),
+                      const SizedBox(width: 6),
                       TextButton.icon(
                         onPressed: _addTrialStudent,
-                        icon: const Icon(Icons.add, size: 16),
+                        icon: const Icon(Icons.add, size: 14),
                         label: const Text('体験を追加', style: TextStyle(fontSize: 12)),
+                        style: TextButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 8)),
                       ),
                     ],
                   ),
@@ -1308,24 +1257,134 @@ Future<void> _deleteRecurrenceGroup(String recurrenceGroupId) async {
               ],
             ),
           ),
-          const Divider(height: 1),
         ],
-        
+
+        _sectionSpacer(),
+
+        // ─── メモ ───
         _buildListTile(
           icon: Icons.notes,
           child: TextFormField(
             controller: _notesController,
             maxLines: 3,
+            minLines: 1,
             decoration: InputDecoration(
               hintText: 'メモを追加',
-              hintStyle: TextStyle(color: context.colors.textHint),
+              hintStyle: TextStyle(color: context.colors.textHint, fontSize: 14),
               border: InputBorder.none,
-              filled: true,
-              fillColor: context.colors.cardBg,
+              isDense: true,
+              contentPadding: const EdgeInsets.symmetric(vertical: 12),
             ),
+            style: TextStyle(fontSize: 14, color: context.colors.textPrimary),
           ),
         ),
         const SizedBox(height: 40),
+      ],
+    );
+  }
+
+  Widget _sectionSpacer() => const SizedBox(height: 4);
+
+  Widget _buildTimePill(String label, VoidCallback onTap) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: BoxDecoration(
+          color: context.colors.chipBg,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(fontSize: 15, color: context.colors.textPrimary, fontWeight: FontWeight.w500),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSegmented({required List<String> options, required int selectedIndex, required ValueChanged<int> onChanged}) {
+    return Container(
+      padding: const EdgeInsets.all(3),
+      decoration: BoxDecoration(
+        color: context.colors.chipBg,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: List.generate(options.length, (i) {
+          final selected = i == selectedIndex;
+          return GestureDetector(
+            onTap: () => onChanged(i),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 150),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+              decoration: BoxDecoration(
+                color: selected ? context.colors.cardBg : Colors.transparent,
+                borderRadius: BorderRadius.circular(6),
+                boxShadow: selected
+                    ? [BoxShadow(color: Colors.black.withOpacity(0.08), blurRadius: 4, offset: const Offset(0, 1))]
+                    : null,
+              ),
+              child: Text(
+                options[i],
+                style: TextStyle(
+                  fontSize: 12,
+                  color: selected ? context.colors.textPrimary : context.colors.textSecondary,
+                  fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
+                ),
+              ),
+            ),
+          );
+        }),
+      ),
+    );
+  }
+
+  Widget _buildPeoplePicker({required String hintText, required VoidCallback? onTapAdd, required List<Widget> chips, bool disabled = false}) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: EdgeInsets.only(top: 10, bottom: chips.isEmpty ? 10 : 8),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  hintText,
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: disabled ? context.colors.borderMedium : context.colors.textSecondary,
+                  ),
+                ),
+              ),
+              InkWell(
+                onTap: onTapAdd,
+                borderRadius: BorderRadius.circular(20),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: disabled ? context.colors.borderMedium : AppColors.primary),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.add, size: 14, color: disabled ? context.colors.borderMedium : AppColors.primary),
+                      const SizedBox(width: 2),
+                      Text('追加', style: TextStyle(fontSize: 12, color: disabled ? context.colors.borderMedium : AppColors.primary)),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        if (chips.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: Wrap(spacing: 6, runSpacing: 6, children: chips),
+          ),
       ],
     );
   }
@@ -1358,15 +1417,18 @@ Future<void> _deleteRecurrenceGroup(String recurrenceGroupId) async {
 
   Widget _buildListTile({required IconData icon, required Widget child}) {
     return Padding(
-      padding: const EdgeInsets.only(left: 16, right: 16),
+      padding: const EdgeInsets.symmetric(horizontal: 20),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Padding(
-            padding: const EdgeInsets.only(top: 16),
-            child: Icon(icon, color: context.colors.textSecondary, size: 24),
+            padding: const EdgeInsets.only(top: 14),
+            child: SizedBox(
+              width: 24,
+              child: Icon(icon, color: context.colors.iconMuted, size: 20),
+            ),
           ),
-          const SizedBox(width: 16),
+          const SizedBox(width: 12),
           Expanded(child: child),
         ],
       ),
@@ -1898,10 +1960,15 @@ class _PersonSelectSheetState extends State<_PersonSelectSheet> {
         final snapshot = await FirebaseFirestore.instance.collection('staffs').get();
         for (var doc in snapshot.docs) {
           final data = doc.data();
-          
+          final classrooms = List<String>.from(data['classrooms'] ?? []);
+
+          // ビースマイリープラス専任は担当者選択から除外
+          final isOnlyPlus = classrooms.isNotEmpty &&
+              classrooms.every((c) => c.contains('プラス'));
+          if (isOnlyPlus) continue;
+
           // 教室フィルター（filterKeyが指定されている場合）
           if (widget.filterKey != null) {
-            final classrooms = List<String>.from(data['classrooms'] ?? []);
             if (!classrooms.contains(widget.filterKey)) continue;
           }
           
@@ -1936,8 +2003,14 @@ class _PersonSelectSheetState extends State<_PersonSelectSheet> {
 
   List<dynamic> _buildGroupedList() {
     final List<dynamic> result = [];
+    // スタッフ選択では50音インデックスを表示しない
+    if (widget.type == 'staff') {
+      for (var person in _filteredPeople) {
+        result.add({'type': 'person', 'data': person});
+      }
+      return result;
+    }
     String? currentGroup;
-    
     for (var person in _filteredPeople) {
       final group = person['group'] as String;
       if (group != currentGroup) {
@@ -1993,27 +2066,29 @@ class _PersonSelectSheetState extends State<_PersonSelectSheet> {
                   )
                 else
                   Text(widget.title, style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: _searchCtrl,
-                  decoration: InputDecoration(
-                    hintText: '名前で検索...',
-                    prefixIcon: const Icon(Icons.search),
-                    filled: true,
-                    fillColor: context.colors.chipBg,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                      borderSide: BorderSide.none,
+                if (widget.type != 'staff') ...[
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: _searchCtrl,
+                    decoration: InputDecoration(
+                      hintText: '名前で検索...',
+                      prefixIcon: const Icon(Icons.search),
+                      filled: true,
+                      fillColor: context.colors.chipBg,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: BorderSide.none,
+                      ),
                     ),
+                    onChanged: (q) => setState(() {
+                      _filteredPeople = q.isEmpty
+                        ? _people
+                        : _people.where((p) =>
+                            p['name'].contains(q) || p['kana'].contains(q)
+                          ).toList();
+                    }),
                   ),
-                  onChanged: (q) => setState(() {
-                    _filteredPeople = q.isEmpty 
-                      ? _people 
-                      : _people.where((p) => 
-                          p['name'].contains(q) || p['kana'].contains(q)
-                        ).toList();
-                  }),
-                ),
+                ],
               ],
             ),
           ),
