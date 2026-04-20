@@ -245,7 +245,6 @@ class MeetingMinutesEditScreen extends StatefulWidget {
 class _MeetingMinutesEditScreenState extends State<MeetingMinutesEditScreen> {
   DateTime _meetingDate = DateTime.now();
   String _category = MeetingCategory.all.first.id;
-  _Staff? _conductor;
   final List<_Staff> _participants = [];
   final _contentCtrl = TextEditingController();
   final _noteCtrl = TextEditingController();
@@ -294,15 +293,6 @@ class _MeetingMinutesEditScreenState extends State<MeetingMinutesEditScreen> {
           _participants
             ..clear()
             ..addAll(list.where((s) => ids.contains(s.id)));
-          final condId = d['conductorId'] as String?;
-          final condName = d['conductor'] as String?;
-          if (condId != null && condId.isNotEmpty) {
-            final hit = list.where((s) => s.id == condId).toList();
-            if (hit.isNotEmpty) _conductor = hit.first;
-          } else if (condName != null && condName.isNotEmpty) {
-            final hit = list.where((s) => s.name == condName).toList();
-            if (hit.isNotEmpty) _conductor = hit.first;
-          }
         }
       });
     } catch (e) {
@@ -332,8 +322,6 @@ class _MeetingMinutesEditScreenState extends State<MeetingMinutesEditScreen> {
       'note': _noteCtrl.text.trim(),
       'participantIds': _participants.map((s) => s.id).toList(),
       'participantNames': _participants.map((s) => s.name).toList(),
-      'conductorId': _conductor?.id,
-      'conductor': _conductor?.name ?? '',
       'content': _contentCtrl.text.trim(),
       'materials': _materials.map((m) => m.toStorage()).toList(),
       'updatedAt': now,
@@ -397,23 +385,6 @@ class _MeetingMinutesEditScreenState extends State<MeetingMinutesEditScreen> {
         _participants
           ..clear()
           ..addAll(result);
-      });
-    }
-  }
-
-  Future<void> _pickConductor() async {
-    final picked = await showDialog<_Staff?>(
-      context: context,
-      builder: (c) => _StaffSinglePickerDialog(all: _allStaffs, selected: _conductor),
-    );
-    if (picked == _ClearStaffSentinel.instance) {
-      setState(() => _conductor = null);
-    } else if (picked != null) {
-      setState(() {
-        _conductor = picked;
-        if (!_participants.any((s) => s.id == picked.id)) {
-          _participants.add(picked);
-        }
       });
     }
   }
@@ -558,38 +529,6 @@ class _MeetingMinutesEditScreenState extends State<MeetingMinutesEditScreen> {
                     const SizedBox(width: 10),
                     Text(DateFormat('yyyy/M/d (E)', 'ja').format(_meetingDate),
                         style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: context.colors.textPrimary)),
-                  ],
-                ),
-              ),
-            ),
-
-            const SizedBox(height: 20),
-            _section('実施者'),
-            InkWell(
-              onTap: _pickConductor,
-              borderRadius: BorderRadius.circular(10),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                decoration: BoxDecoration(
-                  color: context.colors.cardBg,
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: context.colors.borderMedium),
-                ),
-                child: Row(
-                  children: [
-                    Icon(Icons.person_outline, size: 18, color: AppColors.primary),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        _conductor?.name ?? '実施者を選択',
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                          color: _conductor == null ? context.colors.textSecondary : context.colors.textPrimary,
-                        ),
-                      ),
-                    ),
-                    Icon(Icons.expand_more, size: 18, color: context.colors.textSecondary),
                   ],
                 ),
               ),
@@ -936,92 +875,6 @@ class _StaffMultiPickerDialogState extends State<_StaffMultiPickerDialog> {
       ),
     );
   }
-}
-
-// ============================================================
-// 実施者選択（単一）
-// ============================================================
-class _StaffSinglePickerDialog extends StatefulWidget {
-  final List<_Staff> all;
-  final _Staff? selected;
-  const _StaffSinglePickerDialog({required this.all, required this.selected});
-  @override
-  State<_StaffSinglePickerDialog> createState() => _StaffSinglePickerDialogState();
-}
-
-class _StaffSinglePickerDialogState extends State<_StaffSinglePickerDialog> {
-  String _q = '';
-  @override
-  Widget build(BuildContext context) {
-    final list = _q.isEmpty
-        ? widget.all
-        : widget.all
-            .where((s) => s.name.toLowerCase().contains(_q.toLowerCase()) || s.kana.contains(_q))
-            .toList();
-    return Dialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 380, maxHeight: 520),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-              child: Text('実施者を選択',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: context.colors.textPrimary)),
-            ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: TextField(
-                decoration: InputDecoration(
-                  hintText: '名前で検索',
-                  prefixIcon: const Icon(Icons.search, size: 18),
-                  isDense: true,
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                ),
-                onChanged: (v) => setState(() => _q = v),
-              ),
-            ),
-            const SizedBox(height: 8),
-            Expanded(
-              child: ListView.builder(
-                itemCount: list.length,
-                itemBuilder: (c, i) {
-                  final s = list[i];
-                  final sel = s.id == widget.selected?.id;
-                  return ListTile(
-                    title: Text(s.name, style: const TextStyle(fontSize: 14)),
-                    trailing: sel ? const Icon(Icons.check, color: AppColors.primary) : null,
-                    onTap: () => Navigator.pop(context, s),
-                  );
-                },
-              ),
-            ),
-            const Divider(height: 1),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-              child: Row(
-                children: [
-                  if (widget.selected != null)
-                    TextButton(
-                      onPressed: () => Navigator.pop(context, _ClearStaffSentinel.instance),
-                      child: Text('クリア', style: TextStyle(color: context.colors.textSecondary)),
-                    ),
-                  const Spacer(),
-                  TextButton(onPressed: () => Navigator.pop(context), child: const Text('キャンセル')),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _ClearStaffSentinel extends _Staff {
-  const _ClearStaffSentinel._() : super(id: '__clear__', name: '', kana: '');
-  static const instance = _ClearStaffSentinel._();
 }
 
 // ============================================================
