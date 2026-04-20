@@ -428,6 +428,7 @@ class _AddEventDialogState extends State<AddEventDialog> {
       } else {
         await _saveEvent();
       }
+      _justSaved = true; // PopScope による破棄確認をバイパス
       if (mounted) Navigator.pop(context, true);
     } catch (e) {
       if (mounted) {
@@ -437,6 +438,8 @@ class _AddEventDialogState extends State<AddEventDialog> {
       if (mounted) setState(() => _isLoading = false);
     }
   }
+
+  bool _justSaved = false;
 
   Future<void> _saveTask() async {
     final user = FirebaseAuth.instance.currentUser;
@@ -816,6 +819,11 @@ Future<void> _deleteRecurrenceGroup(String recurrenceGroupId) async {
       canPop: false,
       onPopInvokedWithResult: (didPop, result) async {
         if (didPop) return;
+        // 保存成功直後 or 未入力ならそのまま閉じる
+        if (_justSaved || !_hasUnsavedInput()) {
+          if (mounted) Navigator.of(context).pop();
+          return;
+        }
         final ok = await _confirmDiscard();
         if (ok && mounted) Navigator.of(context).pop();
       },
