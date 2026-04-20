@@ -126,10 +126,16 @@ class _MeetingMinutesScreenState extends State<MeetingMinutesScreen> {
             ),
           );
         }
-        return ListView.builder(
-          padding: const EdgeInsets.fromLTRB(12, 10, 12, 88),
-          itemCount: docs.length,
-          itemBuilder: (c, i) => _MeetingListTile(doc: docs[i]),
+        return Align(
+          alignment: Alignment.topCenter,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 640),
+            child: ListView.builder(
+              padding: const EdgeInsets.fromLTRB(12, 10, 12, 88),
+              itemCount: docs.length,
+              itemBuilder: (c, i) => _MeetingListTile(doc: docs[i]),
+            ),
+          ),
         );
       },
     );
@@ -145,14 +151,15 @@ class _MeetingListTile extends StatelessWidget {
     final d = doc.data();
     final date = (d['meetingDate'] as Timestamp?)?.toDate();
     final category = d['category'] as String? ?? 'other';
+    final categoryOther = (d['categoryOther'] as String? ?? '').trim();
     final note = (d['note'] as String? ?? '').trim();
     final participantNames = List<String>.from(d['participantNames'] ?? []);
-    final conductor = d['conductor'] as String? ?? '';
-    final location = d['location'] as String? ?? '';
     final content = d['content'] as String? ?? '';
     final materials = List<String>.from(d['materials'] ?? []);
 
-    final categoryLabel = MeetingCategory.labelOf(category);
+    final categoryLabel = category == 'other' && categoryOther.isNotEmpty
+        ? categoryOther
+        : MeetingCategory.labelOf(category);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
@@ -205,14 +212,10 @@ class _MeetingListTile extends StatelessWidget {
                 Text(note,
                     style: TextStyle(fontSize: 13, color: context.colors.textPrimary, fontWeight: FontWeight.w600)),
               ],
-              if (conductor.isNotEmpty || location.isNotEmpty || participantNames.isNotEmpty) ...[
+              if (participantNames.isNotEmpty) ...[
                 const SizedBox(height: 4),
                 Text(
-                  [
-                    if (conductor.isNotEmpty) '実施者: $conductor',
-                    if (location.isNotEmpty) '場所: $location',
-                    if (participantNames.isNotEmpty) '参加: ${participantNames.join('、')}',
-                  ].join('　'),
+                  '参加: ${participantNames.join('、')}',
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(fontSize: 11, color: context.colors.textTertiary),
@@ -248,10 +251,9 @@ class _MeetingMinutesEditScreenState extends State<MeetingMinutesEditScreen> {
   DateTime _meetingDate = DateTime.now();
   String _category = MeetingCategory.all.first.id;
   final List<_Staff> _participants = [];
-  final _conductorCtrl = TextEditingController();
-  final _locationCtrl = TextEditingController();
   final _contentCtrl = TextEditingController();
   final _noteCtrl = TextEditingController();
+  final _categoryOtherCtrl = TextEditingController();
   final List<_Material> _materials = [];
   bool _saving = false;
 
@@ -267,8 +269,7 @@ class _MeetingMinutesEditScreenState extends State<MeetingMinutesEditScreen> {
       final d = widget.doc!.data();
       _meetingDate = (d['meetingDate'] as Timestamp?)?.toDate() ?? DateTime.now();
       _category = (d['category'] as String?) ?? MeetingCategory.all.first.id;
-      _conductorCtrl.text = d['conductor'] ?? '';
-      _locationCtrl.text = d['location'] ?? '';
+      _categoryOtherCtrl.text = d['categoryOther'] ?? '';
       _contentCtrl.text = d['content'] ?? '';
       _noteCtrl.text = d['note'] ?? '';
       final rawMats = List<String>.from(d['materials'] ?? []);
@@ -305,7 +306,7 @@ class _MeetingMinutesEditScreenState extends State<MeetingMinutesEditScreen> {
 
   @override
   void dispose() {
-    for (final c in [_conductorCtrl, _locationCtrl, _contentCtrl, _noteCtrl]) {
+    for (final c in [_contentCtrl, _noteCtrl, _categoryOtherCtrl]) {
       c.dispose();
     }
     super.dispose();
@@ -321,11 +322,10 @@ class _MeetingMinutesEditScreenState extends State<MeetingMinutesEditScreen> {
     final data = <String, dynamic>{
       'meetingDate': Timestamp.fromDate(_meetingDate),
       'category': _category,
+      'categoryOther': _category == 'other' ? _categoryOtherCtrl.text.trim() : '',
       'note': _noteCtrl.text.trim(),
       'participantIds': _participants.map((s) => s.id).toList(),
       'participantNames': _participants.map((s) => s.name).toList(),
-      'conductor': _conductorCtrl.text.trim(),
-      'location': _locationCtrl.text.trim(),
       'content': _contentCtrl.text.trim(),
       'materials': _materials.map((m) => m.toStorage()).toList(),
       'updatedAt': now,
@@ -433,17 +433,49 @@ class _MeetingMinutesEditScreenState extends State<MeetingMinutesEditScreen> {
             IconButton(icon: Icon(Icons.delete_outline, color: Colors.red.shade400), onPressed: _delete),
         ],
       ),
-      body: SingleChildScrollView(
+      body: Align(
+        alignment: Alignment.topCenter,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 640),
+          child: SingleChildScrollView(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 100),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             _section('種類'),
-            _chipGroup(
-              options: MeetingCategory.all.map((c) => (id: c.id, label: c.label)).toList(),
-              selected: {_category},
-              onToggle: (id) => setState(() => _category = id),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              decoration: BoxDecoration(
+                color: context.colors.cardBg,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: context.colors.borderMedium),
+              ),
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<String>(
+                  value: _category,
+                  isExpanded: true,
+                  icon: Icon(Icons.expand_more, color: context.colors.textSecondary),
+                  style: TextStyle(fontSize: 14, color: context.colors.textPrimary),
+                  items: MeetingCategory.all
+                      .map((c) => DropdownMenuItem<String>(
+                            value: c.id,
+                            child: Text(c.label),
+                          ))
+                      .toList(),
+                  onChanged: (v) {
+                    if (v != null) setState(() => _category = v);
+                  },
+                ),
+              ),
             ),
+            if (_category == 'other') ...[
+              const SizedBox(height: 8),
+              TextField(
+                controller: _categoryOtherCtrl,
+                onChanged: (_) => setState(() {}),
+                decoration: _decoration('種類を入力', hint: '例：○○勉強会'),
+              ),
+            ],
 
             const SizedBox(height: 20),
             _section('実施日'),
@@ -474,27 +506,6 @@ class _MeetingMinutesEditScreenState extends State<MeetingMinutesEditScreen> {
                   ],
                 ),
               ),
-            ),
-
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _conductorCtrl,
-                    onChanged: (_) => setState(() {}),
-                    decoration: _decoration('実施者'),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: TextField(
-                    controller: _locationCtrl,
-                    onChanged: (_) => setState(() {}),
-                    decoration: _decoration('開催場所'),
-                  ),
-                ),
-              ],
             ),
 
             const SizedBox(height: 20),
@@ -579,6 +590,8 @@ class _MeetingMinutesEditScreenState extends State<MeetingMinutesEditScreen> {
           ],
         ),
       ),
+        ),
+      ),
     );
   }
 
@@ -651,39 +664,6 @@ class _MeetingMinutesEditScreenState extends State<MeetingMinutesEditScreen> {
             style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: context.colors.textPrimary)),
       );
 
-  Widget _chipGroup({
-    required List<({String id, String label})> options,
-    required Set<String> selected,
-    required ValueChanged<String> onToggle,
-  }) {
-    return Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      children: options.map((opt) {
-        final isSel = selected.contains(opt.id);
-        return GestureDetector(
-          onTap: () => onToggle(opt.id),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            decoration: BoxDecoration(
-              color: isSel ? AppColors.primary.withValues(alpha: 0.15) : context.colors.cardBg,
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(
-                color: isSel ? AppColors.primary : context.colors.borderMedium,
-                width: isSel ? 1.5 : 0.8,
-              ),
-            ),
-            child: Text(opt.label,
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: isSel ? FontWeight.bold : FontWeight.normal,
-                  color: isSel ? AppColors.primary : context.colors.textPrimary,
-                )),
-          ),
-        );
-      }).toList(),
-    );
-  }
 }
 
 // ============================================================
