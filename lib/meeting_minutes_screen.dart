@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_storage/firebase_storage.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'app_theme.dart';
@@ -51,48 +53,41 @@ class _MeetingMinutesScreenState extends State<MeetingMinutesScreen> {
         children: [
           Container(
             color: context.colors.cardBg,
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                children: [
-                  _filterChip(null, '全て'),
-                  const SizedBox(width: 6),
-                  ...MeetingCategory.all.map((c) => Padding(
-                        padding: const EdgeInsets.only(right: 6),
-                        child: _filterChip(c.id, c.label),
-                      )),
-                ],
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
+            child: Align(
+              alignment: Alignment.topCenter,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 640),
+                child: Container(
+                  height: 40,
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  decoration: BoxDecoration(
+                    color: context.colors.inputFill,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: DropdownButtonHideUnderline(
+                    child: DropdownButton<String?>(
+                      value: _categoryFilter,
+                      isExpanded: true,
+                      icon: Icon(Icons.expand_more, color: context.colors.textSecondary),
+                      style: TextStyle(fontSize: 13, color: context.colors.textPrimary),
+                      items: [
+                        const DropdownMenuItem<String?>(value: null, child: Text('種類: すべて')),
+                        ...MeetingCategory.all.map((c) => DropdownMenuItem<String?>(
+                              value: c.id,
+                              child: Text(c.label),
+                            )),
+                      ],
+                      onChanged: (v) => setState(() => _categoryFilter = v),
+                    ),
+                  ),
+                ),
               ),
             ),
           ),
           const Divider(height: 1),
           Expanded(child: _buildList()),
         ],
-      ),
-    );
-  }
-
-  Widget _filterChip(String? value, String label) {
-    final sel = _categoryFilter == value;
-    return GestureDetector(
-      onTap: () => setState(() => _categoryFilter = value),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        decoration: BoxDecoration(
-          color: sel ? AppColors.primary.withValues(alpha: 0.15) : context.colors.chipBg,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: sel ? AppColors.primary : Colors.transparent,
-            width: 1,
-          ),
-        ),
-        child: Text(label,
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: sel ? FontWeight.bold : FontWeight.normal,
-              color: sel ? AppColors.primary : context.colors.textSecondary,
-            )),
       ),
     );
   }
@@ -250,12 +245,14 @@ class MeetingMinutesEditScreen extends StatefulWidget {
 class _MeetingMinutesEditScreenState extends State<MeetingMinutesEditScreen> {
   DateTime _meetingDate = DateTime.now();
   String _category = MeetingCategory.all.first.id;
+  _Staff? _conductor;
   final List<_Staff> _participants = [];
   final _contentCtrl = TextEditingController();
   final _noteCtrl = TextEditingController();
   final _categoryOtherCtrl = TextEditingController();
   final List<_Material> _materials = [];
   bool _saving = false;
+  bool _uploading = false;
 
   List<_Staff> _allStaffs = [];
 
@@ -297,6 +294,15 @@ class _MeetingMinutesEditScreenState extends State<MeetingMinutesEditScreen> {
           _participants
             ..clear()
             ..addAll(list.where((s) => ids.contains(s.id)));
+          final condId = d['conductorId'] as String?;
+          final condName = d['conductor'] as String?;
+          if (condId != null && condId.isNotEmpty) {
+            final hit = list.where((s) => s.id == condId).toList();
+            if (hit.isNotEmpty) _conductor = hit.first;
+          } else if (condName != null && condName.isNotEmpty) {
+            final hit = list.where((s) => s.name == condName).toList();
+            if (hit.isNotEmpty) _conductor = hit.first;
+          }
         }
       });
     } catch (e) {
@@ -326,6 +332,8 @@ class _MeetingMinutesEditScreenState extends State<MeetingMinutesEditScreen> {
       'note': _noteCtrl.text.trim(),
       'participantIds': _participants.map((s) => s.id).toList(),
       'participantNames': _participants.map((s) => s.name).toList(),
+      'conductorId': _conductor?.id,
+      'conductor': _conductor?.name ?? '',
       'content': _contentCtrl.text.trim(),
       'materials': _materials.map((m) => m.toStorage()).toList(),
       'updatedAt': now,
@@ -393,12 +401,59 @@ class _MeetingMinutesEditScreenState extends State<MeetingMinutesEditScreen> {
     }
   }
 
+  Future<void> _pickConductor() async {
+    final picked = await showDialog<_Staff?>(
+      context: context,
+      builder: (c) => _StaffSinglePickerDialog(all: _allStaffs, selected: _conductor),
+    );
+    if (picked == _ClearStaffSentinel.instance) {
+      setState(() => _conductor = null);
+    } else if (picked != null) {
+      setState(() {
+        _conductor = picked;
+        if (!_participants.any((s) => s.id == picked.id)) {
+          _participants.add(picked);
+        }
+      });
+    }
+  }
+
   Future<void> _addMaterial() async {
     final result = await showDialog<_Material>(
       context: context,
       builder: (c) => const _MaterialDialog(),
     );
     if (result != null) setState(() => _materials.add(result));
+  }
+
+  Future<void> _uploadFiles() async {
+    final result = await FilePicker.platform.pickFiles(
+      allowMultiple: true,
+      withData: true,
+    );
+    if (result == null || result.files.isEmpty) return;
+    setState(() => _uploading = true);
+    try {
+      for (final f in result.files) {
+        final bytes = f.bytes;
+        if (bytes == null) continue;
+        final ts = DateTime.now().millisecondsSinceEpoch;
+        final safeName = f.name.replaceAll(RegExp(r'[\s/\\]'), '_');
+        final ref = FirebaseStorage.instance
+            .ref('meeting_minutes/$ts-$safeName');
+        await ref.putData(bytes);
+        final url = await ref.getDownloadURL();
+        setState(() => _materials.add(_Material(label: f.name, url: url)));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('アップロード失敗: $e'), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _uploading = false);
+    }
   }
 
   Future<void> _editMaterial(int i) async {
@@ -509,6 +564,38 @@ class _MeetingMinutesEditScreenState extends State<MeetingMinutesEditScreen> {
             ),
 
             const SizedBox(height: 20),
+            _section('実施者'),
+            InkWell(
+              onTap: _pickConductor,
+              borderRadius: BorderRadius.circular(10),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                decoration: BoxDecoration(
+                  color: context.colors.cardBg,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: context.colors.borderMedium),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.person_outline, size: 18, color: AppColors.primary),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        _conductor?.name ?? '実施者を選択',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: _conductor == null ? context.colors.textSecondary : context.colors.textPrimary,
+                        ),
+                      ),
+                    ),
+                    Icon(Icons.expand_more, size: 18, color: context.colors.textSecondary),
+                  ],
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 20),
             _section('参加者'),
             InkWell(
               onTap: _pickParticipants,
@@ -559,10 +646,24 @@ class _MeetingMinutesEditScreenState extends State<MeetingMinutesEditScreen> {
             _section('資料'),
             ..._materials.asMap().entries.map((e) => _materialTile(e.key, e.value)),
             const SizedBox(height: 6),
-            OutlinedButton.icon(
-              onPressed: _addMaterial,
-              icon: const Icon(Icons.add, size: 18),
-              label: const Text('資料を追加'),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: _uploading ? null : _uploadFiles,
+                    icon: _uploading
+                        ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                        : const Icon(Icons.upload_file, size: 18),
+                    label: Text(_uploading ? 'アップロード中…' : 'ファイルをアップロード'),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                OutlinedButton.icon(
+                  onPressed: _addMaterial,
+                  icon: const Icon(Icons.link, size: 18),
+                  label: const Text('URLを追加'),
+                ),
+              ],
             ),
 
             const SizedBox(height: 20),
@@ -597,6 +698,7 @@ class _MeetingMinutesEditScreenState extends State<MeetingMinutesEditScreen> {
 
   Widget _materialTile(int i, _Material m) {
     final hasUrl = m.url.startsWith('http');
+    final noUrl = m.url.isEmpty;
     return Container(
       margin: const EdgeInsets.only(bottom: 6),
       decoration: BoxDecoration(
@@ -613,26 +715,27 @@ class _MeetingMinutesEditScreenState extends State<MeetingMinutesEditScreen> {
         ),
         title: Text(m.label.isNotEmpty ? m.label : m.url,
             style: const TextStyle(fontSize: 13), overflow: TextOverflow.ellipsis),
-        subtitle: m.label.isNotEmpty && m.url.isNotEmpty
-            ? Text(m.url,
-                style: TextStyle(fontSize: 11, color: context.colors.textTertiary),
-                overflow: TextOverflow.ellipsis)
-            : null,
+        subtitle: noUrl
+            ? Text('URL未設定（タップで設定）',
+                style: TextStyle(fontSize: 11, color: Colors.orange.shade600))
+            : (m.label.isNotEmpty
+                ? Text(m.url,
+                    style: TextStyle(fontSize: 11, color: context.colors.textTertiary),
+                    overflow: TextOverflow.ellipsis)
+                : null),
+        onTap: () => _editMaterial(i),
         trailing: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             if (hasUrl)
               IconButton(
                 icon: const Icon(Icons.open_in_new, size: 16),
+                tooltip: '開く',
                 onPressed: () async {
                   final uri = Uri.tryParse(m.url);
                   if (uri != null) await launchUrl(uri, mode: LaunchMode.externalApplication);
                 },
               ),
-            IconButton(
-              icon: const Icon(Icons.edit, size: 16),
-              onPressed: () => _editMaterial(i),
-            ),
             IconButton(
               icon: Icon(Icons.close, size: 16, color: Colors.red.shade400),
               onPressed: () => setState(() => _materials.removeAt(i)),
@@ -833,6 +936,92 @@ class _StaffMultiPickerDialogState extends State<_StaffMultiPickerDialog> {
       ),
     );
   }
+}
+
+// ============================================================
+// 実施者選択（単一）
+// ============================================================
+class _StaffSinglePickerDialog extends StatefulWidget {
+  final List<_Staff> all;
+  final _Staff? selected;
+  const _StaffSinglePickerDialog({required this.all, required this.selected});
+  @override
+  State<_StaffSinglePickerDialog> createState() => _StaffSinglePickerDialogState();
+}
+
+class _StaffSinglePickerDialogState extends State<_StaffSinglePickerDialog> {
+  String _q = '';
+  @override
+  Widget build(BuildContext context) {
+    final list = _q.isEmpty
+        ? widget.all
+        : widget.all
+            .where((s) => s.name.toLowerCase().contains(_q.toLowerCase()) || s.kana.contains(_q))
+            .toList();
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 380, maxHeight: 520),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+              child: Text('実施者を選択',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: context.colors.textPrimary)),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: TextField(
+                decoration: InputDecoration(
+                  hintText: '名前で検索',
+                  prefixIcon: const Icon(Icons.search, size: 18),
+                  isDense: true,
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+                onChanged: (v) => setState(() => _q = v),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Expanded(
+              child: ListView.builder(
+                itemCount: list.length,
+                itemBuilder: (c, i) {
+                  final s = list[i];
+                  final sel = s.id == widget.selected?.id;
+                  return ListTile(
+                    title: Text(s.name, style: const TextStyle(fontSize: 14)),
+                    trailing: sel ? const Icon(Icons.check, color: AppColors.primary) : null,
+                    onTap: () => Navigator.pop(context, s),
+                  );
+                },
+              ),
+            ),
+            const Divider(height: 1),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+              child: Row(
+                children: [
+                  if (widget.selected != null)
+                    TextButton(
+                      onPressed: () => Navigator.pop(context, _ClearStaffSentinel.instance),
+                      child: Text('クリア', style: TextStyle(color: context.colors.textSecondary)),
+                    ),
+                  const Spacer(),
+                  TextButton(onPressed: () => Navigator.pop(context), child: const Text('キャンセル')),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ClearStaffSentinel extends _Staff {
+  const _ClearStaffSentinel._() : super(id: '__clear__', name: '', kana: '');
+  static const instance = _ClearStaffSentinel._();
 }
 
 // ============================================================

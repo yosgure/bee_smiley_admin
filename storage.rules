@@ -60,5 +60,13 @@ service firebase.storage {
                    && request.auth.token.role == 'staff'
                    && request.resource.size < 10 * 1024 * 1024;
     }
+
+    // meeting_minutes: 議事録・研修記録の添付資料（スタッフのみ）
+    match /meeting_minutes/{fileName} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null
+                   && request.auth.token.role == 'staff'
+                   && request.resource.size < 50 * 1024 * 1024;
+    }
   }
 }
