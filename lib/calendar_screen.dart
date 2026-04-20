@@ -259,7 +259,8 @@ Future<void> _saveDisplayDate(DateTime date) async {
                   .where((room) => !room.contains('プラス'))
                   .toList();
               for (var room in _myClassrooms) {
-                _classroomFilters[room] = true;
+                // 既存の値（SharedPreferences から読み込み済み）があれば尊重する
+                _classroomFilters.putIfAbsent(room, () => true);
               }
               _isLoadingStaffInfo = false;
             });
