@@ -7,7 +7,7 @@ import 'app_theme.dart';
 import 'main.dart';
 
 // ============================================================
-// 議事録一覧
+// 議事録・研修記録一覧
 // ============================================================
 class MeetingMinutesScreen extends StatefulWidget {
   const MeetingMinutesScreen({super.key});
@@ -30,7 +30,7 @@ class _MeetingMinutesScreenState extends State<MeetingMinutesScreen> {
     return Scaffold(
       backgroundColor: context.colors.scaffoldBg,
       appBar: AppBar(
-        title: const Text('議事録', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
+        title: const Text('議事録・研修記録', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
         backgroundColor: context.colors.cardBg,
         elevation: 0,
         foregroundColor: context.colors.textPrimary,
@@ -66,11 +66,11 @@ class _MeetingMinutesScreenState extends State<MeetingMinutesScreen> {
                 children: [
                   Icon(Icons.description_outlined, size: 56, color: context.colors.textTertiary),
                   const SizedBox(height: 12),
-                  Text('議事録はまだありません', style: TextStyle(color: context.colors.textSecondary, fontSize: 14)),
+                  Text('議事録・研修記録はまだありません', style: TextStyle(color: context.colors.textSecondary, fontSize: 14)),
                   const SizedBox(height: 4),
                   Text('右下の「新規作成」から記録できます', style: TextStyle(color: context.colors.textTertiary, fontSize: 12)),
                   const SizedBox(height: 4),
-                  Text('NotionのURLを貼って過去議事録を登録できます', style: TextStyle(color: context.colors.textTertiary, fontSize: 12)),
+                  Text('NotionのURLを貼って過去議事録・研修記録を登録できます', style: TextStyle(color: context.colors.textTertiary, fontSize: 12)),
                 ],
               ),
             );
@@ -98,7 +98,12 @@ class _MeetingListTile extends StatelessWidget {
     final category = d['category'] as String? ?? '';
     final participantNames = List<String>.from(d['participantNames'] ?? []);
     final summary = d['summary'] as String? ?? '';
+    final content = d['content'] as String? ?? '';
     final notionUrl = d['notionUrl'] as String? ?? '';
+    final conductor = d['conductor'] as String? ?? '';
+    final location = d['location'] as String? ?? '';
+    final materials = List<String>.from(d['materials'] ?? []);
+    final preview = summary.isNotEmpty ? summary : content;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
@@ -166,19 +171,34 @@ class _MeetingListTile extends StatelessWidget {
                 title.isEmpty ? '(タイトル未設定)' : title,
                 style: TextStyle(fontSize: 14, color: context.colors.textPrimary, fontWeight: FontWeight.w700),
               ),
-              if (participantNames.isNotEmpty) ...[
+              if (conductor.isNotEmpty || location.isNotEmpty || participantNames.isNotEmpty) ...[
                 const SizedBox(height: 4),
                 Text(
-                  '参加: ${participantNames.join('、')}',
-                  maxLines: 1,
+                  [
+                    if (conductor.isNotEmpty) '実施者: $conductor',
+                    if (location.isNotEmpty) '場所: $location',
+                    if (participantNames.isNotEmpty) '参加: ${participantNames.join('、')}',
+                  ].join('　'),
+                  maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(fontSize: 11, color: context.colors.textTertiary),
                 ),
               ],
-              if (summary.isNotEmpty) ...[
+              if (materials.isNotEmpty) ...[
+                const SizedBox(height: 4),
+                Row(
+                  children: [
+                    Icon(Icons.attach_file, size: 12, color: context.colors.textTertiary),
+                    const SizedBox(width: 2),
+                    Text('資料${materials.length}件',
+                        style: TextStyle(fontSize: 10, color: context.colors.textTertiary)),
+                  ],
+                ),
+              ],
+              if (preview.isNotEmpty) ...[
                 const SizedBox(height: 6),
                 Text(
-                  summary.length > 100 ? '${summary.substring(0, 100)}…' : summary,
+                  preview.length > 120 ? '${preview.substring(0, 120)}…' : preview,
                   style: TextStyle(fontSize: 12, color: context.colors.textSecondary, height: 1.4),
                 ),
               ],
@@ -191,7 +211,7 @@ class _MeetingListTile extends StatelessWidget {
 }
 
 // ============================================================
-// 議事録 入力/編集
+// 議事録・研修記録 入力/編集
 // ============================================================
 class MeetingMinutesEditScreen extends StatefulWidget {
   final QueryDocumentSnapshot<Map<String, dynamic>>? doc;
@@ -206,6 +226,10 @@ class _MeetingMinutesEditScreenState extends State<MeetingMinutesEditScreen> {
   final _titleCtrl = TextEditingController();
   String _category = 'regular';
   final List<_Staff> _participants = [];
+  final _conductorCtrl = TextEditingController();
+  final _locationCtrl = TextEditingController();
+  final _contentCtrl = TextEditingController();
+  final _materialsCtrl = TextEditingController();
   final _agendaCtrl = TextEditingController();
   final _summaryCtrl = TextEditingController();
   final _decisionsCtrl = TextEditingController();
@@ -226,6 +250,10 @@ class _MeetingMinutesEditScreenState extends State<MeetingMinutesEditScreen> {
       _meetingDate = (d['meetingDate'] as Timestamp?)?.toDate() ?? DateTime.now();
       _titleCtrl.text = d['title'] ?? '';
       _category = d['category'] ?? 'regular';
+      _conductorCtrl.text = d['conductor'] ?? '';
+      _locationCtrl.text = d['location'] ?? '';
+      _contentCtrl.text = d['content'] ?? '';
+      _materialsCtrl.text = (List<String>.from(d['materials'] ?? [])).join('\n');
       _agendaCtrl.text = d['agenda'] ?? '';
       _summaryCtrl.text = d['summary'] ?? '';
       _decisionsCtrl.text = d['decisions'] ?? '';
@@ -263,7 +291,7 @@ class _MeetingMinutesEditScreenState extends State<MeetingMinutesEditScreen> {
 
   @override
   void dispose() {
-    for (final c in [_titleCtrl, _agendaCtrl, _summaryCtrl, _decisionsCtrl, _todoCtrl, _notionCtrl]) {
+    for (final c in [_titleCtrl, _conductorCtrl, _locationCtrl, _contentCtrl, _materialsCtrl, _agendaCtrl, _summaryCtrl, _decisionsCtrl, _todoCtrl, _notionCtrl]) {
       c.dispose();
     }
     super.dispose();
@@ -272,6 +300,7 @@ class _MeetingMinutesEditScreenState extends State<MeetingMinutesEditScreen> {
   bool get _canSubmit =>
       _titleCtrl.text.trim().isNotEmpty ||
       _summaryCtrl.text.trim().isNotEmpty ||
+      _contentCtrl.text.trim().isNotEmpty ||
       _notionCtrl.text.trim().isNotEmpty;
 
   Future<void> _submit() async {
@@ -279,12 +308,21 @@ class _MeetingMinutesEditScreenState extends State<MeetingMinutesEditScreen> {
     setState(() => _saving = true);
     final user = FirebaseAuth.instance.currentUser;
     final now = FieldValue.serverTimestamp();
+    final materials = _materialsCtrl.text
+        .split('\n')
+        .map((s) => s.trim())
+        .where((s) => s.isNotEmpty)
+        .toList();
     final data = <String, dynamic>{
       'meetingDate': Timestamp.fromDate(_meetingDate),
       'title': _titleCtrl.text.trim(),
       'category': _category,
       'participantIds': _participants.map((s) => s.id).toList(),
       'participantNames': _participants.map((s) => s.name).toList(),
+      'conductor': _conductorCtrl.text.trim(),
+      'location': _locationCtrl.text.trim(),
+      'content': _contentCtrl.text.trim(),
+      'materials': materials,
       'agenda': _agendaCtrl.text.trim(),
       'summary': _summaryCtrl.text.trim(),
       'decisions': _decisionsCtrl.text.trim(),
@@ -321,7 +359,7 @@ class _MeetingMinutesEditScreenState extends State<MeetingMinutesEditScreen> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (c) => AlertDialog(
-        title: const Text('この議事録を削除しますか？'),
+        title: const Text('この議事録・研修記録を削除しますか？'),
         content: const Text('この操作は取り消せません。'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('キャンセル')),
@@ -360,7 +398,7 @@ class _MeetingMinutesEditScreenState extends State<MeetingMinutesEditScreen> {
     return Scaffold(
       backgroundColor: context.colors.scaffoldBg,
       appBar: AppBar(
-        title: Text(_isEdit ? '議事録を編集' : '議事録作成',
+        title: Text(_isEdit ? '議事録・研修記録を編集' : '議事録・研修記録作成',
             style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
         backgroundColor: context.colors.cardBg,
         elevation: 0,
@@ -415,11 +453,32 @@ class _MeetingMinutesEditScreenState extends State<MeetingMinutesEditScreen> {
             ),
 
             const SizedBox(height: 20),
-            _section('タイトル'),
+            _section('タイトル / 研修名'),
             TextField(
               controller: _titleCtrl,
               onChanged: (_) => setState(() {}),
-              decoration: _decoration(null, hint: '例：4月定例ミーティング'),
+              decoration: _decoration(null, hint: '例：虐待防止研修 / 4月定例ミーティング'),
+            ),
+
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _conductorCtrl,
+                    onChanged: (_) => setState(() {}),
+                    decoration: _decoration('実施者'),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: TextField(
+                    controller: _locationCtrl,
+                    onChanged: (_) => setState(() {}),
+                    decoration: _decoration('開催場所'),
+                  ),
+                ),
+              ],
             ),
 
             const SizedBox(height: 20),
@@ -461,6 +520,27 @@ class _MeetingMinutesEditScreenState extends State<MeetingMinutesEditScreen> {
             ),
 
             const SizedBox(height: 20),
+            _section('研修内容 / 議事内容'),
+            TextField(
+              controller: _contentCtrl,
+              maxLines: 10,
+              onChanged: (_) => setState(() {}),
+              decoration: _decoration(null, hint: '研修内容・議事内容の全文'),
+            ),
+
+            const SizedBox(height: 20),
+            _section('資料リンク'),
+            Text('1行につき1URL。ファイルパス・Google DriveなどもOK',
+                style: TextStyle(fontSize: 12, color: context.colors.textTertiary)),
+            const SizedBox(height: 6),
+            TextField(
+              controller: _materialsCtrl,
+              maxLines: 4,
+              onChanged: (_) => setState(() {}),
+              decoration: _decoration(null, hint: 'https://...\nhttps://...'),
+            ),
+
+            const SizedBox(height: 20),
             _section('議題'),
             TextField(
               controller: _agendaCtrl,
@@ -470,12 +550,12 @@ class _MeetingMinutesEditScreenState extends State<MeetingMinutesEditScreen> {
             ),
 
             const SizedBox(height: 20),
-            _section('内容・サマリ'),
+            _section('サマリ（一覧用）'),
             TextField(
               controller: _summaryCtrl,
-              maxLines: 6,
+              maxLines: 3,
               onChanged: (_) => setState(() {}),
-              decoration: _decoration(null, hint: '議事の要約'),
+              decoration: _decoration(null, hint: '一覧表示用の短い要約（空なら研修内容を表示）'),
             ),
 
             const SizedBox(height: 20),
@@ -498,7 +578,7 @@ class _MeetingMinutesEditScreenState extends State<MeetingMinutesEditScreen> {
 
             const SizedBox(height: 20),
             _section('Notion原典リンク'),
-            Text('過去の議事録はNotionのURLを貼って紐付けできます',
+            Text('過去の議事録・研修記録はNotionのURLを貼って紐付けできます',
                 style: TextStyle(fontSize: 12, color: context.colors.textTertiary)),
             const SizedBox(height: 6),
             TextField(
