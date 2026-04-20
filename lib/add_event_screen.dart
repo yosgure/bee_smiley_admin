@@ -110,43 +110,26 @@ class _AddEventDialogState extends State<AddEventDialog> {
       _endDate = _startDate.add(const Duration(hours: 1));
       _taskDate = DateTime(initial.year, initial.month, initial.day);
       
-      // 新規作成時に自分自身を担当者としてデフォルト選択
-      _addCurrentUserAsStaff();
+      // 新規作成時の担当者はユーザーが明示的に選ぶ運用に変更。
+      // ただしフィルタで非表示にならないよう、保存時に空なら自 UID を補填する。
+    }
+
+    // 新規作成でレッスンがデフォルトの場合、教室選択UIを使う（自由入力ではなく）
+    if (!_isEditing && !_isTaskMode && _selectedCategory == 'レッスン') {
+      _isManualLocation = false;
     }
 
     _fetchClassrooms().then((_) {
       if (!_isEditing && !_isTaskMode && mounted && _classroomList.isNotEmpty) {
         // レッスンカテゴリの場合のみ教室をデフォルト選択
         if (_selectedCategory == 'レッスン') {
-          setState(() => _selectedClassroom = _classroomList.first);
+          setState(() {
+            _selectedClassroom = _classroomList.first;
+            _isManualLocation = false;
+          });
         }
       }
     });
-  }
-
-  // 現在のユーザーを担当者として追加
-  Future<void> _addCurrentUserAsStaff() async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return;
-    
-    try {
-      final snapshot = await FirebaseFirestore.instance
-          .collection('staffs')
-          .where('uid', isEqualTo: user.uid)
-          .limit(1)
-          .get();
-      
-      if (snapshot.docs.isNotEmpty && mounted) {
-        final data = snapshot.docs.first.data();
-        String name = data['name'] ?? '${data['lastName'] ?? ''} ${data['firstName'] ?? ''}';
-        setState(() {
-          _selectedStaffIds.add(user.uid);
-          _staffNamesMap[user.uid] = name;
-        });
-      }
-    } catch (e) {
-      debugPrint('Error adding current user as staff: $e');
-    }
   }
 
   void _initializeEventData(Map<String, dynamic> data) {
@@ -461,10 +444,11 @@ class _AddEventDialogState extends State<AddEventDialog> {
 
   Future<void> _saveEvent() async {
   // 新規作成時、_addCurrentUserAsStaff() が非同期で間に合わず staffIds が空のまま
-  // 保存されるケースの保険。自分の UID を必ず含める（フィルタで非表示になる事故を防ぐ）。
-  if (!_isEditing) {
+  // 保存されるケースの保険。担当者が未選択の場合のみ自 UID を追加する
+  // （ユーザーが他スタッフを選んでいる／自分を意図的に外した場合は追加しない）。
+  if (!_isEditing && _selectedStaffIds.isEmpty) {
     final user = FirebaseAuth.instance.currentUser;
-    if (user != null && !_selectedStaffIds.contains(user.uid)) {
+    if (user != null) {
       _selectedStaffIds.add(user.uid);
       _staffNamesMap.putIfAbsent(user.uid, () => '');
     }
