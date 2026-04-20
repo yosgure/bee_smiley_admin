@@ -8,15 +8,60 @@ const { getFirestore, FieldValue } = require("firebase-admin/firestore");
 const { getMessaging } = require("firebase-admin/messaging");
 const { getAuth } = require("firebase-admin/auth");
 const { GoogleGenerativeAI } = require("@google/generative-ai");
+const { Anthropic } = require("@anthropic-ai/sdk");
 const fetch = require("node-fetch");
 const cheerio = require("cheerio");
 const { CookieJar, Cookie } = require("tough-cookie");
 
 // Secret Manager でAPIキー・初期パスワードを管理
 const geminiApiKey = defineSecret("GEMINI_API_KEY");
+const anthropicApiKey = defineSecret("ANTHROPIC_API_KEY");
 const initialPassword = defineSecret("INITIAL_PASSWORD");
 const hugUsername = defineSecret("HUG_USERNAME");
 const hugPassword = defineSecret("HUG_PASSWORD");
+
+// Claudeモデル定義
+const CLAUDE_MAIN_MODEL = 'claude-sonnet-4-6';
+const CLAUDE_SUMMARY_MODEL = 'claude-haiku-4-5-20251001';
+
+/**
+ * Claude API呼び出しの共通ラッパー（リトライ＋プロンプトキャッシュ対応）
+ *
+ * @param {object} params
+ * @param {string} params.model - モデルID
+ * @param {Array|string} params.system - systemプロンプト。配列にする場合は各要素に
+ *     { type: 'text', text: '...', cache_control: { type: 'ephemeral' } } を含められる
+ * @param {Array} params.messages - [{ role, content }]
+ * @param {number} [params.maxTokens=2048]
+ * @param {number} [params.maxRetries=3]
+ */
+async function callClaude({ model, system, messages, maxTokens = 2048, maxRetries = 3 }) {
+  const client = new Anthropic({ apiKey: anthropicApiKey.value() });
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const response = await client.messages.create({
+        model,
+        max_tokens: maxTokens,
+        system,
+        messages,
+      });
+      const textBlocks = (response.content || []).filter((b) => b.type === 'text');
+      const text = textBlocks.map((b) => b.text).join('\n').trim();
+      console.log(`[Claude] model=${model} input=${response.usage?.input_tokens} cached=${response.usage?.cache_read_input_tokens || 0} output=${response.usage?.output_tokens}`);
+      return text;
+    } catch (err) {
+      const status = err?.status || 0;
+      const retryable = status === 429 || status === 500 || status === 503 || status === 529;
+      if (retryable && attempt < maxRetries) {
+        const delay = Math.pow(2, attempt) * 2000 + Math.random() * 1000;
+        console.log(`[Claude] retry ${attempt + 1}/${maxRetries} after ${Math.round(delay)}ms (status=${status})`);
+        await new Promise((r) => setTimeout(r, delay));
+        continue;
+      }
+      throw err;
+    }
+  }
+}
 
 initializeApp();
 
@@ -1590,13 +1635,71 @@ function buildSystemPrompt(context) {
 
   if (hugAssessment) {
     prompt += `
-## HUGアセスメント情報（スタッフがHUGシステムから入力した情報）
+## HUGアセスメント情報（手動入力フォールバック）
 ${hugAssessment}
 
 `;
   }
 
-  // 過去セッションの要約を注入
+  // HUGドキュメント（自動同期された5種類の最新情報）
+  const hugDocs = context.hugDocs;
+  if (hugDocs && typeof hugDocs === 'object') {
+    const labels = {
+      assessment: 'アセスメント',
+      carePlanDraft: '個別支援計画書(原案)',
+      beforeMeeting: 'サービス担当者会議(支援会議)の議事録',
+      carePlanMain: '個別支援計画書',
+      monitoring: 'モニタリング',
+    };
+    const sections = [];
+    for (const [key, label] of Object.entries(labels)) {
+      const doc = hugDocs[key];
+      if (doc && doc.rawText) {
+        sections.push(`### ${label}\n${doc.rawText}`);
+      }
+    }
+    if (sections.length > 0) {
+      prompt += `
+## HUGから自動取得した最新情報（同期済み）
+${sections.join('\n\n')}
+
+`;
+    }
+  }
+
+  // AI児童プロファイル（蓄積された知見）
+  const aiProfile = context.aiProfile;
+  if (aiProfile && typeof aiProfile === 'object') {
+    const sections = [];
+    const labels = {
+      strengths: '得意・好きなこと',
+      challenges: '課題・苦手なこと',
+      triggers: '不安・混乱のきっかけ',
+      effectiveApproaches: '効果のあった支援方法',
+      currentGoals: '現在の目標',
+      recentWins: '最近の成功体験',
+      familyContext: '家族関係のメモ',
+      staffNotes: '担当者メモ',
+    };
+    for (const [key, label] of Object.entries(labels)) {
+      const v = aiProfile[key];
+      if (!v) continue;
+      if (Array.isArray(v) && v.length > 0) {
+        sections.push(`### ${label}\n${v.map((x) => `・${x}`).join('\n')}`);
+      } else if (typeof v === 'string' && v.trim()) {
+        sections.push(`### ${label}\n${v.trim()}`);
+      }
+    }
+    if (sections.length > 0) {
+      prompt += `
+## この子について蓄積された知見（過去の相談から学んだこと）
+${sections.join('\n\n')}
+
+`;
+    }
+  }
+
+  // 過去セッションの要約を注入（直近N件）
   const pastSummaries = context.pastSummaries;
   if (pastSummaries && pastSummaries.length > 0) {
     prompt += `
@@ -1617,36 +1720,29 @@ ${hugAssessment}
 }
 
 /**
- * 会話履歴を要約する
+ * 会話履歴を要約する（Claude Haikuで処理、安価で十分な品質）
  */
-async function summarizeConversation(genAI, messages, existingSummary) {
-  const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
-
+async function summarizeConversation(messages, existingSummary) {
   let conversationText = '';
   messages.forEach(msg => {
     const role = msg.role === 'user' ? 'スタッフ' : 'AI';
     conversationText += `${role}: ${msg.content}\n\n`;
   });
 
-  let summaryPrompt = `以下の会話を簡潔に要約してください。要点を箇条書きで整理し、300文字以内にまとめてください。
-
-`;
+  let summaryPrompt = `以下の会話を簡潔に要約してください。要点を箇条書きで整理し、300文字以内にまとめてください。\n\n`;
 
   if (existingSummary) {
-    summaryPrompt += `【これまでの要約】
-${existingSummary}
-
-【追加の会話】
-${conversationText}
-
-上記を統合して、新しい要約を作成してください。`;
+    summaryPrompt += `【これまでの要約】\n${existingSummary}\n\n【追加の会話】\n${conversationText}\n上記を統合して、新しい要約を作成してください。`;
   } else {
-    summaryPrompt += `【会話内容】
-${conversationText}`;
+    summaryPrompt += `【会話内容】\n${conversationText}`;
   }
 
-  const result = await model.generateContent(summaryPrompt);
-  return result.response.text();
+  return await callClaude({
+    model: CLAUDE_SUMMARY_MODEL,
+    system: '日本語で回答してください。指示に従って簡潔にまとめてください。',
+    messages: [{ role: 'user', content: summaryPrompt }],
+    maxTokens: 600,
+  });
 }
 
 /**
@@ -1655,7 +1751,8 @@ ${conversationText}`;
 exports.sendAiMessage = onCall(
   {
     region: 'asia-northeast1',
-    secrets: [geminiApiKey],
+    secrets: [anthropicApiKey],
+    timeoutSeconds: 120,
   },
   async (request) => {
     if (!request.auth) {
@@ -1670,8 +1767,38 @@ exports.sendAiMessage = onCall(
 
     const MESSAGE_THRESHOLD = 20;  // 要約を開始するメッセージ数
     const RECENT_MESSAGE_COUNT = 10;  // 要約後に保持する最新メッセージ数
+    const RECENT_SUMMARY_COUNT = 10; // 過去セッション要約を何件まで渡すか
 
     try {
+      // コンテキストを拡張: HUG自動同期データ＆AIプロファイル＆過去セッション要約をサーバー側で読み込み
+      const studentId = context?.studentInfo?.studentId;
+      const enrichedContext = { ...(context || {}) };
+      if (studentId) {
+        try {
+          const profileDoc = await db.collection('ai_student_profiles').doc(studentId).get();
+          if (profileDoc.exists) {
+            const pd = profileDoc.data() || {};
+            if (pd.hugDocs) enrichedContext.hugDocs = pd.hugDocs;
+            if (pd.aiProfile) enrichedContext.aiProfile = pd.aiProfile;
+          }
+          // 過去セッション要約を時系列で取得
+          const summariesSnap = await db
+            .collection('ai_student_profiles').doc(studentId)
+            .collection('session_summaries')
+            .orderBy('endedAt', 'desc')
+            .limit(RECENT_SUMMARY_COUNT)
+            .get();
+          if (!summariesSnap.empty) {
+            enrichedContext.pastSummaries = summariesSnap.docs.reverse().map((d) => {
+              const s = d.data();
+              const date = s.endedAt?.toDate ? s.endedAt.toDate().toLocaleDateString('ja-JP') : '';
+              return { date, summary: s.summary || '' };
+            });
+          }
+        } catch (e) {
+          console.warn(`[sendAiMessage] profile load failed for ${studentId}:`, e.message);
+        }
+      }
       const sessionRef = db.collection('ai_chat_sessions').doc(sessionId);
       const messagesRef = sessionRef.collection('messages');
 
@@ -1696,138 +1823,98 @@ exports.sendAiMessage = onCall(
       const totalMessageCount = allMessagesSnap.docs.length;
       console.log(`Total messages: ${totalMessageCount}, Threshold: ${MESSAGE_THRESHOLD}`);
 
-      // 4. Gemini API クライアント初期化
-      const genAI = new GoogleGenerativeAI(geminiApiKey.value());
-
-      // 5. メッセージ数が閾値を超えている場合、要約を作成
+      // 4. 長大セッションの要約更新（Claude Haikuで処理）
       if (totalMessageCount > MESSAGE_THRESHOLD && !existingSummary) {
-        // 最新10件を除いた古いメッセージを要約
         const oldMessages = allMessagesSnap.docs.slice(0, -RECENT_MESSAGE_COUNT);
         const oldMessagesData = oldMessages.map(doc => doc.data());
-
         console.log(`Summarizing ${oldMessagesData.length} old messages...`);
-        existingSummary = await summarizeConversation(genAI, oldMessagesData, null);
-
-        // 要約をセッションに保存
+        existingSummary = await summarizeConversation(oldMessagesData, null);
         await sessionRef.update({
           summary: existingSummary,
           summarizedAt: FieldValue.serverTimestamp(),
         });
-        console.log('Summary created and saved.');
       } else if (totalMessageCount > MESSAGE_THRESHOLD + 10 && existingSummary) {
-        // 既に要約があり、さらに10件増えたら要約を更新
         const messagesToSummarize = allMessagesSnap.docs.slice(0, -RECENT_MESSAGE_COUNT);
         const newMessagesCount = messagesToSummarize.length;
-
-        // 前回要約時からのメッセージ数を概算（10件単位で更新）
         const lastSummarizedCount = sessionData.lastSummarizedCount || MESSAGE_THRESHOLD - RECENT_MESSAGE_COUNT;
-
         if (newMessagesCount >= lastSummarizedCount + 10) {
-          console.log(`Updating summary with ${newMessagesCount - lastSummarizedCount} new messages...`);
-
-          // 前回要約後の新しいメッセージだけを取得
           const newOldMessages = messagesToSummarize.slice(lastSummarizedCount);
           const newOldMessagesData = newOldMessages.map(doc => doc.data());
-
-          existingSummary = await summarizeConversation(genAI, newOldMessagesData, existingSummary);
-
+          existingSummary = await summarizeConversation(newOldMessagesData, existingSummary);
           await sessionRef.update({
             summary: existingSummary,
             summarizedAt: FieldValue.serverTimestamp(),
             lastSummarizedCount: newMessagesCount,
           });
-          console.log('Summary updated.');
         }
       }
 
-      // 6. 会話履歴を構築
-      let chatHistory = [];
-
+      // 5. Claude向け messages 構築
+      const claudeMessages = [];
       if (existingSummary) {
-        // 要約がある場合：要約 + 最新10件
         const recentMessages = allMessagesSnap.docs.slice(-RECENT_MESSAGE_COUNT);
-
-        // 要約をシステムコンテキストとして最初に追加
-        chatHistory.push({
+        claudeMessages.push({
           role: 'user',
-          parts: [{ text: `【これまでの会話の要約】\n${existingSummary}\n\n上記を踏まえて会話を続けてください。` }],
+          content: `【これまでの会話の要約】\n${existingSummary}\n\n上記を踏まえて会話を続けてください。`,
         });
-        chatHistory.push({
-          role: 'model',
-          parts: [{ text: 'はい、これまでの会話内容を理解しました。続きの相談をお聞かせください。' }],
+        claudeMessages.push({
+          role: 'assistant',
+          content: 'はい、これまでの会話内容を理解しました。続きの相談をお聞かせください。',
         });
-
-        // 最新のメッセージを追加
-        recentMessages.forEach(doc => {
+        recentMessages.forEach((doc) => {
           const data = doc.data();
           if (data.role && data.content) {
-            chatHistory.push({
-              role: data.role === 'user' ? 'user' : 'model',
-              parts: [{ text: data.content }],
+            claudeMessages.push({
+              role: data.role === 'user' ? 'user' : 'assistant',
+              content: data.content,
             });
           }
         });
       } else {
-        // 要約がない場合：全メッセージ（最大20件）
         const recentMessages = allMessagesSnap.docs.slice(-MESSAGE_THRESHOLD);
-        recentMessages.forEach(doc => {
+        recentMessages.forEach((doc) => {
           const data = doc.data();
           if (data.role && data.content) {
-            chatHistory.push({
-              role: data.role === 'user' ? 'user' : 'model',
-              parts: [{ text: data.content }],
+            claudeMessages.push({
+              role: data.role === 'user' ? 'user' : 'assistant',
+              content: data.content,
             });
           }
         });
       }
 
-      // 7. システムプロンプト構築
-      let systemPrompt = buildSystemPrompt(context);
-
-      // コマンドスクリプトがある場合、システムプロンプトに追加
+      // 6. システムプロンプト構築（キャッシュ可能な静的部分と動的部分に分割）
+      const baseSystemPrompt = buildSystemPrompt(enrichedContext);
+      const systemBlocks = [
+        { type: 'text', text: baseSystemPrompt, cache_control: { type: 'ephemeral' } },
+      ];
       if (commandScript) {
-        systemPrompt += `\n\n## 今回のリクエストに対する出力指示（最優先で従うこと）\n${commandScript}\n`;
+        systemBlocks.push({
+          type: 'text',
+          text: `\n\n## 今回のリクエストに対する出力指示（最優先で従うこと）\n${commandScript}\n`,
+        });
       }
 
-      // 8. Gemini API呼び出し
-      const model = genAI.getGenerativeModel({
-        model: "gemini-2.5-flash",
-        systemInstruction: systemPrompt,
-      });
-
-      // リトライ付きAPI呼び出し（503エラー対策）
-      const callWithRetry = async (fn, maxRetries = 3) => {
-        for (let attempt = 0; attempt <= maxRetries; attempt++) {
-          try {
-            return await fn();
-          } catch (err) {
-            const status = err?.status || err?.httpStatusCode || 0;
-            const msg = err?.message || '';
-            const isRetryable = status === 503 || status === 429 || msg.includes('503') || msg.includes('429') || msg.includes('overloaded');
-            if (isRetryable && attempt < maxRetries) {
-              const delay = Math.pow(2, attempt) * 2000 + Math.random() * 1000;
-              console.log(`Gemini API retry ${attempt + 1}/${maxRetries} after ${Math.round(delay)}ms`);
-              await new Promise(r => setTimeout(r, delay));
-              continue;
-            }
-            throw err;
-          }
-        }
-      };
-
-      // コマンドスクリプトがある場合、チャット履歴を使わず単発リクエストにする
-      // 出力指示をユーザーメッセージに直接埋め込む（システムプロンプトだけだと無視されるため）
+      // 7. Claude Sonnet 4.6 に投げる
       let aiResponse;
       if (commandScript) {
         const augmentedMessage = `${message}\n\n---\n【出力指示】以下の指示に厳密に従って出力してください。会話形式や補足説明は不要です。指定されたフォーマットのみを出力してください。\n${commandScript}`;
-        const result = await callWithRetry(() => model.generateContent(augmentedMessage));
-        aiResponse = result.response.text();
+        aiResponse = await callClaude({
+          model: CLAUDE_MAIN_MODEL,
+          system: systemBlocks,
+          messages: [{ role: 'user', content: augmentedMessage }],
+          maxTokens: 4096,
+        });
       } else {
-        // 履歴から最後のユーザーメッセージを除いてチャット開始
-        const historyForChat = chatHistory.slice(0, -1);
-        const chat = model.startChat({ history: historyForChat });
-        const result = await callWithRetry(() => chat.sendMessage(message));
-        aiResponse = result.response.text();
+        // claudeMessagesの末尾を現ユーザーメッセージに置き換え、重複を避ける
+        const msgs = claudeMessages.slice();
+        // 最新のユーザーメッセージはmessageで渡すため、履歴の最後のユーザーは取り除かない（Firestoreに保存済みなので既に含まれている）
+        aiResponse = await callClaude({
+          model: CLAUDE_MAIN_MODEL,
+          system: systemBlocks,
+          messages: msgs,
+          maxTokens: 4096,
+        });
       }
 
       // マークダウン記法を除去
@@ -1875,7 +1962,8 @@ exports.sendAiMessage = onCall(
 exports.summarizeSession = onCall(
   {
     region: 'asia-northeast1',
-    secrets: [geminiApiKey],
+    secrets: [anthropicApiKey],
+    timeoutSeconds: 60,
   },
   async (request) => {
     if (!request.auth) {
@@ -1915,10 +2003,6 @@ exports.summarizeSession = onCall(
 
       const messages = messagesSnap.docs.map(doc => doc.data());
 
-      // Gemini APIで要約生成
-      const genAI = new GoogleGenerativeAI(geminiApiKey.value());
-      const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
-
       let conversationText = '';
       messages.forEach(msg => {
         const role = msg.role === 'user' ? 'スタッフ' : 'AI';
@@ -1930,8 +2014,12 @@ exports.summarizeSession = onCall(
 【会話内容】
 ${conversationText}`;
 
-      const result = await model.generateContent(summaryPrompt);
-      const summary = result.response.text();
+      const summary = await callClaude({
+        model: CLAUDE_SUMMARY_MODEL,
+        system: '日本語で簡潔に要約してください。',
+        messages: [{ role: 'user', content: summaryPrompt }],
+        maxTokens: 600,
+      });
 
       // 要約をセッションに保存
       await sessionRef.update({
@@ -1946,6 +2034,141 @@ ${conversationText}`;
       console.error(JSON.stringify({ function: 'summarizeSession', sessionId, error: error.message }));
       throw new HttpsError('internal', error.message);
     }
+  }
+);
+
+/**
+ * セッション終了時に要約＋AIプロファイル更新を一括で行う。
+ * - ai_student_profiles/{studentId}/session_summaries/{sessionId} にサマリ保存
+ * - ai_student_profiles/{studentId}.aiProfile を差分更新
+ * クライアントはユーザーが「このセッションを終了」or 画面離脱時に呼ぶ。
+ */
+exports.endAiSession = onCall(
+  {
+    region: 'asia-northeast1',
+    secrets: [anthropicApiKey],
+    timeoutSeconds: 60,
+  },
+  async (request) => {
+    if (!request.auth) throw new HttpsError('unauthenticated', '認証が必要です');
+    const { sessionId, studentId } = request.data || {};
+    if (!sessionId) throw new HttpsError('invalid-argument', 'sessionIdが必要です');
+
+    const sessionRef = db.collection('ai_chat_sessions').doc(sessionId);
+    const sessionDoc = await sessionRef.get();
+    if (!sessionDoc.exists) return { success: false, reason: 'session_not_found' };
+    const sessionData = sessionDoc.data() || {};
+    const targetStudentId = studentId || sessionData.studentId;
+
+    // 自由チャットや studentId 欠落時はスキップ（記録対象外）
+    if (!targetStudentId) {
+      return { success: false, reason: 'no_student_id' };
+    }
+
+    const messagesSnap = await sessionRef.collection('messages').orderBy('createdAt', 'asc').get();
+    if (messagesSnap.docs.length < 3) {
+      return { success: false, reason: 'not_enough_messages' };
+    }
+
+    const messages = messagesSnap.docs.map((d) => d.data());
+    let conversationText = '';
+    messages.forEach((msg) => {
+      const role = msg.role === 'user' ? 'スタッフ' : 'AI';
+      conversationText += `${role}: ${msg.content}\n\n`;
+    });
+
+    // 既存プロファイルを取得
+    const profileRef = db.collection('ai_student_profiles').doc(targetStudentId);
+    const profileDoc = await profileRef.get();
+    const currentProfile = profileDoc.exists ? (profileDoc.data()?.aiProfile || {}) : {};
+
+    // Claude Haiku に「要約＋プロファイル更新JSON」を1回で出力させる
+    const prompt = `あなたは児童発達支援の記録を整理するアシスタントです。以下の相談会話を分析し、JSON形式で以下を出力してください。
+
+出力JSONスキーマ:
+{
+  "sessionSummary": "この相談内容を200〜400字で要約。何を相談して何が分かったか。次に取り組むべきこと",
+  "profile": {
+    "strengths": ["得意・好きなこと（最大5件、重要な順）"],
+    "challenges": ["課題・苦手なこと（最大5件、重要な順）"],
+    "triggers": ["不安・混乱のきっかけ（最大5件）"],
+    "effectiveApproaches": ["効果のあった支援方法（最大5件）"],
+    "currentGoals": ["現在の目標（最大3件）"],
+    "recentWins": ["最近の成功体験（最大5件、新しい順）"],
+    "familyContext": "家族関係のメモ（2〜3文）",
+    "staffNotes": "担当者メモ（2〜3文、運用上の留意点）"
+  }
+}
+
+profileは新しい情報で更新してください。既存情報は引き続き重要なら残し、古くなったものや重複は整理して差し替えてください。情報が不足している項目は既存値を維持してください（省略してOK）。
+
+【既存のプロファイル】
+${JSON.stringify(currentProfile, null, 2)}
+
+【今回の相談会話】
+${conversationText}
+
+JSONのみを出力してください。説明文・マークダウン（\`\`\`）は一切含めないでください。`;
+
+    let aiOutput;
+    try {
+      aiOutput = await callClaude({
+        model: CLAUDE_SUMMARY_MODEL,
+        system: '日本語でJSON形式で回答してください。JSONオブジェクトのみを返し、説明文・マークダウンは一切含めないでください。',
+        messages: [{ role: 'user', content: prompt }],
+        maxTokens: 2000,
+      });
+    } catch (e) {
+      console.error(`endAiSession Claude error:`, e.message);
+      throw new HttpsError('internal', `要約生成エラー: ${e.message}`);
+    }
+
+    // JSON抽出（余計なマークダウンが入ったケースを救済）
+    let parsed;
+    try {
+      const jsonText = aiOutput
+        .replace(/^```json\s*/i, '')
+        .replace(/^```\s*/i, '')
+        .replace(/```\s*$/i, '')
+        .trim();
+      parsed = JSON.parse(jsonText);
+    } catch (e) {
+      console.error(`endAiSession JSON parse error:`, e.message, 'raw:', aiOutput.substring(0, 500));
+      // パース失敗しても要約だけは保存
+      parsed = { sessionSummary: aiOutput.substring(0, 500), profile: null };
+    }
+
+    const summary = (parsed.sessionSummary || '').toString().trim();
+    const newProfile = parsed.profile || null;
+
+    // セッション要約をサブコレクションに保存
+    if (summary) {
+      await profileRef.collection('session_summaries').doc(sessionId).set({
+        sessionId,
+        summary,
+        endedAt: FieldValue.serverTimestamp(),
+      });
+      // ai_chat_sessions 側にも保存（履歴UIで即使えるよう）
+      await sessionRef.update({
+        endSummary: summary,
+        endedAt: FieldValue.serverTimestamp(),
+      });
+    }
+
+    // プロファイル更新（マージ）
+    if (newProfile) {
+      await profileRef.set({
+        studentId: targetStudentId,
+        aiProfile: {
+          ...newProfile,
+          version: (currentProfile.version || 0) + 1,
+          updatedAt: new Date().toISOString(),
+        },
+      }, { merge: true });
+    }
+
+    console.log(`[endAiSession] ${sessionId} student=${targetStudentId} summary=${summary.length}chars profileUpdated=${!!newProfile}`);
+    return { success: true, summary, profileUpdated: !!newProfile };
   }
 );
 
@@ -2633,6 +2856,305 @@ exports.syncToHugScheduled = onSchedule(
       console.log('Scheduled sync result:', JSON.stringify(result));
     } catch (error) {
       console.error('Scheduled syncToHug error:', error);
+    }
+  }
+);
+
+// ==========================================
+// HUGドキュメント自動同期（アセスメント/個別支援計画/議事録/モニタリング）
+// ==========================================
+
+const HUG_DOC_TYPES = {
+  assessment:     { label: 'アセスメント',         urlPath: 'individual_assessment.php' },
+  carePlanDraft:  { label: '個別支援計画書(原案)',   urlPath: 'individual_care-plan.php' },
+  beforeMeeting:  { label: 'サービス担当者会議議事録', urlPath: 'individual_before-meeting.php' },
+  carePlanMain:   { label: '個別支援計画書',         urlPath: 'individual_care-plan-main.php' },
+  monitoring:     { label: 'モニタリング',           urlPath: 'individual_monitoring.php' },
+};
+
+/**
+ * 状況一覧ページを全ページ巡回し、c_id ごとに最新（作成回数が最大）の行を返す。
+ * 行構造（調査済み）:
+ *   - 児童名リンク: profile_children.php?mode=profile&id={c_id}
+ *   - 各ドキュメントリンク: individual_{type}.php?mode=detail&id={docId}
+ *     ※未作成の場合は mode=edit や 「未作成」テキストで detail リンクなし
+ *   - 作成回数: 3列目
+ */
+async function scrapeHugSituationList(cookies) {
+  const rows = [];
+  const seenPages = new Set();
+  for (let page = 1; page <= 20; page++) {
+    const url = `${HUG_BASE_URL}/individual_situation.php?page=${page}`;
+    const res = await hugFetch(url, {}, cookies);
+    const html = await res.text();
+    const $ = cheerio.load(html);
+
+    // 無限ループ防止: 同じHTMLが返る（最終ページ超過）なら終了
+    const pageHash = html.length + ':' + (html.indexOf('<tbody') || 0);
+    if (seenPages.has(pageHash)) break;
+    seenPages.add(pageHash);
+
+    const pageRowsBefore = rows.length;
+    $('table tbody tr, table tr').each((_, tr) => {
+      const $tr = $(tr);
+      const childLink = $tr.find('a[href*="profile_children.php"]').first();
+      if (!childLink.length) return;
+      const childHref = childLink.attr('href') || '';
+      const cIdMatch = childHref.match(/id=(\d+)/);
+      if (!cIdMatch) return;
+      const cId = cIdMatch[1];
+      const childName = childLink.text().trim();
+      if (!childName) return;
+
+      const facility = $tr.find('td').eq(1).text().trim();
+      const countText = $tr.find('td').eq(2).text().trim();
+      const count = parseInt(countText, 10) || 0;
+
+      const docIds = {};
+      for (const [type, cfg] of Object.entries(HUG_DOC_TYPES)) {
+        const escaped = cfg.urlPath.replace(/\./g, '\\.').replace(/\-/g, '\\-');
+        const pattern = new RegExp(escaped + '\\?mode=detail&id=(\\d+)');
+        const link = $tr.find(`a[href*="${cfg.urlPath}?mode=detail"]`).first();
+        if (link.length) {
+          const href = link.attr('href') || '';
+          const m = href.match(pattern);
+          if (m) docIds[type] = m[1];
+        }
+      }
+
+      rows.push({ cId, childName, count, facility, docIds });
+    });
+
+    if (rows.length === pageRowsBefore) break; // このページで行が見つからなければ終了
+
+    // 次ページリンクが存在するかチェック
+    const hasNext = $(`a[href*="individual_situation.php?page=${page + 1}"]`).length > 0;
+    if (!hasNext) break;
+  }
+
+  // c_idごとに最新（count最大）のものだけ残す
+  const latestByChild = {};
+  for (const row of rows) {
+    if (!latestByChild[row.cId] || row.count > latestByChild[row.cId].count) {
+      latestByChild[row.cId] = row;
+    }
+  }
+  console.log(`[HUG] scraped situation list: ${rows.length} rows, ${Object.keys(latestByChild).length} unique children`);
+  return Object.values(latestByChild);
+}
+
+/**
+ * 指定ドキュメントの詳細ページHTMLからテキストを抽出
+ * - ナビ・フッタ・操作ボタンを除去
+ * - テーブル行を "ラベル: 値" 形式で連結
+ */
+function extractHugDocumentText(html) {
+  const $ = cheerio.load(html);
+  // ノイズ除去
+  $('script, style, nav, header, footer').remove();
+  $('.global-nav, #header_top, #header, #footer, .footer, .copyright, .breadcrumb, #sidemenu, #menu').remove();
+  $('button, input[type="button"], input[type="submit"]').remove();
+  $('a:contains("戻る"), a:contains("印刷"), a:contains("PDFを出力"), a:contains("編集する"), a:contains("ログアウト")').remove();
+
+  const lines = [];
+  const seen = new Set();
+  const push = (s) => {
+    if (!s) return;
+    const t = s.replace(/\s+/g, ' ').trim();
+    if (t && !seen.has(t)) { seen.add(t); lines.push(t); }
+  };
+
+  // タイトル
+  const title = $('h1, h2').first().text().trim();
+  if (title) push(`## ${title}`);
+
+  // ヘッダ付近の情報（施設名・作成日等）
+  $('dl, .info, .assessment-info, .right-box').each((_, el) => {
+    const t = $(el).text().replace(/[\t\r]+/g, ' ').replace(/\n\s*\n/g, '\n').trim();
+    if (t && t.length < 500) push(t);
+  });
+
+  // テーブル行を "ラベル: 値" に変換
+  $('table').each((_, table) => {
+    $(table).find('tr').each((_, row) => {
+      const cells = $(row).find('th, td');
+      if (cells.length === 0) return;
+      const texts = cells.map((_, c) => $(c).text().replace(/[\t\r]+/g, ' ').replace(/\n\s*\n/g, '\n').trim()).get();
+      if (cells.length === 1) {
+        push(texts[0]);
+      } else {
+        const label = texts[0];
+        const value = texts.slice(1).join(' / ');
+        if (label && value) push(`${label}: ${value}`);
+        else if (label) push(label);
+      }
+    });
+  });
+
+  return lines.join('\n');
+}
+
+async function fetchHugDocumentDetail(cookies, type, hugId) {
+  const cfg = HUG_DOC_TYPES[type];
+  if (!cfg) throw new Error(`unknown doc type: ${type}`);
+  const url = `${HUG_BASE_URL}/${cfg.urlPath}?mode=detail&id=${hugId}`;
+  const res = await hugFetch(url, {}, cookies);
+  const html = await res.text();
+  const rawText = extractHugDocumentText(html);
+  return { url, rawText, hugId };
+}
+
+/**
+ * HUG児童名 → Firestore studentId 解決
+ * families コレクションをスキャンし、lastName+firstName が一致し、
+ * ビースマイリープラス湘南藤沢の利用児童を探す。
+ */
+async function buildStudentNameIndex() {
+  const snap = await db.collection('families').get();
+  const index = {};
+  for (const doc of snap.docs) {
+    const data = doc.data();
+    const lastName = (data.lastName || '').replace(/\s+/g, '');
+    const familyUid = data.uid || doc.id;
+    const children = data.children || [];
+    for (const child of children) {
+      const firstName = (child.firstName || '').replace(/\s+/g, '');
+      if (!firstName) continue;
+      const classrooms = child.classrooms || (child.classroom ? [child.classroom] : []);
+      const inScope = classrooms.some((c) => typeof c === 'string' && c.includes('湘南藤沢'));
+      if (!inScope) continue;
+      const fullName = `${lastName}${firstName}`;
+      const studentId = child.studentId || `${familyUid}_${firstName}`;
+      index[fullName] = {
+        studentId,
+        studentName: `${data.lastName || ''} ${child.firstName || ''}`.trim(),
+        familyUid,
+      };
+    }
+  }
+  return index;
+}
+
+/**
+ * HUG 5種類ドキュメントを全対象児童について同期
+ * - 1日1回のスケジュール＋UI からの手動実行を想定
+ * - 書き込み先: ai_student_profiles/{studentId}（hugDocs フィールド配下）
+ */
+async function syncHugDocsCore(options = {}) {
+  const targetStudentId = options.studentId || null; // 指定あれば1名のみ
+  const cookies = await loginToHug();
+  const situationRows = await scrapeHugSituationList(cookies);
+  const nameIndex = await buildStudentNameIndex();
+
+  const summary = {
+    totalChildren: situationRows.length,
+    synced: 0,
+    skippedUnmapped: 0,
+    errors: [],
+  };
+  const unmapped = [];
+
+  for (const row of situationRows) {
+    const resolved = nameIndex[row.childName.replace(/\s+/g, '')];
+    if (!resolved) {
+      summary.skippedUnmapped++;
+      unmapped.push({ hugChildName: row.childName, hugCId: row.cId });
+      continue;
+    }
+    if (targetStudentId && resolved.studentId !== targetStudentId) continue;
+
+    const hugDocs = {};
+    for (const [type, hugId] of Object.entries(row.docIds)) {
+      if (!hugId) {
+        hugDocs[type] = { status: 'not-created', fetchedAt: FieldValue.serverTimestamp() };
+        continue;
+      }
+      try {
+        const detail = await fetchHugDocumentDetail(cookies, type, hugId);
+        hugDocs[type] = {
+          hugId,
+          rawText: detail.rawText,
+          url: detail.url,
+          status: 'ok',
+          fetchedAt: FieldValue.serverTimestamp(),
+        };
+      } catch (e) {
+        console.error(`[HUG] detail fetch failed for ${row.childName} ${type}:`, e);
+        hugDocs[type] = { status: 'error', error: e.message, fetchedAt: FieldValue.serverTimestamp() };
+        summary.errors.push({ childName: row.childName, type, error: e.message });
+      }
+    }
+
+    await db.collection('ai_student_profiles').doc(resolved.studentId).set({
+      studentId: resolved.studentId,
+      studentName: resolved.studentName,
+      familyUid: resolved.familyUid,
+      hugCId: row.cId,
+      hugDocs,
+      lastSyncedAt: FieldValue.serverTimestamp(),
+    }, { merge: true });
+    summary.synced++;
+  }
+
+  // 未マッピング一覧を保存（マッピング画面で表示できるように）
+  await db.collection('hug_settings').doc('unmapped_children').set({
+    unmapped,
+    updatedAt: FieldValue.serverTimestamp(),
+  });
+
+  // 実行ログ
+  await db.collection('hug_sync_logs').add({
+    kind: 'docs',
+    summary,
+    targetStudentId,
+    startedAt: FieldValue.serverTimestamp(),
+  });
+
+  console.log(`[HUG] docs sync done:`, JSON.stringify(summary));
+  return summary;
+}
+
+/**
+ * 手動実行 (UI「今すぐ同期」or 管理画面)
+ */
+exports.syncHugDocs = onCall(
+  {
+    region: 'asia-northeast1',
+    memory: '512MiB',
+    timeoutSeconds: 540,
+    secrets: [hugUsername, hugPassword],
+  },
+  async (request) => {
+    if (!request.auth) throw new HttpsError('unauthenticated', '認証が必要です');
+    try {
+      const studentId = request.data?.studentId || null;
+      const result = await syncHugDocsCore({ studentId });
+      return { success: true, ...result };
+    } catch (e) {
+      console.error('syncHugDocs error:', e);
+      throw new HttpsError('internal', `HUG同期エラー: ${e.message}`);
+    }
+  }
+);
+
+/**
+ * スケジュール実行: 毎朝6時JST
+ */
+exports.syncHugDocsScheduled = onSchedule(
+  {
+    schedule: '0 6 * * *',
+    timeZone: 'Asia/Tokyo',
+    region: 'asia-northeast1',
+    memory: '512MiB',
+    timeoutSeconds: 540,
+    secrets: [hugUsername, hugPassword],
+  },
+  async () => {
+    try {
+      const result = await syncHugDocsCore();
+      console.log('[HUG] scheduled docs sync:', JSON.stringify(result));
+    } catch (e) {
+      console.error('[HUG] scheduled docs sync error:', e);
     }
   }
 );
