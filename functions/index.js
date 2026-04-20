@@ -2760,25 +2760,22 @@ async function syncToHugCore(contentIds = null) {
       }
 
       if (!recordInfo) {
-        // 一覧に出ない場合は新規作成として直接編集ページにアクセス
-        console.log(`[sync] No record found in list, using insert mode for c_id=${hugChildId}`);
-        recordInfo = { rId: 'insert', cId: hugChildId, calDate: dateStr };
+        // 療育記録が HUG 上に存在しない日は連携しない（新規作成はしない）。
+        // HUG のポリシー: 療育に来ていない生徒の記録は作成不可。
+        throw new Error(
+          `${dateStr} に ${studentName}さんの HUG 療育記録が見つかりません。` +
+          `HUG 上で該当日に療育記録が作成されていることを確認してから再試行してください。`
+        );
       }
 
       console.log(`[sync] Using recordInfo: rId=${recordInfo.rId}, cId=${recordInfo.cId}, calDate=${recordInfo.calDate || dateStr}`);
 
       // 編集ページからフォーム情報取得
       const formFields = await getEditPageFields(cookies, recordInfo.rId, recordInfo.calDate || dateStr, recordInfo.cId || hugChildId);
-
-      // insert（新規作成）の場合、必須フィールドが空なので手動で埋める
-      if (recordInfo.rId === 'insert' || !formFields.c_id) {
-        formFields.c_id = recordInfo.cId || hugChildId;
-        formFields.cal_date = recordInfo.calDate || dateStr;
-        formFields.f_id = formFields.f_id || '1';
-        formFields.facility_id = formFields.facility_id || '1';
-        formFields.service_id = formFields.service_id || '2';
-        formFields.id = formFields.id || 'insert';
-        console.log(`[sync] Filled insert mode fields: c_id=${formFields.c_id}, cal_date=${formFields.cal_date}`);
+      if (!formFields.c_id) {
+        throw new Error(
+          `${dateStr} の ${studentName}さんの編集ページが取得できません。HUG 上の記録状態を確認してください。`
+        );
       }
 
       // 下書き保存
