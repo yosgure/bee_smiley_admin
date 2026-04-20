@@ -1,7 +1,10 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:csv/csv.dart';
 import 'app_theme.dart';
 import 'main.dart';
 
@@ -133,7 +136,7 @@ class _CrmLeadScreenState extends State<CrmLeadScreen> {
     return Scaffold(
       backgroundColor: context.colors.scaffoldBg,
       appBar: AppBar(
-        title: const Text('CRM（見込み顧客）',
+        title: const Text('CRM',
             style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
         backgroundColor: context.colors.cardBg,
         elevation: 0,
@@ -143,6 +146,11 @@ class _CrmLeadScreenState extends State<CrmLeadScreen> {
           onPressed: _close,
         ),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.upload_file, size: 20),
+            tooltip: 'CSVインポート（Notion）',
+            onPressed: _importFromNotionCsv,
+          ),
           IconButton(
             icon: const Icon(Icons.refresh),
             tooltip: '再読込',
@@ -310,6 +318,232 @@ class _CrmLeadScreenState extends State<CrmLeadScreen> {
     await Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => const CrmLeadEditScreen()),
+    );
+  }
+
+  // ------------------------------------------------------------
+  // CSVインポート（Notionエクスポート用・一回限り）
+  // ------------------------------------------------------------
+  Future<void> _importFromNotionCsv() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: const Text('NotionエクスポートCSVをインポート'),
+        content: const Text(
+            '選択したCSVをリードとして一括登録します。\n'
+            '同じCSVを二度インポートすると重複するので注意してください。\n\n続行しますか？'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(c, false),
+              child: const Text('キャンセル')),
+          TextButton(
+              onPressed: () => Navigator.pop(c, true),
+              child: const Text('選択',
+                  style: TextStyle(
+                      color: AppColors.primary,
+                      fontWeight: FontWeight.bold))),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    final picked = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['csv'],
+      withData: true,
+    );
+    if (picked == null || picked.files.isEmpty) return;
+    final bytes = picked.files.first.bytes;
+    if (bytes == null) return;
+
+    String text;
+    try {
+      text = utf8.decode(bytes);
+    } catch (_) {
+      text = latin1.decode(bytes);
+    }
+
+    final rows = const CsvToListConverter(
+            eol: '\n', shouldParseNumbers: false, allowInvalid: true)
+        .convert(text);
+    if (rows.length < 2) {
+      _snack('行がありません', Colors.orange);
+      return;
+    }
+    final header = rows.first.map((e) => e.toString().trim()).toList();
+    int idx(String name) => header.indexOf(name);
+    final iName = idx('名前');
+    final iTel = idx('TEL') >= 0 ? idx('TEL') : idx(' TEL');
+    final iArea = idx('お住いの地域');
+    final iChild = idx('お子さまの名前');
+    final iKana = idx('ふりがな');
+    final iStatus = idx('ステータス');
+    final iEmail = idx('メール');
+    final iMainConcern = idx('主訴');
+    final iAddress = idx('住所');
+    final iTrialNotes = idx('体験で分かったこと/聞いたこと');
+    final iTrial = idx('体験日');
+    final iKinder = idx('保育園/幼稚園');
+    final iMemo = idx('備考');
+    final iInquired = idx('問い合わせ日');
+    final iLikes = idx('好きなこと');
+    final iNext = idx('対応期日');
+    final iSource = idx('応募経路');
+    final iGender = idx('性別');
+    final iNextAction = idx('現状・ネクストアクション');
+    final iDislikes = idx('苦手なこと');
+    final iBirth = idx('誕生日');
+    final iLoss = idx('辞退理由');
+
+    String get(List<dynamic> row, int i) {
+      if (i < 0 || i >= row.length) return '';
+      return row[i].toString().trim();
+    }
+
+    DateTime? parseJpDate(String s) {
+      final m = RegExp(r'(\d{4})年\s*(\d{1,2})月\s*(\d{1,2})日').firstMatch(s);
+      if (m == null) return null;
+      return DateTime(int.parse(m.group(1)!), int.parse(m.group(2)!),
+          int.parse(m.group(3)!));
+    }
+
+    String mapStage(String s) {
+      final v = s.trim();
+      if (v == '辞退') return 'lost';
+      if (v == '入会') return 'won';
+      if (v == '検討中') return 'considering';
+      if (v == '入会準備中') return 'onboarding';
+      return 'new';
+    }
+
+    String mapSource(String s) {
+      if (s.contains('Instagram') || s.contains('インスタ')) return 'instagram';
+      if (s.contains('紹介')) return 'referral_other';
+      if (s.contains('チラシ')) return 'flyer';
+      if (s.contains('HP') || s.contains('Web') || s.contains('検索')) return 'website';
+      return 'other';
+    }
+
+    final user = FirebaseAuth.instance.currentUser;
+    final fs = FirebaseFirestore.instance;
+    final col = fs.collection('crm_leads');
+
+    int ok = 0;
+    int skipped = 0;
+    WriteBatch batch = fs.batch();
+    int inBatch = 0;
+
+    // 進捗スナックバー
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.showSnackBar(const SnackBar(
+        content: Text('インポート中...'), duration: Duration(seconds: 60)));
+
+    try {
+      for (int r = 1; r < rows.length; r++) {
+        final row = rows[r];
+        final parentFull = get(row, iName);
+        final childName = get(row, iChild);
+        final inquired = parseJpDate(get(row, iInquired));
+        if (parentFull.isEmpty && childName.isEmpty && inquired == null) {
+          skipped++;
+          continue;
+        }
+        final cleaned = parentFull.replaceAll(RegExp(r'\s+'), ' ').trim();
+        final parts = cleaned.split(' ');
+        final pLast = parts.isNotEmpty ? parts[0] : '';
+        final pFirst = parts.length >= 2 ? parts.sublist(1).join('') : '';
+        final stage = mapStage(get(row, iStatus));
+        final trialAt = parseJpDate(get(row, iTrial));
+        final nextAt = parseJpDate(get(row, iNext));
+        final birth = parseJpDate(get(row, iBirth));
+        final source = mapSource(get(row, iSource));
+        final addressParts = [get(row, iArea), get(row, iAddress)]
+            .where((s) => s.isNotEmpty)
+            .toList();
+        final data = <String, dynamic>{
+          'importSource': 'notion_initial',
+          'childLastName': '',
+          'childFirstName': childName,
+          'childKana': get(row, iKana),
+          'childGender': get(row, iGender),
+          'childBirthDate':
+              birth == null ? null : Timestamp.fromDate(birth),
+          'kindergarten': get(row, iKinder),
+          'permitStatus': 'none',
+          'parentLastName': pLast,
+          'parentFirstName': pFirst,
+          'parentKana': '',
+          'parentTel': get(row, iTel),
+          'parentEmail': get(row, iEmail).replaceFirst(RegExp(r'^mailto:'), ''),
+          'parentLine': '',
+          'preferredChannel': 'tel',
+          'address': addressParts.join(' '),
+          'stage': stage,
+          'confidence': stage == 'won'
+              ? 'A'
+              : stage == 'lost'
+                  ? 'C'
+                  : 'B',
+          'source': source,
+          'sourceDetail': get(row, iSource),
+          'preferredDays': '',
+          'preferredTimeSlots': '',
+          'preferredStart': '',
+          'mainConcern': get(row, iMainConcern),
+          'likes': get(row, iLikes),
+          'dislikes': get(row, iDislikes),
+          'trialNotes': get(row, iTrialNotes),
+          'nextActionAt':
+              nextAt == null ? null : Timestamp.fromDate(nextAt),
+          'nextActionNote': get(row, iNextAction),
+          'inquiredAt': inquired == null
+              ? FieldValue.serverTimestamp()
+              : Timestamp.fromDate(inquired),
+          'firstContactedAt': null,
+          'trialAt':
+              trialAt == null ? null : Timestamp.fromDate(trialAt),
+          'enrolledAt': stage == 'won'
+              ? (trialAt == null
+                  ? (inquired == null
+                      ? null
+                      : Timestamp.fromDate(inquired))
+                  : Timestamp.fromDate(trialAt))
+              : null,
+          'lostAt': stage == 'lost' && inquired != null
+              ? Timestamp.fromDate(inquired)
+              : null,
+          'lossReason': stage == 'lost' ? 'other' : null,
+          'lossDetail': stage == 'lost' ? get(row, iLoss) : '',
+          'reapproachOk': true,
+          'memo': get(row, iMemo),
+          'activities': <Map<String, dynamic>>[],
+          'createdAt': FieldValue.serverTimestamp(),
+          'updatedAt': FieldValue.serverTimestamp(),
+          'createdBy': 'import:notion:${user?.uid ?? ''}',
+        };
+        batch.set(col.doc(), data);
+        inBatch++;
+        ok++;
+        if (inBatch >= 400) {
+          await batch.commit();
+          batch = fs.batch();
+          inBatch = 0;
+        }
+      }
+      if (inBatch > 0) await batch.commit();
+      messenger.hideCurrentSnackBar();
+      _snack('インポート完了: $ok件（スキップ $skipped）', Colors.green);
+      if (mounted) setState(() {});
+    } catch (e) {
+      messenger.hideCurrentSnackBar();
+      _snack('インポート失敗: $e', Colors.red);
+    }
+  }
+
+  void _snack(String msg, Color color) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(msg), backgroundColor: color),
     );
   }
 }
