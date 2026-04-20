@@ -1130,132 +1130,207 @@ class _AiChatScreenState extends State<AiChatScreen> {
       builder: (ctx) {
         return StatefulBuilder(
           builder: (ctx, setDialogState) {
-            return AlertDialog(
-              title: const Text('hugへ送信'),
-              content: SizedBox(
-                width: 500,
+            final c = context.colors;
+            Widget metaRow(IconData icon, String label, Widget value) => Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Row(
+                children: [
+                  Icon(icon, size: 16, color: c.textTertiary),
+                  const SizedBox(width: 10),
+                  SizedBox(
+                    width: 64,
+                    child: Text(label, style: TextStyle(fontSize: 12, color: c.textSecondary)),
+                  ),
+                  Expanded(child: value),
+                ],
+              ),
+            );
+
+            return Dialog(
+              backgroundColor: c.scaffoldBg,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              insetPadding: const EdgeInsets.symmetric(horizontal: 32, vertical: 40),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 560),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    // カテゴリ選択
-                    Row(
-                      children: [
-                        const Text('カテゴリ: ',
-                            style: TextStyle(
-                                fontWeight: FontWeight.bold, fontSize: 14)),
-                        const SizedBox(width: 8),
-                        DropdownButton<String>(
-                          value: selectedCategory,
-                          underline: const SizedBox(),
-                          borderRadius: BorderRadius.circular(8),
-                          items: commandLabels.map((label) {
-                            return DropdownMenuItem(
-                                value: label, child: Text(label));
-                          }).toList(),
-                          onChanged: (v) {
-                            if (v != null) {
-                              setDialogState(() => selectedCategory = v);
-                            }
-                          },
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    // 生徒名（表示のみ）
-                    Row(
-                      children: [
-                        const Text('生徒名: ',
-                            style: TextStyle(
-                                fontWeight: FontWeight.bold, fontSize: 14)),
-                        Text(widget.studentName,
-                            style: const TextStyle(fontSize: 14)),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    // 記録者名（表示のみ）
-                    Row(
-                      children: [
-                        const Text('記録者: ',
-                            style: TextStyle(
-                                fontWeight: FontWeight.bold, fontSize: 14)),
-                        Text(staffName,
-                            style: const TextStyle(fontSize: 14)),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    // 日付（変更可能）
-                    Row(
-                      children: [
-                        const Text('日付: ',
-                            style: TextStyle(
-                                fontWeight: FontWeight.bold, fontSize: 14)),
-                        TextButton.icon(
-                          icon: const Icon(Icons.calendar_today, size: 18),
-                          label: Text(
-                            DateFormat('yyyy/MM/dd').format(selectedDate),
-                            style: const TextStyle(fontSize: 14),
+                    // ヘッダ
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(24, 20, 24, 16),
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: c.aiAccent.withOpacity(0.12),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Icon(Icons.cloud_upload_outlined, color: c.aiAccent, size: 20),
                           ),
-                          onPressed: () async {
-                            final picked = await showDatePicker(
-                              context: ctx,
-                              initialDate: selectedDate,
-                              firstDate: DateTime.now()
-                                  .subtract(const Duration(days: 30)),
-                              lastDate: DateTime.now(),
-                              locale: const Locale('ja'),
-                            );
-                            if (picked != null) {
-                              setDialogState(() {
-                                selectedDate = picked;
-                              });
-                            }
-                          },
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    // 内容（編集可能）
-                    const Text('内容:',
-                        style: TextStyle(
-                            fontWeight: FontWeight.bold, fontSize: 14)),
-                    const SizedBox(height: 6),
-                    SizedBox(
-                      height: 300,
-                      child: TextField(
-                        controller: textController,
-                        maxLines: null,
-                        expands: true,
-                        textAlignVertical: TextAlignVertical.top,
-                        decoration: InputDecoration(
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text('HUGへ連携',
+                                    style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600, color: c.textPrimary)),
+                                const SizedBox(height: 2),
+                                Text('AIが生成した内容をHUGの記録に下書きとして送信します',
+                                    style: TextStyle(fontSize: 11, color: c.textSecondary)),
+                              ],
+                            ),
                           ),
-                          contentPadding: const EdgeInsets.all(12),
+                          IconButton(
+                            icon: Icon(Icons.close, size: 20, color: c.textTertiary),
+                            onPressed: () => Navigator.pop(ctx, false),
+                            splashRadius: 18,
+                          ),
+                        ],
+                      ),
+                    ),
+                    Divider(height: 1, color: c.borderLight),
+
+                    // 本文
+                    Flexible(
+                      child: SingleChildScrollView(
+                        padding: const EdgeInsets.fromLTRB(24, 16, 24, 16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            // メタ情報カード
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: c.tagBg,
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Column(
+                                children: [
+                                  metaRow(Icons.category_outlined, 'カテゴリ', DropdownButtonHideUnderline(
+                                    child: DropdownButton<String>(
+                                      value: selectedCategory,
+                                      isExpanded: true,
+                                      borderRadius: BorderRadius.circular(10),
+                                      style: TextStyle(fontSize: 13, color: c.textPrimary),
+                                      items: commandLabels.map((label) {
+                                        return DropdownMenuItem(value: label, child: Text(label));
+                                      }).toList(),
+                                      onChanged: (v) {
+                                        if (v != null) setDialogState(() => selectedCategory = v);
+                                      },
+                                    ),
+                                  )),
+                                  Divider(height: 1, color: c.borderLight),
+                                  metaRow(Icons.person_outline, '生徒名',
+                                    Text(widget.studentName, style: TextStyle(fontSize: 13, color: c.textPrimary, fontWeight: FontWeight.w500))),
+                                  Divider(height: 1, color: c.borderLight),
+                                  metaRow(Icons.edit_outlined, '記録者',
+                                    Text(staffName, style: TextStyle(fontSize: 13, color: c.textPrimary, fontWeight: FontWeight.w500))),
+                                  Divider(height: 1, color: c.borderLight),
+                                  metaRow(Icons.calendar_today_outlined, '日付',
+                                    InkWell(
+                                      borderRadius: BorderRadius.circular(6),
+                                      onTap: () async {
+                                        final picked = await showDatePicker(
+                                          context: ctx,
+                                          initialDate: selectedDate,
+                                          firstDate: DateTime.now().subtract(const Duration(days: 30)),
+                                          lastDate: DateTime.now(),
+                                          locale: const Locale('ja'),
+                                        );
+                                        if (picked != null) {
+                                          setDialogState(() => selectedDate = picked);
+                                        }
+                                      },
+                                      child: Padding(
+                                        padding: const EdgeInsets.symmetric(vertical: 4),
+                                        child: Row(
+                                          children: [
+                                            Text(DateFormat('yyyy/MM/dd (E)', 'ja').format(selectedDate),
+                                              style: TextStyle(fontSize: 13, color: c.aiAccent, fontWeight: FontWeight.w500)),
+                                            const SizedBox(width: 4),
+                                            Icon(Icons.arrow_drop_down, size: 18, color: c.aiAccent),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 20),
+                            // 内容編集
+                            Row(
+                              children: [
+                                Icon(Icons.description_outlined, size: 16, color: c.textTertiary),
+                                const SizedBox(width: 8),
+                                Text('内容', style: TextStyle(fontSize: 12, color: c.textSecondary)),
+                                const Spacer(),
+                                StatefulBuilder(
+                                  builder: (ctx, _) => Text(
+                                    '${textController.text.length}文字',
+                                    style: TextStyle(fontSize: 11, color: c.textTertiary),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            Container(
+                              decoration: BoxDecoration(
+                                color: c.tagBg,
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(color: c.borderLight, width: 0.5),
+                              ),
+                              child: TextField(
+                                controller: textController,
+                                maxLines: 12,
+                                minLines: 8,
+                                textAlignVertical: TextAlignVertical.top,
+                                decoration: const InputDecoration(
+                                  border: InputBorder.none,
+                                  contentPadding: EdgeInsets.all(14),
+                                ),
+                                style: TextStyle(fontSize: 13, height: 1.7, color: c.textPrimary),
+                                onChanged: (_) => setDialogState(() {}),
+                              ),
+                            ),
+                          ],
                         ),
-                        style: const TextStyle(fontSize: 13, height: 1.6),
+                      ),
+                    ),
+
+                    // フッタ
+                    Divider(height: 1, color: c.borderLight),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+                      child: Row(
+                        children: [
+                          const Spacer(),
+                          TextButton(
+                            onPressed: () => Navigator.pop(ctx, false),
+                            child: Text('キャンセル', style: TextStyle(color: c.textSecondary)),
+                          ),
+                          const SizedBox(width: 8),
+                          ElevatedButton.icon(
+                            onPressed: () => Navigator.pop(ctx, true),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: c.aiAccent,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              elevation: 0,
+                            ),
+                            icon: const Icon(Icons.cloud_upload_outlined, size: 16),
+                            label: const Text('HUGへ送信', style: TextStyle(fontWeight: FontWeight.w600)),
+                          ),
+                        ],
                       ),
                     ),
                   ],
                 ),
               ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(ctx, false),
-                  child: const Text('キャンセル'),
-                ),
-                ElevatedButton.icon(
-                  onPressed: () => Navigator.pop(ctx, true),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blue,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10)),
-                  ),
-                  icon: const Icon(Icons.cloud_upload_outlined, size: 18),
-                  label: const Text('hugへ送信'),
-                ),
-              ],
             );
           },
         );
@@ -1653,34 +1728,43 @@ class _AiChatScreenState extends State<AiChatScreen> {
           return _buildWelcomeView();
         }
 
-        // スクロール制御
+        // スクロール制御: ユーザー送信時は最下部へ。AI応答が来た時はユーザーが
+        // 自分で上に戻っていない限り最下部を追いかける（Claudeライクな挙動）。
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (!_scrollController.hasClients) return;
 
           final currentCount = allMessages.length;
           final lastRole = allMessages.isNotEmpty ? allMessages.last['role'] : null;
 
+          final position = _scrollController.position;
+          final isNearBottom = position.pixels >= position.maxScrollExtent - 120;
+
           if (_previousMessageCount == 0 && currentCount > 0) {
-            _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
+            _scrollController.jumpTo(position.maxScrollExtent);
           } else if (currentCount > _previousMessageCount) {
-            if (lastRole == 'assistant') {
-              final userMessageIndex = currentCount - 2;
-              if (userMessageIndex >= 0) {
-                final targetPosition = userMessageIndex * 80.0;
-                _scrollController.animateTo(
-                  targetPosition.clamp(0.0, _scrollController.position.maxScrollExtent),
-                  duration: const Duration(milliseconds: 300),
-                  curve: Curves.easeOut,
-                );
-              }
-            } else if (lastRole == 'user') {
-              _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
+            if (lastRole == 'user') {
+              _scrollController.jumpTo(position.maxScrollExtent);
+            } else if (lastRole == 'assistant' && isNearBottom) {
+              _scrollController.animateTo(
+                position.maxScrollExtent,
+                duration: const Duration(milliseconds: 200),
+                curve: Curves.easeOut,
+              );
             }
+          } else if (_isWaitingForAiResponse && isNearBottom) {
+            // ストリーミング中の逐次更新に追従
+            _scrollController.jumpTo(position.maxScrollExtent);
           }
 
           _previousMessageCount = currentCount;
-
         });
+
+        // ストリーミング中のアシスタントメッセージが既にリストにあるなら、
+        // typing indicator を重ねて表示しない
+        final hasStreamingAssistant = allMessages.isNotEmpty &&
+            allMessages.last['role'] == 'assistant' &&
+            (allMessages.last['status'] == 'streaming');
+        final showTyping = _isWaitingForAiResponse && !hasStreamingAssistant;
 
         return Align(
           alignment: Alignment.topCenter,
@@ -1689,7 +1773,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
             child: ListView.builder(
               controller: _scrollController,
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-              itemCount: allMessages.length + (_isWaitingForAiResponse ? 1 : 0),
+              itemCount: allMessages.length + (showTyping ? 1 : 0),
               itemBuilder: (context, index) {
                 if (index == allMessages.length) {
                   return _buildTypingIndicator();
@@ -1984,8 +2068,8 @@ class _AiChatScreenState extends State<AiChatScreen> {
                     ),
                     const SizedBox(width: 2),
                     _AiMessageActionButton(
-                      icon: Icons.bookmark_outline_rounded,
-                      tooltip: '保存',
+                      icon: Icons.cloud_upload_outlined,
+                      tooltip: 'HUG連携',
                       onTap: () => _showSaveContentDialog(content, defaultCommandLabel: usedCommandLabel),
                     ),
                     const Spacer(),
