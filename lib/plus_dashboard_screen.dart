@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
-import 'package:url_launcher/url_launcher.dart';
 import 'app_theme.dart';
 import 'classroom_utils.dart';
+import 'student_profile_dialog.dart';
 
 /// プラスダッシュボードのコンテンツウィジェット
 class PlusDashboardContent extends StatefulWidget {
@@ -102,10 +102,11 @@ class _PlusDashboardContentState extends State<PlusDashboardContent> {
       
       for (var doc in snapshot.docs) {
         final data = doc.data();
+        final familyUid = data['uid'] as String? ?? doc.id;
         final lastName = data['lastName'] as String? ?? '';
         final lastNameKana = data['lastNameKana'] as String? ?? '';
         final children = List<Map<String, dynamic>>.from(data['children'] ?? []);
-        
+
         for (var child in children) {
           final firstName = child['firstName'] as String? ?? '';
           final classrooms = getChildClassrooms(child);
@@ -113,7 +114,9 @@ class _PlusDashboardContentState extends State<PlusDashboardContent> {
 
           // プラスの教室のみ
           if (firstName.isNotEmpty && classrooms.any((c) => c.contains('プラス'))) {
+            final studentId = child['studentId'] ?? '${familyUid}_$firstName';
             students.add({
+              'studentId': studentId,
               'name': '$lastName $firstName'.trim(),
               'firstName': firstName,
               'lastName': lastName,
@@ -3104,33 +3107,29 @@ void _showStudentSelectionDialog(Function(Map<String, dynamic>) onSelect) {
                             ),
                           ),
                         ),
-                        // 策定会議ボタン
+                        // 策定会議ボタン（児童プロファイルダイアログを開く）
                         Builder(builder: (_) {
                           final matchedStudent = _allStudents.firstWhere(
                             (s) => s['name'] == studentName,
                             orElse: () => <String, dynamic>{},
                           );
-                          final meetingUrls = (matchedStudent['meetingUrls'] as List<dynamic>? ?? [])
-                              .map((e) => Map<String, dynamic>.from(e))
-                              .where((e) => (e['url'] as String? ?? '').isNotEmpty)
-                              .toList();
-                          if (meetingUrls.isEmpty) return const SizedBox.shrink();
+                          final sid = matchedStudent['studentId'] as String?;
+                          if (sid == null) return const SizedBox.shrink();
                           return Padding(
                             padding: const EdgeInsets.only(left: 8),
                             child: ElevatedButton(
-                              onPressed: () {
-                                for (final item in meetingUrls) {
-                                  final url = item['url'] as String;
-                                  launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
-                                }
-                              },
-                              child: const Text('策定会議'),
+                              onPressed: () => showStudentProfileDialog(
+                                context,
+                                studentId: sid,
+                                studentName: studentName,
+                              ),
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: Colors.teal,
                                 foregroundColor: Colors.white,
                                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                               ),
+                              child: const Text('策定会議'),
                             ),
                           );
                         }),
@@ -3199,14 +3198,23 @@ void _showStudentSelectionDialog(Function(Map<String, dynamic>) onSelect) {
                           const SizedBox(height: 12),
                           // 既存タスク一覧
                           if (studentTasks.isNotEmpty) ...[
-                            ...studentTasks.map((task) => GestureDetector(
+                            ...studentTasks.map((task) {
+                              final isDark = Theme.of(context).brightness == Brightness.dark;
+                              final taskBg = isDark
+                                  ? AppColors.accent.shade900.withValues(alpha: 0.25)
+                                  : AppColors.accent.shade50;
+                              final taskBorder = isDark
+                                  ? AppColors.accent.shade700.withValues(alpha: 0.4)
+                                  : AppColors.accent.shade100;
+                              return GestureDetector(
                               onTap: () => _showEditTaskDialog(task),
                               child: Container(
                                 margin: const EdgeInsets.only(bottom: 8),
                                 padding: const EdgeInsets.all(10),
                                 decoration: BoxDecoration(
-                                  color: AppColors.accent.shade50,
+                                  color: taskBg,
                                   borderRadius: BorderRadius.circular(6),
+                                  border: Border.all(color: taskBorder),
                                 ),
                                 child: Row(
                                   children: [
@@ -3214,7 +3222,8 @@ void _showStudentSelectionDialog(Function(Map<String, dynamic>) onSelect) {
                                       child: Column(
                                         crossAxisAlignment: CrossAxisAlignment.start,
                                         children: [
-                                          Text(task['title'] ?? '', style: TextStyle(fontSize: 13)),
+                                          Text(task['title'] ?? '',
+                                              style: TextStyle(fontSize: 13, color: context.colors.textPrimary)),
                                           if (task['dueDate'] != null)
                                             Text(
                                               '期限: ${DateFormat('M/d').format((task['dueDate'] as Timestamp).toDate())}',
@@ -3239,7 +3248,8 @@ void _showStudentSelectionDialog(Function(Map<String, dynamic>) onSelect) {
                                   ],
                                 ),
                               ),
-                            )),
+                            );
+                            }),
                           ],
                           // 新規タスク入力
                           Row(
