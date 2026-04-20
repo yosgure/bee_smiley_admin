@@ -397,9 +397,20 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
                 return Card(
                   child: InkWell(
                     onTap: () {
-                      Navigator.push(context, MaterialPageRoute(
-                        builder: (context) => AssessmentDetailScreen(doc: doc),
-                      ));
+                      final isWide = MediaQuery.of(context).size.width >= 600;
+                      if (isWide) {
+                        AdminShell.showOverlay(
+                          context,
+                          AssessmentDetailScreen(
+                            doc: doc,
+                            onClose: () => AdminShell.hideOverlay(context),
+                          ),
+                        );
+                      } else {
+                        Navigator.push(context, MaterialPageRoute(
+                          builder: (context) => AssessmentDetailScreen(doc: doc),
+                        ));
+                      }
                     },
                     borderRadius: AppStyles.radius,
                     child: Padding(
@@ -472,9 +483,20 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
                 return Card(
                   child: InkWell(
                     onTap: () {
-                      Navigator.push(context, MaterialPageRoute(
-                        builder: (context) => AssessmentDetailScreen(doc: doc),
-                      ));
+                      final isWide = MediaQuery.of(context).size.width >= 600;
+                      if (isWide) {
+                        AdminShell.showOverlay(
+                          context,
+                          AssessmentDetailScreen(
+                            doc: doc,
+                            onClose: () => AdminShell.hideOverlay(context),
+                          ),
+                        );
+                      } else {
+                        Navigator.push(context, MaterialPageRoute(
+                          builder: (context) => AssessmentDetailScreen(doc: doc),
+                        ));
+                      }
                     },
                     borderRadius: AppStyles.radius,
                     child: Padding(

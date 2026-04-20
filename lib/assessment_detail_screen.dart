@@ -4,11 +4,13 @@ import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'assessment_edit_screen.dart';
 import 'app_theme.dart';
+import 'main.dart';
 
 class AssessmentDetailScreen extends StatefulWidget {
   final DocumentSnapshot doc;
+  final VoidCallback? onClose;
 
-  const AssessmentDetailScreen({super.key, required this.doc});
+  const AssessmentDetailScreen({super.key, required this.doc, this.onClose});
 
   @override
   State<AssessmentDetailScreen> createState() => _AssessmentDetailScreenState();
@@ -16,12 +18,71 @@ class AssessmentDetailScreen extends StatefulWidget {
 
 class _AssessmentDetailScreenState extends State<AssessmentDetailScreen> {
   bool _isPublishing = false;
+  bool _isDeleting = false;
   late Map<String, dynamic> _data;
 
   @override
   void initState() {
     super.initState();
     _data = widget.doc.data() as Map<String, dynamic>;
+  }
+
+  void _close() {
+    if (widget.onClose != null) {
+      widget.onClose!();
+    } else {
+      Navigator.pop(context);
+    }
+  }
+
+  Future<void> _confirmAndDelete() async {
+    final type = _data['type'] as String? ?? 'weekly';
+    final isWeekly = type == 'weekly';
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text(isWeekly ? 'この週次アセスメントを削除しますか？' : 'この月次サマリを削除しますか？'),
+        content: const Text('この操作は取り消せません。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('キャンセル'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('削除'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    setState(() => _isDeleting = true);
+    try {
+      await FirebaseFirestore.instance
+          .collection('assessments')
+          .doc(widget.doc.id)
+          .delete();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('削除しました'), backgroundColor: Colors.green),
+        );
+        _close();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('削除に失敗: $e'), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isDeleting = false);
+    }
   }
 
   Future<void> _launchUrl(String url) async {
@@ -77,7 +138,7 @@ class _AssessmentDetailScreenState extends State<AssessmentDetailScreen> {
         elevation: 0,
         leading: IconButton(
           icon: Icon(Icons.arrow_back_ios, color: context.colors.textPrimary),
-          onPressed: () => Navigator.pop(context),
+          onPressed: _close,
         ),
         actions: [
           // 下書きの場合は「公開」ボタンを表示
@@ -97,22 +158,59 @@ class _AssessmentDetailScreenState extends State<AssessmentDetailScreen> {
             ),
           TextButton.icon(
             onPressed: () {
-              Navigator.pushReplacement(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => AssessmentEditScreen(
+              if (widget.onClose != null) {
+                // オーバーレイモード: 編集画面に差し替え
+                AdminShell.showOverlay(
+                  context,
+                  AssessmentEditScreen(
                     studentId: _data['studentId'] ?? '',
                     studentName: studentName,
                     type: type,
                     docId: widget.doc.id,
                     initialData: _data,
+                    onClose: () => AdminShell.hideOverlay(context),
                   ),
-                ),
-              );
+                );
+              } else {
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => AssessmentEditScreen(
+                      studentId: _data['studentId'] ?? '',
+                      studentName: studentName,
+                      type: type,
+                      docId: widget.doc.id,
+                      initialData: _data,
+                    ),
+                  ),
+                );
+              }
             },
             icon: const Icon(Icons.edit, size: 18, color: AppColors.primary),
             label: const Text('編集', style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold)),
           ),
+          // 削除ボタン（三点メニュー内）
+          PopupMenuButton<String>(
+            tooltip: 'その他',
+            icon: Icon(Icons.more_vert, color: context.colors.textSecondary),
+            onSelected: (v) {
+              if (v == 'delete') _confirmAndDelete();
+            },
+            itemBuilder: (ctx) => [
+              PopupMenuItem<String>(
+                value: 'delete',
+                enabled: !_isDeleting,
+                child: Row(
+                  children: [
+                    Icon(Icons.delete_outline, size: 18, color: Colors.red.shade600),
+                    const SizedBox(width: 10),
+                    Text('削除', style: TextStyle(color: Colors.red.shade600)),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(width: 4),
         ],
       ),
       body: Align(
