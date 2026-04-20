@@ -72,9 +72,14 @@ class _StudentProfileDialogState extends State<_StudentProfileDialog> {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       insetPadding: const EdgeInsets.symmetric(horizontal: 32, vertical: 40),
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 680, maxHeight: 720),
+        // 高さを固定して、中身の展開/折りたたみで全体サイズが変わらないようにする
+        constraints: BoxConstraints(
+          maxWidth: 680,
+          minHeight: MediaQuery.of(context).size.height - 80,
+          maxHeight: MediaQuery.of(context).size.height - 80,
+        ),
         child: Column(
-          mainAxisSize: MainAxisSize.min,
+          mainAxisSize: MainAxisSize.max,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             // ヘッダ
@@ -268,20 +273,120 @@ class _StudentProfileDialogState extends State<_StudentProfileDialog> {
               width: double.infinity,
               padding: const EdgeInsets.fromLTRB(14, 0, 14, 12),
               child: Container(
-                padding: const EdgeInsets.all(12),
+                padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
                   color: c.scaffoldBg,
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(color: c.borderLight, width: 0.5),
                 ),
-                child: SelectableText(
-                  rawText,
-                  style: TextStyle(fontSize: 12, color: c.textPrimary, height: 1.6),
-                ),
+                child: _buildStructuredText(rawText),
               ),
             ),
         ],
       ),
+    );
+  }
+
+  /// HUGから抽出した rawText を読みやすい構造で表示する。
+  /// - "## タイトル" → 見出し
+  /// - "ラベル: 値" → ラベル小文字 + 値（値に " / " や " ・" があれば箇条書き）
+  /// - その他 → パラグラフ
+  Widget _buildStructuredText(String raw) {
+    final c = context.colors;
+    final lines = raw.split('\n').map((l) => l.trim()).where((l) => l.isNotEmpty).toList();
+    final widgets = <Widget>[];
+
+    List<Widget> renderValue(String value) {
+      String v = value.trim();
+      // 値内に ・区切りの項目が2つ以上
+      final bulletSplit = v.split(RegExp(r'\s*・\s*')).where((p) => p.trim().isNotEmpty).toList();
+      if (v.startsWith('・') || (bulletSplit.length >= 2 && RegExp(r'・').hasMatch(v))) {
+        return bulletSplit.map((p) => Padding(
+          padding: const EdgeInsets.only(left: 2, bottom: 3),
+          child: Text('・${p.trim()}',
+              style: TextStyle(fontSize: 13, color: c.textPrimary, height: 1.7)),
+        )).toList();
+      }
+      // " / " で複数値を連結している場合も箇条書きにする（ただし日付などのスラッシュは除外する目安で3つ以上）
+      final slashParts = v.split(' / ').map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
+      if (slashParts.length >= 3) {
+        return slashParts.map((p) => Padding(
+          padding: const EdgeInsets.only(left: 2, bottom: 3),
+          child: Text('・$p',
+              style: TextStyle(fontSize: 13, color: c.textPrimary, height: 1.7)),
+        )).toList();
+      }
+      return [
+        SelectableText(v, style: TextStyle(fontSize: 13, color: c.textPrimary, height: 1.7)),
+      ];
+    }
+
+    for (final line in lines) {
+      if (line.startsWith('## ')) {
+        if (widgets.isNotEmpty) widgets.add(const SizedBox(height: 10));
+        widgets.add(Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: Text(
+            line.substring(3).trim(),
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+              color: c.textPrimary,
+              height: 1.4,
+            ),
+          ),
+        ));
+        continue;
+      }
+      final colonIdx = line.indexOf(': ');
+      if (colonIdx > 0 && colonIdx < 40) {
+        final label = line.substring(0, colonIdx).trim();
+        final value = line.substring(colonIdx + 2).trim();
+        if (value.isEmpty) {
+          widgets.add(Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: Text(label,
+                style: TextStyle(
+                    fontSize: 12,
+                    color: c.textSecondary,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 0.3)),
+          ));
+        } else {
+          widgets.add(Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: c.textSecondary,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 0.3,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                ...renderValue(value),
+              ],
+            ),
+          ));
+        }
+      } else {
+        widgets.add(Padding(
+          padding: const EdgeInsets.only(bottom: 6),
+          child: SelectableText(
+            line,
+            style: TextStyle(fontSize: 13, color: c.textPrimary, height: 1.7),
+          ),
+        ));
+      }
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: widgets,
     );
   }
 
