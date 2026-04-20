@@ -3200,10 +3200,116 @@ final plusStaff = _staffList.where((s) =>
             ),
           ),
           const SizedBox(width: 8),
-          // シフト希望入力アイコン
-          _buildShiftRequestIconButton(),
+          // 3点メニュー（シフト希望・CRM・会議録・事故ヒヤリハット・苦情受付・法定研修）
+          _buildPlusMenuButton(),
         ],
       ),
+    );
+  }
+
+  /// 右上の「…」メニュー。シフト希望など関連ツールへの入口。
+  Widget _buildPlusMenuButton() {
+    final target = resolveShiftRequestTargetMonth();
+    final deadline = DateTime(target.year, target.month - 1, 10);
+    final today = DateTime.now();
+    final t = DateTime(today.year, today.month, today.day);
+    final d = DateTime(deadline.year, deadline.month, deadline.day);
+    final daysLeft = d.difference(t).inDays;
+    final needsAttention = daysLeft <= 3; // 締切3日前以内 or 超過
+
+    return PopupMenuButton<String>(
+      tooltip: 'メニュー',
+      position: PopupMenuPosition.under,
+      offset: const Offset(0, 8),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      color: context.colors.scaffoldBg,
+      icon: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Icon(Icons.more_horiz, color: context.colors.textTertiary, size: 22),
+          if (needsAttention)
+            Positioned(
+              right: -2,
+              top: -2,
+              child: Container(
+                width: 8,
+                height: 8,
+                decoration: BoxDecoration(
+                  color: daysLeft < 0 ? Colors.red.shade700 : Colors.red.shade400,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: context.colors.scaffoldBg, width: 1.5),
+                ),
+              ),
+            ),
+        ],
+      ),
+      onSelected: (value) async {
+        switch (value) {
+          case 'shift':
+            showPlusShiftRequestDialog(context, target);
+            break;
+          case 'shift_decision':
+            final saved = await showPlusShiftDecisionDialog(context, target);
+            if (saved == true && mounted) {
+              await _loadShiftData();
+              setState(() {});
+            }
+            break;
+          case 'crm':
+          case 'meeting':
+          case 'accident':
+          case 'complaint':
+          case 'training':
+            final labels = {
+              'crm': 'CRM',
+              'meeting': '会議録',
+              'accident': '事故ヒヤリハット',
+              'complaint': '苦情受付',
+              'training': '法定研修',
+            };
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('${labels[value]}のリンクは未設定です。')),
+              );
+            }
+            break;
+        }
+      },
+      itemBuilder: (ctx) {
+        PopupMenuItem<String> item(String value, IconData icon, String label, {String? trailing, Color? trailingColor}) {
+          return PopupMenuItem<String>(
+            value: value,
+            child: Row(
+              children: [
+                Icon(icon, size: 18, color: context.colors.textSecondary),
+                const SizedBox(width: 12),
+                Expanded(child: Text(label, style: const TextStyle(fontSize: 13))),
+                if (trailing != null)
+                  Text(trailing,
+                      style: TextStyle(fontSize: 11, color: trailingColor ?? context.colors.textTertiary)),
+              ],
+            ),
+          );
+        }
+        return [
+          item(
+            'shift',
+            Icons.how_to_vote_outlined,
+            'シフト希望',
+            trailing: daysLeft < 0
+                ? '超過${-daysLeft}日'
+                : 'あと$daysLeft日',
+            trailingColor: needsAttention ? Colors.red.shade400 : null,
+          ),
+          item('shift_decision', Icons.event_available_outlined, 'シフト決定'),
+          const PopupMenuDivider(),
+          item('crm', Icons.people_alt_outlined, 'CRM'),
+          item('meeting', Icons.description_outlined, '会議録'),
+          item('accident', Icons.warning_amber_outlined, '事故ヒヤリハット'),
+          item('complaint', Icons.report_gmailerrorred_outlined, '苦情受付'),
+          item('training', Icons.school_outlined, '法定研修'),
+        ];
+      },
     );
   }
 
@@ -3282,56 +3388,6 @@ final plusStaff = _staffList.where((s) =>
   }
 
   // シフト希望入力のアイコンボタン（右上のビュー切替の横に配置）
-  Widget _buildShiftRequestIconButton() {
-    final target = resolveShiftRequestTargetMonth();
-    final deadline = DateTime(target.year, target.month - 1, 10);
-    final today = DateTime.now();
-    final t = DateTime(today.year, today.month, today.day);
-    final d = DateTime(deadline.year, deadline.month, deadline.day);
-    final daysLeft = d.difference(t).inDays;
-
-    // 色分け: 通常=グレー / 3日以内=赤 / 超過=濃い赤
-    late final Color color;
-    if (daysLeft < 0) {
-      color = Colors.red.shade700;
-    } else if (daysLeft <= 3) {
-      color = Colors.red.shade400;
-    } else {
-      color = context.colors.textTertiary;
-    }
-
-    final tooltipText =
-        '${target.year}年${target.month}月のシフト希望を入力\n締切: ${DateFormat('M/d', 'ja').format(deadline)}'
-        '${daysLeft < 0 ? '（超過 ${-daysLeft}日）' : '（あと$daysLeft日）'}';
-
-    return Tooltip(
-      message: '$tooltipText\n（長押しでシフト決定ビューを開く）',
-      child: Material(
-        color: Colors.transparent,
-        borderRadius: BorderRadius.circular(8),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(8),
-          onTap: () {
-            showPlusShiftRequestDialog(context, target);
-          },
-          onLongPress: () async {
-            final saved =
-                await showPlusShiftDecisionDialog(context, target);
-            if (saved == true && mounted) {
-              await _loadShiftData();
-              setState(() {});
-            }
-          },
-          child: SizedBox(
-            width: 36,
-            height: 36,
-            child: Icon(Icons.how_to_vote_outlined, color: color, size: 20),
-          ),
-        ),
-      ),
-    );
-  }
-
   Widget _buildViewModeTab(int mode, IconData icon, String label) {
     final isSelected = _viewMode == mode;
     return Tooltip(
