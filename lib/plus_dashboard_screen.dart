@@ -2554,14 +2554,23 @@ if (studentTasks.isNotEmpty) {
                             const SizedBox(height: 12),
                             // 既存タスク一覧
                             if (studentTasks.isNotEmpty) ...[
-                              ...studentTasks.map((task) => GestureDetector(
+                              ...studentTasks.map((task) {
+                                final isDark = Theme.of(context).brightness == Brightness.dark;
+                                final taskBg = isDark
+                                    ? AppColors.accent.shade900.withValues(alpha: 0.25)
+                                    : AppColors.accent.shade50;
+                                final taskBorder = isDark
+                                    ? AppColors.accent.shade700.withValues(alpha: 0.4)
+                                    : AppColors.accent.shade100;
+                                return GestureDetector(
                                 onTap: () => _showEditTaskDialog(task),
                                 child: Container(
                                   margin: const EdgeInsets.only(bottom: 8),
                                   padding: const EdgeInsets.all(10),
                                   decoration: BoxDecoration(
-                                    color: AppColors.accent.shade50,
+                                    color: taskBg,
                                     borderRadius: BorderRadius.circular(6),
+                                    border: Border.all(color: taskBorder),
                                   ),
                                   child: Row(
                                     children: [
@@ -2569,7 +2578,8 @@ if (studentTasks.isNotEmpty) {
                                         child: Column(
                                           crossAxisAlignment: CrossAxisAlignment.start,
                                           children: [
-                                            Text(task['title'] ?? '', style: TextStyle(fontSize: 13)),
+                                            Text(task['title'] ?? '',
+                                                style: TextStyle(fontSize: 13, color: context.colors.textPrimary)),
                                             if (task['dueDate'] != null)
                                               Text(
                                                 '期限: ${DateFormat('M/d').format((task['dueDate'] as Timestamp).toDate())}',
@@ -2594,7 +2604,8 @@ if (studentTasks.isNotEmpty) {
                                     ],
                                   ),
                                 ),
-                              )),
+                              );
+                              }),
                             ],
                             // 新規タスク入力
                             Row(

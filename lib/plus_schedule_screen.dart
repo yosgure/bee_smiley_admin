@@ -11,6 +11,7 @@ import 'package:flutter/gestures.dart';
 import 'ai_chat_screen.dart';
 import 'main.dart';
 import 'student_detail_screen.dart';
+import 'student_profile_dialog.dart';
 
 // 講師名・教室名クリック時に生徒編集ダイアログの発火を抑制するフラグ
 bool _quickEditTappedGlobal = false;
@@ -29,6 +30,22 @@ class _PlusScheduleContentState extends State<PlusScheduleContent> with Automati
   // AutomaticKeepAliveClientMixinを追加して、タブ切り替え時に状態を保持
   @override
   bool get wantKeepAlive => true;
+
+  /// タスク行の装飾（ダークモード対応）
+  BoxDecoration _taskDecoration() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return BoxDecoration(
+      color: isDark
+          ? AppColors.accent.shade900.withValues(alpha: 0.25)
+          : AppColors.accent.shade50,
+      borderRadius: BorderRadius.circular(6),
+      border: Border.all(
+        color: isDark
+            ? AppColors.accent.shade700.withValues(alpha: 0.4)
+            : AppColors.accent.shade100,
+      ),
+    );
+  }
   late DateTime _weekStart;
   
 // 表示モード: 0=週カレンダー, 1=ダッシュボード, 2=月カレンダー
@@ -2394,10 +2411,7 @@ void _goToPage(int page) {
                                 child: Container(
                                   margin: const EdgeInsets.only(bottom: 8),
                                   padding: const EdgeInsets.all(10),
-                                  decoration: BoxDecoration(
-                                    color: AppColors.accent.shade50,
-                                    borderRadius: BorderRadius.circular(6),
-                                  ),
+                                  decoration: _taskDecoration(),
                                   child: Row(
                                     children: [
                                       Expanded(
@@ -7018,10 +7032,7 @@ if (inputMode != 'memo') ...[
                                 child: Container(
                                   margin: const EdgeInsets.only(bottom: 8),
                                   padding: const EdgeInsets.all(10),
-                                  decoration: BoxDecoration(
-                                    color: AppColors.accent.shade50,
-                                    borderRadius: BorderRadius.circular(6),
-                                  ),
+                                  decoration: _taskDecoration(),
                                   child: Row(
                                     children: [
                                       Expanded(
@@ -7821,34 +7832,30 @@ await _loadLessonsForWeek(showLoading: false);
                             ),
                           ),
                         ),
-                        // 策定会議ボタン
+                        // 策定会議ボタン（児童プロファイルダイアログを開く）
                         if (!isCustomEvent && studentName.isNotEmpty)
                           Builder(builder: (_) {
                             final student = _allStudents.firstWhere(
                               (s) => s['name'] == studentName,
                               orElse: () => <String, dynamic>{},
                             );
-                            final meetingUrls = (student['meetingUrls'] as List<dynamic>? ?? [])
-                                .map((e) => Map<String, dynamic>.from(e))
-                                .where((e) => (e['url'] as String? ?? '').isNotEmpty)
-                                .toList();
-                            if (meetingUrls.isEmpty) return const SizedBox.shrink();
+                            final sid = student['studentId'] as String?;
+                            if (sid == null) return const SizedBox.shrink();
                             return Padding(
                               padding: const EdgeInsets.only(left: 8),
                               child: ElevatedButton(
-                                onPressed: () {
-                                  for (final item in meetingUrls) {
-                                    final url = item['url'] as String;
-                                    launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
-                                  }
-                                },
-                                child: const Text('策定会議'),
+                                onPressed: () => showStudentProfileDialog(
+                                  context,
+                                  studentId: sid,
+                                  studentName: studentName,
+                                ),
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: Colors.teal,
                                   foregroundColor: context.colors.textOnPrimary,
                                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                                 ),
+                                child: const Text('策定会議'),
                               ),
                             );
                           }),
@@ -8053,10 +8060,7 @@ await _loadLessonsForWeek(showLoading: false);
                                 child: Container(
                                   margin: const EdgeInsets.only(bottom: 8),
                                   padding: const EdgeInsets.all(10),
-                                  decoration: BoxDecoration(
-                                    color: AppColors.accent.shade50,
-                                    borderRadius: BorderRadius.circular(6),
-                                  ),
+                                  decoration: _taskDecoration(),
                                   child: Row(
                                     children: [
                                       Expanded(
