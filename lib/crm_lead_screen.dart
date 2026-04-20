@@ -171,6 +171,7 @@ class _CrmLeadScreenState extends State<CrmLeadScreen> {
         children: [
           // ビュー切替
           SegmentedButton<int>(
+            showSelectedIcon: false,
             segments: const [
               ButtonSegment(value: 0, label: Text('カンバン'), icon: Icon(Icons.view_kanban_outlined, size: 16)),
               ButtonSegment(value: 1, label: Text('一覧'), icon: Icon(Icons.table_rows_outlined, size: 16)),
@@ -655,25 +656,27 @@ class _LeadKanbanCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final d = doc.data();
     final childName = _childFullName(d);
-    final parentName = _parentFullName(d);
     final source = d['source'] as String? ?? '';
     final inquiredAt = (d['inquiredAt'] as Timestamp?)?.toDate();
     final nextAt = (d['nextActionAt'] as Timestamp?)?.toDate();
     final nextNote = d['nextActionNote'] as String? ?? '';
-    final confidence = d['confidence'] as String? ?? '';
     final overdue = nextAt != null && nextAt.isBefore(DateTime.now());
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 6),
+      margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
         color: context.colors.cardBg,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(10),
         border: Border.all(
-            color: overdue ? Colors.red.shade300 : context.colors.borderLight,
-            width: overdue ? 1 : 0.5),
+          color: overdue
+              ? Colors.red.shade300
+              : (isDark ? const Color(0xFF3A3D42) : const Color(0xFFE4E7EB)),
+          width: 1,
+        ),
       ),
       child: InkWell(
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(10),
         onTap: () => Navigator.push(context,
             MaterialPageRoute(builder: (_) => CrmLeadEditScreen(doc: doc))),
         child: Padding(
@@ -681,46 +684,14 @@ class _LeadKanbanCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      childName.isEmpty ? '(児童名未入力)' : childName,
-                      style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.bold,
-                          color: context.colors.textPrimary),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  if (confidence.isNotEmpty)
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 5, vertical: 1),
-                      decoration: BoxDecoration(
-                        color: confidence == 'A'
-                            ? Colors.red.shade400
-                            : confidence == 'B'
-                                ? Colors.orange.shade400
-                                : Colors.grey.shade400,
-                        borderRadius: BorderRadius.circular(3),
-                      ),
-                      child: Text(confidence,
-                          style: const TextStyle(
-                              fontSize: 9,
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold)),
-                    ),
-                ],
+              Text(
+                childName.isEmpty ? '(児童名未入力)' : childName,
+                style: TextStyle(
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w700,
+                    color: context.colors.textPrimary),
+                overflow: TextOverflow.ellipsis,
               ),
-              if (parentName.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(top: 2),
-                  child: Text('保: $parentName',
-                      style: TextStyle(
-                          fontSize: 11, color: context.colors.textSecondary),
-                      overflow: TextOverflow.ellipsis),
-                ),
               const SizedBox(height: 6),
               Wrap(
                 spacing: 4,
@@ -788,15 +759,11 @@ class _LeadKanbanCard extends StatelessWidget {
 }
 
 String _childFullName(Map<String, dynamic> d) {
-  final l = (d['childLastName'] as String? ?? '').trim();
-  final f = (d['childFirstName'] as String? ?? '').trim();
-  return [l, f].where((s) => s.isNotEmpty).join(' ');
-}
-
-String _parentFullName(Map<String, dynamic> d) {
-  final l = (d['parentLastName'] as String? ?? '').trim();
-  final f = (d['parentFirstName'] as String? ?? '').trim();
-  return [l, f].where((s) => s.isNotEmpty).join(' ');
+  final cl = (d['childLastName'] as String? ?? '').trim();
+  final cf = (d['childFirstName'] as String? ?? '').trim();
+  final pl = (d['parentLastName'] as String? ?? '').trim();
+  final last = cl.isNotEmpty ? cl : pl;
+  return [last, cf].where((s) => s.isNotEmpty).join(' ');
 }
 
 // ============================================================
@@ -826,20 +793,22 @@ class _LeadTableRow extends StatelessWidget {
     final stage = d['stage'] as String? ?? 'considering';
     final color = CrmOptions.stageColor(stage);
     final childName = _childFullName(d);
-    final parentName = _parentFullName(d);
     final source = d['source'] as String? ?? '';
     final tel = d['parentTel'] as String? ?? '';
     final inquiredAt = (d['inquiredAt'] as Timestamp?)?.toDate();
     final trialAt = (d['trialAt'] as Timestamp?)?.toDate();
     final nextAt = (d['nextActionAt'] as Timestamp?)?.toDate();
     final overdue = nextAt != null && nextAt.isBefore(DateTime.now());
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 6),
       decoration: BoxDecoration(
         color: context.colors.cardBg,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: context.colors.borderLight, width: 0.5),
+        border: Border.all(
+            color: isDark ? const Color(0xFF3A3D42) : const Color(0xFFE4E7EB),
+            width: 1),
       ),
       child: InkWell(
         borderRadius: BorderRadius.circular(10),
@@ -888,8 +857,6 @@ class _LeadTableRow extends StatelessWidget {
                 spacing: 12,
                 runSpacing: 4,
                 children: [
-                  if (parentName.isNotEmpty)
-                    _meta(context, Icons.person_outline, '保護者: $parentName'),
                   if (tel.isNotEmpty)
                     _meta(context, Icons.phone_outlined, tel),
                   if (inquiredAt != null)
