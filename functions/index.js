@@ -63,6 +63,46 @@ async function callClaude({ model, system, messages, maxTokens = 2048, maxRetrie
   }
 }
 
+/**
+ * Claudeのストリーミング API でデルタ受信ごとに onDelta(fullText, chunk) を呼ぶ。
+ */
+async function callClaudeStream({ model, system, messages, maxTokens = 4096, maxRetries = 3, onDelta }) {
+  const client = new Anthropic({ apiKey: anthropicApiKey.value() });
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const stream = await client.messages.stream({
+        model,
+        max_tokens: maxTokens,
+        system,
+        messages,
+      });
+      let fullText = '';
+      for await (const event of stream) {
+        if (event.type === 'content_block_delta' && event.delta?.type === 'text_delta') {
+          const chunk = event.delta.text || '';
+          fullText += chunk;
+          if (onDelta) {
+            try { await onDelta(fullText, chunk); } catch (e) { console.warn('onDelta error:', e.message); }
+          }
+        }
+      }
+      const final = await stream.finalMessage();
+      console.log(`[Claude-stream] model=${model} input=${final.usage?.input_tokens} cached=${final.usage?.cache_read_input_tokens || 0} output=${final.usage?.output_tokens}`);
+      return fullText;
+    } catch (err) {
+      const status = err?.status || 0;
+      const retryable = status === 429 || status === 500 || status === 503 || status === 529;
+      if (retryable && attempt < maxRetries) {
+        const delay = Math.pow(2, attempt) * 2000 + Math.random() * 1000;
+        console.log(`[Claude-stream] retry ${attempt + 1}/${maxRetries} after ${Math.round(delay)}ms (status=${status})`);
+        await new Promise((r) => setTimeout(r, delay));
+        continue;
+      }
+      throw err;
+    }
+  }
+}
+
 initializeApp();
 
 const db = getFirestore();
@@ -1895,9 +1935,24 @@ exports.sendAiMessage = onCall(
         });
       }
 
+      // マークダウン除去用ヘルパー
+      const stripMarkdown = (s) => (s || '')
+        .replace(/```[\s\S]*?```/g, '')
+        .replace(/\*\*([^*]+)\*\*/g, '$1')
+        .replace(/\*([^*]+)\*/g, '$1')
+        .replace(/~~([^~]+)~~/g, '$1')
+        .replace(/`([^`]+)`/g, '$1')
+        .replace(/^#{1,6}\s+/gm, '')
+        .replace(/^>\s+/gm, '')
+        .replace(/^[\*\-]\s+/gm, '・ ')
+        .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+        .replace(/^---+$/gm, '')
+        .replace(/\n{3,}/g, '\n\n');
+
       // 7. Claude Sonnet 4.6 に投げる
       let aiResponse;
       if (commandScript) {
+        // 構造化出力コマンドはストリーミング不要、単発リクエストで十分
         const augmentedMessage = `${message}\n\n---\n【出力指示】以下の指示に厳密に従って出力してください。会話形式や補足説明は不要です。指定されたフォーマットのみを出力してください。\n${commandScript}`;
         aiResponse = await callClaude({
           model: CLAUDE_MAIN_MODEL,
@@ -1905,40 +1960,48 @@ exports.sendAiMessage = onCall(
           messages: [{ role: 'user', content: augmentedMessage }],
           maxTokens: 4096,
         });
+        aiResponse = stripMarkdown(aiResponse);
+        await messagesRef.add({
+          role: 'assistant',
+          content: aiResponse,
+          createdAt: FieldValue.serverTimestamp(),
+          status: 'sent',
+        });
       } else {
-        // claudeMessagesの末尾を現ユーザーメッセージに置き換え、重複を避ける
-        const msgs = claudeMessages.slice();
-        // 最新のユーザーメッセージはmessageで渡すため、履歴の最後のユーザーは取り除かない（Firestoreに保存済みなので既に含まれている）
-        aiResponse = await callClaude({
+        // 通常会話はストリーミングで逐次Firestoreへ反映
+        const assistantDoc = await messagesRef.add({
+          role: 'assistant',
+          content: '',
+          createdAt: FieldValue.serverTimestamp(),
+          status: 'streaming',
+        });
+
+        let lastUpdate = 0;
+        const UPDATE_INTERVAL_MS = 400;
+        const onDelta = async (fullText) => {
+          const now = Date.now();
+          if (now - lastUpdate > UPDATE_INTERVAL_MS) {
+            lastUpdate = now;
+            await assistantDoc.update({ content: stripMarkdown(fullText) });
+          }
+        };
+
+        const streamed = await callClaudeStream({
           model: CLAUDE_MAIN_MODEL,
           system: systemBlocks,
-          messages: msgs,
+          messages: claudeMessages,
           maxTokens: 4096,
+          onDelta,
+        });
+
+        aiResponse = stripMarkdown(streamed);
+        // 最終確定: マークダウン除去済み＋ステータス更新
+        await assistantDoc.update({
+          content: aiResponse,
+          status: 'sent',
+          completedAt: FieldValue.serverTimestamp(),
         });
       }
-
-      // マークダウン記法を除去
-      aiResponse = aiResponse
-        .replace(/```[\s\S]*?```/g, '')     // ```コードブロック``` を除去
-        .replace(/\*\*([^*]+)\*\*/g, '$1')  // **太字** → 太字
-        .replace(/\*([^*]+)\*/g, '$1')      // *イタリック* → イタリック
-        .replace(/~~([^~]+)~~/g, '$1')      // ~~取り消し線~~ → 取り消し線
-        .replace(/`([^`]+)`/g, '$1')        // `コード` → コード
-        .replace(/^#{1,6}\s+/gm, '')        // ### 見出し → 見出し
-        .replace(/^>\s+/gm, '')             // > 引用 → 引用
-        .replace(/^[\*\-]\s+/gm, '・ ')     // * や - の箇条書き → ・
-        .replace(/^\d+\.\s+/gm, (m) => m)  // 1. 番号付きリストはそのまま
-        .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1') // [テキスト](URL) → テキスト
-        .replace(/^---+$/gm, '')            // --- 水平線を除去
-        .replace(/\n{3,}/g, '\n\n');        // 3行以上の空行を2行に
-
-      // 9. AI応答をFirestoreに保存
-      await messagesRef.add({
-        role: 'assistant',
-        content: aiResponse,
-        createdAt: FieldValue.serverTimestamp(),
-        status: 'sent',
-      });
 
       // 10. セッションメタデータ更新
       await sessionRef.update({
