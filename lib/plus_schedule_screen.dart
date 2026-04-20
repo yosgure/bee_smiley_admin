@@ -12,6 +12,7 @@ import 'ai_chat_screen.dart';
 import 'main.dart';
 import 'student_detail_screen.dart';
 import 'student_profile_dialog.dart';
+import 'hiyari_screen.dart';
 
 // 講師名・教室名クリック時に生徒編集ダイアログの発火を抑制するフラグ
 bool _quickEditTappedGlobal = false;
@@ -3233,7 +3234,7 @@ final plusStaff = _staffList.where((s) =>
             child: Stack(
               clipBehavior: Clip.none,
               children: [
-                Icon(Icons.more_horiz, color: context.colors.textTertiary, size: 22),
+                Icon(Icons.more_horiz, color: context.colors.textPrimary, size: 24),
                 if (needsAttention)
                   Positioned(
                     right: -2,
@@ -3313,15 +3314,21 @@ final plusStaff = _staffList.where((s) =>
           setState(() {});
         }
         break;
+      case 'accident':
+        if (mounted) {
+          await Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const HiyariScreen()),
+          );
+        }
+        break;
       case 'crm':
       case 'meeting':
-      case 'accident':
       case 'complaint':
       case 'training':
         const labels = {
           'crm': 'CRM',
           'meeting': '会議録',
-          'accident': '事故ヒヤリハット',
           'complaint': '苦情受付',
           'training': '法定研修',
         };
