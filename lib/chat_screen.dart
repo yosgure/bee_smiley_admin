@@ -108,15 +108,19 @@ class _ChatListScreenState extends State<ChatListScreen> {
         context,
         MaterialPageRoute(
           builder: (_) => Scaffold(
+            backgroundColor: context.colors.cardBg,
             appBar: PreferredSize(
               preferredSize: const Size.fromHeight(56),
-              child: SafeArea(
-                child: _buildCommonHeader(
-                  roomName,
-                  showBackButton: true,
-                  actions: [
-                    _buildChatMenu(roomId, isGroup, memberNames, false),
-                  ],
+              child: Container(
+                color: context.colors.cardBg,
+                child: SafeArea(
+                  child: _buildCommonHeader(
+                    roomName,
+                    showBackButton: true,
+                    actions: [
+                      _buildChatMenu(roomId, isGroup, memberNames, false),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -200,9 +204,13 @@ class _ChatListScreenState extends State<ChatListScreen> {
 
   Widget _buildNarrowLayout() {
     return Scaffold(
+      backgroundColor: context.colors.cardBg,
       body: Column(
         children: [
-          SafeArea(bottom: false, child: _buildCommonHeader('チャット', isLeftPane: true)),
+          Container(
+            color: context.colors.cardBg,
+            child: SafeArea(bottom: false, child: _buildCommonHeader('チャット', isLeftPane: true)),
+          ),
           Expanded(child: _buildFirestoreRoomList(isWide: false)),
         ],
       ),
@@ -250,9 +258,13 @@ class _ChatListScreenState extends State<ChatListScreen> {
                           } else {
                             Navigator.push(context, MaterialPageRoute(
                               builder: (_) => Scaffold(
+                                backgroundColor: context.colors.cardBg,
                                 appBar: PreferredSize(
                                   preferredSize: const Size.fromHeight(56),
-                                  child: SafeArea(child: _buildCommonHeader(name, showBackButton: true, actions: [_buildChatMenu(roomId, isGroup, memberNames, false)])),
+                                  child: Container(
+                                    color: context.colors.cardBg,
+                                    child: SafeArea(child: _buildCommonHeader(name, showBackButton: true, actions: [_buildChatMenu(roomId, isGroup, memberNames, false)])),
+                                  ),
                                 ),
                                 body: ChatDetailView(roomId: roomId, roomName: name, isGroup: isGroup, memberNames: memberNames, showAppBar: false),
                               ),
@@ -389,9 +401,13 @@ class _ChatListScreenState extends State<ChatListScreen> {
                 } else {
                   Navigator.push(context, MaterialPageRoute(
                     builder: (context) => Scaffold(
+                      backgroundColor: context.colors.cardBg,
                       appBar: PreferredSize(
                         preferredSize: const Size.fromHeight(56),
-                        child: SafeArea(child: _buildCommonHeader(roomName, showBackButton: true, actions: [_buildChatMenu(roomId, isGroup, memberNames, false)])),
+                        child: Container(
+                          color: context.colors.cardBg,
+                          child: SafeArea(child: _buildCommonHeader(roomName, showBackButton: true, actions: [_buildChatMenu(roomId, isGroup, memberNames, false)])),
+                        ),
                       ),
                       body: ChatDetailView(roomId: roomId, roomName: roomName, isGroup: isGroup, memberNames: memberNames, showAppBar: false),
                     ),
@@ -1399,21 +1415,68 @@ class _ChatDetailViewState extends State<ChatDetailView> {
   List<InlineSpan> _buildTextSpansWithLinks(String text, {BuildContext? ctx}) {
     final textStyle = ctx != null ? _chatTextStyleOf(ctx) : const TextStyle(fontSize: 15, height: 1.5, color: Colors.black87, fontFamily: 'NotoSansJP', fontFamilyFallback: ['Hiragino Sans', 'Roboto', 'sans-serif']);
     final mentionStyle = TextStyle(fontSize: 15, height: 1.5, color: AppColors.primary, fontWeight: FontWeight.bold, fontFamily: 'NotoSansJP', fontFamilyFallback: const ['Hiragino Sans', 'Roboto', 'sans-serif']);
-    // URL と @メンション両方をマッチ
-    final combinedPattern = RegExp(r'https?://[^\s\u3000]+|@[^\s\u3000@]+', caseSensitive: false);
-    final spans = <InlineSpan>[]; int lastEnd = 0;
-    for (final match in combinedPattern.allMatches(text)) {
-      if (match.start > lastEnd) spans.add(TextSpan(text: text.substring(lastEnd, match.start), style: textStyle));
-      final matched = match.group(0)!;
-      if (matched.startsWith('http')) {
-        spans.add(TextSpan(text: matched, style: _chatLinkStyle, recognizer: TapGestureRecognizer()..onTap = () async { final uri = Uri.tryParse(matched); if (uri != null && await canLaunchUrl(uri)) await launchUrl(uri, mode: LaunchMode.externalApplication); }));
-      } else {
-        // @メンション
-        spans.add(TextSpan(text: matched, style: mentionStyle));
+    // メンバー名一覧（長い順）でメンションを完全一致させ、苗字+名前（間に空白）もハイライトされるようにする
+    final memberNames = widget.memberNames.values
+        .map((v) => v.toString())
+        .where((n) => n.isNotEmpty)
+        .toList()
+      ..sort((a, b) => b.length.compareTo(a.length));
+
+    final urlPattern = RegExp(r'https?://[^\s\u3000]+', caseSensitive: false);
+    final spans = <InlineSpan>[];
+    int i = 0;
+    while (i < text.length) {
+      // URLマッチ
+      final urlMatch = urlPattern.matchAsPrefix(text, i);
+      if (urlMatch != null) {
+        final matched = urlMatch.group(0)!;
+        spans.add(TextSpan(
+          text: matched,
+          style: _chatLinkStyle,
+          recognizer: TapGestureRecognizer()
+            ..onTap = () async {
+              final uri = Uri.tryParse(matched);
+              if (uri != null && await canLaunchUrl(uri)) {
+                await launchUrl(uri, mode: LaunchMode.externalApplication);
+              }
+            },
+        ));
+        i = urlMatch.end;
+        continue;
       }
-      lastEnd = match.end;
+      // @メンション
+      if (text[i] == '@') {
+        String? matchedName;
+        for (final name in memberNames) {
+          if (text.startsWith(name, i + 1)) {
+            matchedName = name;
+            break;
+          }
+        }
+        if (matchedName != null) {
+          spans.add(TextSpan(text: '@$matchedName', style: mentionStyle));
+          i += 1 + matchedName.length;
+          continue;
+        }
+        // メンバー名に一致しない場合は、空白まで1語をメンション扱い
+        int j = i + 1;
+        while (j < text.length && text[j] != ' ' && text[j] != '\u3000' && text[j] != '\n' && text[j] != '@') {
+          j++;
+        }
+        if (j > i + 1) {
+          spans.add(TextSpan(text: text.substring(i, j), style: mentionStyle));
+          i = j;
+          continue;
+        }
+      }
+      // 通常テキスト：次の特殊文字（@/h）の直前まで一気に進めてspan化
+      int j = i + 1;
+      while (j < text.length && text[j] != '@' && text[j] != 'h' && text[j] != 'H') {
+        j++;
+      }
+      spans.add(TextSpan(text: text.substring(i, j), style: textStyle));
+      i = j;
     }
-    if (lastEnd < text.length) spans.add(TextSpan(text: text.substring(lastEnd), style: textStyle));
     if (spans.isEmpty) spans.add(TextSpan(text: text, style: textStyle));
     return spans;
   }
