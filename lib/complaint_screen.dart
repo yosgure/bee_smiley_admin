@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
 import 'app_theme.dart';
+import 'classroom_utils.dart';
 import 'main.dart';
 
 // ============================================================
@@ -179,17 +180,16 @@ class ComplaintEditScreen extends StatefulWidget {
 class _ComplaintEditScreenState extends State<ComplaintEditScreen> {
   DateTime _occurredAt = DateTime.now();
   final _officeCtrl = TextEditingController(text: 'ビースマイリープラス湘南藤沢教室');
-  final _reporterCtrl = TextEditingController();
-  final _managerCtrl = TextEditingController();
+  _Staff? _reporter;
+  _Staff? _manager;
+  _Staff? _receiver;
   final _claimantNameCtrl = TextEditingController();
   final _claimantKanaCtrl = TextEditingController();
   String _relation = 'mother';
   final _relationOtherCtrl = TextEditingController();
-  final _childNameCtrl = TextEditingController();
-  final _childKanaCtrl = TextEditingController();
+  _Child? _selectedChild;
   final _addressCtrl = TextEditingController();
   final _phoneCtrl = TextEditingController();
-  final _receiverCtrl = TextEditingController();
   TimeOfDay _receivedAt = TimeOfDay.now();
   TimeOfDay? _managerReportAt;
   String _category = 'staff';
@@ -198,26 +198,26 @@ class _ComplaintEditScreenState extends State<ComplaintEditScreen> {
   final _contentCtrl = TextEditingController();
   bool _saving = false;
 
+  List<_Staff> _allStaffs = [];
+  List<_Child> _allChildren = [];
+
   bool get _isEdit => widget.doc != null;
 
   @override
   void initState() {
     super.initState();
+    _loadStaffs();
+    _loadChildren();
     if (widget.doc != null) {
       final d = widget.doc!.data();
       _occurredAt = (d['occurredAt'] as Timestamp?)?.toDate() ?? DateTime.now();
       _officeCtrl.text = d['officeName'] ?? _officeCtrl.text;
-      _reporterCtrl.text = d['reporterName'] ?? '';
-      _managerCtrl.text = d['managerName'] ?? '';
       _claimantNameCtrl.text = d['claimantName'] ?? '';
       _claimantKanaCtrl.text = d['claimantKana'] ?? '';
       _relation = d['relation'] ?? 'mother';
       _relationOtherCtrl.text = d['relationOther'] ?? '';
-      _childNameCtrl.text = d['childName'] ?? '';
-      _childKanaCtrl.text = d['childKana'] ?? '';
       _addressCtrl.text = d['address'] ?? '';
       _phoneCtrl.text = d['phone'] ?? '';
-      _receiverCtrl.text = d['receiverName'] ?? '';
       final rec = d['receivedAt'] as String?;
       if (rec != null && rec.contains(':')) {
         final parts = rec.split(':');
@@ -235,12 +235,98 @@ class _ComplaintEditScreenState extends State<ComplaintEditScreen> {
     }
   }
 
+  Future<void> _loadStaffs() async {
+    try {
+      final snap = await FirebaseFirestore.instance.collection('staffs').get();
+      final list = <_Staff>[];
+      for (final d in snap.docs) {
+        final data = d.data();
+        final name = (data['name'] as String? ?? '').trim();
+        if (name.isEmpty) continue;
+        list.add(_Staff(id: d.id, name: name, kana: (data['kana'] as String? ?? '').trim()));
+      }
+      list.sort((a, b) => a.kana.compareTo(b.kana));
+      if (!mounted) return;
+      setState(() {
+        _allStaffs = list;
+        if (widget.doc != null) {
+          final d = widget.doc!.data();
+          _Staff? findBy(String nameKey, String idKey) {
+            final id = d[idKey] as String?;
+            final name = d[nameKey] as String?;
+            if (id != null) {
+              final hit = list.where((s) => s.id == id).toList();
+              if (hit.isNotEmpty) return hit.first;
+            }
+            if (name != null && name.isNotEmpty) {
+              final hit = list.where((s) => s.name == name).toList();
+              if (hit.isNotEmpty) return hit.first;
+            }
+            return null;
+          }
+          _reporter = findBy('reporterName', 'reporterId');
+          _manager = findBy('managerName', 'managerId');
+          _receiver = findBy('receiverName', 'receiverId');
+        }
+      });
+    } catch (e) {
+      debugPrint('Error loading staffs: $e');
+    }
+  }
+
+  Future<void> _loadChildren() async {
+    try {
+      final snap = await FirebaseFirestore.instance.collection('families').get();
+      final list = <_Child>[];
+      for (final doc in snap.docs) {
+        final data = doc.data();
+        final familyUid = data['uid'] as String? ?? doc.id;
+        final lastName = data['lastName'] as String? ?? '';
+        final lastNameKana = data['lastNameKana'] as String? ?? '';
+        final address = data['address'] as String? ?? '';
+        final phone = data['phone'] as String? ?? '';
+        final children = List<Map<String, dynamic>>.from(data['children'] ?? []);
+        for (final c in children) {
+          final firstName = c['firstName'] as String? ?? '';
+          final firstNameKana = c['firstNameKana'] as String? ?? '';
+          final classrooms = getChildClassrooms(c);
+          if (firstName.isEmpty) continue;
+          if (!classrooms.any((cl) => cl.contains('プラス'))) continue;
+          final id = (c['studentId'] as String?) ?? '${familyUid}_$firstName';
+          list.add(_Child(
+            id: id,
+            fullName: '$lastName $firstName'.trim(),
+            fullKana: '$lastNameKana $firstNameKana'.trim(),
+            kanaForSort: lastNameKana,
+            address: address,
+            phone: phone,
+          ));
+        }
+      }
+      list.sort((a, b) => a.kanaForSort.compareTo(b.kanaForSort));
+      if (!mounted) return;
+      setState(() {
+        _allChildren = list;
+        if (widget.doc != null) {
+          final d = widget.doc!.data();
+          final cid = d['childId'] as String?;
+          if (cid != null) {
+            final hit = list.where((c) => c.id == cid).toList();
+            if (hit.isNotEmpty) _selectedChild = hit.first;
+          }
+        }
+      });
+    } catch (e) {
+      debugPrint('Error loading children: $e');
+    }
+  }
+
   @override
   void dispose() {
     for (final c in [
-      _officeCtrl, _reporterCtrl, _managerCtrl, _claimantNameCtrl, _claimantKanaCtrl,
-      _relationOtherCtrl, _childNameCtrl, _childKanaCtrl, _addressCtrl, _phoneCtrl,
-      _receiverCtrl, _categoryOtherCtrl, _contentCtrl,
+      _officeCtrl, _claimantNameCtrl, _claimantKanaCtrl,
+      _relationOtherCtrl, _addressCtrl, _phoneCtrl,
+      _categoryOtherCtrl, _contentCtrl,
     ]) {
       c.dispose();
     }
@@ -260,17 +346,21 @@ class _ComplaintEditScreenState extends State<ComplaintEditScreen> {
     final data = <String, dynamic>{
       'occurredAt': Timestamp.fromDate(_occurredAt),
       'officeName': _officeCtrl.text.trim(),
-      'reporterName': _reporterCtrl.text.trim(),
-      'managerName': _managerCtrl.text.trim(),
+      'reporterId': _reporter?.id,
+      'reporterName': _reporter?.name ?? '',
+      'managerId': _manager?.id,
+      'managerName': _manager?.name ?? '',
+      'receiverId': _receiver?.id,
+      'receiverName': _receiver?.name ?? '',
       'claimantName': _claimantNameCtrl.text.trim(),
       'claimantKana': _claimantKanaCtrl.text.trim(),
       'relation': _relation,
       'relationOther': _relation == 'other' ? _relationOtherCtrl.text.trim() : '',
-      'childName': _childNameCtrl.text.trim(),
-      'childKana': _childKanaCtrl.text.trim(),
+      'childId': _selectedChild?.id,
+      'childName': _selectedChild?.fullName ?? '',
+      'childKana': _selectedChild?.fullKana ?? '',
       'address': _addressCtrl.text.trim(),
       'phone': _phoneCtrl.text.trim(),
-      'receiverName': _receiverCtrl.text.trim(),
       'receivedAt': tt(_receivedAt),
       'managerReportAt': _managerReportAt != null ? tt(_managerReportAt!) : null,
       'category': _category,
@@ -355,9 +445,13 @@ class _ComplaintEditScreenState extends State<ComplaintEditScreen> {
             _dateTimeTile(),
             const SizedBox(height: 10),
             _rowFields([
-              _textField('記入者', _reporterCtrl),
-              _textField('管理者', _managerCtrl),
+              _staffPickerTile('記入者', _reporter, (s) => setState(() => _reporter = s)),
+              _staffPickerTile('管理者', _manager, (s) => setState(() => _manager = s)),
             ]),
+
+            const SizedBox(height: 20),
+            _section('利用児'),
+            _childPickerTile(),
 
             const SizedBox(height: 20),
             _section('申出人'),
@@ -377,12 +471,6 @@ class _ComplaintEditScreenState extends State<ComplaintEditScreen> {
             ],
 
             const SizedBox(height: 20),
-            _section('利用児'),
-            _textField('フリガナ', _childKanaCtrl),
-            const SizedBox(height: 10),
-            _textField('氏名', _childNameCtrl),
-
-            const SizedBox(height: 20),
             _section('連絡先'),
             _textField('住所', _addressCtrl),
             const SizedBox(height: 10),
@@ -390,7 +478,7 @@ class _ComplaintEditScreenState extends State<ComplaintEditScreen> {
 
             const SizedBox(height: 20),
             _section('受付'),
-            _textField('苦情受付者', _receiverCtrl),
+            _staffPickerTile('苦情受付者', _receiver, (s) => setState(() => _receiver = s)),
             const SizedBox(height: 10),
             _rowFields([
               _timeTile('受付時間', _receivedAt, (t) => setState(() => _receivedAt = t)),
@@ -501,6 +589,113 @@ class _ComplaintEditScreenState extends State<ComplaintEditScreen> {
           if (i < fields.length - 1) const SizedBox(width: 8),
         ],
       ],
+    );
+  }
+
+  Widget _staffPickerTile(String label, _Staff? selected, ValueChanged<_Staff?> onPick) {
+    return InkWell(
+      onTap: () async {
+        final picked = await showDialog<_Staff?>(
+          context: context,
+          builder: (c) => _StaffPickerDialog(all: _allStaffs, selected: selected),
+        );
+        if (picked != null || picked == null) {
+          // pickedがnull（キャンセル）でもUI変化なし
+          if (picked == _ClearStaffSentinel.instance) {
+            onPick(null);
+          } else if (picked != null) {
+            onPick(picked);
+          }
+        }
+      },
+      borderRadius: BorderRadius.circular(10),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        decoration: BoxDecoration(
+          color: context.colors.cardBg,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: context.colors.borderLight),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.person_outline, size: 16, color: context.colors.textSecondary),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(label, style: TextStyle(fontSize: 11, color: context.colors.textSecondary)),
+                  const SizedBox(height: 2),
+                  Text(
+                    selected?.name ?? '未選択',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: selected == null ? context.colors.textTertiary : context.colors.textPrimary,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+            Icon(Icons.expand_more, size: 18, color: context.colors.textSecondary),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _childPickerTile() {
+    return InkWell(
+      onTap: () async {
+        final picked = await showDialog<_Child?>(
+          context: context,
+          builder: (c) => _ChildPickerDialog(all: _allChildren, selected: _selectedChild),
+        );
+        if (picked == _ClearChildSentinel.instance) {
+          setState(() {
+            _selectedChild = null;
+            _addressCtrl.text = '';
+            _phoneCtrl.text = '';
+          });
+        } else if (picked != null) {
+          setState(() {
+            _selectedChild = picked;
+            if (picked.address.isNotEmpty) _addressCtrl.text = picked.address;
+            if (picked.phone.isNotEmpty) _phoneCtrl.text = picked.phone;
+          });
+        }
+      },
+      borderRadius: BorderRadius.circular(10),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        decoration: BoxDecoration(
+          color: context.colors.cardBg,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: context.colors.borderMedium),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.child_care, size: 18, color: AppColors.primary),
+            const SizedBox(width: 10),
+            Expanded(
+              child: _selectedChild == null
+                  ? Text('児童を選択', style: TextStyle(fontSize: 13, color: context.colors.textSecondary))
+                  : Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (_selectedChild!.fullKana.isNotEmpty)
+                          Text(_selectedChild!.fullKana,
+                              style: TextStyle(fontSize: 11, color: context.colors.textTertiary)),
+                        Text(_selectedChild!.fullName,
+                            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: context.colors.textPrimary)),
+                      ],
+                    ),
+            ),
+            Icon(Icons.expand_more, size: 18, color: context.colors.textSecondary),
+          ],
+        ),
+      ),
     );
   }
 
@@ -645,6 +840,216 @@ class _ComplaintEditScreenState extends State<ComplaintEditScreen> {
     setState(() {
       _occurredAt = DateTime(d.year, d.month, d.day, t.hour, t.minute);
     });
+  }
+}
+
+// ============================================================
+// モデル / ダイアログ
+// ============================================================
+class _Staff {
+  final String id;
+  final String name;
+  final String kana;
+  const _Staff({required this.id, required this.name, required this.kana});
+
+  @override
+  bool operator ==(Object other) => other is _Staff && other.id == id;
+  @override
+  int get hashCode => id.hashCode;
+}
+
+class _Child {
+  final String id;
+  final String fullName;
+  final String fullKana;
+  final String kanaForSort;
+  final String address;
+  final String phone;
+  const _Child({
+    required this.id,
+    required this.fullName,
+    required this.fullKana,
+    required this.kanaForSort,
+    required this.address,
+    required this.phone,
+  });
+
+  @override
+  bool operator ==(Object other) => other is _Child && other.id == id;
+  @override
+  int get hashCode => id.hashCode;
+}
+
+class _ClearStaffSentinel extends _Staff {
+  const _ClearStaffSentinel._() : super(id: '__clear__', name: '', kana: '');
+  static const instance = _ClearStaffSentinel._();
+}
+
+class _ClearChildSentinel extends _Child {
+  const _ClearChildSentinel._()
+      : super(id: '__clear__', fullName: '', fullKana: '', kanaForSort: '', address: '', phone: '');
+  static const instance = _ClearChildSentinel._();
+}
+
+class _StaffPickerDialog extends StatefulWidget {
+  final List<_Staff> all;
+  final _Staff? selected;
+  const _StaffPickerDialog({required this.all, required this.selected});
+  @override
+  State<_StaffPickerDialog> createState() => _StaffPickerDialogState();
+}
+
+class _StaffPickerDialogState extends State<_StaffPickerDialog> {
+  String _q = '';
+  @override
+  Widget build(BuildContext context) {
+    final list = _q.isEmpty
+        ? widget.all
+        : widget.all
+            .where((s) =>
+                s.name.toLowerCase().contains(_q.toLowerCase()) || s.kana.contains(_q))
+            .toList();
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 380, maxHeight: 520),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+              child: Text('講師を選択',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: context.colors.textPrimary)),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: TextField(
+                decoration: InputDecoration(
+                  hintText: '名前で検索',
+                  prefixIcon: const Icon(Icons.search, size: 18),
+                  isDense: true,
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+                onChanged: (v) => setState(() => _q = v),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Expanded(
+              child: ListView.builder(
+                itemCount: list.length,
+                itemBuilder: (c, i) {
+                  final s = list[i];
+                  final sel = s.id == widget.selected?.id;
+                  return ListTile(
+                    title: Text(s.name, style: const TextStyle(fontSize: 14)),
+                    trailing: sel ? const Icon(Icons.check, color: AppColors.primary) : null,
+                    onTap: () => Navigator.pop(context, s),
+                  );
+                },
+              ),
+            ),
+            const Divider(height: 1),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+              child: Row(
+                children: [
+                  if (widget.selected != null)
+                    TextButton(
+                      onPressed: () => Navigator.pop(context, _ClearStaffSentinel.instance),
+                      child: Text('クリア', style: TextStyle(color: context.colors.textSecondary)),
+                    ),
+                  const Spacer(),
+                  TextButton(onPressed: () => Navigator.pop(context), child: const Text('キャンセル')),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ChildPickerDialog extends StatefulWidget {
+  final List<_Child> all;
+  final _Child? selected;
+  const _ChildPickerDialog({required this.all, required this.selected});
+  @override
+  State<_ChildPickerDialog> createState() => _ChildPickerDialogState();
+}
+
+class _ChildPickerDialogState extends State<_ChildPickerDialog> {
+  String _q = '';
+  @override
+  Widget build(BuildContext context) {
+    final list = _q.isEmpty
+        ? widget.all
+        : widget.all
+            .where((c) =>
+                c.fullName.toLowerCase().contains(_q.toLowerCase()) || c.fullKana.contains(_q))
+            .toList();
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 400, maxHeight: 560),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+              child: Text('利用児を選択',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: context.colors.textPrimary)),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: TextField(
+                decoration: InputDecoration(
+                  hintText: '名前で検索',
+                  prefixIcon: const Icon(Icons.search, size: 18),
+                  isDense: true,
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+                onChanged: (v) => setState(() => _q = v),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Expanded(
+              child: ListView.builder(
+                itemCount: list.length,
+                itemBuilder: (c, i) {
+                  final ch = list[i];
+                  final sel = ch.id == widget.selected?.id;
+                  return ListTile(
+                    title: Text(ch.fullName, style: const TextStyle(fontSize: 14)),
+                    subtitle: ch.fullKana.isEmpty
+                        ? null
+                        : Text(ch.fullKana,
+                            style: TextStyle(fontSize: 11, color: Theme.of(context).hintColor)),
+                    trailing: sel ? const Icon(Icons.check, color: AppColors.primary) : null,
+                    onTap: () => Navigator.pop(context, ch),
+                  );
+                },
+              ),
+            ),
+            const Divider(height: 1),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+              child: Row(
+                children: [
+                  if (widget.selected != null)
+                    TextButton(
+                      onPressed: () => Navigator.pop(context, _ClearChildSentinel.instance),
+                      child: Text('クリア', style: TextStyle(color: context.colors.textSecondary)),
+                    ),
+                  const Spacer(),
+                  TextButton(onPressed: () => Navigator.pop(context), child: const Text('キャンセル')),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 
