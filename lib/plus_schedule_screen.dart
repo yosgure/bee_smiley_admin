@@ -15,6 +15,7 @@ import 'student_profile_dialog.dart';
 import 'hiyari_screen.dart';
 import 'complaint_screen.dart';
 import 'meeting_minutes_screen.dart';
+import 'crm_lead_screen.dart';
 
 // 講師名・教室名クリック時に生徒編集ダイアログの発火を抑制するフラグ
 bool _quickEditTappedGlobal = false;
@@ -3356,14 +3357,22 @@ final plusStaff = _staffList.where((s) =>
         }
         break;
       case 'crm':
+        if (mounted) {
+          final isWide = MediaQuery.of(context).size.width >= 600;
+          if (isWide) {
+            AdminShell.showOverlay(context, const CrmLeadScreen());
+          } else {
+            await Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const CrmLeadScreen()),
+            );
+          }
+        }
+        break;
       case 'training':
-        const labels = {
-          'crm': 'CRM',
-          'training': '法定研修',
-        };
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('${labels[selected]}のリンクは未設定です。')),
+            const SnackBar(content: Text('法定研修のリンクは未設定です。')),
           );
         }
         break;
