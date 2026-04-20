@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
 import 'app_theme.dart';
 import 'classroom_utils.dart';
+import 'main.dart';
 
 // ============================================================
 // H-02: ヒヤリハット一覧画面（メインエントリ）
@@ -18,10 +19,10 @@ class HiyariScreen extends StatefulWidget {
 
 class _HiyariScreenState extends State<HiyariScreen> {
   void _close() {
-    if (widget.onClose != null) {
-      widget.onClose!();
-    } else {
+    if (Navigator.canPop(context)) {
       Navigator.pop(context);
+    } else {
+      AdminShell.hideOverlay(context);
     }
   }
 

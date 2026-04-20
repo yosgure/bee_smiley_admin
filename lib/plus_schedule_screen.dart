@@ -13,6 +13,7 @@ import 'main.dart';
 import 'student_detail_screen.dart';
 import 'student_profile_dialog.dart';
 import 'hiyari_screen.dart';
+import 'complaint_screen.dart';
 
 // 講師名・教室名クリック時に生徒編集ダイアログの発火を抑制するフラグ
 bool _quickEditTappedGlobal = false;
@@ -3318,10 +3319,7 @@ final plusStaff = _staffList.where((s) =>
         if (mounted) {
           final isWide = MediaQuery.of(context).size.width >= 600;
           if (isWide) {
-            AdminShell.showOverlay(
-              context,
-              HiyariScreen(onClose: () => AdminShell.hideOverlay(context)),
-            );
+            AdminShell.showOverlay(context, const HiyariScreen());
           } else {
             await Navigator.push(
               context,
@@ -3330,14 +3328,25 @@ final plusStaff = _staffList.where((s) =>
           }
         }
         break;
+      case 'complaint':
+        if (mounted) {
+          final isWide = MediaQuery.of(context).size.width >= 600;
+          if (isWide) {
+            AdminShell.showOverlay(context, const ComplaintScreen());
+          } else {
+            await Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const ComplaintScreen()),
+            );
+          }
+        }
+        break;
       case 'crm':
       case 'meeting':
-      case 'complaint':
       case 'training':
         const labels = {
           'crm': 'CRM',
           'meeting': '会議録',
-          'complaint': '苦情受付',
           'training': '法定研修',
         };
         if (mounted) {
