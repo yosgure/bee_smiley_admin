@@ -168,6 +168,7 @@ class _PlusShiftRequestDialogState extends State<PlusShiftRequestDialog> {
 
   Widget _buildDeadlineBadge() {
     final days = _daysUntilDeadline;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     late final Color bg;
     late final Color fg;
     late final String label;
@@ -176,12 +177,12 @@ class _PlusShiftRequestDialogState extends State<PlusShiftRequestDialog> {
       fg = Colors.white;
       label = '締切超過 ${-days}日';
     } else if (days <= 3) {
-      bg = Colors.red.shade100;
-      fg = Colors.red.shade900;
+      bg = isDark ? Colors.red.shade900.withValues(alpha: 0.4) : Colors.red.shade100;
+      fg = isDark ? Colors.red.shade200 : Colors.red.shade900;
       label = '締切まであと$days日';
     } else {
-      bg = Colors.orange.shade100;
-      fg = Colors.orange.shade900;
+      bg = isDark ? Colors.orange.shade900.withValues(alpha: 0.4) : Colors.orange.shade100;
+      fg = isDark ? Colors.orange.shade200 : Colors.orange.shade900;
       label = '締切まであと$days日';
     }
     return Container(
@@ -417,27 +418,37 @@ class _PlusShiftRequestDialogState extends State<PlusShiftRequestDialog> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           // 案内
-                          Container(
-                            padding: const EdgeInsets.all(10),
-                            decoration: BoxDecoration(
-                              color: Colors.orange.shade50,
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Row(
-                              children: [
-                                Icon(Icons.info_outline,
-                                    size: 16,
-                                    color: Colors.orange.shade800),
-                                const SizedBox(width: 6),
-                                const Expanded(
-                                  child: Text(
-                                    '日付をタップ: 1回目「休み希望」→ 2回目「絶対休」→ 3回目 解除',
-                                    style: TextStyle(fontSize: 12),
-                                  ),
+                          Builder(builder: (ctx) {
+                            final isDark = Theme.of(ctx).brightness == Brightness.dark;
+                            return Container(
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                color: isDark
+                                    ? Colors.orange.shade900.withValues(alpha: 0.25)
+                                    : Colors.orange.shade50,
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(
+                                  color: isDark
+                                      ? Colors.orange.shade700.withValues(alpha: 0.4)
+                                      : Colors.orange.shade100,
                                 ),
-                              ],
-                            ),
-                          ),
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(Icons.info_outline,
+                                      size: 16,
+                                      color: isDark ? Colors.orange.shade200 : Colors.orange.shade800),
+                                  const SizedBox(width: 6),
+                                  Expanded(
+                                    child: Text(
+                                      '日付をタップ: 1回目「休み希望」→ 2回目「絶対休」→ 3回目 解除',
+                                      style: TextStyle(fontSize: 12, color: ctx.colors.textPrimary),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
+                          }),
                           const SizedBox(height: 12),
                           // カレンダー
                           _buildCalendar(),
@@ -922,30 +933,40 @@ class _PlusShiftDecisionDialogState extends State<PlusShiftDecisionDialog> {
                     ),
                   ),
                   // 説明
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
-                    child: Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: Colors.orange.shade50,
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(Icons.info_outline,
-                              size: 14,
-                              color: Colors.orange.shade800),
-                          const SizedBox(width: 6),
-                          const Expanded(
-                            child: Text(
-                              '日付をタップして休みスタッフを決定。オレンジの「希望」バッジ付きはスタッフから提出された希望です。',
-                              style: TextStyle(fontSize: 11),
-                            ),
+                  Builder(builder: (ctx) {
+                    final isDark = Theme.of(ctx).brightness == Brightness.dark;
+                    return Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+                      child: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: isDark
+                              ? Colors.orange.shade900.withValues(alpha: 0.25)
+                              : Colors.orange.shade50,
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(
+                            color: isDark
+                                ? Colors.orange.shade700.withValues(alpha: 0.4)
+                                : Colors.orange.shade100,
                           ),
-                        ],
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(Icons.info_outline,
+                                size: 14,
+                                color: isDark ? Colors.orange.shade200 : Colors.orange.shade800),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: Text(
+                                '日付をタップして休みスタッフを決定。オレンジの「希望」バッジ付きはスタッフから提出された希望です。',
+                                style: TextStyle(fontSize: 11, color: ctx.colors.textPrimary),
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
-                  ),
+                    );
+                  }),
                   const Divider(height: 1),
                   // カレンダー本体
                   Expanded(
@@ -1001,13 +1022,14 @@ class _PlusShiftDecisionDialogState extends State<PlusShiftDecisionDialog> {
             children: List.generate(7, (i) {
               final isSun = i == 6;
               final isSat = i == 5;
+              final isDark = Theme.of(context).brightness == Brightness.dark;
               return Expanded(
                 child: Container(
                   padding: const EdgeInsets.symmetric(vertical: 6),
                   alignment: Alignment.center,
                   decoration: BoxDecoration(
                     color: isSun
-                        ? Colors.red.shade50
+                        ? (isDark ? Colors.red.shade900.withValues(alpha: 0.2) : Colors.red.shade50)
                         : context.colors.chipBg,
                     border: Border(
                       right: BorderSide(color: context.colors.borderMedium),
@@ -1024,9 +1046,9 @@ class _PlusShiftDecisionDialogState extends State<PlusShiftDecisionDialog> {
                       fontSize: 12,
                       fontWeight: FontWeight.bold,
                       color: isSun
-                          ? Colors.red
+                          ? Colors.red.shade400
                           : isSat
-                              ? Colors.blue
+                              ? Colors.blue.shade400
                               : context.colors.textPrimary,
                     ),
                   ),
@@ -1067,10 +1089,11 @@ class _PlusShiftDecisionDialogState extends State<PlusShiftDecisionDialog> {
   Widget _buildDayCell({required int? day, required int columnIndex}) {
     final isSun = columnIndex == 6;
     final isSat = columnIndex == 5;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final numberColor = isSun
-        ? Colors.red
+        ? Colors.red.shade400
         : isSat
-            ? Colors.blue
+            ? Colors.blue.shade400
             : context.colors.textPrimary;
 
     // 日曜は定休表示
@@ -1078,7 +1101,7 @@ class _PlusShiftDecisionDialogState extends State<PlusShiftDecisionDialog> {
       return Container(
         constraints: const BoxConstraints(minHeight: 80),
         decoration: BoxDecoration(
-          color: Colors.red.shade50,
+          color: isDark ? Colors.red.shade900.withValues(alpha: 0.15) : Colors.red.shade50,
           border: Border.all(color: context.colors.borderMedium),
         ),
         padding: const EdgeInsets.all(4),
@@ -1090,7 +1113,7 @@ class _PlusShiftDecisionDialogState extends State<PlusShiftDecisionDialog> {
                 '$day',
                 style: TextStyle(
                   fontSize: 12,
-                  color: Colors.red.shade300,
+                  color: isDark ? Colors.red.shade300 : Colors.red.shade300,
                   fontWeight: FontWeight.bold,
                 ),
               ),
@@ -1099,7 +1122,7 @@ class _PlusShiftDecisionDialogState extends State<PlusShiftDecisionDialog> {
               '定休',
               style: TextStyle(
                 fontSize: 9,
-                color: Colors.red.shade300,
+                color: isDark ? Colors.red.shade300 : Colors.red.shade300,
               ),
             ),
           ],
@@ -1135,8 +1158,8 @@ class _PlusShiftDecisionDialogState extends State<PlusShiftDecisionDialog> {
         chipBg = Colors.red.shade800;
         chipFg = Colors.white;
       } else if (isRequested) {
-        chipBg = Colors.orange.shade100;
-        chipFg = Colors.orange.shade900;
+        chipBg = isDark ? Colors.orange.shade900.withValues(alpha: 0.4) : Colors.orange.shade100;
+        chipFg = isDark ? Colors.orange.shade100 : Colors.orange.shade900;
         chipBorder = Border.all(color: Colors.orange.shade400);
       } else {
         chipBg = Colors.red.shade400;
@@ -1183,7 +1206,7 @@ class _PlusShiftDecisionDialogState extends State<PlusShiftDecisionDialog> {
       child: Container(
         constraints: const BoxConstraints(minHeight: 80),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: context.colors.scaffoldBg,
           border: Border.all(color: context.colors.borderMedium),
         ),
         padding: const EdgeInsets.all(4),
