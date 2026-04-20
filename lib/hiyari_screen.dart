@@ -4,7 +4,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
 import 'app_theme.dart';
 import 'classroom_utils.dart';
-import 'main.dart';
 
 // ============================================================
 // H-02: ヒヤリハット一覧画面（メインエントリ）
@@ -18,9 +17,6 @@ class HiyariScreen extends StatefulWidget {
 }
 
 class _HiyariScreenState extends State<HiyariScreen> {
-  String? _severityFilter;
-  String? _locationFilter;
-
   void _close() {
     if (widget.onClose != null) {
       widget.onClose!();
@@ -49,84 +45,15 @@ class _HiyariScreenState extends State<HiyariScreen> {
         icon: const Icon(Icons.add, color: Colors.white),
         label: const Text('新規報告', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
       ),
-      body: Column(
-        children: [
-          _buildFilters(),
-          const Divider(height: 1),
-          Expanded(child: _buildList()),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildFilters() {
-    return Container(
-      color: context.colors.cardBg,
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      child: Row(
-        children: [
-          Expanded(
-            child: _dropdown(
-              value: _severityFilter,
-              hint: '重大度（全て）',
-              items: HiyariOptions.severity,
-              onChanged: (v) => setState(() => _severityFilter = v),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: _dropdown(
-              value: _locationFilter,
-              hint: '場所（全て）',
-              items: HiyariOptions.location,
-              onChanged: (v) => setState(() => _locationFilter = v),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _dropdown({
-    required String? value,
-    required String hint,
-    required List<({String id, String label})> items,
-    required ValueChanged<String?> onChanged,
-  }) {
-    return Container(
-      height: 36,
-      padding: const EdgeInsets.symmetric(horizontal: 10),
-      decoration: BoxDecoration(
-        color: context.colors.inputFill,
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: DropdownButtonHideUnderline(
-        child: DropdownButton<String?>(
-          value: value,
-          isExpanded: true,
-          hint: Text(hint, style: TextStyle(fontSize: 13, color: context.colors.textHint)),
-          style: TextStyle(fontSize: 13, color: context.colors.textPrimary),
-          icon: Icon(Icons.expand_more, size: 16, color: context.colors.textSecondary),
-          items: [
-            DropdownMenuItem<String?>(value: null, child: Text(hint, style: const TextStyle(fontSize: 13))),
-            ...items.map((it) => DropdownMenuItem<String?>(
-                  value: it.id,
-                  child: Text(it.label, style: const TextStyle(fontSize: 13)),
-                )),
-          ],
-          onChanged: onChanged,
-        ),
-      ),
+      body: _buildList(),
     );
   }
 
   Widget _buildList() {
-    Query<Map<String, dynamic>> q = FirebaseFirestore.instance
+    final q = FirebaseFirestore.instance
         .collection('hiyari_reports')
         .orderBy('occurredAt', descending: true)
         .limit(100);
-    if (_severityFilter != null) q = q.where('severity', isEqualTo: _severityFilter);
-    if (_locationFilter != null) q = q.where('location', isEqualTo: _locationFilter);
 
     return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
       stream: q.snapshots(),
@@ -162,18 +89,10 @@ class _HiyariScreenState extends State<HiyariScreen> {
   }
 
   Future<void> _openNewReport() async {
-    final isWide = MediaQuery.of(context).size.width >= 600;
-    if (isWide) {
-      AdminShell.showOverlay(
-        context,
-        HiyariEditScreen(onClose: () => AdminShell.hideOverlay(context)),
-      );
-    } else {
-      await Navigator.push(
-        context,
-        MaterialPageRoute(builder: (_) => const HiyariEditScreen()),
-      );
-    }
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const HiyariEditScreen()),
+    );
   }
 }
 
@@ -205,17 +124,9 @@ class _HiyariListTile extends StatelessWidget {
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
         onTap: () {
-          final isWide = MediaQuery.of(context).size.width >= 600;
-          if (isWide) {
-            AdminShell.showOverlay(
-              context,
-              HiyariEditScreen(doc: doc, onClose: () => AdminShell.hideOverlay(context)),
-            );
-          } else {
-            Navigator.push(context, MaterialPageRoute(
-              builder: (_) => HiyariEditScreen(doc: doc),
-            ));
-          }
+          Navigator.push(context, MaterialPageRoute(
+            builder: (_) => HiyariEditScreen(doc: doc),
+          ));
         },
         child: Padding(
           padding: const EdgeInsets.all(14),
@@ -611,21 +522,43 @@ class _HiyariEditScreenState extends State<HiyariEditScreen> {
               multiSelect: false,
             ),
             const SizedBox(height: 20),
-            _sectionTitle('(1) いつ？'),
-            Row(
-              children: [
-                OutlinedButton.icon(
-                  onPressed: () => setState(() => _occurredAt = DateTime.now()),
-                  icon: const Icon(Icons.bolt, size: 18),
-                  label: const Text('今すぐ'),
+            _sectionTitle('(1) 発生日時'),
+            InkWell(
+              onTap: _pickDateTime,
+              borderRadius: BorderRadius.circular(10),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                decoration: BoxDecoration(
+                  color: context.colors.cardBg,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: context.colors.borderMedium),
                 ),
-                const SizedBox(width: 8),
-                OutlinedButton.icon(
-                  onPressed: _pickDateTime,
-                  icon: const Icon(Icons.schedule, size: 18),
-                  label: Text(DateFormat('M/d HH:mm', 'ja').format(_occurredAt)),
+                child: Row(
+                  children: [
+                    Icon(Icons.schedule, size: 18, color: AppColors.primary),
+                    const SizedBox(width: 10),
+                    Text(
+                      DateFormat('yyyy/M/d (E) HH:mm', 'ja').format(_occurredAt),
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: context.colors.textPrimary,
+                      ),
+                    ),
+                    const Spacer(),
+                    TextButton.icon(
+                      onPressed: () => setState(() => _occurredAt = DateTime.now()),
+                      icon: const Icon(Icons.bolt, size: 16),
+                      label: const Text('今に合わせる', style: TextStyle(fontSize: 12)),
+                      style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        minimumSize: Size.zero,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                    ),
+                  ],
                 ),
-              ],
+              ),
             ),
             if (_type == 'child') ...[
               const SizedBox(height: 20),
