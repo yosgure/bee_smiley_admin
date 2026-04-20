@@ -14,26 +14,15 @@ import 'main.dart';
 class CrmOptions {
   /// パイプライン上に並べるステージ（左→右へ前進）
   static const List<({String id, String label, Color color})> stages = [
-    (id: 'new', label: '新規', color: Color(0xFF2196F3)),
-    (id: 'contacted', label: '初回接触', color: Color(0xFF03A9F4)),
-    (id: 'trial_scheduled', label: '体験予約', color: Color(0xFF00BCD4)),
-    (id: 'trial_completed', label: '体験実施', color: Color(0xFF009688)),
     (id: 'considering', label: '検討中', color: Color(0xFFFF9800)),
-    (id: 'intent', label: '入会意向', color: Color(0xFFFF5722)),
     (id: 'onboarding', label: '入会手続中', color: Color(0xFF9C27B0)),
     (id: 'won', label: '入会', color: Color(0xFF4CAF50)),
     (id: 'lost', label: '失注', color: Color(0xFF9E9E9E)),
-    (id: 'nurture', label: 'ナーチャリング', color: Color(0xFF607D8B)),
   ];
 
-  /// カンバンに表示する進行中ステージ（won/lost/nurtureを除外）
+  /// カンバンに表示する進行中ステージ（won/lostを除外）
   static const List<String> kanbanStages = [
-    'new',
-    'contacted',
-    'trial_scheduled',
-    'trial_completed',
     'considering',
-    'intent',
     'onboarding',
   ];
 
@@ -411,9 +400,8 @@ class _CrmLeadScreenState extends State<CrmLeadScreen> {
       final v = s.trim();
       if (v == '辞退') return 'lost';
       if (v == '入会') return 'won';
-      if (v == '検討中') return 'considering';
       if (v == '入会準備中') return 'onboarding';
-      return 'new';
+      return 'considering';
     }
 
     String mapSource(String s) {
@@ -563,9 +551,8 @@ class _CrmKanbanView extends StatelessWidget {
     }
     byStage['won'] = [];
     byStage['lost'] = [];
-    byStage['nurture'] = [];
     for (final d in docs) {
-      final stage = d.data()['stage'] as String? ?? 'new';
+      final stage = d.data()['stage'] as String? ?? 'considering';
       (byStage[stage] ??= []).add(d);
     }
 
@@ -573,7 +560,6 @@ class _CrmKanbanView extends StatelessWidget {
       ...CrmOptions.kanbanStages,
       'won',
       'lost',
-      'nurture',
     ];
 
     return SingleChildScrollView(
@@ -837,7 +823,7 @@ class _LeadTableRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final d = doc.data();
-    final stage = d['stage'] as String? ?? 'new';
+    final stage = d['stage'] as String? ?? 'considering';
     final color = CrmOptions.stageColor(stage);
     final childName = _childFullName(d);
     final parentName = _parentFullName(d);
@@ -961,7 +947,7 @@ class _CrmDashboardView extends StatelessWidget {
 
     for (final doc in docs) {
       final d = doc.data();
-      final stage = d['stage'] as String? ?? 'new';
+      final stage = d['stage'] as String? ?? 'considering';
       stageCount[stage] = (stageCount[stage] ?? 0) + 1;
       final src = d['source'] as String? ?? 'other';
       sourceCount[src] = (sourceCount[src] ?? 0) + 1;
@@ -1200,7 +1186,7 @@ class _CrmLeadEditScreenState extends State<CrmLeadEditScreen> {
   final _addressCtrl = TextEditingController();
 
   // 案件
-  String _stage = 'new';
+  String _stage = 'considering';
   String _confidence = 'B';
   String _source = 'instagram';
   final _sourceDetailCtrl = TextEditingController();
@@ -1257,7 +1243,7 @@ class _CrmLeadEditScreenState extends State<CrmLeadEditScreen> {
       _lineCtrl.text = d['parentLine'] ?? '';
       _preferredChannel = d['preferredChannel'] ?? 'tel';
       _addressCtrl.text = d['address'] ?? '';
-      _stage = d['stage'] ?? 'new';
+      _stage = d['stage'] ?? 'considering';
       _confidence = d['confidence'] ?? 'B';
       _source = d['source'] ?? 'instagram';
       _sourceDetailCtrl.text = d['sourceDetail'] ?? '';
@@ -2083,9 +2069,6 @@ class _CrmLeadEditScreenState extends State<CrmLeadEditScreen> {
           onTap: () {
             setState(() {
               _stage = s.id;
-              if (s.id == 'contacted' && _firstContactedAt == null) {
-                _firstContactedAt = DateTime.now();
-              }
               if (s.id == 'lost' && _lostAt == null) {
                 _lostAt = DateTime.now();
               }
