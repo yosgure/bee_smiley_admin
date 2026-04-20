@@ -156,8 +156,14 @@ service cloud.firestore {
       }
     }
     match /hiyari_reports/{reportId} {
+      function hiyariValid(d) {
+        return d.type in ['child', 'environment']
+               && (d.type != 'child' || (d.childId is string && d.childId.size() > 0));
+      }
       allow read: if isStaff();
-      allow create, update, delete: if isStaff();
+      allow create: if isStaff() && hiyariValid(request.resource.data);
+      allow update: if isStaff() && hiyariValid(request.resource.data);
+      allow delete: if isStaff();
       match /comments/{commentId} {
         allow read, write: if isStaff();
       }

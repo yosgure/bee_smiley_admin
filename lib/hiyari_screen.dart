@@ -3,12 +3,15 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
 import 'app_theme.dart';
+import 'classroom_utils.dart';
+import 'main.dart';
 
 // ============================================================
 // H-02: ヒヤリハット一覧画面（メインエントリ）
 // ============================================================
 class HiyariScreen extends StatefulWidget {
-  const HiyariScreen({super.key});
+  final VoidCallback? onClose;
+  const HiyariScreen({super.key, this.onClose});
 
   @override
   State<HiyariScreen> createState() => _HiyariScreenState();
@@ -17,6 +20,14 @@ class HiyariScreen extends StatefulWidget {
 class _HiyariScreenState extends State<HiyariScreen> {
   String? _severityFilter;
   String? _locationFilter;
+
+  void _close() {
+    if (widget.onClose != null) {
+      widget.onClose!();
+    } else {
+      Navigator.pop(context);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -29,7 +40,7 @@ class _HiyariScreenState extends State<HiyariScreen> {
         foregroundColor: context.colors.textPrimary,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios, size: 20),
-          onPressed: () => Navigator.pop(context),
+          onPressed: _close,
         ),
       ),
       floatingActionButton: FloatingActionButton.extended(
@@ -97,7 +108,7 @@ class _HiyariScreenState extends State<HiyariScreen> {
           style: TextStyle(fontSize: 13, color: context.colors.textPrimary),
           icon: Icon(Icons.expand_more, size: 16, color: context.colors.textSecondary),
           items: [
-            DropdownMenuItem<String?>(value: null, child: Text(hint, style: TextStyle(fontSize: 13))),
+            DropdownMenuItem<String?>(value: null, child: Text(hint, style: const TextStyle(fontSize: 13))),
             ...items.map((it) => DropdownMenuItem<String?>(
                   value: it.id,
                   child: Text(it.label, style: const TextStyle(fontSize: 13)),
@@ -151,10 +162,18 @@ class _HiyariScreenState extends State<HiyariScreen> {
   }
 
   Future<void> _openNewReport() async {
-    await Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => const HiyariEditScreen()),
-    );
+    final isWide = MediaQuery.of(context).size.width >= 600;
+    if (isWide) {
+      AdminShell.showOverlay(
+        context,
+        HiyariEditScreen(onClose: () => AdminShell.hideOverlay(context)),
+      );
+    } else {
+      await Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const HiyariEditScreen()),
+      );
+    }
   }
 }
 
@@ -173,6 +192,8 @@ class _HiyariListTile extends StatelessWidget {
     final riskTags = List<String>.from(data['riskTags'] ?? []);
     final reporterName = data['reporterName'] as String? ?? '';
     final status = data['status'] as String? ?? 'pending';
+    final type = data['type'] as String? ?? 'child';
+    final childNames = List<String>.from(data['childNames'] ?? []);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
@@ -184,9 +205,17 @@ class _HiyariListTile extends StatelessWidget {
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
         onTap: () {
-          Navigator.push(context, MaterialPageRoute(
-            builder: (_) => HiyariEditScreen(doc: doc),
-          ));
+          final isWide = MediaQuery.of(context).size.width >= 600;
+          if (isWide) {
+            AdminShell.showOverlay(
+              context,
+              HiyariEditScreen(doc: doc, onClose: () => AdminShell.hideOverlay(context)),
+            );
+          } else {
+            Navigator.push(context, MaterialPageRoute(
+              builder: (_) => HiyariEditScreen(doc: doc),
+            ));
+          }
         },
         child: Padding(
           padding: const EdgeInsets.all(14),
@@ -196,6 +225,8 @@ class _HiyariListTile extends StatelessWidget {
               Row(
                 children: [
                   _severityBadge(severity),
+                  const SizedBox(width: 6),
+                  _typeBadge(type),
                   const SizedBox(width: 8),
                   Text(
                     occurredAt != null ? DateFormat('M/d (E) HH:mm', 'ja').format(occurredAt) : '',
@@ -206,6 +237,12 @@ class _HiyariListTile extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 8),
+              if (type == 'child' && childNames.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: Text('対象: ${childNames.join('、')}',
+                      style: TextStyle(fontSize: 12, color: context.colors.textSecondary, fontWeight: FontWeight.w600)),
+                ),
               Wrap(
                 spacing: 6,
                 runSpacing: 6,
@@ -260,6 +297,21 @@ class _HiyariListTile extends StatelessWidget {
     );
   }
 
+  Widget _typeBadge(String type) {
+    return Builder(builder: (context) {
+      final label = type == 'environment' ? '環境' : '児童';
+      final color = type == 'environment' ? Colors.blueGrey : Colors.blue;
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(4),
+        ),
+        child: Text(label, style: TextStyle(fontSize: 10, color: color, fontWeight: FontWeight.w600)),
+      );
+    });
+  }
+
   Widget _statusBadge(String id) {
     return Builder(builder: (context) {
       final label = switch (id) {
@@ -286,14 +338,17 @@ class _HiyariListTile extends StatelessWidget {
 // ============================================================
 class HiyariEditScreen extends StatefulWidget {
   final QueryDocumentSnapshot<Map<String, dynamic>>? doc;
-  const HiyariEditScreen({super.key, this.doc});
+  final VoidCallback? onClose;
+  const HiyariEditScreen({super.key, this.doc, this.onClose});
 
   @override
   State<HiyariEditScreen> createState() => _HiyariEditScreenState();
 }
 
 class _HiyariEditScreenState extends State<HiyariEditScreen> {
+  String _type = 'child';
   DateTime _occurredAt = DateTime.now();
+  final List<_Child> _selectedChildren = [];
   String? _location;
   String? _activity;
   String _severity = 'hiyari';
@@ -305,13 +360,25 @@ class _HiyariEditScreenState extends State<HiyariEditScreen> {
   bool _showAdmin = false;
   String _status = 'pending';
 
+  List<_Child> _allChildren = [];
+
   bool get _isEdit => widget.doc != null;
+
+  void _close() {
+    if (widget.onClose != null) {
+      widget.onClose!();
+    } else {
+      Navigator.pop(context);
+    }
+  }
 
   @override
   void initState() {
     super.initState();
+    _loadChildren();
     if (widget.doc != null) {
       final d = widget.doc!.data();
+      _type = d['type'] as String? ?? 'child';
       _occurredAt = (d['occurredAt'] as Timestamp?)?.toDate() ?? DateTime.now();
       _location = d['location'] as String?;
       _activity = d['activityType'] as String?;
@@ -321,6 +388,50 @@ class _HiyariEditScreenState extends State<HiyariEditScreen> {
       _factorCtrl.text = d['factorAnalysis'] as String? ?? '';
       _preventionCtrl.text = d['preventiveMeasures'] as String? ?? '';
       _status = d['status'] as String? ?? 'pending';
+      // 児童情報は _allChildren 取得後に再構築
+    }
+  }
+
+  Future<void> _loadChildren() async {
+    try {
+      final snap = await FirebaseFirestore.instance.collection('families').get();
+      final list = <_Child>[];
+      for (final doc in snap.docs) {
+        final data = doc.data();
+        final familyUid = data['uid'] as String? ?? doc.id;
+        final lastName = data['lastName'] as String? ?? '';
+        final lastNameKana = data['lastNameKana'] as String? ?? '';
+        final children = List<Map<String, dynamic>>.from(data['children'] ?? []);
+        for (final c in children) {
+          final firstName = c['firstName'] as String? ?? '';
+          final classrooms = getChildClassrooms(c);
+          if (firstName.isEmpty) continue;
+          if (!classrooms.any((cl) => cl.contains('プラス'))) continue;
+          final id = (c['studentId'] as String?) ?? '${familyUid}_$firstName';
+          list.add(_Child(
+            id: id,
+            fullName: '$lastName $firstName'.trim(),
+            firstName: firstName,
+            kana: lastNameKana,
+          ));
+        }
+      }
+      list.sort((a, b) => a.kana.compareTo(b.kana));
+      if (!mounted) return;
+      setState(() {
+        _allChildren = list;
+        if (widget.doc != null) {
+          final d = widget.doc!.data();
+          final childId = d['childId'] as String?;
+          final addl = List<String>.from(d['additionalChildIds'] ?? []);
+          final ids = {if (childId != null) childId, ...addl};
+          _selectedChildren
+            ..clear()
+            ..addAll(list.where((c) => ids.contains(c.id)));
+        }
+      });
+    } catch (e) {
+      debugPrint('Error loading children: $e');
     }
   }
 
@@ -332,11 +443,24 @@ class _HiyariEditScreenState extends State<HiyariEditScreen> {
     super.dispose();
   }
 
-  bool get _canSubmit =>
-      _location != null &&
-      _activity != null &&
-      _riskTags.isNotEmpty &&
-      _situationCtrl.text.trim().isNotEmpty;
+  bool get _canSubmit {
+    if (_type == 'child' && _selectedChildren.isEmpty) return false;
+    return _location != null &&
+        _activity != null &&
+        _riskTags.isNotEmpty &&
+        _situationCtrl.text.trim().isNotEmpty;
+  }
+
+  String get _situationHint {
+    if (_type == 'child' && _selectedChildren.isNotEmpty) {
+      final name = _selectedChildren.first.firstName;
+      return '例：$nameくんが積み木で遊んでいた時、隣の友達の手に当たりそうになった。';
+    }
+    if (_type == 'environment') {
+      return '例：療育室の棚の角が尖っており、通行時にぶつかりそうになった。';
+    }
+    return '例：〇〇くんが積み木で遊んでいた時、隣の友達の手に当たりそうになった。';
+  }
 
   Future<void> _submit() async {
     if (!_canSubmit) return;
@@ -357,6 +481,7 @@ class _HiyariEditScreenState extends State<HiyariEditScreen> {
     }
     final now = FieldValue.serverTimestamp();
     final data = <String, dynamic>{
+      'type': _type,
       'occurredAt': Timestamp.fromDate(_occurredAt),
       'location': _location,
       'activityType': _activity,
@@ -368,6 +493,16 @@ class _HiyariEditScreenState extends State<HiyariEditScreen> {
       'status': _status,
       'updatedAt': now,
     };
+    if (_type == 'child') {
+      data['childId'] = _selectedChildren.first.id;
+      data['additionalChildIds'] =
+          _selectedChildren.length > 1 ? _selectedChildren.sublist(1).map((c) => c.id).toList() : <String>[];
+      data['childNames'] = _selectedChildren.map((c) => c.fullName).toList();
+    } else {
+      data['childId'] = null;
+      data['additionalChildIds'] = <String>[];
+      data['childNames'] = <String>[];
+    }
     try {
       if (_isEdit) {
         await widget.doc!.reference.update(data);
@@ -381,7 +516,7 @@ class _HiyariEditScreenState extends State<HiyariEditScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(_isEdit ? '更新しました' : '報告しました'), backgroundColor: Colors.green),
         );
-        Navigator.pop(context);
+        _close();
       }
     } catch (e) {
       if (mounted) {
@@ -413,11 +548,28 @@ class _HiyariEditScreenState extends State<HiyariEditScreen> {
     if (ok != true) return;
     try {
       await widget.doc!.reference.delete();
-      if (mounted) Navigator.pop(context);
+      if (mounted) _close();
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('削除失敗: $e')));
       }
+    }
+  }
+
+  Future<void> _pickChildren() async {
+    final result = await showDialog<List<_Child>>(
+      context: context,
+      builder: (c) => _ChildPickerDialog(
+        all: _allChildren,
+        initiallySelected: _selectedChildren,
+      ),
+    );
+    if (result != null) {
+      setState(() {
+        _selectedChildren
+          ..clear()
+          ..addAll(result);
+      });
     }
   }
 
@@ -433,7 +585,7 @@ class _HiyariEditScreenState extends State<HiyariEditScreen> {
         foregroundColor: context.colors.textPrimary,
         leading: IconButton(
           icon: const Icon(Icons.close),
-          onPressed: () => Navigator.pop(context),
+          onPressed: _close,
         ),
         actions: [
           if (_isEdit)
@@ -448,6 +600,17 @@ class _HiyariEditScreenState extends State<HiyariEditScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            _sectionTitle('(0) ヒヤリの種類'),
+            _chipGroup(
+              options: HiyariOptions.type,
+              selected: {_type},
+              onToggle: (id) => setState(() {
+                _type = id;
+                if (id == 'environment') _selectedChildren.clear();
+              }),
+              multiSelect: false,
+            ),
+            const SizedBox(height: 20),
             _sectionTitle('(1) いつ？'),
             Row(
               children: [
@@ -464,8 +627,13 @@ class _HiyariEditScreenState extends State<HiyariEditScreen> {
                 ),
               ],
             ),
+            if (_type == 'child') ...[
+              const SizedBox(height: 20),
+              _sectionTitle('対象児童（複数可）'),
+              _buildChildrenSelector(),
+            ],
             const SizedBox(height: 20),
-            _sectionTitle('(2) どこで？ ※必須'),
+            _sectionTitle('(2) どこで？'),
             _chipGroup(
               options: HiyariOptions.location,
               selected: _location == null ? const {} : {_location!},
@@ -473,7 +641,7 @@ class _HiyariEditScreenState extends State<HiyariEditScreen> {
               multiSelect: false,
             ),
             const SizedBox(height: 20),
-            _sectionTitle('(3) 何をしていた時？ ※必須'),
+            _sectionTitle('(3) 何をしていた時？'),
             _chipGroup(
               options: HiyariOptions.activity,
               selected: _activity == null ? const {} : {_activity!},
@@ -481,7 +649,7 @@ class _HiyariEditScreenState extends State<HiyariEditScreen> {
               multiSelect: false,
             ),
             const SizedBox(height: 20),
-            _sectionTitle('(4) 何が起きそうになった？ ※必須（複数可）'),
+            _sectionTitle('(4) 何が起きそうになった？（複数可）'),
             _chipGroup(
               options: HiyariOptions.riskTag,
               selected: _riskTags,
@@ -495,7 +663,7 @@ class _HiyariEditScreenState extends State<HiyariEditScreen> {
               multiSelect: true,
             ),
             const SizedBox(height: 20),
-            _sectionTitle('(5) 重大度 ※必須'),
+            _sectionTitle('(5) 重大度'),
             _chipGroup(
               options: HiyariOptions.severity,
               selected: {_severity},
@@ -503,14 +671,14 @@ class _HiyariEditScreenState extends State<HiyariEditScreen> {
               multiSelect: false,
             ),
             const SizedBox(height: 20),
-            _sectionTitle('(6) 状況 ※必須'),
+            _sectionTitle('(6) 状況'),
             TextField(
               controller: _situationCtrl,
               maxLines: 4,
               maxLength: 200,
               onChanged: (_) => setState(() {}),
               decoration: InputDecoration(
-                hintText: '例：〇〇君が積み木で遊んでいた時、隣の友達の手に当たりそうになった。',
+                hintText: _situationHint,
                 hintStyle: TextStyle(fontSize: 13, color: context.colors.textHint),
                 filled: true,
                 fillColor: context.colors.cardBg,
@@ -521,7 +689,6 @@ class _HiyariEditScreenState extends State<HiyariEditScreen> {
               ),
             ),
             const SizedBox(height: 16),
-            // 管理者入力欄（折りたたみ）
             InkWell(
               onTap: () => setState(() => _showAdmin = !_showAdmin),
               borderRadius: BorderRadius.circular(8),
@@ -540,17 +707,9 @@ class _HiyariEditScreenState extends State<HiyariEditScreen> {
             ),
             if (_showAdmin) ...[
               const SizedBox(height: 4),
-              TextField(
-                controller: _factorCtrl,
-                maxLines: 3,
-                decoration: _adminDecoration('要因分析'),
-              ),
+              TextField(controller: _factorCtrl, maxLines: 3, decoration: _adminDecoration('要因分析')),
               const SizedBox(height: 10),
-              TextField(
-                controller: _preventionCtrl,
-                maxLines: 3,
-                decoration: _adminDecoration('再発防止策'),
-              ),
+              TextField(controller: _preventionCtrl, maxLines: 3, decoration: _adminDecoration('再発防止策')),
               const SizedBox(height: 10),
               _chipGroup(
                 options: HiyariOptions.status,
@@ -575,6 +734,45 @@ class _HiyariEditScreenState extends State<HiyariEditScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildChildrenSelector() {
+    return InkWell(
+      onTap: _pickChildren,
+      borderRadius: BorderRadius.circular(10),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        decoration: BoxDecoration(
+          color: context.colors.cardBg,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: context.colors.borderMedium),
+        ),
+        child: _selectedChildren.isEmpty
+            ? Row(
+                children: [
+                  Icon(Icons.add_circle_outline, size: 18, color: context.colors.textSecondary),
+                  const SizedBox(width: 8),
+                  Text('児童を選択', style: TextStyle(fontSize: 13, color: context.colors.textSecondary)),
+                ],
+              )
+            : Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: _selectedChildren
+                    .map((c) => Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: AppColors.primary.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          child: Text(c.fullName,
+                              style: const TextStyle(fontSize: 12, color: AppColors.primary, fontWeight: FontWeight.w600)),
+                        ))
+                    .toList(),
+              ),
       ),
     );
   }
@@ -657,9 +855,121 @@ class _HiyariEditScreenState extends State<HiyariEditScreen> {
 }
 
 // ============================================================
+// 児童選択ダイアログ
+// ============================================================
+class _ChildPickerDialog extends StatefulWidget {
+  final List<_Child> all;
+  final List<_Child> initiallySelected;
+  const _ChildPickerDialog({required this.all, required this.initiallySelected});
+
+  @override
+  State<_ChildPickerDialog> createState() => _ChildPickerDialogState();
+}
+
+class _ChildPickerDialogState extends State<_ChildPickerDialog> {
+  late final Set<String> _selected = widget.initiallySelected.map((c) => c.id).toSet();
+  String _q = '';
+
+  @override
+  Widget build(BuildContext context) {
+    final list = _q.isEmpty
+        ? widget.all
+        : widget.all.where((c) => c.fullName.toLowerCase().contains(_q.toLowerCase()) || c.kana.contains(_q)).toList();
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 400, maxHeight: 560),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+              child: Row(
+                children: [
+                  Text('児童を選択',
+                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: context.colors.textPrimary)),
+                  const Spacer(),
+                  Text('${_selected.length}名',
+                      style: TextStyle(fontSize: 13, color: context.colors.textSecondary)),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: TextField(
+                decoration: InputDecoration(
+                  hintText: '名前で検索',
+                  prefixIcon: const Icon(Icons.search, size: 18),
+                  isDense: true,
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+                onChanged: (v) => setState(() => _q = v),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Expanded(
+              child: ListView.builder(
+                itemCount: list.length,
+                itemBuilder: (c, i) {
+                  final ch = list[i];
+                  final sel = _selected.contains(ch.id);
+                  return CheckboxListTile(
+                    value: sel,
+                    onChanged: (v) => setState(() {
+                      if (v == true) {
+                        _selected.add(ch.id);
+                      } else {
+                        _selected.remove(ch.id);
+                      }
+                    }),
+                    title: Text(ch.fullName, style: const TextStyle(fontSize: 14)),
+                    dense: true,
+                    controlAffinity: ListTileControlAffinity.leading,
+                  );
+                },
+              ),
+            ),
+            const Divider(height: 1),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(onPressed: () => Navigator.pop(context), child: const Text('キャンセル')),
+                  TextButton(
+                    onPressed: () {
+                      final result = widget.all.where((c) => _selected.contains(c.id)).toList();
+                      Navigator.pop(context, result);
+                    },
+                    child: const Text('決定', style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold)),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _Child {
+  final String id;
+  final String fullName;
+  final String firstName;
+  final String kana;
+  const _Child({required this.id, required this.fullName, required this.firstName, required this.kana});
+}
+
+// ============================================================
 // 選択肢マスタ
 // ============================================================
 class HiyariOptions {
+  static const List<({String id, String label})> type = [
+    (id: 'child', label: '児童に関わる'),
+    (id: 'environment', label: '環境のみ'),
+  ];
+
   static const List<({String id, String label})> location = [
     (id: 'therapyRoom', label: '療育室'),
     (id: 'feedbackRoom', label: 'フィードバック室'),
