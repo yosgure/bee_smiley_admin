@@ -3207,6 +3207,8 @@ final plusStaff = _staffList.where((s) =>
     );
   }
 
+  final GlobalKey _plusMenuButtonKey = GlobalKey();
+
   /// 右上の「…」メニュー。シフト希望など関連ツールへの入口。
   Widget _buildPlusMenuButton() {
     final target = resolveShiftRequestTargetMonth();
@@ -3215,101 +3217,194 @@ final plusStaff = _staffList.where((s) =>
     final t = DateTime(today.year, today.month, today.day);
     final d = DateTime(deadline.year, deadline.month, deadline.day);
     final daysLeft = d.difference(t).inDays;
-    final needsAttention = daysLeft <= 3; // 締切3日前以内 or 超過
+    final needsAttention = daysLeft <= 3;
 
-    return PopupMenuButton<String>(
-      tooltip: 'メニュー',
-      position: PopupMenuPosition.under,
-      offset: const Offset(0, 8),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      color: context.colors.scaffoldBg,
-      icon: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          Icon(Icons.more_horiz, color: context.colors.textTertiary, size: 22),
-          if (needsAttention)
+    return Material(
+      color: Colors.transparent,
+      borderRadius: BorderRadius.circular(8),
+      child: InkWell(
+        key: _plusMenuButtonKey,
+        borderRadius: BorderRadius.circular(8),
+        onTap: _showPlusMenu,
+        child: Padding(
+          padding: const EdgeInsets.all(6),
+          child: Tooltip(
+            message: 'メニュー',
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Icon(Icons.more_horiz, color: context.colors.textTertiary, size: 22),
+                if (needsAttention)
+                  Positioned(
+                    right: -2,
+                    top: -2,
+                    child: Container(
+                      width: 8,
+                      height: 8,
+                      decoration: BoxDecoration(
+                        color: daysLeft < 0 ? Colors.red.shade700 : Colors.red.shade400,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: context.colors.scaffoldBg, width: 1.5),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showPlusMenu() async {
+    final target = resolveShiftRequestTargetMonth();
+    final deadline = DateTime(target.year, target.month - 1, 10);
+    final today = DateTime.now();
+    final t = DateTime(today.year, today.month, today.day);
+    final d = DateTime(deadline.year, deadline.month, deadline.day);
+    final daysLeft = d.difference(t).inDays;
+    final needsAttention = daysLeft <= 3;
+
+    // ボタン位置を取得（画面右端からの距離と上端からの距離）
+    final renderBox = _plusMenuButtonKey.currentContext?.findRenderObject() as RenderBox?;
+    if (renderBox == null) return;
+    final origin = renderBox.localToGlobal(Offset.zero);
+    final screen = MediaQuery.of(context).size;
+    final menuRight = screen.width - origin.dx - renderBox.size.width;
+    final menuTop = origin.dy + renderBox.size.height + 6;
+
+    final selected = await showGeneralDialog<String>(
+      context: context,
+      barrierLabel: 'plus_menu',
+      barrierDismissible: true,
+      barrierColor: Colors.transparent,
+      transitionDuration: const Duration(milliseconds: 140),
+      pageBuilder: (ctx, _, __) => const SizedBox.shrink(),
+      transitionBuilder: (ctx, anim, _, child) {
+        final fade = CurvedAnimation(parent: anim, curve: Curves.easeOutCubic);
+        return Stack(
+          children: [
             Positioned(
-              right: -2,
-              top: -2,
-              child: Container(
-                width: 8,
-                height: 8,
-                decoration: BoxDecoration(
-                  color: daysLeft < 0 ? Colors.red.shade700 : Colors.red.shade400,
-                  shape: BoxShape.circle,
-                  border: Border.all(color: context.colors.scaffoldBg, width: 1.5),
+              right: menuRight,
+              top: menuTop,
+              child: FadeTransition(
+                opacity: fade,
+                child: ScaleTransition(
+                  scale: Tween<double>(begin: 0.96, end: 1.0).animate(fade),
+                  alignment: Alignment.topRight,
+                  child: _plusMenuContent(ctx, daysLeft: daysLeft, needsAttention: needsAttention),
                 ),
               ),
             ),
-        ],
-      ),
-      onSelected: (value) async {
-        switch (value) {
-          case 'shift':
-            showPlusShiftRequestDialog(context, target);
-            break;
-          case 'shift_decision':
-            final saved = await showPlusShiftDecisionDialog(context, target);
-            if (saved == true && mounted) {
-              await _loadShiftData();
-              setState(() {});
-            }
-            break;
-          case 'crm':
-          case 'meeting':
-          case 'accident':
-          case 'complaint':
-          case 'training':
-            final labels = {
-              'crm': 'CRM',
-              'meeting': '会議録',
-              'accident': '事故ヒヤリハット',
-              'complaint': '苦情受付',
-              'training': '法定研修',
-            };
-            if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('${labels[value]}のリンクは未設定です。')),
-              );
-            }
-            break;
-        }
+          ],
+        );
       },
-      itemBuilder: (ctx) {
-        PopupMenuItem<String> item(String value, IconData icon, String label, {String? trailing, Color? trailingColor}) {
-          return PopupMenuItem<String>(
-            value: value,
-            child: Row(
-              children: [
-                Icon(icon, size: 18, color: context.colors.textSecondary),
-                const SizedBox(width: 12),
-                Expanded(child: Text(label, style: const TextStyle(fontSize: 13))),
-                if (trailing != null)
-                  Text(trailing,
-                      style: TextStyle(fontSize: 11, color: trailingColor ?? context.colors.textTertiary)),
-              ],
-            ),
+    );
+
+    if (!mounted || selected == null) return;
+    switch (selected) {
+      case 'shift':
+        showPlusShiftRequestDialog(context, target);
+        break;
+      case 'shift_decision':
+        final saved = await showPlusShiftDecisionDialog(context, target);
+        if (saved == true && mounted) {
+          await _loadShiftData();
+          setState(() {});
+        }
+        break;
+      case 'crm':
+      case 'meeting':
+      case 'accident':
+      case 'complaint':
+      case 'training':
+        const labels = {
+          'crm': 'CRM',
+          'meeting': '会議録',
+          'accident': '事故ヒヤリハット',
+          'complaint': '苦情受付',
+          'training': '法定研修',
+        };
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('${labels[selected]}のリンクは未設定です。')),
           );
         }
-        return [
-          item(
-            'shift',
-            Icons.how_to_vote_outlined,
-            'シフト希望',
-            trailing: daysLeft < 0
-                ? '超過${-daysLeft}日'
-                : 'あと$daysLeft日',
-            trailingColor: needsAttention ? Colors.red.shade400 : null,
+        break;
+    }
+  }
+
+  Widget _plusMenuContent(BuildContext ctx, {required int daysLeft, required bool needsAttention}) {
+    final c = ctx.colors;
+    final isDark = Theme.of(ctx).brightness == Brightness.dark;
+    final bg = isDark ? const Color(0xFF1E1F22) : Colors.white;
+    final border = isDark ? const Color(0xFF35373B) : const Color(0xFFE5E7EB);
+
+    Widget menuItem(String value, IconData icon, String label, {String? trailing, Color? trailingColor}) {
+      return InkWell(
+        onTap: () => Navigator.of(ctx).pop(value),
+        borderRadius: BorderRadius.circular(8),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+          child: Row(
+            children: [
+              Icon(icon, size: 17, color: c.textSecondary),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(label,
+                    style: TextStyle(fontSize: 13, color: c.textPrimary, fontWeight: FontWeight.w500)),
+              ),
+              if (trailing != null)
+                Text(trailing,
+                    style: TextStyle(
+                        fontSize: 11, color: trailingColor ?? c.textTertiary, fontWeight: FontWeight.w500)),
+            ],
           ),
-          item('shift_decision', Icons.event_available_outlined, 'シフト決定'),
-          const PopupMenuDivider(),
-          item('crm', Icons.people_alt_outlined, 'CRM'),
-          item('meeting', Icons.description_outlined, '会議録'),
-          item('accident', Icons.warning_amber_outlined, '事故ヒヤリハット'),
-          item('complaint', Icons.report_gmailerrorred_outlined, '苦情受付'),
-          item('training', Icons.school_outlined, '法定研修'),
-        ];
-      },
+        ),
+      );
+    }
+
+    return Material(
+      color: Colors.transparent,
+      child: Container(
+        width: 240,
+        decoration: BoxDecoration(
+          color: bg,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: border),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: isDark ? 0.45 : 0.12),
+              blurRadius: 24,
+              offset: const Offset(0, 8),
+            ),
+          ],
+        ),
+        padding: const EdgeInsets.all(4),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            menuItem(
+              'shift',
+              Icons.how_to_vote_outlined,
+              'シフト希望',
+              trailing: daysLeft < 0 ? '超過${-daysLeft}日' : 'あと$daysLeft日',
+              trailingColor: needsAttention ? Colors.red.shade400 : null,
+            ),
+            menuItem('shift_decision', Icons.event_available_outlined, 'シフト決定'),
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 6),
+              child: Divider(height: 1, color: border),
+            ),
+            menuItem('crm', Icons.people_alt_outlined, 'CRM'),
+            menuItem('meeting', Icons.description_outlined, '会議録'),
+            menuItem('accident', Icons.warning_amber_outlined, '事故ヒヤリハット'),
+            menuItem('complaint', Icons.report_gmailerrorred_outlined, '苦情受付'),
+            menuItem('training', Icons.school_outlined, '法定研修'),
+          ],
+        ),
+      ),
     );
   }
 
