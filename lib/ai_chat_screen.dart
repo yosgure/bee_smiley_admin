@@ -1356,6 +1356,44 @@ class _AiChatScreenState extends State<AiChatScreen> {
   /// hugへ直接送信（B案: 保存→送信→削除を内部で透過実行）
   /// 失敗時はセッション内のリトライバナーに積む
   Future<void> _sendToHugDirect(Map<String, dynamic> payload) async {
+    // 送信中ダイアログ（進捗アニメーション）
+    if (mounted) {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) {
+          final c = context.colors;
+          return Dialog(
+            backgroundColor: c.scaffoldBg,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(28, 28, 28, 24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  SizedBox(
+                    width: 40, height: 40,
+                    child: CircularProgressIndicator(strokeWidth: 3, color: c.aiAccent),
+                  ),
+                  const SizedBox(height: 16),
+                  Text('HUGへ送信中...', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: c.textPrimary)),
+                  const SizedBox(height: 4),
+                  Text('ログイン〜記録の保存まで数秒かかります',
+                      style: TextStyle(fontSize: 11, color: c.textSecondary)),
+                ],
+              ),
+            ),
+          );
+        },
+      );
+    }
+
+    void closeProgress() {
+      if (mounted) {
+        Navigator.of(context, rootNavigator: true).pop();
+      }
+    }
+
     // 一時的に saved_ai_contents に保存
     String? tempDocId;
     try {
@@ -1374,12 +1412,14 @@ class _AiChatScreenState extends State<AiChatScreen> {
       final resultData = result.data as Map<String, dynamic>;
       final successCount = resultData['successCount'] ?? 0;
 
+      closeProgress();
+
       if (successCount > 0) {
         // 成功: 一時保存も既に削除されているはず（syncToHugが成功時に削除）
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('${payload['category']}をhugに送信しました'),
+              content: Text('${payload['category']}をHUGに送信しました'),
               backgroundColor: Colors.green,
               duration: const Duration(seconds: 2),
             ),
@@ -1398,6 +1438,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
         _addToFailedBanner(payload, errorMsg.toString());
       }
     } catch (e) {
+      closeProgress();
       // 通信エラー等: 一時保存があれば削除
       if (tempDocId != null) {
         await FirebaseFirestore.instance
@@ -1507,29 +1548,31 @@ class _AiChatScreenState extends State<AiChatScreen> {
   }
 
   Widget _buildFailedHugBanner() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bg = isDark ? const Color(0xFF3A1F1F) : Colors.red.shade50;
+    final border = isDark ? const Color(0xFF7A3030) : Colors.red.shade200;
+    final fg = isDark ? const Color(0xFFFFAAAA) : Colors.red.shade700;
+    final itemColor = isDark ? const Color(0xFFE6D8D8) : context.colors.textPrimary;
+    final retryColor = isDark ? const Color(0xFF7CB2FF) : Colors.blue;
+    final discardColor = isDark ? const Color(0xFF9CA0AA) : Colors.grey;
     return Container(
       margin: const EdgeInsets.fromLTRB(12, 8, 12, 0),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: Colors.red.shade50,
+        color: bg,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: Colors.red.shade200),
+        border: Border.all(color: border),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Icon(Icons.warning_amber_rounded,
-                  color: Colors.red.shade700, size: 20),
+              Icon(Icons.warning_amber_rounded, color: fg, size: 20),
               const SizedBox(width: 8),
               Text(
-                'hug送信失敗 (${_failedHugSends.length}件)',
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.red.shade700,
-                ),
+                'HUG送信失敗 (${_failedHugSends.length}件)',
+                style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: fg),
               ),
             ],
           ),
@@ -1543,7 +1586,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
                   Expanded(
                     child: Text(
                       '${item['category']} / ${item['studentName']}',
-                      style: const TextStyle(fontSize: 12),
+                      style: TextStyle(fontSize: 12, color: itemColor),
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
@@ -1552,7 +1595,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
                     style: TextButton.styleFrom(
                       minimumSize: const Size(0, 28),
                       padding: const EdgeInsets.symmetric(horizontal: 8),
-                      foregroundColor: Colors.blue,
+                      foregroundColor: retryColor,
                     ),
                     child: const Text('再送', style: TextStyle(fontSize: 12)),
                   ),
@@ -1561,7 +1604,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
                     style: TextButton.styleFrom(
                       minimumSize: const Size(0, 28),
                       padding: const EdgeInsets.symmetric(horizontal: 8),
-                      foregroundColor: Colors.grey,
+                      foregroundColor: discardColor,
                     ),
                     child: const Text('破棄', style: TextStyle(fontSize: 12)),
                   ),
@@ -1989,28 +2032,15 @@ class _AiChatScreenState extends State<AiChatScreen> {
                 ),
               ),
             ),
-          if (timeStr.isNotEmpty)
+          if (isSending)
             Padding(
               padding: const EdgeInsets.only(top: 4, right: 4),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (isSending) ...[
-                    SizedBox(
-                      width: 10,
-                      height: 10,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 1.5,
-                        color: context.colors.iconMuted,
-                      ),
-                    ),
-                    const SizedBox(width: 4),
-                  ],
-                  Text(
-                    timeStr,
-                    style: TextStyle(fontSize: 11, color: context.colors.textHint),
-                  ),
-                ],
+              child: SizedBox(
+                width: 10, height: 10,
+                child: CircularProgressIndicator(
+                  strokeWidth: 1.5,
+                  color: context.colors.iconMuted,
+                ),
               ),
             ),
         ],
@@ -2072,12 +2102,6 @@ class _AiChatScreenState extends State<AiChatScreen> {
                       tooltip: 'HUG連携',
                       onTap: () => _showSaveContentDialog(content, defaultCommandLabel: usedCommandLabel),
                     ),
-                    const Spacer(),
-                    if (timeStr.isNotEmpty)
-                      Text(
-                        timeStr,
-                        style: TextStyle(fontSize: 11, color: context.colors.textHint),
-                      ),
                   ],
                 ),
               ],
