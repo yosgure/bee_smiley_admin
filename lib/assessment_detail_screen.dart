@@ -63,25 +63,53 @@ class _AssessmentDetailScreenState extends State<AssessmentDetailScreen> {
     if (confirmed != true) return;
 
     setState(() => _isDeleting = true);
+    // 親のMessengerを事前取得（_close後はcontextが使えない可能性があるため）
+    final messenger = ScaffoldMessenger.maybeOf(context);
     try {
       await FirebaseFirestore.instance
           .collection('assessments')
           .doc(widget.doc.id)
           .delete();
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('削除しました'), backgroundColor: Colors.green),
-        );
-        _close();
-      }
+      messenger?.showSnackBar(
+        const SnackBar(content: Text('削除しました'), backgroundColor: Colors.green),
+      );
+      if (mounted) _close();
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('削除に失敗: $e'), backgroundColor: Colors.red),
-        );
-      }
-    } finally {
+      messenger?.showSnackBar(
+        SnackBar(content: Text('削除に失敗: $e'), backgroundColor: Colors.red),
+      );
       if (mounted) setState(() => _isDeleting = false);
+    }
+  }
+
+  void _openEdit() {
+    final type = _data['type'] as String? ?? 'weekly';
+    final studentName = _data['studentName'] ?? '';
+    if (widget.onClose != null) {
+      AdminShell.showOverlay(
+        context,
+        AssessmentEditScreen(
+          studentId: _data['studentId'] ?? '',
+          studentName: studentName,
+          type: type,
+          docId: widget.doc.id,
+          initialData: _data,
+          onClose: () => AdminShell.hideOverlay(context),
+        ),
+      );
+    } else {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (_) => AssessmentEditScreen(
+            studentId: _data['studentId'] ?? '',
+            studentName: studentName,
+            type: type,
+            docId: widget.doc.id,
+            initialData: _data,
+          ),
+        ),
+      );
     }
   }
 
@@ -156,47 +184,25 @@ class _AssessmentDetailScreenState extends State<AssessmentDetailScreen> {
                   : const Text('公開', style: TextStyle(fontSize: 13, color: Colors.white)),
               ),
             ),
-          TextButton.icon(
-            onPressed: () {
-              if (widget.onClose != null) {
-                // オーバーレイモード: 編集画面に差し替え
-                AdminShell.showOverlay(
-                  context,
-                  AssessmentEditScreen(
-                    studentId: _data['studentId'] ?? '',
-                    studentName: studentName,
-                    type: type,
-                    docId: widget.doc.id,
-                    initialData: _data,
-                    onClose: () => AdminShell.hideOverlay(context),
-                  ),
-                );
-              } else {
-                Navigator.pushReplacement(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => AssessmentEditScreen(
-                      studentId: _data['studentId'] ?? '',
-                      studentName: studentName,
-                      type: type,
-                      docId: widget.doc.id,
-                      initialData: _data,
-                    ),
-                  ),
-                );
-              }
-            },
-            icon: const Icon(Icons.edit, size: 18, color: AppColors.primary),
-            label: const Text('編集', style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold)),
-          ),
-          // 削除ボタン（三点メニュー内）
+          // 編集・削除は三点メニューに統合
           PopupMenuButton<String>(
             tooltip: 'その他',
             icon: Icon(Icons.more_vert, color: context.colors.textSecondary),
             onSelected: (v) {
+              if (v == 'edit') _openEdit();
               if (v == 'delete') _confirmAndDelete();
             },
             itemBuilder: (ctx) => [
+              const PopupMenuItem<String>(
+                value: 'edit',
+                child: Row(
+                  children: [
+                    Icon(Icons.edit_outlined, size: 18, color: AppColors.primary),
+                    SizedBox(width: 10),
+                    Text('編集', style: TextStyle(color: AppColors.primary)),
+                  ],
+                ),
+              ),
               PopupMenuItem<String>(
                 value: 'delete',
                 enabled: !_isDeleting,

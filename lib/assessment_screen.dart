@@ -23,7 +23,7 @@ class AssessmentScreen extends StatefulWidget {
 
 class _AssessmentScreenState extends State<AssessmentScreen> {
   List<String> _classrooms = [];
-  String? _selectedClassroom; // null = 全教室
+  String? _selectedClassroom;
 
   List<Map<String, dynamic>> _allStudents = [];
 
@@ -39,6 +39,9 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
   // モバイル用サイドバー表示
   bool _showSidebar = true;
 
+  // 詳細画面を右ペインに表示する際のドキュメント
+  DocumentSnapshot? _detailDoc;
+
   @override
   void initState() {
     super.initState();
@@ -53,13 +56,11 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
 
   List<Map<String, dynamic>> get _filteredStudents {
     var list = _allStudents;
-    // 教室フィルタ
     if (_selectedClassroom != null) {
       list = list
           .where((s) => (s['classrooms'] as List<String>?)?.contains(_selectedClassroom) ?? false)
           .toList();
     }
-    // 検索フィルタ
     if (_searchQuery.isNotEmpty) {
       final q = _searchQuery.toLowerCase();
       list = list.where((s) {
@@ -94,7 +95,6 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
           final classrooms = getChildClassrooms(child);
           final classroom = classrooms.join(', ');
 
-          // アセスメント対象教室に所属する子だけ
           if (!classrooms.any((c) => classList.contains(c))) continue;
 
           final id = '${uid}_$firstName';
@@ -117,7 +117,6 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
           _allStudents = studentList;
           _isLoading = false;
 
-          // 外部から生徒指定で開いた場合
           if (widget.initialStudentId != null) {
             _selectedStudentId = widget.initialStudentId;
             _selectedStudentName = widget.initialStudentName ?? '';
@@ -128,7 +127,7 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
             if (student.isNotEmpty) {
               _selectedStudentName = student['name'] as String;
             }
-            _showSidebar = false; // 直接アクセス時はコンテンツ表示
+            _showSidebar = false;
           }
         });
       }
@@ -142,10 +141,22 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
     setState(() {
       _selectedStudentId = student['id'] as String;
       _selectedStudentName = student['name'] as String;
-      // モバイルではコンテンツ表示に切り替え
+      _detailDoc = null;
       if (MediaQuery.of(context).size.width < 768) {
         _showSidebar = false;
       }
+    });
+  }
+
+  void _openDetail(DocumentSnapshot doc) {
+    setState(() {
+      _detailDoc = doc;
+    });
+  }
+
+  void _closeDetail() {
+    setState(() {
+      _detailDoc = null;
     });
   }
 
@@ -187,10 +198,10 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
     final isDesktop = MediaQuery.of(context).size.width >= 768;
 
     return Scaffold(
-      backgroundColor: context.colors.cardBg,
+      backgroundColor: context.colors.scaffoldBg,
       appBar: (!isDesktop && _showSidebar)
           ? AppBar(
-              title: const Text('アセスメント'),
+              title: const Text('記録'),
               centerTitle: true,
               backgroundColor: context.colors.cardBg,
               elevation: 0,
@@ -200,14 +211,11 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
           : null,
       body: Row(
         children: [
-          // 左サイドバー
           if (isDesktop || _showSidebar)
             SizedBox(
               width: isDesktop ? 280 : MediaQuery.of(context).size.width,
               child: _buildSidebar(context),
             ),
-          if (isDesktop) VerticalDivider(thickness: 1, width: 1, color: context.colors.borderLight),
-          // 右コンテンツ
           if (isDesktop || !_showSidebar)
             Expanded(child: _buildContent(context, isDesktop)),
         ],
@@ -218,85 +226,107 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
   Widget _buildSidebar(BuildContext context) {
     final isDesktop = MediaQuery.of(context).size.width >= 768;
     final students = _filteredStudents;
-    return Column(
-      children: [
-        // ヘッダー（デスクトップのみ、モバイルはAppBarがタイトルを担当）
-        if (isDesktop)
-          Container(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-            child: const Text(
-              'アセスメント',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              textAlign: TextAlign.center,
-            ),
-          ),
-        // 教室フィルタ
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10),
-            decoration: BoxDecoration(
-              color: context.colors.inputFill,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: DropdownButtonHideUnderline(
-              child: DropdownButton<String>(
-                value: _selectedClassroom,
-                isExpanded: true,
-                hint: const Text('全教室', style: TextStyle(fontSize: 13)),
-                style: TextStyle(fontSize: 13, color: context.colors.textPrimary),
-                icon: Icon(Icons.expand_more, size: 18, color: context.colors.textSecondary),
-                items: [
-                  DropdownMenuItem<String>(
-                    value: null,
-                    child: Text('全教室', style: TextStyle(fontSize: 13, color: context.colors.textPrimary)),
-                  ),
-                  ..._classrooms.map((c) => DropdownMenuItem(
-                    value: c,
-                    child: Text(c, style: TextStyle(fontSize: 13, color: context.colors.textPrimary)),
-                  )),
-                ],
-                onChanged: (val) => setState(() => _selectedClassroom = val),
+    return Container(
+      decoration: BoxDecoration(
+        color: context.colors.hoverBg,
+        border: Border(
+          right: BorderSide(color: context.colors.borderLight, width: 0.5),
+        ),
+      ),
+      child: Column(
+        children: [
+          if (isDesktop)
+            Container(
+              padding: EdgeInsets.fromLTRB(16, MediaQuery.of(context).padding.top + 12, 16, 12),
+              child: Text(
+                '記録',
+                style: TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w600,
+                  color: context.colors.textPrimary,
+                ),
               ),
             ),
-          ),
-        ),
-        // 検索バー
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-          child: TextField(
-            controller: _searchController,
-            style: const TextStyle(fontSize: 14),
-            decoration: InputDecoration(
-              hintText: '検索...',
-              hintStyle: TextStyle(fontSize: 13, color: context.colors.textTertiary),
-              prefixIcon: Icon(Icons.search, size: 18, color: context.colors.textTertiary),
-              filled: true,
-              fillColor: context.colors.inputFill,
-              border: OutlineInputBorder(
+          // 教室フィルタ
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Container(
+              height: 36,
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              decoration: BoxDecoration(
+                color: context.colors.borderLight,
                 borderRadius: BorderRadius.circular(8),
-                borderSide: BorderSide.none,
               ),
-              contentPadding: const EdgeInsets.symmetric(vertical: 8),
-              isDense: true,
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<String>(
+                  value: _selectedClassroom,
+                  isExpanded: true,
+                  hint: Text('全教室', style: TextStyle(fontSize: 13, color: context.colors.textHint)),
+                  style: TextStyle(fontSize: 13, color: context.colors.textPrimary),
+                  icon: Icon(Icons.expand_more, size: 16, color: context.colors.textHint),
+                  items: [
+                    DropdownMenuItem<String>(
+                      value: null,
+                      child: Text('全教室', style: TextStyle(fontSize: 13, color: context.colors.textPrimary)),
+                    ),
+                    ..._classrooms.map((c) => DropdownMenuItem(
+                      value: c,
+                      child: Text(c, style: TextStyle(fontSize: 13, color: context.colors.textPrimary)),
+                    )),
+                  ],
+                  onChanged: (val) => setState(() => _selectedClassroom = val),
+                ),
+              ),
             ),
-            onChanged: (val) => setState(() => _searchQuery = val),
           ),
-        ),
-        const SizedBox(height: 4),
-        // 生徒一覧
-        Expanded(
-          child: _isLoading
-              ? const Center(child: CircularProgressIndicator())
-              : students.isEmpty
-                  ? Center(child: Text('該当する児童がいません', style: TextStyle(color: context.colors.textSecondary, fontSize: 13)))
-                  : _buildStudentListWithIndex(students),
-        ),
-      ],
+          const SizedBox(height: 6),
+          // 検索バー
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Container(
+              height: 36,
+              decoration: BoxDecoration(
+                color: context.colors.borderLight,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: TextField(
+                controller: _searchController,
+                style: TextStyle(fontSize: 13, color: context.colors.textPrimary),
+                decoration: InputDecoration(
+                  hintText: '検索...',
+                  hintStyle: TextStyle(color: context.colors.textHint, fontSize: 13),
+                  prefixIcon: Icon(Icons.search_rounded, color: context.colors.textHint, size: 16),
+                  filled: false,
+                  border: InputBorder.none,
+                  contentPadding: const EdgeInsets.symmetric(vertical: 8),
+                ),
+                onChanged: (val) => setState(() => _searchQuery = val),
+              ),
+            ),
+          ),
+          const SizedBox(height: 6),
+          Expanded(
+            child: _isLoading
+                ? Center(child: CircularProgressIndicator(color: AppColors.primary))
+                : students.isEmpty
+                    ? Center(child: Text('該当する児童がいません', style: TextStyle(color: context.colors.textTertiary, fontSize: 13)))
+                    : _buildStudentListWithIndex(students),
+          ),
+        ],
+      ),
     );
   }
 
   Widget _buildContent(BuildContext context, bool isDesktop) {
+    // 詳細表示中は詳細画面を描画（サイドバーは残す）
+    if (_detailDoc != null) {
+      return AssessmentDetailScreen(
+        key: ValueKey('detail_${_detailDoc!.id}'),
+        doc: _detailDoc!,
+        onClose: _closeDetail,
+      );
+    }
+
     return DefaultTabController(
       length: 2,
       child: Scaffold(
@@ -304,7 +334,7 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
         appBar: AppBar(
           title: Text(
             _selectedStudentId != null ? _selectedStudentName : '',
-            style: const TextStyle(fontSize: 16),
+            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
           ),
           centerTitle: true,
           backgroundColor: context.colors.cardBg,
@@ -320,6 +350,8 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
             labelColor: AppColors.primary,
             unselectedLabelColor: context.colors.textSecondary,
             indicatorColor: AppColors.primary,
+            labelStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+            unselectedLabelStyle: const TextStyle(fontSize: 13),
             tabs: const [
               Tab(text: '週次アセスメント'),
               Tab(text: '月次サマリ'),
@@ -327,17 +359,7 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
           ),
         ),
         body: _selectedStudentId == null
-            ? Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.assignment_outlined, size: 64, color: context.colors.textTertiary),
-                    const SizedBox(height: 16),
-                    Text('左の生徒を選んでアセスメントを表示',
-                        style: TextStyle(color: context.colors.textSecondary)),
-                  ],
-                ),
-              )
+            ? _buildWelcome()
             : TabBarView(
                 physics: const NeverScrollableScrollPhysics(),
                 children: [
@@ -351,13 +373,44 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
                 onPressed: _onAddPressed,
                 backgroundColor: AppColors.primary,
                 elevation: 4,
-                icon: const Icon(Icons.edit, color: Colors.white),
+                icon: const Icon(Icons.edit, color: Colors.white, size: 18),
                 label: Text(
                   _currentTabIndex == 0 ? '週次アセスメント作成' : '月次サマリ作成',
-                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
                 ),
               )
             : null,
+      ),
+    );
+  }
+
+  Widget _buildWelcome() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            width: 72,
+            height: 72,
+            decoration: BoxDecoration(
+              color: AppColors.primary.withOpacity(0.12),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Icon(Icons.edit_note, color: AppColors.primary, size: 40),
+          ),
+          const SizedBox(height: 20),
+          Text(
+            '記録',
+            style: TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.bold,
+              color: context.colors.textPrimary,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text('左の生徒を選んで記録を表示',
+              style: TextStyle(fontSize: 13, color: context.colors.textTertiary)),
+        ],
       ),
     );
   }
@@ -373,10 +426,10 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
       stream: query.snapshots(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
+          return Center(child: CircularProgressIndicator(color: AppColors.primary));
         }
         if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-          return Center(child: Text('データがありません', style: TextStyle(color: context.colors.textSecondary)));
+          return Center(child: Text('データがありません', style: TextStyle(color: context.colors.textTertiary, fontSize: 13)));
         }
 
         final docs = snapshot.data!.docs;
@@ -385,7 +438,7 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 600),
             child: ListView.builder(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               itemCount: docs.length,
               itemBuilder: (context, index) {
                 final doc = docs[index];
@@ -394,52 +447,31 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
                 final records = List<Map<String, dynamic>>.from(data['entries'] ?? []);
                 final toolNames = records.map((r) => r['tool'] as String? ?? '不明').join('、');
 
-                return Card(
-                  child: InkWell(
-                    onTap: () {
-                      final isWide = MediaQuery.of(context).size.width >= 600;
-                      if (isWide) {
-                        AdminShell.showOverlay(
-                          context,
-                          AssessmentDetailScreen(
-                            doc: doc,
-                            onClose: () => AdminShell.hideOverlay(context),
-                          ),
-                        );
-                      } else {
-                        Navigator.push(context, MaterialPageRoute(
-                          builder: (context) => AssessmentDetailScreen(doc: doc),
-                        ));
-                      }
-                    },
-                    borderRadius: AppStyles.radius,
-                    child: Padding(
-                      padding: const EdgeInsets.all(16.0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                return _RecordCard(
+                  onTap: () => _openDetail(doc),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
                         children: [
-                          Row(
-                            children: [
-                              Text(
-                                DateFormat('yyyy/MM/dd (E)', 'ja').format(date),
-                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                              ),
-                              const SizedBox(width: 8),
-                              _buildStatusBadge(data['isPublished'] == true),
-                              const Spacer(),
-                              Icon(Icons.chevron_right, color: context.colors.textSecondary),
-                            ],
-                          ),
-                          const SizedBox(height: 8),
                           Text(
-                            toolNames.isEmpty ? '記録なし' : toolNames,
-                            style: TextStyle(color: context.colors.textPrimary, fontSize: 14),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
+                            DateFormat('yyyy/MM/dd (E)', 'ja').format(date),
+                            style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: context.colors.textPrimary),
                           ),
+                          const SizedBox(width: 8),
+                          _buildStatusBadge(data['isPublished'] == true),
+                          const Spacer(),
+                          Icon(Icons.chevron_right_rounded, color: context.colors.textTertiary, size: 18),
                         ],
                       ),
-                    ),
+                      const SizedBox(height: 6),
+                      Text(
+                        toolNames.isEmpty ? '記録なし' : toolNames,
+                        style: TextStyle(color: context.colors.textSecondary, fontSize: 12, height: 1.4),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
                   ),
                 );
               },
@@ -461,10 +493,10 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
       stream: query.snapshots(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
+          return Center(child: CircularProgressIndicator(color: AppColors.primary));
         }
         if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-          return Center(child: Text('データがありません', style: TextStyle(color: context.colors.textSecondary)));
+          return Center(child: Text('データがありません', style: TextStyle(color: context.colors.textTertiary, fontSize: 13)));
         }
 
         final docs = snapshot.data!.docs;
@@ -473,59 +505,38 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 600),
             child: ListView.builder(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               itemCount: docs.length,
               itemBuilder: (context, index) {
                 final doc = docs[index];
                 final data = doc.data() as Map<String, dynamic>;
                 final date = (data['date'] as Timestamp).toDate();
 
-                return Card(
-                  child: InkWell(
-                    onTap: () {
-                      final isWide = MediaQuery.of(context).size.width >= 600;
-                      if (isWide) {
-                        AdminShell.showOverlay(
-                          context,
-                          AssessmentDetailScreen(
-                            doc: doc,
-                            onClose: () => AdminShell.hideOverlay(context),
-                          ),
-                        );
-                      } else {
-                        Navigator.push(context, MaterialPageRoute(
-                          builder: (context) => AssessmentDetailScreen(doc: doc),
-                        ));
-                      }
-                    },
-                    borderRadius: AppStyles.radius,
-                    child: Padding(
-                      padding: const EdgeInsets.all(16.0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                return _RecordCard(
+                  onTap: () => _openDetail(doc),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
                         children: [
-                          Row(
-                            children: [
-                              Text(
-                                DateFormat('yyyy年 MM月', 'ja').format(date),
-                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                              ),
-                              const SizedBox(width: 8),
-                              _buildStatusBadge(data['isPublished'] == true),
-                              const Spacer(),
-                              Icon(Icons.chevron_right, color: context.colors.textSecondary),
-                            ],
-                          ),
-                          const SizedBox(height: 8),
                           Text(
-                            data['summary'] ?? '',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(color: context.colors.textSecondary),
+                            DateFormat('yyyy年 MM月', 'ja').format(date),
+                            style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: context.colors.textPrimary),
                           ),
+                          const SizedBox(width: 8),
+                          _buildStatusBadge(data['isPublished'] == true),
+                          const Spacer(),
+                          Icon(Icons.chevron_right_rounded, color: context.colors.textTertiary, size: 18),
                         ],
                       ),
-                    ),
+                      const SizedBox(height: 6),
+                      Text(
+                        data['summary'] ?? '',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(color: context.colors.textSecondary, fontSize: 12),
+                      ),
+                    ],
                   ),
                 );
               },
@@ -553,7 +564,6 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
   }
 
   Widget _buildStudentListWithIndex(List<Map<String, dynamic>> students) {
-    // 五十音ヘッダー付きリストを構築
     final items = <Widget>[];
     String lastHeader = '';
     for (final student in students) {
@@ -573,7 +583,10 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
         onTap: () => _selectStudent(student),
       ));
     }
-    return ListView(children: items);
+    return ListView(
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      children: items,
+    );
   }
 
   Widget _buildStatusBadge(bool isPublished) {
@@ -590,9 +603,45 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
       child: Text(
         isPublished ? '公開中' : '下書き',
         style: TextStyle(
-          fontSize: 11,
+          fontSize: 10,
           fontWeight: FontWeight.bold,
           color: isPublished ? Colors.green.shade700 : AppColors.accent.shade700,
+        ),
+      ),
+    );
+  }
+}
+
+class _RecordCard extends StatefulWidget {
+  final Widget child;
+  final VoidCallback onTap;
+
+  const _RecordCard({required this.child, required this.onTap});
+
+  @override
+  State<_RecordCard> createState() => _RecordCardState();
+}
+
+class _RecordCardState extends State<_RecordCard> {
+  bool _hover = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hover = true),
+      onExit: (_) => setState(() => _hover = false),
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: Container(
+          margin: const EdgeInsets.only(bottom: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          decoration: BoxDecoration(
+            color: _hover ? context.colors.hoverBg : context.colors.cardBg,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: context.colors.borderLight, width: 0.5),
+          ),
+          child: widget.child,
         ),
       ),
     );
@@ -620,32 +669,46 @@ class _HoverableStudentItemState extends State<_HoverableStudentItem> {
   @override
   Widget build(BuildContext context) {
     final firstChar = widget.name.isNotEmpty ? widget.name[0] : '?';
+    final isHighlighted = widget.isActive || _isHovered;
     return MouseRegion(
       onEnter: (_) => setState(() => _isHovered = true),
       onExit: (_) => setState(() => _isHovered = false),
+      cursor: SystemMouseCursors.click,
       child: GestureDetector(
         onTap: widget.onTap,
         behavior: HitTestBehavior.opaque,
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          color: widget.isActive
-              ? AppColors.primary.withValues(alpha: 0.12)
-              : _isHovered
-                  ? context.colors.hoverBg
-                  : Colors.transparent,
+          margin: const EdgeInsets.only(bottom: 2),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          decoration: BoxDecoration(
+            color: widget.isActive
+                ? AppColors.primary.withValues(alpha: 0.12)
+                : _isHovered
+                    ? context.colors.chipBg
+                    : Colors.transparent,
+            borderRadius: BorderRadius.circular(10),
+          ),
           child: Row(
             children: [
-              CircleAvatar(
-                radius: 16,
-                backgroundColor: widget.isActive
-                    ? AppColors.primary.withValues(alpha: 0.2)
-                    : context.colors.chipBg,
-                child: Text(
-                  firstChar,
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.bold,
-                    color: widget.isActive ? AppColors.primary : context.colors.textSecondary,
+              Container(
+                width: 30,
+                height: 30,
+                decoration: BoxDecoration(
+                  color: widget.isActive
+                      ? AppColors.primary.withOpacity(0.15)
+                      : _isHovered
+                          ? context.colors.borderMedium
+                          : context.colors.borderLight,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Center(
+                  child: Text(
+                    firstChar,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                      color: widget.isActive ? AppColors.primary : context.colors.textSecondary,
+                    ),
                   ),
                 ),
               ),
@@ -654,10 +717,12 @@ class _HoverableStudentItemState extends State<_HoverableStudentItem> {
                 child: Text(
                   widget.name,
                   style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: widget.isActive ? FontWeight.bold : FontWeight.normal,
+                    fontSize: 13,
+                    fontWeight: isHighlighted ? FontWeight.w600 : FontWeight.normal,
                     color: widget.isActive ? AppColors.primary : context.colors.textPrimary,
                   ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
             ],
