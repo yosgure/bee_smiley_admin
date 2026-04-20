@@ -460,6 +460,16 @@ class _AddEventDialogState extends State<AddEventDialog> {
   }
 
   Future<void> _saveEvent() async {
+  // 新規作成時、_addCurrentUserAsStaff() が非同期で間に合わず staffIds が空のまま
+  // 保存されるケースの保険。自分の UID を必ず含める（フィルタで非表示になる事故を防ぐ）。
+  if (!_isEditing) {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null && !_selectedStaffIds.contains(user.uid)) {
+      _selectedStaffIds.add(user.uid);
+      _staffNamesMap.putIfAbsent(user.uid, () => '');
+    }
+  }
+
   final colorValue = _categories.firstWhere((c) => c['label'] == _selectedCategory)['color'] as int;
   
   DateTime startToSave = _startDate;
