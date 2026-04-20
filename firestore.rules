@@ -145,5 +145,15 @@ service cloud.firestore {
     match /hug_settings/{docId} {
       allow read, write: if isStaff();
     }
+    match /hug_sync_logs/{docId} {
+      allow read: if isStaff();
+      allow write: if false;
+    }
+    match /ai_student_profiles/{studentId} {
+      allow read, write: if isStaff();
+      match /session_summaries/{summaryId} {
+        allow read, write: if isStaff();
+      }
+    }
   }
 }

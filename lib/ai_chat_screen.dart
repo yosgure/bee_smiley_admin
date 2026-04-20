@@ -761,11 +761,239 @@ class _AiChatScreenState extends State<AiChatScreen> {
     _isSummarizing = true;
 
     try {
-      final callable = _functions.httpsCallable('summarizeSession');
-      await callable.call({'sessionId': _sessionId});
+      // 新フロー: endAiSession で要約＋AIプロファイル更新を一括処理
+      final isFreeChat = widget.studentId.startsWith('free_chat');
+      if (isFreeChat) {
+        final callable = _functions.httpsCallable('summarizeSession');
+        await callable.call({'sessionId': _sessionId});
+      } else {
+        final callable = _functions.httpsCallable('endAiSession');
+        await callable.call({
+          'sessionId': _sessionId,
+          'studentId': widget.studentId,
+        });
+      }
     } catch (e) {
-      debugPrint('Error summarizing session: $e');
+      debugPrint('Error ending session: $e');
     }
+  }
+
+  Future<void> _syncHugForStudent(BuildContext dialogCtx) async {
+    if (widget.studentId.startsWith('free_chat')) return;
+    showDialog(
+      context: dialogCtx,
+      barrierDismissible: false,
+      builder: (_) => const Center(child: CircularProgressIndicator()),
+    );
+    try {
+      final callable = _functions.httpsCallable('syncHugDocs');
+      final result = await callable.call({'studentId': widget.studentId});
+      if (!mounted) return;
+      Navigator.of(dialogCtx, rootNavigator: true).pop(); // progress
+      final data = (result.data as Map?) ?? {};
+      final synced = data['synced'] ?? 0;
+      final unmapped = data['skippedUnmapped'] ?? 0;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(synced == 1 ? 'HUG情報を更新しました' : 'HUG情報: $synced件同期 / $unmapped件未マッピング')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      Navigator.of(dialogCtx, rootNavigator: true).pop();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('HUG同期に失敗しました: $e')),
+      );
+    }
+  }
+
+  void _showStudentProfileDialog() {
+    final studentId = widget.studentId;
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: context.colors.aiAccent.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(Icons.psychology_outlined, color: context.colors.aiAccent, size: 20),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text('児童プロファイル', style: TextStyle(fontSize: 16, color: context.colors.textPrimary)),
+              ),
+            ],
+          ),
+          content: SizedBox(
+            width: 560,
+            child: SingleChildScrollView(
+              child: StreamBuilder<DocumentSnapshot>(
+                stream: FirebaseFirestore.instance
+                    .collection('ai_student_profiles')
+                    .doc(studentId)
+                    .snapshots(),
+                builder: (ctx, snapshot) {
+                  if (!snapshot.hasData) {
+                    return const Padding(
+                      padding: EdgeInsets.all(24),
+                      child: Center(child: CircularProgressIndicator()),
+                    );
+                  }
+                  final data = snapshot.data!.data() as Map<String, dynamic>?;
+                  final hugDocs = (data?['hugDocs'] as Map?)?.cast<String, dynamic>() ?? {};
+                  final aiProfile = (data?['aiProfile'] as Map?)?.cast<String, dynamic>() ?? {};
+                  final lastSynced = data?['lastSyncedAt'];
+                  final lastSyncedText = lastSynced is Timestamp
+                      ? DateFormat('yyyy/MM/dd HH:mm').format(lastSynced.toDate())
+                      : '未同期';
+
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(Icons.sync, size: 14, color: context.colors.textSecondary),
+                          const SizedBox(width: 6),
+                          Text('HUG最終同期: $lastSyncedText',
+                              style: TextStyle(fontSize: 12, color: context.colors.textSecondary)),
+                          const Spacer(),
+                          TextButton.icon(
+                            icon: const Icon(Icons.refresh, size: 16),
+                            label: const Text('今すぐ同期', style: TextStyle(fontSize: 12)),
+                            onPressed: () => _syncHugForStudent(ctx),
+                          ),
+                        ],
+                      ),
+                      const Divider(height: 24),
+                      Text('HUG情報（自動取得）',
+                          style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: context.colors.textPrimary)),
+                      const SizedBox(height: 8),
+                      ..._buildHugDocStatuses(hugDocs),
+                      const SizedBox(height: 16),
+                      Text('AIが蓄積した知見',
+                          style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: context.colors.textPrimary)),
+                      const SizedBox(height: 8),
+                      if (aiProfile.isEmpty)
+                        Text('まだ蓄積されたプロファイルはありません。相談を重ねると自動的に学習します。',
+                            style: TextStyle(fontSize: 12, color: context.colors.textSecondary))
+                      else
+                        ..._buildAiProfileSections(aiProfile),
+                      const SizedBox(height: 16),
+                      TextButton.icon(
+                        icon: const Icon(Icons.edit_note, size: 16),
+                        label: const Text('手動でHUG情報を貼り付け（フォールバック）', style: TextStyle(fontSize: 12)),
+                        onPressed: _showHugAssessmentDialog,
+                      ),
+                    ],
+                  );
+                },
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: Text('閉じる', style: TextStyle(color: context.colors.textSecondary)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  List<Widget> _buildHugDocStatuses(Map<String, dynamic> hugDocs) {
+    const labels = {
+      'assessment': 'アセスメント',
+      'carePlanDraft': '個別支援計画書(原案)',
+      'beforeMeeting': 'サービス担当者会議の議事録',
+      'carePlanMain': '個別支援計画書',
+      'monitoring': 'モニタリング',
+    };
+    return labels.entries.map((e) {
+      final d = (hugDocs[e.key] as Map?)?.cast<String, dynamic>() ?? {};
+      final status = d['status'] as String?;
+      IconData icon;
+      Color color;
+      String statusText;
+      switch (status) {
+        case 'ok':
+          icon = Icons.check_circle;
+          color = Colors.green;
+          final len = (d['rawText'] as String?)?.length ?? 0;
+          statusText = '取得済 ($len文字)';
+          break;
+        case 'not-created':
+          icon = Icons.remove_circle_outline;
+          color = Colors.grey;
+          statusText = '未作成';
+          break;
+        case 'error':
+          icon = Icons.error_outline;
+          color = Colors.red;
+          statusText = 'エラー';
+          break;
+        default:
+          icon = Icons.help_outline;
+          color = Colors.grey;
+          statusText = '未取得';
+      }
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 4),
+        child: Row(
+          children: [
+            Icon(icon, size: 14, color: color),
+            const SizedBox(width: 8),
+            Expanded(child: Text(e.value, style: const TextStyle(fontSize: 12))),
+            Text(statusText, style: TextStyle(fontSize: 11, color: context.colors.textSecondary)),
+          ],
+        ),
+      );
+    }).toList();
+  }
+
+  List<Widget> _buildAiProfileSections(Map<String, dynamic> aiProfile) {
+    const labels = {
+      'strengths': '得意・好きなこと',
+      'challenges': '課題・苦手なこと',
+      'triggers': '不安・混乱のきっかけ',
+      'effectiveApproaches': '効果のあった支援方法',
+      'currentGoals': '現在の目標',
+      'recentWins': '最近の成功体験',
+      'familyContext': '家族関係',
+      'staffNotes': '担当者メモ',
+    };
+    final widgets = <Widget>[];
+    for (final entry in labels.entries) {
+      final v = aiProfile[entry.key];
+      if (v == null) continue;
+      String content;
+      if (v is List) {
+        if (v.isEmpty) continue;
+        content = v.map((x) => '・$x').join('\n');
+      } else if (v is String) {
+        if (v.trim().isEmpty) continue;
+        content = v.trim();
+      } else {
+        continue;
+      }
+      widgets.add(Padding(
+        padding: const EdgeInsets.only(bottom: 8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(entry.value, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+            const SizedBox(height: 2),
+            Text(content, style: TextStyle(fontSize: 11, color: context.colors.textSecondary)),
+          ],
+        ),
+      ));
+    }
+    return widgets;
   }
 
   void _showHugAssessmentDialog() {
@@ -1164,16 +1392,12 @@ class _AiChatScreenState extends State<AiChatScreen> {
           if (!isFreeChat)
             IconButton(
               icon: Icon(
-                _hugAssessment != null && _hugAssessment!.isNotEmpty
-                    ? Icons.description
-                    : Icons.description_outlined,
-                color: _hugAssessment != null && _hugAssessment!.isNotEmpty
-                    ? context.colors.aiAccent
-                    : context.colors.textTertiary,
+                Icons.psychology_outlined,
+                color: context.colors.textTertiary,
                 size: 22,
               ),
-              tooltip: 'HUGアセスメント',
-              onPressed: _showHugAssessmentDialog,
+              tooltip: '児童プロファイル／HUG情報',
+              onPressed: _showStudentProfileDialog,
             ),
           IconButton(
             icon: Icon(Icons.history_rounded, color: context.colors.textTertiary, size: 22),
