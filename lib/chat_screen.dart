@@ -1055,15 +1055,28 @@ class _ChatDetailViewState extends State<ChatDetailView> {
         itemCount: _filteredMembers.length,
         itemBuilder: (context, index) {
           final entry = _filteredMembers[index];
+          final name = entry.value.toString();
+          final initial = name.isNotEmpty ? name.characters.first : '?';
           return InkWell(
-            onTap: () => _insertMention(entry.key, entry.value.toString()),
+            onTap: () => _insertMention(entry.key, name),
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
               child: Row(
                 children: [
-                  Icon(Icons.person, size: 20, color: context.colors.textSecondary),
+                  CircleAvatar(
+                    radius: 14,
+                    backgroundColor: context.colors.chipBg,
+                    child: Text(
+                      initial,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: context.colors.textSecondary,
+                      ),
+                    ),
+                  ),
                   const SizedBox(width: 10),
-                  Text(entry.value.toString(), style: TextStyle(fontSize: 15, color: context.colors.textPrimary)),
+                  Text(name, style: TextStyle(fontSize: 15, color: context.colors.textPrimary)),
                 ],
               ),
             ),
