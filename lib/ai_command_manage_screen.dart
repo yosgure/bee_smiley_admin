@@ -464,91 +464,112 @@ class _CommandEditDialogState extends State<_CommandEditDialog> {
                   ),
                 )
               else
-                ListView.builder(
+                ReorderableListView.builder(
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
+                  buildDefaultDragHandles: false,
                   itemCount: _questions.length,
+                  onReorder: (oldIndex, newIndex) {
+                    setState(() {
+                      if (newIndex > oldIndex) newIndex -= 1;
+                      final item = _questions.removeAt(oldIndex);
+                      _questions.insert(newIndex, item);
+                    });
+                  },
                   itemBuilder: (context, index) {
                     final q = _questions[index];
                     final type = q['type'] as String? ?? 'text';
                     final options = (q['options'] as List<dynamic>?)?.cast<String>() ?? [];
-                    final typeLabel = type == 'select'
-                        ? '選択式'
-                        : type == 'select_or_text'
-                            ? '選択+自由入力'
-                            : '自由入力';
+                    final typeLabel = {
+                      'select': '選択式',
+                      'select_or_text': '選択+自由入力',
+                      'date': '日付',
+                      'datetime': '日時',
+                      'plus_staff': 'プラススタッフ',
+                    }[type] ?? '自由入力';
 
-                    return Card(
-                      key: ValueKey('q_$index'),
-                      margin: const EdgeInsets.only(bottom: 8),
-                      elevation: 0,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        side: BorderSide(color: context.colors.borderLight),
-                      ),
-                      child: InkWell(
-                        onTap: () => _editQuestion(index),
-                        borderRadius: BorderRadius.circular(12),
-                        child: Padding(
-                          padding: const EdgeInsets.all(14),
-                          child: Row(
-                            children: [
-                              Container(
-                                width: 28,
-                                height: 28,
-                                decoration: BoxDecoration(
-                                  color: context.colors.aiAccent.withOpacity(0.1),
-                                  borderRadius: BorderRadius.circular(8),
+                    return Padding(
+                      key: ValueKey(q),
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: Card(
+                        margin: EdgeInsets.zero,
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          side: BorderSide(color: context.colors.borderLight),
+                        ),
+                        child: InkWell(
+                          onTap: () => _editQuestion(index),
+                          borderRadius: BorderRadius.circular(12),
+                          child: Padding(
+                            padding: const EdgeInsets.all(14),
+                            child: Row(
+                              children: [
+                                ReorderableDragStartListener(
+                                  index: index,
+                                  child: Padding(
+                                    padding: const EdgeInsets.only(right: 8),
+                                    child: Icon(Icons.drag_indicator,
+                                        size: 20, color: context.colors.textTertiary),
+                                  ),
                                 ),
-                                child: Center(
-                                  child: Text(
-                                    '${index + 1}',
-                                    style: TextStyle(
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.bold,
-                                      color: context.colors.aiAccent,
+                                Container(
+                                  width: 28,
+                                  height: 28,
+                                  decoration: BoxDecoration(
+                                    color: context.colors.aiAccent.withOpacity(0.1),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Center(
+                                    child: Text(
+                                      '${index + 1}',
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.bold,
+                                        color: context.colors.aiAccent,
+                                      ),
                                     ),
                                   ),
                                 ),
-                              ),
-                              SizedBox(width: 12),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      q['question'] as String? ?? '(未入力)',
-                                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                    SizedBox(height: 2),
-                                    Row(
-                                      children: [
-                                        Container(
-                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                          decoration: BoxDecoration(
-                                            color: context.colors.chipBg,
-                                            borderRadius: BorderRadius.circular(4),
+                                SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        q['question'] as String? ?? '(未入力)',
+                                        style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                      SizedBox(height: 2),
+                                      Row(
+                                        children: [
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                            decoration: BoxDecoration(
+                                              color: context.colors.chipBg,
+                                              borderRadius: BorderRadius.circular(4),
+                                            ),
+                                            child: Text(typeLabel,
+                                                style: TextStyle(fontSize: 10, color: context.colors.textSecondary)),
                                           ),
-                                          child: Text(typeLabel,
-                                              style: TextStyle(fontSize: 10, color: context.colors.textSecondary)),
-                                        ),
-                                        if (options.isNotEmpty) ...[
-                                          SizedBox(width: 6),
-                                          Text('${options.length}択',
-                                              style: TextStyle(fontSize: 10, color: context.colors.textTertiary)),
+                                          if (options.isNotEmpty) ...[
+                                            SizedBox(width: 6),
+                                            Text('${options.length}択',
+                                                style: TextStyle(fontSize: 10, color: context.colors.textTertiary)),
+                                          ],
                                         ],
-                                      ],
-                                    ),
-                                  ],
+                                      ),
+                                    ],
+                                  ),
                                 ),
-                              ),
-                              IconButton(
-                                icon: Icon(Icons.delete_outline, size: 18, color: Colors.red.shade300),
-                                onPressed: () => _removeQuestion(index),
-                              ),
-                            ],
+                                IconButton(
+                                  icon: Icon(Icons.delete_outline, size: 18, color: Colors.red.shade300),
+                                  onPressed: () => _removeQuestion(index),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                       ),
@@ -735,10 +756,14 @@ class _QuestionEditDialogState extends State<_QuestionEditDialog> {
               const SizedBox(height: 8),
               Wrap(
                 spacing: 8,
+                runSpacing: 8,
                 children: [
                   _buildTypeChip('text', '自由入力'),
                   _buildTypeChip('select', '選択式'),
                   _buildTypeChip('select_or_text', '選択+自由入力'),
+                  _buildTypeChip('date', '日付'),
+                  _buildTypeChip('datetime', '日時'),
+                  _buildTypeChip('plus_staff', 'プラススタッフ'),
                 ],
               ),
               const SizedBox(height: 20),

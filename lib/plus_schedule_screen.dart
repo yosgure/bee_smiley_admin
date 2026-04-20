@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'app_theme.dart';
 import 'plus_dashboard_screen.dart';
@@ -16,6 +18,7 @@ import 'hiyari_screen.dart';
 import 'complaint_screen.dart';
 import 'meeting_minutes_screen.dart';
 import 'crm_lead_screen.dart';
+import 'absence_record_dialog.dart';
 
 // 講師名・教室名クリック時に生徒編集ダイアログの発火を抑制するフラグ
 bool _quickEditTappedGlobal = false;
@@ -90,13 +93,21 @@ class _PlusScheduleContentState extends State<PlusScheduleContent> with Automati
     '契約': AppColors.accent,
     '体験': Colors.green,
     '欠席': Colors.red,
+    '欠席（加算なし）': Colors.red,
     '策定会議': Colors.deepPurple,
   };
 
   // カスタマイズ可能なコース色
   Map<String, Color> _courseColors = {};
 
-  final List<String> _courseList = ['通常', 'モンテッソーリ', '感覚統合', '言語', '就学支援', '放デイ', '契約', '体験', '欠席', '策定会議'];
+  final List<String> _courseList = ['通常', 'モンテッソーリ', '感覚統合', '言語', '就学支援', '放デイ', '契約', '体験', '欠席', '欠席（加算なし）', '策定会議'];
+
+  // HUG欠席送信の失敗バナー（セッション内のみ）
+  final List<Map<String, dynamic>> _failedAbsenceSends = [];
+
+  // 予定編集画面で「欠席」を選んだ後、予定保存時にHUGへ送るための保留データ
+  // { category: '欠席連絡'|'欠席（加算なし）', content: String, studentName, absenceDate }
+  Map<String, dynamic>? _pendingAbsenceData;
   
   // カラーパレット（選択可能な色）
   static const List<Color> _colorPalette = [
@@ -1273,6 +1284,8 @@ void _goToThisWeek() {
     // Web/タブレット版
     return Column(
       children: [
+        // HUG送信失敗バナー（失敗がある間だけ表示）
+        if (_failedAbsenceSends.isNotEmpty) _buildAbsenceFailedBanner(),
         // トップバー（常に表示）
         _buildHeader(),
         // サイドメニュー + メインコンテンツ
@@ -2095,6 +2108,9 @@ void _goToPage(int page) {
   }
   
   void _showMobileLessonDetail(Map<String, dynamic> lesson) {
+    if (_hoveredStudentName != null) {
+      setState(() => _hoveredStudentName = null);
+    }
     final isEvent = lesson['isEvent'] == true;
     final isCustomEvent = lesson['isCustomEvent'] == true;
     final studentName = lesson['studentName'] as String? ?? '';
@@ -2364,6 +2380,8 @@ void _goToPage(int page) {
                             onTap: () => _showCourseSelectionDialog(
                               selectedCourse,
                               (newCourse) => setSheetState(() => selectedCourse = newCourse),
+                              studentName: studentName,
+                              absenceDate: date,
                             ),
                             child: Container(
                               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -2647,6 +2665,7 @@ void _goToPage(int page) {
                               return;
                             }
 
+
                             try {
                               // タスクを追加（入力欄にテキストがある場合）
                               final taskText = newTaskController.text.trim();
@@ -2673,6 +2692,18 @@ void _goToPage(int page) {
                                   .collection('plus_lessons')
                                   .doc(lessonId)
                                   .update(mobileUpdateData);
+
+                              // HUG連携（欠席系の場合）
+                              final pending = _pendingAbsenceData;
+                              if (pending != null && pending['studentName'] == studentName) {
+                                _sendAbsenceToHug(
+                                  studentName: studentName,
+                                  absenceDate: pending['absenceDate'] as DateTime,
+                                  category: pending['category'] as String,
+                                  content: pending['content'] as String,
+                                );
+                                _pendingAbsenceData = null;
+                              }
 
                               // 生徒メモを保存
                               if (!isCustomEvent && studentName.isNotEmpty) {
@@ -3673,7 +3704,7 @@ final plusStaff = _staffList.where((s) =>
     for (final doc in lessonsSnap.docs) {
       final data = doc.data();
       final course = data['course'] as String? ?? '';
-      if (course == '欠席') continue;
+      if (course.startsWith('欠席')) continue;
       final ts = data['date'] as Timestamp?;
       if (ts == null) continue;
       final dt = ts.toDate();
@@ -5678,7 +5709,7 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
   String _getTeacherLessonSummary(int dayIndex) {
     final lessonsForDay = _lessons.where((lesson) =>
         lesson['dayIndex'] == dayIndex &&
-        (lesson['course'] as String? ?? '') != '欠席').toList();
+        !((lesson['course'] as String? ?? '').startsWith('欠席'))).toList();
 
     // 講師ごとのコマ数を集計
     final teacherCounts = <String, int>{};
@@ -6756,6 +6787,10 @@ for (var staff in _staffList.where((s) => s['showInSchedule'] != false)) {
 
   void _showAddLessonDialog({int? dayIndex, int? slotIndex, Offset? cellOffset, double cellWidth = 0}) {
     if (dayIndex == null || slotIndex == null) return;
+    // ダイアログ表示中にhover状態が残り続けるのを防ぐ
+    if (_hoveredStudentName != null) {
+      setState(() => _hoveredStudentName = null);
+    }
     
     // 入力モード: 'student'=生徒選択, 'custom'=イベント
     String inputMode = 'student';
@@ -6810,7 +6845,8 @@ final memoCommentController = TextEditingController();
         builder: (dialogContext, setDialogState) {
           final currentColor = _courseColors[selectedCourse] ?? Colors.blue;
           final date = _weekStart.add(Duration(days: dayIndex));
-          
+          final studentName = selectedStudent?['name'] as String? ?? '';
+
           // 初回のみ期限日をイベント当日に設定
           newTaskDueDate ??= date;
           
@@ -7175,6 +7211,8 @@ if (inputMode != 'memo') ...[
                             onTap: () => _showCourseSelectionDialog(
                               selectedCourse,
                               (newCourse) => setDialogState(() => selectedCourse = newCourse),
+                              studentName: studentName,
+                              absenceDate: date,
                             ),
                             child: Container(
                               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -7460,7 +7498,7 @@ InkWell(
                               if (inputMode == 'memo') {
           final memoTitle = memoTitleController.text.trim();
           if (memoTitle.isEmpty) return;
-          
+
           await _saveCellMemo(date, slotIndex, memoTitle, memoCommentController.text.trim());
           if (!dialogContext.mounted) return;
           Navigator.pop(dialogContext);
@@ -7496,7 +7534,19 @@ final lessonData = {
                                   }
                                   
                                   await FirebaseFirestore.instance.collection('plus_lessons').add(lessonData);
-                                  
+
+                                  // HUG連携（欠席系の場合）
+                                  final pending = _pendingAbsenceData;
+                                  if (pending != null && pending['studentName'] == studentName) {
+                                    _sendAbsenceToHug(
+                                      studentName: studentName,
+                                      absenceDate: pending['absenceDate'] as DateTime,
+                                      category: pending['category'] as String,
+                                      content: pending['content'] as String,
+                                    );
+                                    _pendingAbsenceData = null;
+                                  }
+
                                   // 生徒メモを保存（生徒モードの場合のみ）
                                   if (inputMode == 'student' && title.isNotEmpty) {
                                     await _saveStudentNotes(title, {
@@ -7821,6 +7871,10 @@ await _loadLessonsForWeek(showLoading: false);
 
 
   void _showEditLessonDialog(Map<String, dynamic> lesson, {Offset? cellOffset, double cellWidth = 0}) {
+    // ダイアログ表示中にhover状態が残り続けるのを防ぐ
+    if (_hoveredStudentName != null) {
+      setState(() => _hoveredStudentName = null);
+    }
     final dayIndex = lesson['dayIndex'] as int;
     final slotIndex = lesson['slotIndex'] as int;
     final date = _weekStart.add(Duration(days: dayIndex));
@@ -8204,6 +8258,8 @@ await _loadLessonsForWeek(showLoading: false);
                             onTap: () => _showCourseSelectionDialog(
                               selectedCourse,
                               (newCourse) => setDialogState(() => selectedCourse = newCourse),
+                              studentName: studentName,
+                              absenceDate: date,
                             ),
                             child: Container(
                               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -8493,7 +8549,8 @@ InkWell(
                               Navigator.pop(dialogContext);
                               return;
                             }
-                            
+
+
                             try {
                               // タスクを追加（入力欄にテキストがある場合）
                               final taskText = newTaskController.text.trim();
@@ -8504,7 +8561,7 @@ InkWell(
                                   newTaskDueDate,
                                 );
                               }
-                              
+
                               // レッスン情報を保存
                               final updateData = <String, dynamic>{
                                 'teachers': selectedTeachers,
@@ -8520,6 +8577,18 @@ InkWell(
                                   .collection('plus_lessons')
                                   .doc(lessonId)
                                   .update(updateData);
+
+                              // HUG連携（欠席系の場合）
+                              final pending = _pendingAbsenceData;
+                              if (pending != null && pending['studentName'] == studentName) {
+                                _sendAbsenceToHug(
+                                  studentName: studentName,
+                                  absenceDate: pending['absenceDate'] as DateTime,
+                                  category: pending['category'] as String,
+                                  content: pending['content'] as String,
+                                );
+                                _pendingAbsenceData = null;
+                              }
 
                               // 生徒メモを保存（生徒モードの場合のみ）
                               if (!isCustomEvent && studentName.isNotEmpty) {
@@ -8592,60 +8661,311 @@ await _loadLessonsForWeek(showLoading: false);
     );
   }
 
-  void _showCourseSelectionDialog(String currentCourse, Function(String) onSelect) {
-  showDialog(
-    context: context,
-    builder: (dialogContext) => StatefulBuilder(
-      builder: (dialogContext, setDialogState) {
-        return AlertDialog(
-          backgroundColor: context.colors.cardBg,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          title: const Text('内容を選択', style: TextStyle(fontSize: 18)),
-          content: SizedBox(
-            width: 350,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: _courseList.map((course) {
-                final color = _courseColors[course] ?? Colors.blue;
-                return ListTile(
-                  leading: GestureDetector(
-                    onTap: () {
-                      _showColorPickerDialog(course, color, (newColor) {
-                        _saveCourseColor(course, newColor);
-                        setDialogState(() {});
-                      });
-                    },
-                    child: MouseRegion(
-                      cursor: SystemMouseCursors.click,
-                      child: Container(
-                        width: 24,
-                        height: 24,
-                        decoration: BoxDecoration(
-                          color: color,
-                          borderRadius: BorderRadius.circular(4),
-                          border: Border.all(color: context.colors.iconMuted),
+  void _showCourseSelectionDialog(
+    String currentCourse,
+    Function(String) onSelect, {
+    String? studentName,
+    DateTime? absenceDate,
+  }) {
+    showDialog(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) {
+          return AlertDialog(
+            backgroundColor: context.colors.cardBg,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            title: const Text('内容を選択', style: TextStyle(fontSize: 18)),
+            content: SizedBox(
+              width: 350,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: _courseList.map((course) {
+                  final color = _courseColors[course] ?? Colors.blue;
+                  return ListTile(
+                    leading: GestureDetector(
+                      onTap: () {
+                        _showColorPickerDialog(course, color, (newColor) {
+                          _saveCourseColor(course, newColor);
+                          setDialogState(() {});
+                        });
+                      },
+                      child: MouseRegion(
+                        cursor: SystemMouseCursors.click,
+                        child: Container(
+                          width: 24,
+                          height: 24,
+                          decoration: BoxDecoration(
+                            color: color,
+                            borderRadius: BorderRadius.circular(4),
+                            border: Border.all(color: context.colors.iconMuted),
+                          ),
+                          child: const Icon(Icons.edit, size: 14, color: Colors.white),
                         ),
-                        child: const Icon(Icons.edit, size: 14, color: Colors.white),
                       ),
                     ),
-                  ),
-                  title: Text(course),
-                  trailing: currentCourse == course
-                      ? const Icon(Icons.check, color: AppColors.primary)
-                      : null,
-                  onTap: () {
-                    Navigator.pop(dialogContext);
-                    onSelect(course);
-                  },
-                );
-              }).toList(),
+                    title: Text(course),
+                    trailing: currentCourse == course
+                        ? const Icon(Icons.check, color: AppColors.primary)
+                        : null,
+                    onTap: () async {
+                      // 児童に紐づく欠席・欠席（加算なし）選択時は即時に入力/確認を出し、
+                      // 結果を _pendingAbsenceData に保持する（予定保存時にHUG送信）
+                      if (studentName != null && studentName.isNotEmpty && absenceDate != null) {
+                        if (course == '欠席') {
+                          Navigator.pop(dialogContext);
+                          final note = await AbsenceRecordDialog.show(
+                            context,
+                            studentName: studentName,
+                            absenceDate: absenceDate,
+                          );
+                          if (note == null) return; // キャンセル時はコース変更もなし
+                          _pendingAbsenceData = {
+                            'category': '欠席連絡',
+                            'content': note,
+                            'studentName': studentName,
+                            'absenceDate': absenceDate,
+                          };
+                          onSelect(course);
+                          return;
+                        }
+                        if (course == '欠席（加算なし）') {
+                          Navigator.pop(dialogContext);
+                          final ok = await _confirmNoAddAbsence(studentName, absenceDate);
+                          if (!ok) return;
+                          _pendingAbsenceData = {
+                            'category': '欠席（加算なし）',
+                            'content': '',
+                            'studentName': studentName,
+                            'absenceDate': absenceDate,
+                          };
+                          onSelect(course);
+                          return;
+                        }
+                      }
+                      Navigator.pop(dialogContext);
+                      // 欠席以外を選び直した場合は保留データをクリア
+                      _pendingAbsenceData = null;
+                      onSelect(course);
+                    },
+                  );
+                }).toList(),
+              ),
             ),
+          );
+        },
+      ),
+    );
+  }
+
+  Future<bool> _confirmNoAddAbsence(String studentName, DateTime date) async {
+    final df = DateFormat('yyyy/MM/dd (E)', 'ja');
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: context.colors.cardBg,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        title: const Text('欠席（加算なし）として登録', style: TextStyle(fontSize: 16)),
+        content: Text(
+          '$studentName さんを ${df.format(date)} の欠席（欠席時対応加算を取らない）としてHUGに登録します。\nよろしいですか？',
+          style: const TextStyle(fontSize: 13),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text('キャンセル', style: TextStyle(color: context.colors.textSecondary)),
           ),
-        );
-      },
-    ),
-  );
-}
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red.shade400,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('保存'),
+          ),
+        ],
+      ),
+    );
+    return result == true;
+  }
+
+  /// saved_ai_contents にドキュメントを作成→syncToHug Cloud Function を呼ぶ
+  Future<void> _sendAbsenceToHug({
+    required String studentName,
+    required DateTime absenceDate,
+    required String category,
+    required String content,
+  }) async {
+    // 現在ログイン中スタッフ名を取得
+    String recorderName = 'スタッフ';
+    final currentUser = FirebaseAuth.instance.currentUser;
+    if (currentUser != null) {
+      try {
+        final staffSnap = await FirebaseFirestore.instance
+            .collection('staffs')
+            .where('uid', isEqualTo: currentUser.uid)
+            .limit(1)
+            .get();
+        if (staffSnap.docs.isNotEmpty) {
+          recorderName = (staffSnap.docs.first.data()['name'] ?? 'スタッフ') as String;
+        }
+      } catch (_) {}
+    }
+
+    final payload = <String, dynamic>{
+      'category': category,
+      'studentId': studentName,
+      'studentName': studentName,
+      'content': content,
+      'date': Timestamp.fromDate(DateTime(absenceDate.year, absenceDate.month, absenceDate.day)),
+      'recorderName': recorderName,
+      'recorderId': currentUser?.uid ?? '',
+    };
+
+    String? tempDocId;
+    try {
+      final docRef = await FirebaseFirestore.instance
+          .collection('saved_ai_contents')
+          .add({
+        ...payload,
+        'createdAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+      tempDocId = docRef.id;
+
+      final callable = FirebaseFunctions.instanceFor(region: 'asia-northeast1')
+          .httpsCallable('syncToHug');
+      final result = await callable.call({'contentIds': [tempDocId]});
+      final resultData = result.data as Map<String, dynamic>;
+      final successCount = resultData['successCount'] ?? 0;
+
+      if (successCount > 0) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('$studentName さんの$categoryをHUGに送信しました'),
+              backgroundColor: Colors.green,
+              duration: const Duration(seconds: 2),
+            ),
+          );
+        }
+      } else {
+        final errs = (resultData['errors'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+        final errorMsg = errs.isNotEmpty ? (errs.first['error'] ?? '不明なエラー') : '不明なエラー';
+        await FirebaseFirestore.instance
+            .collection('saved_ai_contents')
+            .doc(tempDocId)
+            .delete()
+            .catchError((_) {});
+        _addFailedAbsenceBanner(payload, errorMsg.toString());
+      }
+    } catch (e) {
+      if (tempDocId != null) {
+        await FirebaseFirestore.instance
+            .collection('saved_ai_contents')
+            .doc(tempDocId)
+            .delete()
+            .catchError((_) {});
+      }
+      _addFailedAbsenceBanner(payload, e.toString());
+    }
+  }
+
+  void _addFailedAbsenceBanner(Map<String, dynamic> payload, String error) {
+    if (!mounted) return;
+    setState(() {
+      _failedAbsenceSends.add({
+        ...payload,
+        'error': error,
+      });
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('HUG送信に失敗しました: $error'),
+        backgroundColor: Colors.red,
+        duration: const Duration(seconds: 3),
+      ),
+    );
+  }
+
+  Future<void> _retryFailedAbsence(int index) async {
+    if (index < 0 || index >= _failedAbsenceSends.length) return;
+    final item = Map<String, dynamic>.from(_failedAbsenceSends[index]);
+    item.remove('error');
+    setState(() => _failedAbsenceSends.removeAt(index));
+    final dateTs = item['date'] as Timestamp?;
+    await _sendAbsenceToHug(
+      studentName: item['studentName'] as String? ?? '',
+      absenceDate: dateTs?.toDate() ?? DateTime.now(),
+      category: item['category'] as String? ?? '欠席連絡',
+      content: item['content'] as String? ?? '',
+    );
+  }
+
+  void _discardFailedAbsence(int index) {
+    if (index < 0 || index >= _failedAbsenceSends.length) return;
+    setState(() => _failedAbsenceSends.removeAt(index));
+  }
+
+  Widget _buildAbsenceFailedBanner() {
+    final c = context.colors;
+    return Container(
+      width: double.infinity,
+      color: Colors.red.withValues(alpha: 0.10),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.warning_amber_rounded, size: 16, color: Colors.red.shade400),
+              const SizedBox(width: 8),
+              Text('HUG送信失敗 (${_failedAbsenceSends.length}件)',
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.red.shade400)),
+            ],
+          ),
+          ..._failedAbsenceSends.asMap().entries.map((entry) {
+            final i = entry.key;
+            final item = entry.value;
+            final category = item['category'] as String? ?? '';
+            final student = item['studentName'] as String? ?? '';
+            return Padding(
+              padding: const EdgeInsets.only(top: 4, left: 24),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      '$category / $student',
+                      style: TextStyle(fontSize: 11, color: c.textSecondary),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: () => _retryFailedAbsence(i),
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    child: const Text('再送', style: TextStyle(fontSize: 11)),
+                  ),
+                  TextButton(
+                    onPressed: () => _discardFailedAbsence(i),
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      foregroundColor: c.textTertiary,
+                    ),
+                    child: const Text('破棄', style: TextStyle(fontSize: 11)),
+                  ),
+                ],
+              ),
+            );
+          }),
+        ],
+      ),
+    );
+  }
 
 // カラーピッカーダイアログ（新規追加）
 void _showColorPickerDialog(String course, Color currentColor, Function(Color) onColorSelected) {

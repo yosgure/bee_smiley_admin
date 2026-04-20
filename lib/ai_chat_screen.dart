@@ -90,6 +90,13 @@ class _AiChatScreenState extends State<AiChatScreen> {
   Map<String, dynamic>? _freeformCommand;
   final _freeformTextController = TextEditingController();
 
+  // プラススタッフ一覧（エリシテーションで plus_staff 型に利用）
+  List<String>? _plusStaffOptions;
+
+  // 直近のエリシテーション回答（HUG送信ダイアログで初期日付等を決めるのに使う）
+  List<Map<String, dynamic>>? _lastElicitationQuestions;
+  List<String> _lastElicitationAnswers = [];
+
   // ドラッグ&ドロップ用
   StreamSubscription? _dragOverSub;
   StreamSubscription? _dragLeaveSub;
@@ -163,6 +170,50 @@ class _AiChatScreenState extends State<AiChatScreen> {
     } catch (e) {
       debugPrint('Error loading commands: $e');
     }
+  }
+
+  /// 直近のエリシテーション回答から「欠席日」を含む date/datetime 質問の日付を取り出す
+  DateTime? _resolveInitialDateFromElicitation() {
+    final qs = _lastElicitationQuestions;
+    if (qs == null) return null;
+    for (int i = 0; i < qs.length && i < _lastElicitationAnswers.length; i++) {
+      final q = qs[i];
+      final type = (q['type'] as String?) ?? 'text';
+      final label = (q['question'] as String?) ?? '';
+      if ((type != 'date' && type != 'datetime')) continue;
+      if (!label.contains('欠席日') && !label.contains('欠席した日')) continue;
+      final ans = _lastElicitationAnswers[i];
+      if (ans.isEmpty) continue;
+      try {
+        return DateFormat(type == 'datetime' ? 'yyyy/MM/dd HH:mm' : 'yyyy/MM/dd').parse(ans);
+      } catch (_) {}
+    }
+    return null;
+  }
+
+  /// プラス所属スタッフ一覧を取得（初回のみ）
+  Future<List<String>> _loadPlusStaffOptions() async {
+    if (_plusStaffOptions != null) return _plusStaffOptions!;
+    try {
+      final snap = await FirebaseFirestore.instance.collection('staffs').get();
+      final names = <Map<String, String>>[];
+      for (final d in snap.docs) {
+        final data = d.data();
+        final classrooms = (data['classrooms'] as List?) ?? [];
+        if (classrooms.any((c) => c.toString().contains('プラス'))) {
+          names.add({
+            'name': (data['name'] ?? '') as String,
+            'furigana': (data['furigana'] ?? '') as String,
+          });
+        }
+      }
+      names.sort((a, b) => (a['furigana'] ?? '').compareTo(b['furigana'] ?? ''));
+      _plusStaffOptions = names.map((m) => m['name'] ?? '').where((n) => n.isNotEmpty).toList();
+    } catch (e) {
+      debugPrint('Error loading plus staffs: $e');
+      _plusStaffOptions = [];
+    }
+    return _plusStaffOptions!;
   }
 
   void _onTextChanged() {
@@ -380,6 +431,10 @@ class _AiChatScreenState extends State<AiChatScreen> {
     }
 
     final message = buffer.toString().trim();
+
+    // 完了時点の質問と回答を保持（HUG送信ダイアログで利用）
+    _lastElicitationQuestions = questions.cast<Map<String, dynamic>>().toList();
+    _lastElicitationAnswers = List<String>.from(_elicitationAnswers);
 
     // エリシテーション終了
     setState(() {
@@ -897,7 +952,8 @@ class _AiChatScreenState extends State<AiChatScreen> {
   /// AI生成コンテンツをhugに送信するダイアログを表示
   Future<void> _showSaveContentDialog(String content, {String? defaultCommandLabel}) async {
     final textController = TextEditingController(text: content);
-    DateTime selectedDate = DateTime.now();
+    // 初期日付: 欠席連絡など「欠席日」を含む質問がエリシテーションにあればそれを使う
+    DateTime selectedDate = _resolveInitialDateFromElicitation() ?? DateTime.now();
     final currentUser = FirebaseAuth.instance.currentUser;
     final staffName = _staffName ?? 'スタッフ';
 
@@ -1818,7 +1874,9 @@ class _AiChatScreenState extends State<AiChatScreen> {
                 content,
                 style: TextStyle(
                   fontSize: 15,
-                  color: isSending ? context.colors.textHint : context.colors.chatMyBubbleText,
+                  color: isSending
+                      ? context.colors.chatMyBubbleText.withValues(alpha: 0.7)
+                      : context.colors.chatMyBubbleText,
                   height: 1.5,
                 ),
               ),
@@ -2050,6 +2108,79 @@ class _AiChatScreenState extends State<AiChatScreen> {
     );
   }
 
+  /// エリシテーション用の日付/日時ピッカーボタン
+  Widget _buildDatePickerButton(String type, String currentAnswer) {
+    final hasValue = currentAnswer.isNotEmpty;
+    return InkWell(
+      borderRadius: BorderRadius.circular(12),
+      onTap: () async {
+        DateTime initial = DateTime.now();
+        // 既存値をパースして初期値に
+        try {
+          if (currentAnswer.isNotEmpty) {
+            initial = DateFormat(type == 'datetime' ? 'yyyy/MM/dd HH:mm' : 'yyyy/MM/dd').parse(currentAnswer);
+          }
+        } catch (_) {}
+
+        final picked = await showDatePicker(
+          context: context,
+          initialDate: initial,
+          firstDate: DateTime(2020),
+          lastDate: DateTime(2100),
+          locale: const Locale('ja'),
+        );
+        if (picked == null) return;
+
+        DateTime selected = picked;
+        if (type == 'datetime') {
+          final t = await showTimePicker(
+            context: context,
+            initialTime: TimeOfDay(hour: initial.hour, minute: initial.minute),
+          );
+          if (t == null) return;
+          selected = DateTime(picked.year, picked.month, picked.day, t.hour, t.minute);
+        }
+        final formatted = DateFormat(type == 'datetime' ? 'yyyy/MM/dd HH:mm' : 'yyyy/MM/dd').format(selected);
+        setState(() {
+          _elicitationAnswers[_elicitationStep] = formatted;
+        });
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          color: context.colors.cardBg,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: hasValue ? context.colors.aiAccent : context.colors.borderMedium,
+          ),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              type == 'datetime' ? Icons.event_rounded : Icons.calendar_today_rounded,
+              size: 18,
+              color: hasValue ? context.colors.aiAccent : context.colors.textTertiary,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                hasValue
+                    ? currentAnswer
+                    : (type == 'datetime' ? '日時を選択...' : '日付を選択...'),
+                style: TextStyle(
+                  fontSize: 14,
+                  color: hasValue ? context.colors.textPrimary : context.colors.textHint,
+                  fontWeight: hasValue ? FontWeight.w500 : FontWeight.normal,
+                ),
+              ),
+            ),
+            Icon(Icons.arrow_drop_down, size: 20, color: context.colors.textTertiary),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildElicitationUI() {
     final cmd = _elicitationCommand!;
     final questions = cmd['questions'] as List<dynamic>;
@@ -2152,7 +2283,63 @@ class _AiChatScreenState extends State<AiChatScreen> {
                     ),
                   ),
                   // 回答エリア
-                  if (type == 'select')
+                  if (type == 'date' || type == 'datetime')
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+                      child: _buildDatePickerButton(type, currentAnswer),
+                    )
+                  else if (type == 'plus_staff')
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+                      child: FutureBuilder<List<String>>(
+                        future: _loadPlusStaffOptions(),
+                        builder: (ctx, snap) {
+                          if (!snap.hasData) {
+                            return const Padding(
+                              padding: EdgeInsets.symmetric(vertical: 12),
+                              child: SizedBox(
+                                width: 18, height: 18,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              ),
+                            );
+                          }
+                          final staffList = snap.data!;
+                          if (staffList.isEmpty) {
+                            return Text('プラス所属スタッフが見つかりません',
+                              style: TextStyle(fontSize: 13, color: context.colors.textTertiary));
+                          }
+                          return Wrap(
+                            spacing: 6,
+                            runSpacing: 6,
+                            children: staffList.map((opt) {
+                              final isSelected = currentAnswer == opt;
+                              return GestureDetector(
+                                onTap: () => _answerElicitation(opt),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                                  decoration: BoxDecoration(
+                                    color: isSelected ? context.colors.aiAccent : context.colors.cardBg,
+                                    borderRadius: BorderRadius.circular(20),
+                                    border: Border.all(
+                                      color: isSelected ? context.colors.aiAccent : context.colors.borderMedium,
+                                    ),
+                                  ),
+                                  child: Text(
+                                    opt,
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      color: isSelected ? Colors.white : context.colors.textPrimary,
+                                      fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                                    ),
+                                  ),
+                                ),
+                              );
+                            }).toList(),
+                          );
+                        },
+                      ),
+                    )
+                  else if (type == 'select')
                     Padding(
                       padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
                       child: Wrap(
@@ -2346,7 +2533,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
                           ),
                         const Spacer(),
                         // 次へ / 送信ボタン（上矢印）
-                        if (type == 'text' || type == 'select_or_text' || isLast) ...[
+                        if (type == 'text' || type == 'select_or_text' || type == 'date' || type == 'datetime' || isLast) ...[
                           if (!isLast)
                             // 次へボタン
                             GestureDetector(

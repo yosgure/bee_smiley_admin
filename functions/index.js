@@ -2618,6 +2618,390 @@ async function saveDraftToHug(cookies, formFields, recordStaffId, noteText) {
 }
 
 /**
+ * 各種加算・議事録管理 (record_proceedings.php) の編集ページから
+ * hidden (CSRFトークン等) と加算種別マップを取得
+ */
+async function getRecordProceedingsForm(cookies) {
+  const url = `${HUG_BASE_URL}/record_proceedings.php?mode=edit`;
+  const res = await hugFetch(url, {}, cookies);
+  const html = await res.text();
+  const $ = cheerio.load(html);
+
+  const hidden = {};
+  $('form input[type="hidden"]').each((_, el) => {
+    const name = $(el).attr('name');
+    const value = $(el).attr('value') || '';
+    if (name) hidden[name] = value;
+  });
+
+  // 加算種別のマップ: ラベル(正規化済) → value
+  const addingMap = {};
+  $('select[name="adding_children_id"] option').each((_, el) => {
+    const v = $(el).attr('value') || '';
+    const t = ($(el).text() || '').trim();
+    if (v && v !== '0' && t) addingMap[t] = v;
+  });
+
+  return { hidden, addingMap };
+}
+
+/**
+ * ラベル(例:「子育てサポート」「子育てサポート加算」)から adding_children_id を解決
+ */
+function resolveAddingChildrenId(addingMap, categoryLabel) {
+  const normalized = normalizeName(categoryLabel);
+  for (const [label, id] of Object.entries(addingMap)) {
+    const n = normalizeName(label);
+    if (n === normalized) return id;
+    if (n.includes(normalized) || normalized.includes(n)) return id;
+  }
+  return null;
+}
+
+/**
+ * ajax_record_proceedings.php を叩いて、児童の f_id / s_id を取得
+ * （画面上で児童選択時に走るAjaxをサーバから直接呼び出す）
+ */
+async function fetchChildFacilityService(cookies, childId, addingChildrenId, interviewDate) {
+  const body = new URLSearchParams();
+  body.append('rp_id', 'insert');
+  body.append(`c_id_list[${childId}]`, String(childId));
+  // 初回は f_id が不明なので 1 を仮で送る。単一施設テナントならこれで通る。
+  body.append(`f_id_list[${childId}]`, '1');
+  body.append('interview_date', interviewDate);
+  body.append('adding_children_id', String(addingChildrenId));
+  body.append('change_type', 'adding_children');
+  body.append('mode', 'getData');
+
+  const res = await fetch(`${HUG_BASE_URL}/ajax/ajax_record_proceedings.php`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+      'X-Requested-With': 'XMLHttpRequest',
+      'Accept': '*/*',
+      'Cookie': cookies,
+    },
+    body: body.toString(),
+    redirect: 'manual',
+  });
+  const txt = await res.text();
+  if (!txt) throw new Error('ajax_record_proceedings.php から空のレスポンス');
+  let data;
+  try { data = JSON.parse(txt); }
+  catch (e) { throw new Error(`ajax_record_proceedings.php のJSONパースに失敗: ${e.message}`); }
+
+  const facilityDom = (data.facility_dom || {})[childId] || '';
+  const childrenInfo = (data.children_info || {})[childId] || '';
+
+  // facility_dom から f_id を抽出（selected の option value）
+  const fIdMatch = facilityDom.match(/value=["'](\d+)["']\s+selected/);
+  const fId = fIdMatch ? fIdMatch[1] : null;
+
+  // children_info HTML から s_id を抽出
+  const sIdMatch = childrenInfo.match(/name=["']c_id_list\[\d+\]\[s_id\]["'][^>]*value=["'](\d+)["']/);
+  const sId = sIdMatch ? sIdMatch[1] : null;
+
+  if (!fId || !sId) {
+    throw new Error(`児童(c_id=${childId})の契約施設/サービスが取得できません (f_id=${fId}, s_id=${sId})`);
+  }
+  return { fId, sId };
+}
+
+/**
+ * 各種加算・議事録管理 (record_proceedings.php) に下書き保存
+ */
+async function saveToRecordProceedings(cookies, params) {
+  const { hidden, addingChildrenId, childId, recorderStaffId, dateStr, title, content } = params;
+
+  // interview_date は「YYYY年MM月DD日」形式
+  const [y, m, d] = dateStr.split('-');
+  const interviewDate = `${y}年${m}月${d}日`;
+
+  // 児童の契約施設・サービスを動的取得
+  const { fId, sId } = await fetchChildFacilityService(cookies, childId, addingChildrenId, interviewDate);
+  console.log(`[recordProceedings] c_id=${childId} → f_id=${fId} s_id=${sId}`);
+
+  const FormData = require('form-data');
+  const formData = new FormData();
+
+  // 後から明示的に送るフィールドは hidden の引き継ぎから除外
+  // (同名で2回 append すると PHP は先頭値を採用するため空や0で上書きされる)
+  // また c_id_list[0][...] は「未選択状態のプレースホルダ」。児童選択後は
+  // c_id_list[<c_id>][...] に置き換わるべきなので、GET時の [0] は必ず捨てる。
+  const skipKeys = new Set(['adding_children_id', 'mode', 'id', 'draft_flg', 'title']);
+  for (const [key, value] of Object.entries(hidden)) {
+    if (skipKeys.has(key)) continue;
+    if (key.startsWith('c_id_list[0]')) continue;
+    formData.append(key, value);
+  }
+
+  // 加算選択
+  formData.append('adding_children_id', addingChildrenId);
+
+  // タイトル（既存の手動入力レコードに揃えて空のまま送る）
+  formData.append('title', '');
+
+  // 児童（フォーム側は児童選択後に c_id_list[<c_id>][...] にフィールド名が変わる）
+  formData.append(`c_id_list[${childId}][id]`, String(childId));
+  formData.append(`c_id_list[${childId}][person_absence_note]`, '');
+  formData.append(`c_id_list[${childId}][f_id]`, String(fId));
+  formData.append(`c_id_list[${childId}][s_id]`, String(sId));
+
+  // 記録者 / 対応スタッフ
+  formData.append('recorder', String(recorderStaffId));
+  formData.append('interview_staff[]', String(recorderStaffId));
+
+  // 日時
+  formData.append('interview_date', interviewDate);
+  formData.append('start_hour', '');
+  formData.append('start_time', '');
+  formData.append('end_hour', '');
+  formData.append('end_time', '');
+  formData.append('start_hour2', '');
+  formData.append('start_time2', '');
+  formData.append('end_hour2', '');
+  formData.append('end_time2', '');
+  formData.append('add_date', '');
+  formData.append('nursing_support_date', '');
+
+  // 関係機関・相談支援事業所 (空)
+  formData.append('ro_list[1][related_organizations]', '');
+  formData.append('ro_list[1][related_organizations_manager]', '');
+  formData.append('ro_list[2][related_organizations]', '');
+  formData.append('ro_list[2][related_organizations_manager]', '');
+  formData.append('support_office_id', '0');
+  formData.append('support_office_manager', '');
+
+  // 自由項目: タイトルに加算名、内容にAIテキスト
+  formData.append('customize[title][]', title || '');
+  formData.append('customize[contents][]', content || '');
+
+  // 作成済みで保存（'draft' にすると下書き扱い）
+  formData.append('draft_flg', 'created');
+  formData.append('mode', 'regist');
+  formData.append('id', 'insert');
+
+  console.log('[recordProceedings] sending multipart POST',
+    `adding_children_id=${addingChildrenId} c_id=${childId} f_id=${fId} s_id=${sId} recorder=${recorderStaffId} date=${interviewDate}`);
+
+  const postHeaders = {
+    ...formData.getHeaders(),
+    'Cookie': cookies,
+  };
+
+  const res = await fetch(`${HUG_BASE_URL}/record_proceedings.php`, {
+    method: 'POST',
+    headers: postHeaders,
+    body: formData,
+    redirect: 'manual',
+  });
+
+  const body = await res.text();
+  console.log('[recordProceedings] response status:', res.status, 'Location:', res.headers.get('location'));
+  console.log('[recordProceedings] response body length:', body.length);
+
+  // 成功時はリダイレクト(302)を返す。200はバリデーションエラーでフォームが再表示されている。
+  if (res.status === 302) return true;
+
+  // 200の場合はエラーメッセージを抽出。HUGはpタグやdiv.errなど色々なclassを使う。
+  const $err = cheerio.load(body);
+  const errorTexts = [];
+  $err('.error, .alert, .warning, .msg_error, p.err, .err, [class*="error"]').each((_, el) => {
+    const t = $err(el).text().trim();
+    if (t && t.length > 3) errorTexts.push(t);
+  });
+  // ページタイトルも確認
+  const pageTitle = $err('title').text().trim();
+  console.error('[recordProceedings] page title:', pageTitle);
+  console.error('[recordProceedings] validation errors:', JSON.stringify(errorTexts.slice(0, 10)));
+  // body の一部をログに（エラー周辺を抽出）
+  const bodyIdx = body.indexOf('入力内容に誤り');
+  const errIdx = body.search(/err|error|alert/i);
+  const snippetIdx = bodyIdx > 0 ? bodyIdx : (errIdx > 0 ? errIdx : 0);
+  console.error('[recordProceedings] body snippet:', body.substring(Math.max(0, snippetIdx - 200), snippetIdx + 800).replace(/\s+/g, ' '));
+
+  throw new Error(
+    errorTexts.length > 0
+      ? `HUGのバリデーションエラー: ${errorTexts.slice(0, 3).join(' / ')}`
+      : `HUG保存失敗 (status=${res.status})`
+  );
+}
+
+/**
+ * 指定日の出席表 (attendance.php?mode=detail) から
+ * 児童 c_id に対応する編集URL/r_id/s_idなどを特定する
+ *
+ * HUGの編集URLは2パターンあることに注意:
+ *   A) 未登録(id=insert): attendance.php?mode=edit&r_id=<rId>&id=insert&s_id=<sId>
+ *   B) 登録済み:           attendance.php?mode=edit&id=<attendance_id>&s_id=<sId>
+ */
+async function findAttendanceRecord(cookies, childId, dateStr) {
+  // 施設は単一(f_id=1)想定。必要なら将来的に全施設を探索。
+  const detailUrl = `${HUG_BASE_URL}/attendance.php?mode=detail&f_id=1&date=${dateStr}`;
+  const res = await hugFetch(detailUrl, {}, cookies);
+  const html = await res.text();
+
+  // mode=edit URL を全部抽出（順序問わず）
+  const editUrlStrs = [...new Set(
+    Array.from(html.matchAll(/attendance\.php\?[^"'\s<>]*mode=edit[^"'\s<>]*/g)).map(m => m[0])
+  )];
+  if (editUrlStrs.length === 0) {
+    throw new Error(`${dateStr} の出席表が見つかりません (f_id=1)。HUG上で該当日の出席レコードが作成されているか確認してください。`);
+  }
+
+  // 各編集URLにアクセスして c_id を特定
+  const editPromises = editUrlStrs.map(async (u) => {
+    try {
+      const r = await hugFetch(`${HUG_BASE_URL}/${u}`, {}, cookies);
+      const h = await r.text();
+      const $ = cheerio.load(h);
+      const cId = $('input[name="c_id"]').attr('value') || '';
+      const fId = $('input[name="f_id"]').attr('value') || '';
+      const rId = $('input[name="r_id"]').attr('value') || '';
+      const sId = $('input[name="s_id"]').attr('value') || '';
+      return { editUrl: u, cId, fId, rId, sId };
+    } catch (e) {
+      return { editUrl: u, cId: '', fId: '', rId: '', sId: '', error: e.message };
+    }
+  });
+  const results = await Promise.all(editPromises);
+
+  const match = results.find((r) => String(r.cId) === String(childId));
+  if (!match) {
+    throw new Error(
+      `c_id=${childId} の出席レコードが ${dateStr} 内に見つかりません。` +
+      `検査対象: ${results.length}件, c_ids=${results.map(r => r.cId).join(',')}`
+    );
+  }
+  return match;
+}
+
+/**
+ * attendance.php の編集ページから hidden フィールドを引き継ぎつつ、
+ * 欠席時対応加算理由(absence_note)を埋めて保存する
+ *
+ * @param attendValue '2' = 欠席(加算あり) / '3' = 欠席(加算を取らない)
+ */
+async function saveToAttendance(cookies, params) {
+  const { childId, dateStr, content, recorderStaffId } = params;
+  const attendValue = params.attendValue || '2';
+
+  // 1. 編集URLを特定
+  const record = await findAttendanceRecord(cookies, childId, dateStr);
+  console.log(`[attendance] c_id=${childId} date=${dateStr} attend=${attendValue} → editUrl=${record.editUrl} r_id=${record.rId} s_id=${record.sId}`);
+
+  // 2. 編集ページを取得してフォームのhidden/select値を全部引き継ぐ
+  const editUrl = `${HUG_BASE_URL}/${record.editUrl}`;
+  const editRes = await hugFetch(editUrl, {}, cookies);
+  const editHtml = await editRes.text();
+  const $ = cheerio.load(editHtml);
+
+  const fields = {};
+  // hidden を全部拾う
+  $('form input[type="hidden"]').each((_, el) => {
+    const name = $(el).attr('name');
+    const value = $(el).attr('value') || '';
+    if (name) fields[name] = value;
+  });
+  // select の selected 値を拾う
+  $('form select').each((_, el) => {
+    const name = $(el).attr('name');
+    if (!name) return;
+    const selected = $(el).find('option[selected]').attr('value');
+    if (selected !== undefined) fields[name] = selected;
+  });
+  // textarea の値
+  $('form textarea').each((_, el) => {
+    const name = $(el).attr('name');
+    const value = $(el).text() || '';
+    if (name) fields[name] = value;
+  });
+  // チェックされているradio
+  $('form input[type="radio"]:checked').each((_, el) => {
+    const name = $(el).attr('name');
+    const value = $(el).attr('value') || '';
+    if (name) fields[name] = value;
+  });
+
+  const FormData = require('form-data');
+  const formData = new FormData();
+
+  // 後から上書きするフィールドは引き継ぎから除外
+  const skipKeys = new Set(['attend', 'attend_flg', 'absence_note', 'absence_note_staff', 'absence_note3', 'absence_note_staff3']);
+  for (const [key, value] of Object.entries(fields)) {
+    if (skipKeys.has(key)) continue;
+    formData.append(key, value);
+  }
+
+  // 出欠flg
+  formData.append('attend', attendValue);
+  formData.append('attend_flg', attendValue);
+
+  if (attendValue === '3') {
+    // 加算なし: 記入欄は非表示なので全部空
+    formData.append('absence_note_staff', '');
+    formData.append('absence_note', '');
+    formData.append('absence_note_staff3', '');
+    formData.append('absence_note3', '');
+  } else {
+    // 加算あり: 欠席時対応加算理由（記録者 + 本文）
+    formData.append('absence_note_staff', String(recorderStaffId || ''));
+    formData.append('absence_note', content || '');
+    // 画面上に _staff3 / 3 の複製もあるため同内容を入れておく
+    formData.append('absence_note_staff3', String(recorderStaffId || ''));
+    formData.append('absence_note3', content || '');
+  }
+
+  console.log(`[attendance] sending POST for c_id=${childId} recorder=${recorderStaffId} attend=${attendValue}`);
+
+  const postHeaders = {
+    ...formData.getHeaders(),
+    'Cookie': cookies,
+  };
+  const postRes = await fetch(`${HUG_BASE_URL}/attendance.php`, {
+    method: 'POST',
+    headers: postHeaders,
+    body: formData,
+    redirect: 'manual',
+  });
+  const body = await postRes.text();
+  console.log('[attendance] response status:', postRes.status, 'Location:', postRes.headers.get('location'));
+
+  // 302でもHUG側で保存されていない場合があるため、編集ページを再取得して attend が期待値になっているか検証
+  if (postRes.status === 302 || postRes.status === 200) {
+    try {
+      const verifyRes = await hugFetch(editUrl, {}, cookies);
+      const verifyHtml = await verifyRes.text();
+      const $v = cheerio.load(verifyHtml);
+      const checkedAttend = $v('input[name="attend"]').filter((_, el) => $v(el).attr('checked') !== undefined).attr('value');
+      console.log(`[attendance] verify: checked attend=${checkedAttend}, expected=${attendValue}`);
+      if (String(checkedAttend) === String(attendValue)) return true;
+      throw new Error(
+        `HUG保存に失敗しました（送信後の確認で attend=${checkedAttend || '未設定'} のまま）。期待: ${attendValue}`
+      );
+    } catch (verifyErr) {
+      if (verifyErr.message.startsWith('HUG保存に失敗しました')) throw verifyErr;
+      console.error('[attendance] verify error:', verifyErr.message);
+      // 検証自体が失敗した場合は、元のレスポンスが302なら成功扱い
+      if (postRes.status === 302) return true;
+    }
+  }
+
+  const $err = cheerio.load(body);
+  const errorTexts = [];
+  $err('.error, .err, .alert, .warning, [class*="err"]').each((_, el) => {
+    const t = $err(el).text().trim();
+    if (t && t.length > 3) errorTexts.push(t);
+  });
+  console.error('[attendance] errors:', JSON.stringify(errorTexts.slice(0, 5)));
+  throw new Error(
+    errorTexts.length > 0
+      ? `HUGのバリデーションエラー: ${errorTexts.slice(0, 3).join(' / ')}`
+      : `HUG保存失敗 (attendance status=${postRes.status})`
+  );
+}
+
+/**
  * Firestoreのhugマッピング設定を取得
  * hug_settings/child_mapping: { "児童名": "hugのc_id" }
  * hug_settings/staff_mapping: { "記録者名": "hugのrecord_staff ID" }
@@ -2687,6 +3071,9 @@ async function syncToHugCore(contentIds = null) {
   // 4. 日付ごとに一覧ページを取得してr_idマップを構築（キャッシュ）
   const dateRecordCache = {}; // { 'YYYY-MM-DD': childMap }
 
+  // 各種加算・議事録管理用のフォーム情報はカテゴリ利用時にのみ初期化（lazy）
+  let recordProceedingsForm = null;
+
   let successCount = 0;
   let failCount = 0;
   const errors = [];
@@ -2701,6 +3088,7 @@ async function syncToHugCore(contentIds = null) {
       const dateTs = docData.date;
       const content = docData.content || '';
       const recorderName = docData.recorderName || '';
+      const category = docData.category || '';
 
       // 日付をYYYY-MM-DD形式に変換（JST = UTC+9）
       let dateStr;
@@ -2721,10 +3109,87 @@ async function syncToHugCore(contentIds = null) {
         throw new Error(`児童「${studentName}」のhugマッピングが未設定です。hug_settings/child_mappingに登録してください。`);
       }
 
+      // 欠席（加算なし）は記録者不要 (HUGフォーム側でabsence_note_staffは空で送信)
+      const isNoAddAbsence =
+        normalizeName(category).includes('欠席（加算なし）') ||
+        normalizeName(category).includes('欠席(加算なし)');
+
       // 記録者名 → hug record_staff ID のマッピング（スペース無視で検索）
       const hugStaffId = findMapping(staffMapping, recorderName);
-      if (!hugStaffId) {
+      if (!hugStaffId && !isNoAddAbsence) {
         throw new Error(`記録者「${recorderName}」のhugマッピングが未設定です。hug_settings/staff_mappingに登録してください。`);
+      }
+
+      // カテゴリが「欠席（加算なし）」系なら attendance.php に attend=3 で送信
+      if (normalizeName(category).includes('欠席（加算なし）') || normalizeName(category).includes('欠席(加算なし)')) {
+        const success = await saveToAttendance(cookies, {
+          childId: hugChildId,
+          dateStr,
+          content: '',
+          recorderStaffId: hugStaffId,
+          attendValue: '3',
+        });
+        if (success) {
+          await (docRef.delete ? docRef.delete() : db.collection('saved_ai_contents').doc(docId).delete());
+          successCount++;
+          console.log(`[attendance:skip] synced: ${studentName} ${dateStr}`);
+        } else {
+          failCount++;
+          errors.push({ docId, studentName, error: 'HUG（出席表・加算なし）への保存に失敗しました' });
+        }
+        continue;
+      }
+
+      // カテゴリが「欠席連絡」系なら attendance.php に attend=2 で送信
+      if (normalizeName(category).includes('欠席連絡') || normalizeName(category).includes('欠席')) {
+        const success = await saveToAttendance(cookies, {
+          childId: hugChildId,
+          dateStr,
+          content,
+          recorderStaffId: hugStaffId,
+          attendValue: '2',
+        });
+        if (success) {
+          await (docRef.delete ? docRef.delete() : db.collection('saved_ai_contents').doc(docId).delete());
+          successCount++;
+          console.log(`[attendance] synced: ${studentName} ${dateStr} ${category}`);
+        } else {
+          failCount++;
+          errors.push({ docId, studentName, error: 'HUG（出席表）への保存に失敗しました' });
+        }
+        continue;
+      }
+
+      // カテゴリが「子育てサポート」系なら record_proceedings.php に送信
+      if (normalizeName(category).includes('子育てサポート')) {
+        if (!recordProceedingsForm) {
+          recordProceedingsForm = await getRecordProceedingsForm(cookies);
+        }
+        const { hidden, addingMap } = recordProceedingsForm;
+        const addingChildrenId = resolveAddingChildrenId(addingMap, category);
+        if (!addingChildrenId) {
+          throw new Error(`HUGの加算一覧に「${category}」に該当する選択肢が見つかりません。`);
+        }
+
+        const success = await saveToRecordProceedings(cookies, {
+          hidden,
+          addingChildrenId,
+          childId: hugChildId,
+          recorderStaffId: hugStaffId,
+          dateStr,
+          title: category,
+          content,
+        });
+
+        if (success) {
+          await (docRef.delete ? docRef.delete() : db.collection('saved_ai_contents').doc(docId).delete());
+          successCount++;
+          console.log(`[recordProceedings] synced: ${studentName} ${dateStr} ${category}`);
+        } else {
+          failCount++;
+          errors.push({ docId, studentName, error: 'HUG（加算・議事録）への保存に失敗しました' });
+        }
+        continue;
       }
 
       // 一覧ページから該当日のr_idを取得（キャッシュ）
