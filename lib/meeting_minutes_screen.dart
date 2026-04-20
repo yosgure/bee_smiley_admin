@@ -7,7 +7,7 @@ import 'app_theme.dart';
 import 'main.dart';
 
 // ============================================================
-// 議事録・研修記録一覧
+// 議事録・研修記録 一覧
 // ============================================================
 class MeetingMinutesScreen extends StatefulWidget {
   const MeetingMinutesScreen({super.key});
@@ -17,6 +17,8 @@ class MeetingMinutesScreen extends StatefulWidget {
 }
 
 class _MeetingMinutesScreenState extends State<MeetingMinutesScreen> {
+  String? _categoryFilter;
+
   void _close() {
     if (Navigator.canPop(context)) {
       Navigator.pop(context);
@@ -45,43 +47,91 @@ class _MeetingMinutesScreenState extends State<MeetingMinutesScreen> {
         icon: const Icon(Icons.add, color: Colors.white),
         label: const Text('新規作成', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
       ),
-      body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-        stream: FirebaseFirestore.instance
-            .collection('meeting_minutes')
-            .orderBy('meetingDate', descending: true)
-            .limit(200)
-            .snapshots(),
-        builder: (context, snap) {
-          if (snap.connectionState == ConnectionState.waiting) {
-            return Center(child: CircularProgressIndicator(color: AppColors.primary));
-          }
-          if (snap.hasError) {
-            return Center(child: Text('読み込みエラー: ${snap.error}', style: TextStyle(color: context.colors.textSecondary)));
-          }
-          final docs = snap.data?.docs ?? [];
-          if (docs.isEmpty) {
-            return Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
+      body: Column(
+        children: [
+          Container(
+            color: context.colors.cardBg,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
                 children: [
-                  Icon(Icons.description_outlined, size: 56, color: context.colors.textTertiary),
-                  const SizedBox(height: 12),
-                  Text('議事録・研修記録はまだありません', style: TextStyle(color: context.colors.textSecondary, fontSize: 14)),
-                  const SizedBox(height: 4),
-                  Text('右下の「新規作成」から記録できます', style: TextStyle(color: context.colors.textTertiary, fontSize: 12)),
-                  const SizedBox(height: 4),
-                  Text('NotionのURLを貼って過去議事録・研修記録を登録できます', style: TextStyle(color: context.colors.textTertiary, fontSize: 12)),
+                  _filterChip(null, '全て'),
+                  const SizedBox(width: 6),
+                  ...MeetingCategory.all.map((c) => Padding(
+                        padding: const EdgeInsets.only(right: 6),
+                        child: _filterChip(c.id, c.label),
+                      )),
                 ],
               ),
-            );
-          }
-          return ListView.builder(
-            padding: const EdgeInsets.fromLTRB(12, 10, 12, 88),
-            itemCount: docs.length,
-            itemBuilder: (c, i) => _MeetingListTile(doc: docs[i]),
-          );
-        },
+            ),
+          ),
+          const Divider(height: 1),
+          Expanded(child: _buildList()),
+        ],
       ),
+    );
+  }
+
+  Widget _filterChip(String? value, String label) {
+    final sel = _categoryFilter == value;
+    return GestureDetector(
+      onTap: () => setState(() => _categoryFilter = value),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: sel ? AppColors.primary.withValues(alpha: 0.15) : context.colors.chipBg,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: sel ? AppColors.primary : Colors.transparent,
+            width: 1,
+          ),
+        ),
+        child: Text(label,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: sel ? FontWeight.bold : FontWeight.normal,
+              color: sel ? AppColors.primary : context.colors.textSecondary,
+            )),
+      ),
+    );
+  }
+
+  Widget _buildList() {
+    Query<Map<String, dynamic>> q = FirebaseFirestore.instance
+        .collection('meeting_minutes')
+        .orderBy('meetingDate', descending: true)
+        .limit(300);
+    if (_categoryFilter != null) q = q.where('category', isEqualTo: _categoryFilter);
+
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      stream: q.snapshots(),
+      builder: (context, snap) {
+        if (snap.connectionState == ConnectionState.waiting) {
+          return Center(child: CircularProgressIndicator(color: AppColors.primary));
+        }
+        if (snap.hasError) {
+          return Center(child: Text('読み込みエラー: ${snap.error}', style: TextStyle(color: context.colors.textSecondary)));
+        }
+        final docs = snap.data?.docs ?? [];
+        if (docs.isEmpty) {
+          return Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.description_outlined, size: 56, color: context.colors.textTertiary),
+                const SizedBox(height: 12),
+                Text('記録はありません', style: TextStyle(color: context.colors.textSecondary, fontSize: 14)),
+              ],
+            ),
+          );
+        }
+        return ListView.builder(
+          padding: const EdgeInsets.fromLTRB(12, 10, 12, 88),
+          itemCount: docs.length,
+          itemBuilder: (c, i) => _MeetingListTile(doc: docs[i]),
+        );
+      },
     );
   }
 }
@@ -94,16 +144,15 @@ class _MeetingListTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final d = doc.data();
     final date = (d['meetingDate'] as Timestamp?)?.toDate();
-    final title = d['title'] as String? ?? '';
-    final category = d['category'] as String? ?? '';
+    final category = d['category'] as String? ?? 'other';
+    final note = (d['note'] as String? ?? '').trim();
     final participantNames = List<String>.from(d['participantNames'] ?? []);
-    final summary = d['summary'] as String? ?? '';
-    final content = d['content'] as String? ?? '';
-    final notionUrl = d['notionUrl'] as String? ?? '';
     final conductor = d['conductor'] as String? ?? '';
     final location = d['location'] as String? ?? '';
+    final content = d['content'] as String? ?? '';
     final materials = List<String>.from(d['materials'] ?? []);
-    final preview = summary.isNotEmpty ? summary : content;
+
+    final categoryLabel = MeetingCategory.labelOf(category);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
@@ -131,46 +180,31 @@ class _MeetingListTile extends StatelessWidget {
                     style: TextStyle(fontSize: 12, color: context.colors.textSecondary, fontWeight: FontWeight.w600),
                   ),
                   const SizedBox(width: 8),
-                  if (category.isNotEmpty)
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: context.colors.chipBg,
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Text(MeetingOptions.labelOf(MeetingOptions.category, category),
-                          style: TextStyle(fontSize: 11, color: context.colors.textSecondary)),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: AppColors.primary.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(6),
                     ),
+                    child: Text(categoryLabel,
+                        style: const TextStyle(
+                            fontSize: 11, color: AppColors.primary, fontWeight: FontWeight.w700)),
+                  ),
                   const Spacer(),
-                  if (notionUrl.isNotEmpty)
-                    GestureDetector(
-                      onTap: () async {
-                        final uri = Uri.tryParse(notionUrl);
-                        if (uri != null) await launchUrl(uri, mode: LaunchMode.externalApplication);
-                      },
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                        decoration: BoxDecoration(
-                          color: AppColors.primary.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: const Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.open_in_new, size: 12, color: AppColors.primary),
-                            SizedBox(width: 3),
-                            Text('Notion', style: TextStyle(fontSize: 10, color: AppColors.primary, fontWeight: FontWeight.w600)),
-                          ],
-                        ),
-                      ),
-                    ),
+                  if (materials.isNotEmpty)
+                    Row(children: [
+                      Icon(Icons.attach_file, size: 12, color: context.colors.textTertiary),
+                      const SizedBox(width: 2),
+                      Text('${materials.length}',
+                          style: TextStyle(fontSize: 11, color: context.colors.textTertiary)),
+                    ]),
                 ],
               ),
-              const SizedBox(height: 6),
-              Text(
-                title.isEmpty ? '(タイトル未設定)' : title,
-                style: TextStyle(fontSize: 14, color: context.colors.textPrimary, fontWeight: FontWeight.w700),
-              ),
+              if (note.isNotEmpty) ...[
+                const SizedBox(height: 4),
+                Text(note,
+                    style: TextStyle(fontSize: 13, color: context.colors.textPrimary, fontWeight: FontWeight.w600)),
+              ],
               if (conductor.isNotEmpty || location.isNotEmpty || participantNames.isNotEmpty) ...[
                 const SizedBox(height: 4),
                 Text(
@@ -184,21 +218,10 @@ class _MeetingListTile extends StatelessWidget {
                   style: TextStyle(fontSize: 11, color: context.colors.textTertiary),
                 ),
               ],
-              if (materials.isNotEmpty) ...[
-                const SizedBox(height: 4),
-                Row(
-                  children: [
-                    Icon(Icons.attach_file, size: 12, color: context.colors.textTertiary),
-                    const SizedBox(width: 2),
-                    Text('資料${materials.length}件',
-                        style: TextStyle(fontSize: 10, color: context.colors.textTertiary)),
-                  ],
-                ),
-              ],
-              if (preview.isNotEmpty) ...[
+              if (content.isNotEmpty) ...[
                 const SizedBox(height: 6),
                 Text(
-                  preview.length > 120 ? '${preview.substring(0, 120)}…' : preview,
+                  content.length > 140 ? '${content.substring(0, 140)}…' : content,
                   style: TextStyle(fontSize: 12, color: context.colors.textSecondary, height: 1.4),
                 ),
               ],
@@ -211,7 +234,7 @@ class _MeetingListTile extends StatelessWidget {
 }
 
 // ============================================================
-// 議事録・研修記録 入力/編集
+// 編集画面
 // ============================================================
 class MeetingMinutesEditScreen extends StatefulWidget {
   final QueryDocumentSnapshot<Map<String, dynamic>>? doc;
@@ -223,18 +246,13 @@ class MeetingMinutesEditScreen extends StatefulWidget {
 
 class _MeetingMinutesEditScreenState extends State<MeetingMinutesEditScreen> {
   DateTime _meetingDate = DateTime.now();
-  final _titleCtrl = TextEditingController();
-  String _category = 'regular';
+  String _category = MeetingCategory.all.first.id;
   final List<_Staff> _participants = [];
   final _conductorCtrl = TextEditingController();
   final _locationCtrl = TextEditingController();
   final _contentCtrl = TextEditingController();
-  final _materialsCtrl = TextEditingController();
-  final _agendaCtrl = TextEditingController();
-  final _summaryCtrl = TextEditingController();
-  final _decisionsCtrl = TextEditingController();
-  final _todoCtrl = TextEditingController();
-  final _notionCtrl = TextEditingController();
+  final _noteCtrl = TextEditingController();
+  final List<_Material> _materials = [];
   bool _saving = false;
 
   List<_Staff> _allStaffs = [];
@@ -248,17 +266,13 @@ class _MeetingMinutesEditScreenState extends State<MeetingMinutesEditScreen> {
     if (widget.doc != null) {
       final d = widget.doc!.data();
       _meetingDate = (d['meetingDate'] as Timestamp?)?.toDate() ?? DateTime.now();
-      _titleCtrl.text = d['title'] ?? '';
-      _category = d['category'] ?? 'regular';
+      _category = (d['category'] as String?) ?? MeetingCategory.all.first.id;
       _conductorCtrl.text = d['conductor'] ?? '';
       _locationCtrl.text = d['location'] ?? '';
       _contentCtrl.text = d['content'] ?? '';
-      _materialsCtrl.text = (List<String>.from(d['materials'] ?? [])).join('\n');
-      _agendaCtrl.text = d['agenda'] ?? '';
-      _summaryCtrl.text = d['summary'] ?? '';
-      _decisionsCtrl.text = d['decisions'] ?? '';
-      _todoCtrl.text = d['todo'] ?? '';
-      _notionCtrl.text = d['notionUrl'] ?? '';
+      _noteCtrl.text = d['note'] ?? '';
+      final rawMats = List<String>.from(d['materials'] ?? []);
+      _materials.addAll(rawMats.map(_Material.fromRaw));
     }
   }
 
@@ -291,43 +305,29 @@ class _MeetingMinutesEditScreenState extends State<MeetingMinutesEditScreen> {
 
   @override
   void dispose() {
-    for (final c in [_titleCtrl, _conductorCtrl, _locationCtrl, _contentCtrl, _materialsCtrl, _agendaCtrl, _summaryCtrl, _decisionsCtrl, _todoCtrl, _notionCtrl]) {
+    for (final c in [_conductorCtrl, _locationCtrl, _contentCtrl, _noteCtrl]) {
       c.dispose();
     }
     super.dispose();
   }
 
-  bool get _canSubmit =>
-      _titleCtrl.text.trim().isNotEmpty ||
-      _summaryCtrl.text.trim().isNotEmpty ||
-      _contentCtrl.text.trim().isNotEmpty ||
-      _notionCtrl.text.trim().isNotEmpty;
+  bool get _canSubmit => _contentCtrl.text.trim().isNotEmpty;
 
   Future<void> _submit() async {
     if (!_canSubmit) return;
     setState(() => _saving = true);
     final user = FirebaseAuth.instance.currentUser;
     final now = FieldValue.serverTimestamp();
-    final materials = _materialsCtrl.text
-        .split('\n')
-        .map((s) => s.trim())
-        .where((s) => s.isNotEmpty)
-        .toList();
     final data = <String, dynamic>{
       'meetingDate': Timestamp.fromDate(_meetingDate),
-      'title': _titleCtrl.text.trim(),
       'category': _category,
+      'note': _noteCtrl.text.trim(),
       'participantIds': _participants.map((s) => s.id).toList(),
       'participantNames': _participants.map((s) => s.name).toList(),
       'conductor': _conductorCtrl.text.trim(),
       'location': _locationCtrl.text.trim(),
       'content': _contentCtrl.text.trim(),
-      'materials': materials,
-      'agenda': _agendaCtrl.text.trim(),
-      'summary': _summaryCtrl.text.trim(),
-      'decisions': _decisionsCtrl.text.trim(),
-      'todo': _todoCtrl.text.trim(),
-      'notionUrl': _notionCtrl.text.trim(),
+      'materials': _materials.map((m) => m.toStorage()).toList(),
       'updatedAt': now,
     };
     try {
@@ -359,7 +359,7 @@ class _MeetingMinutesEditScreenState extends State<MeetingMinutesEditScreen> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (c) => AlertDialog(
-        title: const Text('この議事録・研修記録を削除しますか？'),
+        title: const Text('この記録を削除しますか？'),
         content: const Text('この操作は取り消せません。'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('キャンセル')),
@@ -393,12 +393,36 @@ class _MeetingMinutesEditScreenState extends State<MeetingMinutesEditScreen> {
     }
   }
 
+  Future<void> _addMaterial() async {
+    final result = await showDialog<_Material>(
+      context: context,
+      builder: (c) => const _MaterialDialog(),
+    );
+    if (result != null) setState(() => _materials.add(result));
+  }
+
+  Future<void> _editMaterial(int i) async {
+    final result = await showDialog<_Material>(
+      context: context,
+      builder: (c) => _MaterialDialog(initial: _materials[i]),
+    );
+    if (result != null) {
+      setState(() {
+        if (result.label.isEmpty && result.url.isEmpty) {
+          _materials.removeAt(i);
+        } else {
+          _materials[i] = result;
+        }
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: context.colors.scaffoldBg,
       appBar: AppBar(
-        title: Text(_isEdit ? '議事録・研修記録を編集' : '議事録・研修記録作成',
+        title: Text(_isEdit ? '議事録・研修記録を編集' : '議事録・研修記録を作成',
             style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
         backgroundColor: context.colors.cardBg,
         elevation: 0,
@@ -414,7 +438,15 @@ class _MeetingMinutesEditScreenState extends State<MeetingMinutesEditScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _section('開催日'),
+            _section('種類'),
+            _chipGroup(
+              options: MeetingCategory.all.map((c) => (id: c.id, label: c.label)).toList(),
+              selected: {_category},
+              onToggle: (id) => setState(() => _category = id),
+            ),
+
+            const SizedBox(height: 20),
+            _section('実施日'),
             InkWell(
               onTap: () async {
                 final d = await showDatePicker(
@@ -442,22 +474,6 @@ class _MeetingMinutesEditScreenState extends State<MeetingMinutesEditScreen> {
                   ],
                 ),
               ),
-            ),
-
-            const SizedBox(height: 20),
-            _section('種類'),
-            _chipGroup(
-              options: MeetingOptions.category,
-              selected: {_category},
-              onToggle: (id) => setState(() => _category = id),
-            ),
-
-            const SizedBox(height: 20),
-            _section('タイトル / 研修名'),
-            TextField(
-              controller: _titleCtrl,
-              onChanged: (_) => setState(() {}),
-              decoration: _decoration(null, hint: '例：虐待防止研修 / 4月定例ミーティング'),
             ),
 
             const SizedBox(height: 16),
@@ -520,72 +536,30 @@ class _MeetingMinutesEditScreenState extends State<MeetingMinutesEditScreen> {
             ),
 
             const SizedBox(height: 20),
-            _section('研修内容 / 議事内容'),
+            _section('内容'),
             TextField(
               controller: _contentCtrl,
-              maxLines: 10,
+              maxLines: 14,
               onChanged: (_) => setState(() {}),
-              decoration: _decoration(null, hint: '研修内容・議事内容の全文'),
+              decoration: _decoration(null, hint: '研修内容・議事内容'),
             ),
 
             const SizedBox(height: 20),
-            _section('資料リンク'),
-            Text('1行につき1URL。ファイルパス・Google DriveなどもOK',
-                style: TextStyle(fontSize: 12, color: context.colors.textTertiary)),
+            _section('資料'),
+            ..._materials.asMap().entries.map((e) => _materialTile(e.key, e.value)),
             const SizedBox(height: 6),
-            TextField(
-              controller: _materialsCtrl,
-              maxLines: 4,
-              onChanged: (_) => setState(() {}),
-              decoration: _decoration(null, hint: 'https://...\nhttps://...'),
+            OutlinedButton.icon(
+              onPressed: _addMaterial,
+              icon: const Icon(Icons.add, size: 18),
+              label: const Text('資料を追加'),
             ),
 
             const SizedBox(height: 20),
-            _section('議題'),
+            _section('備考（任意）'),
             TextField(
-              controller: _agendaCtrl,
-              maxLines: 3,
+              controller: _noteCtrl,
               onChanged: (_) => setState(() {}),
-              decoration: _decoration(null, hint: '例：シフト調整 / 利用児対応 ...'),
-            ),
-
-            const SizedBox(height: 20),
-            _section('サマリ（一覧用）'),
-            TextField(
-              controller: _summaryCtrl,
-              maxLines: 3,
-              onChanged: (_) => setState(() {}),
-              decoration: _decoration(null, hint: '一覧表示用の短い要約（空なら研修内容を表示）'),
-            ),
-
-            const SizedBox(height: 20),
-            _section('決定事項'),
-            TextField(
-              controller: _decisionsCtrl,
-              maxLines: 4,
-              onChanged: (_) => setState(() {}),
-              decoration: _decoration(null),
-            ),
-
-            const SizedBox(height: 20),
-            _section('ToDo / 次回までに'),
-            TextField(
-              controller: _todoCtrl,
-              maxLines: 4,
-              onChanged: (_) => setState(() {}),
-              decoration: _decoration(null),
-            ),
-
-            const SizedBox(height: 20),
-            _section('Notion原典リンク'),
-            Text('過去の議事録・研修記録はNotionのURLを貼って紐付けできます',
-                style: TextStyle(fontSize: 12, color: context.colors.textTertiary)),
-            const SizedBox(height: 6),
-            TextField(
-              controller: _notionCtrl,
-              keyboardType: TextInputType.url,
-              onChanged: (_) => setState(() {}),
-              decoration: _decoration(null, hint: 'https://www.notion.so/...'),
+              decoration: _decoration(null, hint: '一覧で表示するメモ'),
             ),
 
             const SizedBox(height: 24),
@@ -601,6 +575,54 @@ class _MeetingMinutesEditScreenState extends State<MeetingMinutesEditScreen> {
                   ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
                   : Text(_isEdit ? '更新' : '登 録',
                       style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _materialTile(int i, _Material m) {
+    final hasUrl = m.url.startsWith('http');
+    return Container(
+      margin: const EdgeInsets.only(bottom: 6),
+      decoration: BoxDecoration(
+        color: context.colors.cardBg,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: context.colors.borderLight),
+      ),
+      child: ListTile(
+        dense: true,
+        leading: Icon(
+          hasUrl ? Icons.link : Icons.insert_drive_file_outlined,
+          size: 18,
+          color: hasUrl ? AppColors.primary : context.colors.textSecondary,
+        ),
+        title: Text(m.label.isNotEmpty ? m.label : m.url,
+            style: const TextStyle(fontSize: 13), overflow: TextOverflow.ellipsis),
+        subtitle: m.label.isNotEmpty && m.url.isNotEmpty
+            ? Text(m.url,
+                style: TextStyle(fontSize: 11, color: context.colors.textTertiary),
+                overflow: TextOverflow.ellipsis)
+            : null,
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (hasUrl)
+              IconButton(
+                icon: const Icon(Icons.open_in_new, size: 16),
+                onPressed: () async {
+                  final uri = Uri.tryParse(m.url);
+                  if (uri != null) await launchUrl(uri, mode: LaunchMode.externalApplication);
+                },
+              ),
+            IconButton(
+              icon: const Icon(Icons.edit, size: 16),
+              onPressed: () => _editMaterial(i),
+            ),
+            IconButton(
+              icon: Icon(Icons.close, size: 16, color: Colors.red.shade400),
+              onPressed: () => setState(() => _materials.removeAt(i)),
             ),
           ],
         ),
@@ -665,7 +687,77 @@ class _MeetingMinutesEditScreenState extends State<MeetingMinutesEditScreen> {
 }
 
 // ============================================================
-// 参加者選択ダイアログ（複数選択）
+// 資料モデル + ダイアログ
+// ============================================================
+class _Material {
+  final String label;
+  final String url;
+  const _Material({required this.label, required this.url});
+
+  // Firestore保存形式は "label|url"（labelなしなら url のみ）
+  String toStorage() => label.isEmpty ? url : '$label|$url';
+
+  factory _Material.fromRaw(String raw) {
+    if (raw.contains('|')) {
+      final i = raw.indexOf('|');
+      return _Material(label: raw.substring(0, i), url: raw.substring(i + 1));
+    }
+    return _Material(label: '', url: raw);
+  }
+}
+
+class _MaterialDialog extends StatefulWidget {
+  final _Material? initial;
+  const _MaterialDialog({this.initial});
+  @override
+  State<_MaterialDialog> createState() => _MaterialDialogState();
+}
+
+class _MaterialDialogState extends State<_MaterialDialog> {
+  late final _label = TextEditingController(text: widget.initial?.label ?? '');
+  late final _url = TextEditingController(text: widget.initial?.url ?? '');
+
+  @override
+  void dispose() {
+    _label.dispose();
+    _url.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(widget.initial == null ? '資料を追加' : '資料を編集'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextField(
+            controller: _label,
+            decoration: const InputDecoration(labelText: 'タイトル（任意）'),
+          ),
+          const SizedBox(height: 8),
+          TextField(
+            controller: _url,
+            keyboardType: TextInputType.url,
+            decoration: const InputDecoration(labelText: 'URL / ファイル名'),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('キャンセル')),
+        TextButton(
+          onPressed: () {
+            Navigator.pop(context, _Material(label: _label.text.trim(), url: _url.text.trim()));
+          },
+          child: const Text('OK', style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold)),
+        ),
+      ],
+    );
+  }
+}
+
+// ============================================================
+// 参加者選択（複数）
 // ============================================================
 class _StaffMultiPickerDialog extends StatefulWidget {
   final List<_Staff> all;
@@ -764,7 +856,7 @@ class _StaffMultiPickerDialogState extends State<_StaffMultiPickerDialog> {
 }
 
 // ============================================================
-// モデル / 選択肢マスタ
+// モデル
 // ============================================================
 class _Staff {
   final String id;
@@ -773,19 +865,33 @@ class _Staff {
   const _Staff({required this.id, required this.name, required this.kana});
 }
 
-class MeetingOptions {
-  static const List<({String id, String label})> category = [
-    (id: 'regular', label: '定例'),
-    (id: 'case', label: 'ケース会議'),
-    (id: 'management', label: '運営'),
-    (id: 'training', label: '研修'),
-    (id: 'other', label: 'その他'),
+class MeetingCategory {
+  final String id;
+  final String label;
+  const MeetingCategory({required this.id, required this.label});
+
+  static const all = <MeetingCategory>[
+    MeetingCategory(id: 'overall_support_meeting', label: '全体支援会議'),
+    MeetingCategory(id: 'abuse_committee', label: '虐待防止/身体拘束適正化委員会'),
+    MeetingCategory(id: 'abuse_training', label: '虐待防止研修'),
+    MeetingCategory(id: 'restraint_training', label: '身体的拘束適正化研修'),
+    MeetingCategory(id: 'infection_committee', label: '感染防止対策委員会'),
+    MeetingCategory(id: 'infection_training', label: '感染症・食中毒予防研修'),
+    MeetingCategory(id: 'infection_drill', label: '感染症・食中毒予防訓練'),
+    MeetingCategory(id: 'infection_bcp_training', label: '感染症BCP研修'),
+    MeetingCategory(id: 'infection_bcp_drill', label: '感染症BCP訓練'),
+    MeetingCategory(id: 'disaster_bcp_training', label: '自然災害BCP研修'),
+    MeetingCategory(id: 'disaster_bcp_drill', label: '自然災害BCP訓練'),
+    MeetingCategory(id: 'disaster_drill', label: '防災訓練'),
+    MeetingCategory(id: 'practical_training', label: '実践研修'),
+    MeetingCategory(id: 'liaison_meeting', label: '児童発達支援事業所連絡会'),
+    MeetingCategory(id: 'other', label: 'その他'),
   ];
 
-  static String labelOf(List<({String id, String label})> list, String id) {
-    for (final o in list) {
-      if (o.id == id) return o.label;
+  static String labelOf(String id) {
+    for (final c in all) {
+      if (c.id == id) return c.label;
     }
-    return id;
+    return 'その他';
   }
 }
