@@ -43,11 +43,11 @@ class _AddEventDialogState extends State<AddEventDialog> {
   late DateTime _startDate;
   late DateTime _endDate;
   
-  String _selectedCategory = 'マイカレンダー'; 
+  String _selectedCategory = 'レッスン';
   final List<Map<String, dynamic>> _categories = [
-    {'label': 'マイカレンダー', 'color': 0xFF8E24AA},
     {'label': 'レッスン', 'color': 0xFF039BE5},
     {'label': 'イベント', 'color': 0xFF33B679},
+    {'label': 'マイカレンダー', 'color': 0xFF8E24AA},
   ];
   
   String _recurrenceType = 'なし';
