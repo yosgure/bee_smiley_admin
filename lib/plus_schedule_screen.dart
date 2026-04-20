@@ -3316,10 +3316,18 @@ final plusStaff = _staffList.where((s) =>
         break;
       case 'accident':
         if (mounted) {
-          await Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => const HiyariScreen()),
-          );
+          final isWide = MediaQuery.of(context).size.width >= 600;
+          if (isWide) {
+            AdminShell.showOverlay(
+              context,
+              HiyariScreen(onClose: () => AdminShell.hideOverlay(context)),
+            );
+          } else {
+            await Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const HiyariScreen()),
+            );
+          }
         }
         break;
       case 'crm':
