@@ -14,6 +14,7 @@ import 'student_detail_screen.dart';
 import 'student_profile_dialog.dart';
 import 'hiyari_screen.dart';
 import 'complaint_screen.dart';
+import 'meeting_minutes_screen.dart';
 
 // 講師名・教室名クリック時に生徒編集ダイアログの発火を抑制するフラグ
 bool _quickEditTappedGlobal = false;
@@ -3341,12 +3342,23 @@ final plusStaff = _staffList.where((s) =>
           }
         }
         break;
-      case 'crm':
       case 'meeting':
+        if (mounted) {
+          final isWide = MediaQuery.of(context).size.width >= 600;
+          if (isWide) {
+            AdminShell.showOverlay(context, const MeetingMinutesScreen());
+          } else {
+            await Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const MeetingMinutesScreen()),
+            );
+          }
+        }
+        break;
+      case 'crm':
       case 'training':
         const labels = {
           'crm': 'CRM',
-          'meeting': '会議録',
           'training': '法定研修',
         };
         if (mounted) {
@@ -3422,8 +3434,8 @@ final plusStaff = _staffList.where((s) =>
               child: Divider(height: 1, color: border),
             ),
             menuItem('crm', Icons.people_alt_outlined, 'CRM'),
-            menuItem('meeting', Icons.description_outlined, '会議録'),
-            menuItem('accident', Icons.warning_amber_outlined, '事故ヒヤリハット'),
+            menuItem('meeting', Icons.description_outlined, '議事録'),
+            menuItem('accident', Icons.warning_amber_outlined, '事故・ヒヤリハット'),
             menuItem('complaint', Icons.report_gmailerrorred_outlined, '苦情受付'),
             menuItem('training', Icons.school_outlined, '法定研修'),
           ],

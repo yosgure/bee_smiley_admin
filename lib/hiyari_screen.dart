@@ -31,7 +31,7 @@ class _HiyariScreenState extends State<HiyariScreen> {
     return Scaffold(
       backgroundColor: context.colors.scaffoldBg,
       appBar: AppBar(
-        title: const Text('事故ヒヤリハット', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
+        title: const Text('事故・ヒヤリハット', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
         backgroundColor: context.colors.cardBg,
         elevation: 0,
         foregroundColor: context.colors.textPrimary,
