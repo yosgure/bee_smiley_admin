@@ -159,6 +159,10 @@ service cloud.firestore {
       allow read: if isStaff();
       allow create, update, delete: if isStaff();
     }
+    match /meeting_minutes/{docId} {
+      allow read: if isStaff();
+      allow create, update, delete: if isStaff();
+    }
     match /hiyari_reports/{reportId} {
       function hiyariValid(d) {
         return d.type in ['child', 'environment']
