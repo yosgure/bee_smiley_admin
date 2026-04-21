@@ -4148,7 +4148,7 @@ final plusStaff = _staffList.where((s) =>
                   const SizedBox(height: 2),
                   Builder(
                     builder: (context) {
-                      final summary = _getTeacherLessonSummary(index);
+                      final richMsg = _buildTooltipRichMessage(index);
                       final dateWidget = MouseRegion(
                         cursor: SystemMouseCursors.click,
                         child: GestureDetector(
@@ -4172,13 +4172,21 @@ final plusStaff = _staffList.where((s) =>
                           ),
                         ),
                       );
-                      if (summary.isEmpty) return dateWidget;
+                      if (richMsg == null) return dateWidget;
                       return Tooltip(
-                        message: summary,
+                        richMessage: richMsg,
                         preferBelow: true,
                         verticalOffset: 20,
-                        textStyle: const TextStyle(color: Colors.white, fontSize: 12, height: 1.5),
-                        decoration: BoxDecoration(color: Colors.grey[800], borderRadius: BorderRadius.circular(8)),
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                        margin: const EdgeInsets.symmetric(horizontal: 16),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF2A2E33),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+                          boxShadow: [
+                            BoxShadow(color: Colors.black.withValues(alpha: 0.3), blurRadius: 12, offset: const Offset(0, 4)),
+                          ],
+                        ),
                         waitDuration: const Duration(milliseconds: 300),
                         child: dateWidget,
                       );
@@ -5702,8 +5710,10 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
   
   
 
-  /// その日の講師ごとのコマ数を取得（欠席除外、五十音順）＋ その日の欠席・半休スタッフを付記
-  String _getTeacherLessonSummary(int dayIndex) {
+  /// 日付ホバー用のツールチップ内容を TextSpan で構築
+  /// コマ数（見出し + 各担当）、半休（名前＋勤務時間）、欠席（名前）のセクション構成。
+  /// 該当者がいないセクションは非表示。
+  InlineSpan? _buildTooltipRichMessage(int dayIndex) {
     final lessonsForDay = _lessons.where((lesson) =>
         lesson['dayIndex'] == dayIndex &&
         !((lesson['course'] as String? ?? '').startsWith('欠席'))).toList();
@@ -5740,11 +5750,11 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
         return kanaA.compareTo(kanaB);
       });
 
-    // 欠席・半休スタッフを拾う
+    // 欠席・半休スタッフ + 半休の勤務時間
     final date = _weekStart.add(Duration(days: dayIndex));
     final shiftsForDay = _shiftData[_dateKey(date)] ?? [];
     final absentNames = <String>[];
-    final halfNames = <String>[];
+    final halfEntries = <String>[]; // 「名字  9:00-13:00」形式
     for (final shift in shiftsForDay) {
       final staffId = shift['staffId'] as String?;
       final status = shift['shiftStatus'] as String?;
@@ -5754,18 +5764,55 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
       if (status == 'off') {
         absentNames.add(lastName);
       } else if (status == 'half') {
-        halfNames.add(lastName);
+        final start = (shift['start'] as String? ?? '').trim();
+        final end = (shift['end'] as String? ?? '').trim();
+        if (start.isNotEmpty && end.isNotEmpty) {
+          halfEntries.add('$lastName  $start–$end');
+        } else {
+          halfEntries.add(lastName);
+        }
       }
     }
 
-    final lines = <String>[];
-    if (sortedTeachers.isNotEmpty) {
-      lines.addAll(sortedTeachers.map((name) => '$name: ${teacherCounts[name]}コマ'));
+    if (teacherCounts.isEmpty && absentNames.isEmpty && halfEntries.isEmpty) {
+      return null;
     }
-    if (absentNames.isNotEmpty) lines.add('欠席: ${absentNames.join('、')}');
-    if (halfNames.isNotEmpty) lines.add('半休: ${halfNames.join('、')}');
 
-    return lines.join('\n');
+    const body = TextStyle(color: Colors.white, fontSize: 12, height: 1.5);
+    const sectionLabel = TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 0.5);
+    final halfLabel = TextStyle(color: Colors.orange.shade300, fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 0.5);
+    final absentLabel = TextStyle(color: Colors.red.shade300, fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 0.5);
+
+    final children = <InlineSpan>[];
+
+    if (sortedTeachers.isNotEmpty) {
+      children.add(const TextSpan(text: 'コマ数\n', style: sectionLabel));
+      for (final name in sortedTeachers) {
+        children.add(TextSpan(text: '  $name  ', style: body));
+        children.add(TextSpan(
+          text: '${teacherCounts[name]}コマ\n',
+          style: body.copyWith(fontWeight: FontWeight.w600),
+        ));
+      }
+    }
+
+    if (halfEntries.isNotEmpty) {
+      if (children.isNotEmpty) children.add(const TextSpan(text: '\n'));
+      children.add(TextSpan(text: '半休\n', style: halfLabel));
+      for (final e in halfEntries) {
+        children.add(TextSpan(text: '  $e\n', style: body));
+      }
+    }
+
+    if (absentNames.isNotEmpty) {
+      if (children.isNotEmpty) children.add(const TextSpan(text: '\n'));
+      children.add(TextSpan(text: '欠席\n', style: absentLabel));
+      for (final name in absentNames) {
+        children.add(TextSpan(text: '  $name\n', style: body));
+      }
+    }
+
+    return TextSpan(children: children, style: body);
   }
 
 // 勤怠の3状態セグメント（出勤 / 半休 / 休）
@@ -6148,8 +6195,8 @@ for (var staff in _staffList.where((s) => s['showInSchedule'] != false)) {
     final data = entry.value;
     final status = (data['shiftStatus'] as String?) ?? 'full';
     final isWorking = status != 'off';
-    // 時刻フィールドは 'full' のときのみ入力可
-    final hasTime = status == 'full';
+    // 時刻・備考は出勤（full/half）で保存。半休でも勤務時間を残してツールチップで参照する
+    final hasTime = status != 'off';
     shiftsToSave.add({
       'staffId': staffId,
       'name': data['name'],
