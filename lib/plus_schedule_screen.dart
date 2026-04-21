@@ -5780,15 +5780,20 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
     final halfEntries = <String>[]; // 「名字  9:00-13:00」形式
     for (final shift in shiftsForDay) {
       final staffId = shift['staffId'] as String?;
-      final status = shift['shiftStatus'] as String?;
-      if (staffId == null) continue;
-      // staffId が全スタッフマップにない場合も、shift に保存された name をフォールバックに使う
-      var lastName = staffIdToLastName[staffId];
+      final rawStatus = shift['shiftStatus'] as String?;
+      final isWorking = shift['isWorking'];
+      // 旧データ（shiftStatus 未設定）にも対応: isWorking == false なら off 扱い
+      final String? status = rawStatus ??
+          (isWorking == false ? 'off' : (isWorking == true ? 'full' : null));
+
+      // staffId が null / 全スタッフマップにない場合でも、shift に保存された name をフォールバックに使う
+      String? lastName = staffId == null ? null : staffIdToLastName[staffId];
       if (lastName == null) {
         final fallback = (shift['name'] as String? ?? '').trim();
         if (fallback.isNotEmpty) lastName = fallback.split(' ').first;
       }
       if (lastName == null || lastName.isEmpty) continue;
+
       if (status == 'off') {
         absentNames.add(lastName);
       } else if (status == 'half') {
