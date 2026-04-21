@@ -131,8 +131,11 @@ class _PlusScheduleContentState extends State<PlusScheduleContent> with Automati
   // 部屋リスト
   final List<String> _roomList = ['つき', 'ほし', 'にじ', 'そら', '訪問'];
 
-  // スタッフリスト（シフト編集用）
+  // スタッフリスト（シフト編集用、プラス担当のみ）
   List<Map<String, dynamic>> _staffList = [];
+
+  // 全スタッフの名前マップ（ツールチップの欠席・半休表示用。プラス以外の人の欠席も表示する）
+  Map<String, String> _allStaffIdToName = {};
   
   // ドラッグ中のレッスン（行間インジケーター表示用）
   Map<String, dynamic>? _draggingLesson;
@@ -1195,6 +1198,12 @@ void _goToThisWeek() {
   'dailySlotTarget': data['dailySlotTarget'] ?? data['workDaysPerWeek'],  // 1日あたりの目標コマ数（旧workDaysPerWeekをフォールバック）
 };
           }).toList();
+
+          // ツールチップ用に全スタッフの名前をマッピング（プラス以外のスタッフの欠席も拾う）
+          _allStaffIdToName = {
+            for (final doc in snapshot.docs)
+              doc.id: (doc.data()['name'] as String? ?? '').trim(),
+          };
         });
       }
     } catch (e) {
@@ -5732,15 +5741,29 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
     }
 
     final lastNameToFurigana = <String, String>{};
-    final staffIdToLastName = <String, String>{};
     for (final staff in _staffList) {
       final fullName = (staff['name'] as String? ?? '').trim();
       final furigana = (staff['furigana'] as String? ?? '').trim();
       final lastName = fullName.split(' ').first;
       if (lastName.isEmpty) continue;
       lastNameToFurigana[lastName] = furigana.isNotEmpty ? furigana : lastName;
+    }
+
+    // 欠席・半休判定用の staffId → 名字マップはプラスに限定せず全スタッフから引く
+    // （プラス担当でない人でも欠席設定があれば表示したいため）
+    final staffIdToLastName = <String, String>{};
+    _allStaffIdToName.forEach((staffId, fullName) {
+      final lastName = fullName.split(' ').first;
+      if (lastName.isNotEmpty) staffIdToLastName[staffId] = lastName;
+    });
+    // プラス側にしか登録されていない可能性もあるのでフォールバックとして _staffList も反映
+    for (final staff in _staffList) {
       final staffId = staff['id'] as String?;
-      if (staffId != null && staffId.isNotEmpty) staffIdToLastName[staffId] = lastName;
+      if (staffId == null || staffId.isEmpty) continue;
+      final fullName = (staff['name'] as String? ?? '').trim();
+      final lastName = fullName.split(' ').first;
+      if (lastName.isEmpty) continue;
+      staffIdToLastName.putIfAbsent(staffId, () => lastName);
     }
 
     final sortedTeachers = teacherCounts.keys.toList()
@@ -5759,8 +5782,13 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
       final staffId = shift['staffId'] as String?;
       final status = shift['shiftStatus'] as String?;
       if (staffId == null) continue;
-      final lastName = staffIdToLastName[staffId];
-      if (lastName == null) continue;
+      // staffId が全スタッフマップにない場合も、shift に保存された name をフォールバックに使う
+      var lastName = staffIdToLastName[staffId];
+      if (lastName == null) {
+        final fallback = (shift['name'] as String? ?? '').trim();
+        if (fallback.isNotEmpty) lastName = fallback.split(' ').first;
+      }
+      if (lastName == null || lastName.isEmpty) continue;
       if (status == 'off') {
         absentNames.add(lastName);
       } else if (status == 'half') {
@@ -5774,7 +5802,8 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
       }
     }
 
-    if (teacherCounts.isEmpty && absentNames.isEmpty && halfEntries.isEmpty) {
+    // コマ数も半休もない日はツールチップ自体を出さない（非営業日等でノイズにならないように）
+    if (teacherCounts.isEmpty && halfEntries.isEmpty && absentNames.isEmpty) {
       return null;
     }
 
@@ -5804,9 +5833,15 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
       }
     }
 
-    if (absentNames.isNotEmpty) {
-      if (children.isNotEmpty) children.add(const TextSpan(text: '\n'));
-      children.add(TextSpan(text: '欠席\n', style: absentLabel));
+    // 欠席セクションは常に表示（該当者がいない場合は「なし」）
+    if (children.isNotEmpty) children.add(const TextSpan(text: '\n'));
+    children.add(TextSpan(text: '欠席\n', style: absentLabel));
+    if (absentNames.isEmpty) {
+      children.add(TextSpan(
+        text: '  なし\n',
+        style: body.copyWith(color: Colors.white54),
+      ));
+    } else {
       for (final name in absentNames) {
         children.add(TextSpan(text: '  $name\n', style: body));
       }
