@@ -5778,6 +5778,7 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
     final shiftsForDay = _shiftData[_dateKey(date)] ?? [];
     final absentNames = <String>[];
     final halfEntries = <String>[]; // 「名字  9:00-13:00」形式
+    final recordedStaffIds = <String>{};
     for (final shift in shiftsForDay) {
       final staffId = shift['staffId'] as String?;
       final rawStatus = shift['shiftStatus'] as String?;
@@ -5793,6 +5794,7 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
         if (fallback.isNotEmpty) lastName = fallback.split(' ').first;
       }
       if (lastName == null || lastName.isEmpty) continue;
+      if (staffId != null) recordedStaffIds.add(staffId);
 
       if (status == 'off') {
         absentNames.add(lastName);
@@ -5805,6 +5807,19 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
           halfEntries.add(lastName);
         }
       }
+    }
+
+    // part-time スタッフはシフトが保存されていない日はデフォルトで「休」扱いのため欠席に含める
+    // （シフト編集ダイアログの初期値がそのまま運用されているケースをカバー）
+    for (final staff in _staffList) {
+      if (staff['staffType'] == 'fulltime') continue;
+      if (staff['showInSchedule'] == false) continue;
+      final sid = staff['id'] as String?;
+      if (sid == null || sid.isEmpty) continue;
+      if (recordedStaffIds.contains(sid)) continue;
+      final fullName = (staff['name'] as String? ?? '').trim();
+      final lastName = fullName.split(' ').first;
+      if (lastName.isNotEmpty) absentNames.add(lastName);
     }
 
     // コマ数も半休もない日はツールチップ自体を出さない（非営業日等でノイズにならないように）
