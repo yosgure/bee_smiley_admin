@@ -1741,10 +1741,10 @@ void _goToPage(int page) {
           Padding(
             padding: const EdgeInsets.fromLTRB(8, 0, 8, 6),
             child: Container(
-              height: 32,
+              height: 36,
               decoration: BoxDecoration(
                 color: context.colors.chipBg,
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: BorderRadius.circular(10),
               ),
               child: Row(
                 children: [
@@ -1773,23 +1773,20 @@ void _goToPage(int page) {
           }
         },
         child: Container(
-          margin: const EdgeInsets.all(2),
+          margin: const EdgeInsets.all(3),
           decoration: BoxDecoration(
-            color: isSelected ? context.colors.cardBg : Colors.transparent,
-            borderRadius: BorderRadius.circular(6),
-            boxShadow: isSelected
-                ? [BoxShadow(color: Colors.black.withValues(alpha: 0.08), blurRadius: 2)]
-                : null,
+            color: isSelected ? AppColors.primary.withValues(alpha: 0.18) : Colors.transparent,
+            borderRadius: BorderRadius.circular(8),
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(icon, size: 14, color: isSelected ? AppColors.primary : context.colors.textSecondary),
-              const SizedBox(width: 4),
+              Icon(icon, size: 16, color: isSelected ? AppColors.primary : context.colors.textSecondary),
+              const SizedBox(width: 5),
               Text(
                 label,
                 style: TextStyle(
-                  fontSize: 12,
+                  fontSize: 13,
                   fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
                   color: isSelected ? AppColors.primary : context.colors.textSecondary,
                 ),
@@ -5705,7 +5702,7 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
   
   
 
-  /// その日の講師ごとのコマ数を取得（欠席除外、五十音順）
+  /// その日の講師ごとのコマ数を取得（欠席除外、五十音順）＋ その日の欠席・半休スタッフを付記
   String _getTeacherLessonSummary(int dayIndex) {
     final lessonsForDay = _lessons.where((lesson) =>
         lesson['dayIndex'] == dayIndex &&
@@ -5724,16 +5721,16 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
       }
     }
 
-    if (teacherCounts.isEmpty) return '';
-
     final lastNameToFurigana = <String, String>{};
+    final staffIdToLastName = <String, String>{};
     for (final staff in _staffList) {
-      final fullName = staff['name'] as String? ?? '';
-      final furigana = staff['furigana'] as String? ?? '';
+      final fullName = (staff['name'] as String? ?? '').trim();
+      final furigana = (staff['furigana'] as String? ?? '').trim();
       final lastName = fullName.split(' ').first;
-      if (lastName.isNotEmpty) {
-        lastNameToFurigana[lastName] = furigana.isNotEmpty ? furigana : lastName;
-      }
+      if (lastName.isEmpty) continue;
+      lastNameToFurigana[lastName] = furigana.isNotEmpty ? furigana : lastName;
+      final staffId = staff['id'] as String?;
+      if (staffId != null && staffId.isNotEmpty) staffIdToLastName[staffId] = lastName;
     }
 
     final sortedTeachers = teacherCounts.keys.toList()
@@ -5743,9 +5740,32 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
         return kanaA.compareTo(kanaB);
       });
 
-    return sortedTeachers
-        .map((name) => '$name: ${teacherCounts[name]}コマ')
-        .join('\n');
+    // 欠席・半休スタッフを拾う
+    final date = _weekStart.add(Duration(days: dayIndex));
+    final shiftsForDay = _shiftData[_dateKey(date)] ?? [];
+    final absentNames = <String>[];
+    final halfNames = <String>[];
+    for (final shift in shiftsForDay) {
+      final staffId = shift['staffId'] as String?;
+      final status = shift['shiftStatus'] as String?;
+      if (staffId == null) continue;
+      final lastName = staffIdToLastName[staffId];
+      if (lastName == null) continue;
+      if (status == 'off') {
+        absentNames.add(lastName);
+      } else if (status == 'half') {
+        halfNames.add(lastName);
+      }
+    }
+
+    final lines = <String>[];
+    if (sortedTeachers.isNotEmpty) {
+      lines.addAll(sortedTeachers.map((name) => '$name: ${teacherCounts[name]}コマ'));
+    }
+    if (absentNames.isNotEmpty) lines.add('欠席: ${absentNames.join('、')}');
+    if (halfNames.isNotEmpty) lines.add('半休: ${halfNames.join('、')}');
+
+    return lines.join('\n');
   }
 
 // 勤怠の3状態セグメント（出勤 / 半休 / 休）

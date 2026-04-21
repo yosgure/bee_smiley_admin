@@ -425,10 +425,10 @@ class _PlusDashboardContentState extends State<PlusDashboardContent> {
           Padding(
             padding: const EdgeInsets.fromLTRB(8, 6, 8, 4),
             child: Container(
-              height: 32,
+              height: 36,
               decoration: BoxDecoration(
                 color: context.colors.chipBg,
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: BorderRadius.circular(10),
               ),
               child: Row(
                 children: [
@@ -455,23 +455,20 @@ class _PlusDashboardContentState extends State<PlusDashboardContent> {
       child: GestureDetector(
         onTap: () => setState(() => _mobileViewIndex = index),
         child: Container(
-          margin: const EdgeInsets.all(2),
+          margin: const EdgeInsets.all(3),
           decoration: BoxDecoration(
-            color: isSelected ? context.colors.cardBg : Colors.transparent,
-            borderRadius: BorderRadius.circular(6),
-            boxShadow: isSelected
-                ? [BoxShadow(color: context.colors.shadow, blurRadius: 2)]
-                : null,
+            color: isSelected ? AppColors.primary.withValues(alpha: 0.18) : Colors.transparent,
+            borderRadius: BorderRadius.circular(8),
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(icon, size: 14, color: isSelected ? AppColors.primary : context.colors.textSecondary),
-              const SizedBox(width: 4),
+              Icon(icon, size: 16, color: isSelected ? AppColors.primary : context.colors.textSecondary),
+              const SizedBox(width: 5),
               Text(
                 label,
                 style: TextStyle(
-                  fontSize: 12,
+                  fontSize: 13,
                   fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
                   color: isSelected ? AppColors.primary : context.colors.textSecondary,
                 ),

@@ -120,7 +120,7 @@ class _HiyariListTile extends StatelessWidget {
       decoration: BoxDecoration(
         color: context.colors.cardBg,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: context.colors.borderLight, width: 0.5),
+        border: Border.all(color: context.colors.borderMedium, width: 1),
       ),
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
@@ -269,7 +269,6 @@ class _HiyariEditScreenState extends State<HiyariEditScreen> {
   final _factorCtrl = TextEditingController();
   final _preventionCtrl = TextEditingController();
   bool _saving = false;
-  bool _showAdmin = false;
   String _status = 'pending';
 
   List<_Child> _allChildren = [];
@@ -490,7 +489,7 @@ class _HiyariEditScreenState extends State<HiyariEditScreen> {
     return Scaffold(
       backgroundColor: context.colors.scaffoldBg,
       appBar: AppBar(
-        title: Text(_isEdit ? '報告を編集' : 'ヒヤリ報告',
+        title: Text(_isEdit ? '報告を編集' : '事故ヒヤリハット報告書',
             style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
         backgroundColor: context.colors.cardBg,
         elevation: 0,
@@ -618,40 +617,35 @@ class _HiyariEditScreenState extends State<HiyariEditScreen> {
                 fillColor: context.colors.cardBg,
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(10),
-                  borderSide: BorderSide(color: context.colors.borderLight),
+                  borderSide: BorderSide(color: context.colors.borderMedium),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: BorderSide(color: context.colors.borderMedium),
                 ),
               ),
             ),
-            const SizedBox(height: 16),
-            InkWell(
-              onTap: () => setState(() => _showAdmin = !_showAdmin),
-              borderRadius: BorderRadius.circular(8),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 8),
-                child: Row(
-                  children: [
-                    Icon(_showAdmin ? Icons.expand_less : Icons.expand_more,
-                        size: 20, color: context.colors.textSecondary),
-                    const SizedBox(width: 4),
-                    Text('管理者記入欄（要因分析・対策）',
-                        style: TextStyle(fontSize: 13, color: context.colors.textSecondary, fontWeight: FontWeight.w600)),
-                  ],
-                ),
-              ),
+            const SizedBox(height: 20),
+            _sectionTitle('(7) 要因分析'),
+            TextField(
+              controller: _factorCtrl,
+              maxLines: 3,
+              decoration: _adminDecoration('要因分析'),
             ),
-            if (_showAdmin) ...[
-              const SizedBox(height: 4),
-              TextField(controller: _factorCtrl, maxLines: 3, decoration: _adminDecoration('要因分析')),
-              const SizedBox(height: 10),
-              TextField(controller: _preventionCtrl, maxLines: 3, decoration: _adminDecoration('再発防止策')),
-              const SizedBox(height: 10),
-              _chipGroup(
-                options: HiyariOptions.status,
-                selected: {_status},
-                onToggle: (id) => setState(() => _status = id),
-                multiSelect: false,
-              ),
-            ],
+            const SizedBox(height: 20),
+            _sectionTitle('(8) 再発防止策'),
+            TextField(
+              controller: _preventionCtrl,
+              maxLines: 3,
+              decoration: _adminDecoration('再発防止策'),
+            ),
+            const SizedBox(height: 12),
+            _chipGroup(
+              options: HiyariOptions.status,
+              selected: {_status},
+              onToggle: (id) => setState(() => _status = id),
+              multiSelect: false,
+            ),
             const SizedBox(height: 24),
             ElevatedButton(
               onPressed: (_canSubmit && !_saving) ? _submit : null,
@@ -713,13 +707,17 @@ class _HiyariEditScreenState extends State<HiyariEditScreen> {
 
   InputDecoration _adminDecoration(String label) {
     return InputDecoration(
-      labelText: label,
-      labelStyle: TextStyle(fontSize: 13, color: context.colors.textSecondary),
+      hintText: label,
+      hintStyle: TextStyle(fontSize: 13, color: context.colors.textHint),
       filled: true,
       fillColor: context.colors.cardBg,
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(10),
-        borderSide: BorderSide(color: context.colors.borderLight),
+        borderSide: BorderSide(color: context.colors.borderMedium),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(10),
+        borderSide: BorderSide(color: context.colors.borderMedium),
       ),
     );
   }

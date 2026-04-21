@@ -104,7 +104,9 @@ class _ChatListScreenState extends State<ChatListScreen> {
               (data['groupName'] as String).isNotEmpty);
 
       if (!mounted) return;
-      Navigator.push(
+      // 通知経由で開いた詳細画面は、戻るボタンでチャット一覧（最初のルート）に戻すため
+      // pushAndRemoveUntil を使って現在のスタックを一覧までに揃える
+      Navigator.pushAndRemoveUntil(
         context,
         MaterialPageRoute(
           builder: (_) => Scaffold(
@@ -133,6 +135,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
             ),
           ),
         ),
+        (route) => route.isFirst,
       );
     } catch (e) {
       debugPrint('通知からのチャット遷移失敗: $e');
@@ -616,7 +619,7 @@ class _RoomListTileState extends State<_RoomListTile> {
       final photoUrl = room['photoUrl'] as String?;
       return ListTile(
         selected: widget.isSelected, selectedTileColor: AppColors.primary.withOpacity(0.1),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
         leading: CircleAvatar(
           backgroundColor: AppColors.primary.withOpacity(0.15),
           backgroundImage: photoUrl != null && photoUrl.isNotEmpty ? NetworkImage(photoUrl) : null,
@@ -649,7 +652,7 @@ class _RoomListTileState extends State<_RoomListTile> {
         if (!snapshot.hasData) {
           // フェッチ完了まではスケルトン表示（names mapの古いデータでチラつくのを防止）
           return ListTile(
-            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
             leading: CircleAvatar(backgroundColor: context.colors.borderLight),
             title: Container(height: 14, width: 80, decoration: BoxDecoration(color: context.colors.borderLight, borderRadius: BorderRadius.circular(4))),
             subtitle: Container(height: 10, width: 120, margin: const EdgeInsets.only(top: 4), decoration: BoxDecoration(color: context.colors.chipBg, borderRadius: BorderRadius.circular(4))),
@@ -662,7 +665,7 @@ class _RoomListTileState extends State<_RoomListTile> {
         final isStaff = peerData['isStaff'] == true;
         return ListTile(
           selected: widget.isSelected, selectedTileColor: AppColors.primary.withOpacity(0.1),
-          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
           leading: CircleAvatar(
             backgroundColor: isStaff ? AppColors.primary.withOpacity(0.15) : AppColors.accent.shade100,
             backgroundImage: photoUrl != null && photoUrl.isNotEmpty ? NetworkImage(photoUrl) : null,
@@ -955,6 +958,20 @@ class _ChatDetailViewState extends State<ChatDetailView> {
   List<MapEntry<String, dynamic>> _filteredMembers = [];
   int _mentionStartIndex = -1;
   List<String> _mentionedUids = [];
+
+  // 返信引用タップで元メッセージへジャンプするために msgId → GlobalKey のマップを保持
+  final Map<String, GlobalKey> _messageKeys = {};
+
+  void _jumpToMessage(String messageId) {
+    final ctx = _messageKeys[messageId]?.currentContext;
+    if (ctx == null) return;
+    Scrollable.ensureVisible(
+      ctx,
+      duration: const Duration(milliseconds: 300),
+      alignment: 0.3,
+      curve: Curves.easeOut,
+    );
+  }
 
   void _startReply(String msgId, String type, String text) {
     final senderId = _lastMessageCache[msgId]?['senderId'] as String?;
@@ -1338,7 +1355,10 @@ class _ChatDetailViewState extends State<ChatDetailView> {
                 child: TextField(
                   controller: _textController, focusNode: _focusNode, maxLines: null, minLines: 1, keyboardType: TextInputType.multiline,
                   style: TextStyle(fontSize: 15, height: 1.5, fontFamily: 'NotoSansJP', fontFamilyFallback: ['Hiragino Sans', 'Roboto', 'sans-serif']),
-                  decoration: InputDecoration(hintText: 'メッセージを入力', filled: true, fillColor: context.colors.chipBg, border: OutlineInputBorder(borderRadius: BorderRadius.circular(24), borderSide: BorderSide.none), contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10)),
+                  decoration: InputDecoration(hintText: 'メッセージを入力', filled: true, fillColor: context.colors.chipBg, border: OutlineInputBorder(borderRadius: BorderRadius.circular(20), borderSide: BorderSide.none), contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6), isDense: true),
+                  contextMenuBuilder: (ctx, editableTextState) => AdaptiveTextSelectionToolbar.editableText(
+                    editableTextState: editableTextState,
+                  ),
                 ),
               ),
             ),
@@ -1484,37 +1504,42 @@ class _ChatDetailViewState extends State<ChatDetailView> {
   Widget _buildReplyQuote(Map<String, dynamic> replyTo, bool isMe) {
     final senderName = (replyTo['senderName'] ?? '') as String;
     final preview = (replyTo['preview'] ?? '') as String;
+    final targetId = (replyTo['messageId'] ?? '') as String;
     final bgColor =
         isMe ? context.colors.cardBg.withOpacity(0.5) : context.colors.cardBg.withOpacity(0.7);
     final accentColor = isMe ? AppColors.primary : context.colors.textSecondary;
-    return Container(
-      margin: const EdgeInsets.only(bottom: 6),
-      padding: const EdgeInsets.fromLTRB(8, 4, 8, 5),
-      decoration: BoxDecoration(
-        color: bgColor,
-        borderRadius: BorderRadius.circular(6),
-        border: Border(left: BorderSide(color: accentColor, width: 3)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            senderName,
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.bold,
-              color: accentColor,
+    return InkWell(
+      onTap: targetId.isEmpty ? null : () => _jumpToMessage(targetId),
+      borderRadius: BorderRadius.circular(6),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 6),
+        padding: const EdgeInsets.fromLTRB(8, 4, 8, 5),
+        decoration: BoxDecoration(
+          color: bgColor,
+          borderRadius: BorderRadius.circular(6),
+          border: Border(left: BorderSide(color: accentColor, width: 3)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              senderName,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+                color: accentColor,
+              ),
             ),
-          ),
-          const SizedBox(height: 1),
-          Text(
-            preview,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(fontSize: 12, color: context.colors.textSecondary),
-          ),
-        ],
+            const SizedBox(height: 1),
+            Text(
+              preview,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(fontSize: 12, color: context.colors.textSecondary),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1666,57 +1691,98 @@ class _ChatDetailViewState extends State<ChatDetailView> {
 
     final isDesktop = kIsWeb && MediaQuery.of(context).size.width >= AppBreakpoints.desktop;
 
-    Widget menuButton(bool visible) {
-      if (!visible) return const SizedBox(width: 24, height: 24);
+    // デスクトップは従来通り three-dot を時間 Column の外に置いて hover 表示
+    Widget desktopMenuButton(bool visible) {
+      if (!visible) return const SizedBox(width: 20, height: 20);
       return Material(
         color: Colors.transparent,
         child: InkWell(
-          borderRadius: BorderRadius.circular(12),
-          onTapDown: (details) {
-            if (isDesktop) {
-              _showPopupMenu(details.globalPosition, msgId, isMe, type, text);
-            } else {
-              _showActionSheet(msgId, isMe, type, text);
-            }
-          },
-          child: Container(width: 24, height: 24, alignment: Alignment.center, child: Icon(Icons.more_vert, size: 18, color: context.colors.textSecondary)),
+          borderRadius: BorderRadius.circular(10),
+          onTapDown: (details) => _showPopupMenu(details.globalPosition, msgId, isMe, type, text),
+          child: Container(width: 20, height: 20, alignment: Alignment.center, child: Icon(Icons.more_vert, size: 18, color: context.colors.textSecondary)),
         ),
       );
     }
 
-    return _HoverableMessageRow(
-      isDesktop: isDesktop,
-      hasImage: type == 'image',
-      onLongPress: () => _showActionSheet(msgId, isMe, type, text),
-      builder: (isHovering) => Align(
-        alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
-        child: Container(
-          margin: const EdgeInsets.only(bottom: 6), constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.75), padding: const EdgeInsets.only(top: 12),
-          child: Column(
-            crossAxisAlignment: isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
-            children: [
-              if (senderName.isNotEmpty) Padding(padding: const EdgeInsets.only(left: 8, bottom: 2), child: Text(senderName, style: TextStyle(fontSize: 11, color: context.colors.textSecondary))),
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  if (isMe) ...[
-                    menuButton(isDesktop ? isHovering : true),
-                    const SizedBox(width: 4),
-                    Column(crossAxisAlignment: CrossAxisAlignment.end, children: [if (readText.isNotEmpty) Text(readText, style: TextStyle(fontSize: 10, color: context.colors.textSecondary)), Text(timeStr, style: TextStyle(fontSize: 10, color: context.colors.textSecondary))]),
-                    const SizedBox(width: 8),
+    // モバイル: chevron を時間テキストの真横に並べ、まとめてタップ領域にする
+    Widget mobileTimeChevron() {
+      final timeStyle = TextStyle(fontSize: 10, color: context.colors.textSecondary);
+      // Icon の bbox は視覚的なグリフより上寄りなので、少し下にオフセットして時間の baseline に揃える
+      final chevronIcon = Transform.translate(
+        offset: const Offset(0, 3),
+        child: Icon(
+          isMe ? Icons.chevron_left : Icons.chevron_right,
+          size: 16,
+          color: context.colors.textSecondary,
+        ),
+      );
+      final timeCol = Column(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (isMe && readText.isNotEmpty) Text(readText, style: timeStyle),
+          Text(timeStr, style: timeStyle),
+        ],
+      );
+      return InkWell(
+        onTap: () => _showActionSheet(msgId, isMe, type, text),
+        borderRadius: BorderRadius.circular(8),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: isMe
+                ? [chevronIcon, const SizedBox(width: 2), timeCol]
+                : [Text(timeStr, style: timeStyle), const SizedBox(width: 2), chevronIcon],
+          ),
+        ),
+      );
+    }
+
+    final msgKey = _messageKeys.putIfAbsent(msgId, () => GlobalKey());
+    return KeyedSubtree(
+      key: msgKey,
+      child: _HoverableMessageRow(
+        isDesktop: isDesktop,
+        hasImage: type == 'image',
+        onLongPress: () => _showActionSheet(msgId, isMe, type, text),
+        builder: (isHovering) => Align(
+          alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
+          child: Container(
+            margin: const EdgeInsets.only(bottom: 2), constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.82), padding: const EdgeInsets.only(top: 2),
+            child: Column(
+              crossAxisAlignment: isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+              children: [
+                if (senderName.isNotEmpty) Padding(padding: const EdgeInsets.only(left: 8, bottom: 2), child: Text(senderName, style: TextStyle(fontSize: 11, color: context.colors.textSecondary))),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    if (isMe) ...[
+                      if (isDesktop) ...[
+                        desktopMenuButton(isHovering),
+                        const SizedBox(width: 2),
+                        Column(crossAxisAlignment: CrossAxisAlignment.end, children: [if (readText.isNotEmpty) Text(readText, style: TextStyle(fontSize: 10, color: context.colors.textSecondary)), Text(timeStr, style: TextStyle(fontSize: 10, color: context.colors.textSecondary))]),
+                      ] else
+                        mobileTimeChevron(),
+                      const SizedBox(width: 4),
+                    ],
+                    Flexible(child: isImageOnly && replyTo == null ? content : Container(padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9), decoration: BoxDecoration(color: isMe ? context.colors.chatMyBubble : context.colors.chatOtherBubble, borderRadius: BorderRadius.circular(12)), child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [if (replyTo != null) _buildReplyQuote(replyTo, isMe), content]))),
+                    if (!isMe) ...[
+                      const SizedBox(width: 4),
+                      if (isDesktop) ...[
+                        Text(timeStr, style: TextStyle(fontSize: 10, color: context.colors.textSecondary)),
+                        const SizedBox(width: 2),
+                        desktopMenuButton(isHovering),
+                      ] else
+                        mobileTimeChevron(),
+                    ],
                   ],
-                  Flexible(child: isImageOnly && replyTo == null ? content : Container(padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9), decoration: BoxDecoration(color: isMe ? context.colors.chatMyBubble : context.colors.chatOtherBubble, borderRadius: BorderRadius.circular(12)), child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [if (replyTo != null) _buildReplyQuote(replyTo, isMe), content]))),
-                  if (!isMe) ...[
-                    const SizedBox(width: 8),
-                    Text(timeStr, style: TextStyle(fontSize: 10, color: context.colors.textSecondary)),
-                    const SizedBox(width: 4),
-                    menuButton(isDesktop ? isHovering : true),
-                  ],
-                ],
-              ),
-              if (stamps.isNotEmpty) Padding(padding: EdgeInsets.only(top: 8, left: isMe ? 0 : 8, right: isMe ? 8 : 0), child: Wrap(spacing: 8, children: stamps.entries.map((entry) => _buildReactionChip(msgId, entry.key, entry.value, isMe)).toList())),
-            ],
+                ),
+                if (stamps.isNotEmpty) Padding(padding: EdgeInsets.only(top: 2, left: isMe ? 0 : 8, right: isMe ? 8 : 0), child: Wrap(spacing: 6, runSpacing: 2, children: stamps.entries.map((entry) => _buildReactionChip(msgId, entry.key, entry.value, isMe)).toList())),
+              ],
+            ),
           ),
         ),
       ),
@@ -1729,75 +1795,139 @@ class _ChatDetailViewState extends State<ChatDetailView> {
       // ロゴは絵文字より大きめに表示（絵文字は周囲に余白があるため）
       return Image.asset('assets/logo_beesmileymark.png', width: size * 1.4, height: size * 1.4);
     }
-    return Text(stamp, style: TextStyle(fontSize: size));
+    // CupertinoActionSheet 配下など Material の DefaultTextStyle が届かない場所では
+    // Flutter のデバッグ用黄色下線が出るため、decoration: none を明示
+    return Text(
+      stamp,
+      style: TextStyle(fontSize: size, decoration: TextDecoration.none),
+    );
   }
 
   void _showPopupMenu(Offset position, String msgId, bool isMe, String type, String text) {
     final RenderBox overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
     const quickEmojis = ['👍', '❤️', '😄', '🎉', '🙏', 'bee'];
+
+    // 項目の hover ハイライトを消すため、PopupMenuItem は enabled: false にしつつ、
+    // 内部に hoverColor 透明の InkWell を配置してタップだけをハンドリングする
+    PopupMenuItem<String> buildMenuItem({
+      required IconData icon,
+      required String label,
+      required VoidCallback onTapAction,
+      bool destructive = false,
+    }) {
+      final textColor = destructive ? Colors.red : context.colors.textPrimary;
+      final iconColor = destructive ? Colors.red : context.colors.textSecondary;
+      return PopupMenuItem<String>(
+        enabled: false,
+        padding: EdgeInsets.zero,
+        height: 0,
+        child: Builder(builder: (ctx) => InkWell(
+          hoverColor: Colors.transparent,
+          splashColor: Colors.transparent,
+          highlightColor: Colors.transparent,
+          mouseCursor: SystemMouseCursors.click,
+          onTap: () {
+            Navigator.of(ctx).pop();
+            onTapAction();
+          },
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+            child: Row(
+              children: [
+                Icon(icon, size: 18, color: iconColor),
+                const SizedBox(width: 8),
+                Text(label, style: TextStyle(fontSize: 14, color: textColor)),
+              ],
+            ),
+          ),
+        )),
+      );
+    }
+
     showMenu<String>(
       context: context,
       position: RelativeRect.fromLTRB(position.dx, position.dy, overlay.size.width - position.dx, overlay.size.height - position.dy),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       color: context.colors.cardBg,
       items: [
-        // クイックスタンプバー
-        PopupMenuItem(
-          height: 48,
-          padding: const EdgeInsets.symmetric(horizontal: 8),
-          onTap: () {},
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: [
-              for (final e in quickEmojis)
-                InkWell(
+        // クイックスタンプバー（ここも PopupMenuItem の hover は無効化）
+        PopupMenuItem<String>(
+          enabled: false,
+          padding: EdgeInsets.zero,
+          height: 0,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                for (final e in quickEmojis)
+                  Builder(builder: (ctx) => InkWell(
+                    borderRadius: BorderRadius.circular(8),
+                    hoverColor: Colors.transparent,
+                    splashColor: Colors.transparent,
+                    highlightColor: Colors.transparent,
+                    mouseCursor: SystemMouseCursors.click,
+                    onTap: () {
+                      Navigator.of(ctx).pop();
+                      _toggleReaction(msgId, e);
+                    },
+                    child: Container(
+                      width: 36, height: 36,
+                      alignment: Alignment.center,
+                      child: _stampWidget(e, size: 22),
+                    ),
+                  )),
+                Builder(builder: (ctx) => InkWell(
                   borderRadius: BorderRadius.circular(8),
+                  hoverColor: Colors.transparent,
+                  splashColor: Colors.transparent,
+                  highlightColor: Colors.transparent,
+                  mouseCursor: SystemMouseCursors.click,
                   onTap: () {
-                    Navigator.pop(context);
-                    _toggleReaction(msgId, e);
+                    Navigator.of(ctx).pop();
+                    _showEmojiPicker(msgId);
                   },
                   child: Container(
                     width: 36, height: 36,
                     alignment: Alignment.center,
-                    child: _stampWidget(e, size: 22),
+                    child: Icon(Icons.add, size: 20, color: context.colors.textSecondary),
                   ),
-                ),
-              InkWell(
-                borderRadius: BorderRadius.circular(8),
-                onTap: () {
-                  Navigator.pop(context);
-                  _showEmojiPicker(msgId);
-                },
-                child: Container(
-                  width: 36, height: 36,
-                  alignment: Alignment.center,
-                  child: Icon(Icons.add, size: 20, color: context.colors.textSecondary),
-                ),
-              ),
-            ],
+                )),
+              ],
+            ),
           ),
         ),
         const PopupMenuDivider(height: 1),
-        const PopupMenuItem(value: 'reply', height: 36, padding: EdgeInsets.symmetric(horizontal: 12), child: Row(children: [Icon(Icons.reply, size: 18), SizedBox(width: 8), Text('返信', style: TextStyle(fontSize: 14))])),
-        if (isMe && type == 'text') const PopupMenuItem(value: 'edit', height: 36, padding: EdgeInsets.symmetric(horizontal: 12), child: Row(children: [Icon(Icons.edit, size: 18), SizedBox(width: 8), Text('編集', style: TextStyle(fontSize: 14))])),
-        if (isMe) const PopupMenuItem(value: 'delete', height: 36, padding: EdgeInsets.symmetric(horizontal: 12), child: Row(children: [Icon(Icons.delete, size: 18, color: Colors.red), SizedBox(width: 8), Text('削除', style: TextStyle(fontSize: 14, color: Colors.red))])),
+        buildMenuItem(
+          icon: Icons.reply,
+          label: '返信',
+          onTapAction: () => _startReply(msgId, type, text),
+        ),
+        if (isMe && type == 'text')
+          buildMenuItem(
+            icon: Icons.edit,
+            label: '編集',
+            onTapAction: () => _showEditDialog(msgId, text),
+          ),
+        if (isMe)
+          buildMenuItem(
+            icon: Icons.delete,
+            label: '削除',
+            onTapAction: () => _deleteMessage(msgId),
+            destructive: true,
+          ),
       ],
-    ).then((value) {
-      if (value == null) return;
-      switch (value) {
-        case 'reply': _startReply(msgId, type, text); break;
-        case 'edit': _showEditDialog(msgId, text); break;
-        case 'delete': _deleteMessage(msgId); break;
-      }
-    });
+    );
   }
 
   void _showActionSheet(String msgId, bool isMe, String type, String text) {
     showCupertinoModalPopup(
       context: context,
       builder: (sheetContext) => CupertinoActionSheet(
-        message: _buildQuickReactionBar(sheetContext, msgId),
+        // スタンプバーを actions の先頭に入れることで、コピーなどのアクションと
+        // 同じ白背景シート内で連続表示され「コピーの真上」に並ぶ
         actions: [
+          _buildQuickReactionBar(sheetContext, msgId),
           if (type == 'text' && text.isNotEmpty)
             CupertinoActionSheetAction(
               onPressed: () {
@@ -1811,27 +1941,12 @@ class _ChatDetailViewState extends State<ChatDetailView> {
               },
               child: const Text('コピー'),
             ),
-          if (type == 'text' && text.isNotEmpty)
-            CupertinoActionSheetAction(
-              onPressed: () {
-                Navigator.pop(sheetContext);
-                _showPartialCopyDialog(text);
-              },
-              child: const Text('部分コピー'),
-            ),
           CupertinoActionSheetAction(
             onPressed: () {
               Navigator.pop(sheetContext);
               _startReply(msgId, type, text);
             },
             child: const Text('返信'),
-          ),
-          CupertinoActionSheetAction(
-            onPressed: () {
-              Navigator.pop(sheetContext);
-              _showEmojiPicker(msgId);
-            },
-            child: const Text('他のスタンプ…'),
           ),
           if (isMe && type == 'text')
             CupertinoActionSheetAction(
@@ -1861,9 +1976,10 @@ class _ChatDetailViewState extends State<ChatDetailView> {
 
   // クイックスタンプバー: よく使うスタンプをワンタップで送信
   Widget _buildQuickReactionBar(BuildContext sheetContext, String msgId) {
+    // bee ロゴの右に＋ボタンを配置（タップで他のスタンプを開ける）
     const quickEmojis = ['👍', '❤️', '😄', '🎉', '🙏', 'bee'];
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 4),
+      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: [
@@ -1878,45 +1994,25 @@ class _ChatDetailViewState extends State<ChatDetailView> {
                 width: 40,
                 height: 40,
                 alignment: Alignment.center,
-                child: _stampWidget(e, size: 26),
+                child: _stampWidget(e, size: 28),
               ),
             ),
-        ],
-      ),
-    );
-  }
-
-  // 部分コピー: SelectableText で範囲選択させてネイティブのコピー操作を使わせる
-  void _showPartialCopyDialog(String text) {
-    showDialog(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        backgroundColor: context.colors.cardBg,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        title: const Text('部分コピー', style: TextStyle(fontSize: 16)),
-        content: SizedBox(
-          width: 360,
-          child: SingleChildScrollView(
-            child: SelectableText(
-              text,
-              style: const TextStyle(
-                fontSize: 15,
-                height: 1.5,
-                fontFamily: 'NotoSansJP',
-                fontFamilyFallback: ['Hiragino Sans', 'Roboto', 'sans-serif'],
+          GestureDetector(
+            onTap: () {
+              Navigator.pop(sheetContext);
+              _showEmojiPicker(msgId);
+            },
+            behavior: HitTestBehavior.opaque,
+            child: Container(
+              width: 40,
+              height: 40,
+              alignment: Alignment.center,
+              child: Icon(
+                Icons.add,
+                size: 24,
+                color: CupertinoColors.label.resolveFrom(sheetContext),
               ),
-              contextMenuBuilder: (context, editableTextState) {
-                return AdaptiveTextSelectionToolbar.editableText(
-                  editableTextState: editableTextState,
-                );
-              },
             ),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('閉じる'),
           ),
         ],
       ),
@@ -2125,76 +2221,77 @@ class _ChatDetailViewState extends State<ChatDetailView> {
     showDialog(
       context: context,
       barrierDismissible: true,
-      builder: (dialogContext) => Dialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        child: Container(
+      builder: (dialogContext) => AlertDialog(
+        // ダークモードでも背景がチャット画面と識別できるよう、cardBg を明示 + border 追加
+        backgroundColor: context.colors.cardBg,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: BorderSide(color: context.colors.borderLight, width: 1),
+        ),
+        titlePadding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
+        contentPadding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+        actionsPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+        title: Text(
+          'メッセージを編集',
+          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: context.colors.textPrimary),
+        ),
+        // AlertDialog の content は内部で scrollable 化されているため、
+        // 長文でも自動スクロールでき、actions（保存ボタン）は常に下に固定される
+        content: SizedBox(
           width: 400,
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('メッセージを編集', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: context.colors.textPrimary)),
-              const SizedBox(height: 16),
-              TextField(
-                controller: ctrl,
-                maxLines: null,
-                minLines: 2,
-                autofocus: true,
-                decoration: InputDecoration(
-                  hintText: 'メッセージを入力',
-                  filled: true,
-                  fillColor: context.colors.chipBg,
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                ),
-              ),
-              const SizedBox(height: 16),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  TextButton(
-                    onPressed: () => Navigator.of(dialogContext).pop(),
-                    child: Text('キャンセル', style: TextStyle(color: context.colors.textSecondary)),
-                  ),
-                  const SizedBox(width: 8),
-                  ElevatedButton(
-                    onPressed: () async {
-                      final roomRef = FirebaseFirestore.instance
-                          .collection('chat_rooms')
-                          .doc(widget.roomId);
-                      await roomRef
-                          .collection('messages')
-                          .doc(msgId)
-                          .update({'text': ctrl.text});
-                      // 編集対象が最新メッセージだった場合、一覧プレビューも更新
-                      final latest = await roomRef
-                          .collection('messages')
-                          .orderBy('createdAt', descending: true)
-                          .limit(1)
-                          .get();
-                      if (latest.docs.isNotEmpty && latest.docs.first.id == msgId) {
-                        final d = latest.docs.first.data();
-                        String lastMsg = ctrl.text;
-                        if (d['type'] == 'image') lastMsg = '画像を送信しました';
-                        if (d['type'] == 'file') lastMsg = 'ファイルを送信しました';
-                        if (d['type'] == 'video') lastMsg = '動画を送信しました';
-                        await roomRef.update({'lastMessage': lastMsg});
-                      }
-                      Navigator.of(dialogContext).pop();
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primary,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                    ),
-                    child: const Text('保存'),
-                  ),
-                ],
-              ),
-            ],
+          child: TextField(
+            controller: ctrl,
+            maxLines: null,
+            minLines: 2,
+            autofocus: true,
+            keyboardType: TextInputType.multiline,
+            decoration: InputDecoration(
+              hintText: 'メッセージを入力',
+              filled: true,
+              fillColor: context.colors.chipBg,
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            ),
           ),
         ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: Text('キャンセル', style: TextStyle(color: context.colors.textSecondary)),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              final roomRef = FirebaseFirestore.instance
+                  .collection('chat_rooms')
+                  .doc(widget.roomId);
+              await roomRef
+                  .collection('messages')
+                  .doc(msgId)
+                  .update({'text': ctrl.text});
+              // 編集対象が最新メッセージだった場合、一覧プレビューも更新
+              final latest = await roomRef
+                  .collection('messages')
+                  .orderBy('createdAt', descending: true)
+                  .limit(1)
+                  .get();
+              if (latest.docs.isNotEmpty && latest.docs.first.id == msgId) {
+                final d = latest.docs.first.data();
+                String lastMsg = ctrl.text;
+                if (d['type'] == 'image') lastMsg = '画像を送信しました';
+                if (d['type'] == 'file') lastMsg = 'ファイルを送信しました';
+                if (d['type'] == 'video') lastMsg = '動画を送信しました';
+                await roomRef.update({'lastMessage': lastMsg});
+              }
+              if (dialogContext.mounted) Navigator.of(dialogContext).pop();
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            child: const Text('保存'),
+          ),
+        ],
       ),
     );
   }
