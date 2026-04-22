@@ -3431,9 +3431,27 @@ async function scrapeHugSituationList(cookies) {
       const childName = childLink.text().trim();
       if (!childName) return;
 
-      const facility = $tr.find('td').eq(1).text().trim();
-      const countText = $tr.find('td').eq(2).text().trim();
-      const count = parseInt(countText, 10) || 0;
+      // 各 td のテキストを取得。HUG 画面の列順に左右されないよう、
+      // 「教室」を含む td を施設、純粋な整数 or 数字混じり短文を作成回数と判定する。
+      const tdTexts = $tr.find('td').map((_, td) => $(td).text().trim().replace(/\s+/g, ' ')).get();
+      const facility = tdTexts.find((t) => t.includes('教室')) || tdTexts[1] || '';
+      let count = 0;
+      // 1) 完全一致の整数（1〜99）
+      for (const t of tdTexts) {
+        if (/^\d{1,2}$/.test(t)) { count = parseInt(t, 10); break; }
+      }
+      // 2) 見つからない場合は「2回」「第2回」「作成回数 2」等から抽出
+      if (count === 0) {
+        for (const t of tdTexts) {
+          const m = t.match(/(?:^|回|第|数)?\s*(\d{1,2})\s*回?$/);
+          if (m && t.length < 10) { count = parseInt(m[1], 10); break; }
+        }
+      }
+      // 3) それでもダメなら .eq(2) から全非数字を除去して抽出
+      if (count === 0 && tdTexts[2]) {
+        const digits = tdTexts[2].replace(/[^0-9]/g, '');
+        if (digits) count = parseInt(digits, 10) || 0;
+      }
 
       const docIds = {};
       for (const [type, cfg] of Object.entries(HUG_DOC_TYPES)) {
@@ -3445,6 +3463,11 @@ async function scrapeHugSituationList(cookies) {
           const m = href.match(pattern);
           if (m) docIds[type] = m[1];
         }
+      }
+
+      if (!scrapeHugSituationList._sampled && Object.keys(docIds).length > 0) {
+        scrapeHugSituationList._sampled = true;
+        console.warn(`[HUG] sample row ${childName}: count=${count}, tdTexts=${JSON.stringify(tdTexts)}`);
       }
 
       rows.push({ cId, childName, count, facility, docIds });
