@@ -3593,6 +3593,140 @@ async function fetchHugDocumentDetail(cookies, type, hugId) {
 }
 
 /**
+ * HUG の連絡帳(ケア記録・生活記録)一覧を全児童分スクレイプ。
+ * contact_book.php?mode=search を複数ページに渡って取得し、
+ * 各行から c_id と日付・活動内容・出欠・記録者・プレビューID を抽出する。
+ * 期間はクライアント側でフィルタ（HUG側の param 仕様不明なため）。
+ *
+ * @returns { Map<cId, Array<{date, activity, attendance, recorder, bookId}>> }
+ */
+async function scrapeHugCareRecords(cookies, fromDate, toDate) {
+  const byChildId = {};
+  const seenPages = new Set();
+  let extractedCount = 0;
+  let outOfRangeStreak = 0; // 期間外の連続ヒット数（ソートで過去に外れたら打ち切るため）
+
+  // HUG 側でサーバ側フィルタが効くよう期間パラメータも一応送る（効かない場合はクライアントで除外）
+  const params = new URLSearchParams({
+    mode: 'search',
+    start_date: formatYmd(fromDate),
+    end_date: formatYmd(toDate),
+  });
+
+  for (let page = 1; page <= 30; page++) {
+    const url = `${HUG_BASE_URL}/contact_book.php?${params.toString()}&page=${page}`;
+    const res = await hugFetch(url, {}, cookies);
+    const html = await res.text();
+    const $ = cheerio.load(html);
+    const pageHash = html.length + ':' + (html.indexOf('<tbody') || 0);
+    if (seenPages.has(pageHash)) break;
+    seenPages.add(pageHash);
+
+    let pageRows = 0;
+    $('table tbody tr, table tr').each((_, tr) => {
+      const $tr = $(tr);
+      const cells = $tr.find('td').map((_, td) => $(td).text().replace(/\s+/g, ' ').trim()).get();
+      if (cells.length === 0) return;
+
+      // 日付セル（YYYY/MM/DD）を検出
+      let dateText = '';
+      for (const c of cells) {
+        if (/^\d{4}\/\d{1,2}\/\d{1,2}$/.test(c)) { dateText = c; break; }
+      }
+      if (!dateText) return;
+
+      // 期間チェック
+      const recDate = parseHugDate(dateText);
+      if (!recDate) return;
+      if (recDate < fromDate || recDate > toDate) {
+        outOfRangeStreak++;
+        return;
+      }
+      outOfRangeStreak = 0;
+
+      // c_id: 児童リンク or 行内リンクから取得
+      const childLink = $tr.find('a[href*="profile_children.php"]').first();
+      const childHref = childLink.attr('href') || '';
+      const cIdMatch = childHref.match(/id=(\d+)/);
+      if (!cIdMatch) return;
+      const cId = cIdMatch[1];
+
+      // プレビューID
+      const previewHref = $tr.find('a[href*="contact_book"][href*="mode=print"]').first().attr('href') || '';
+      const bookIdMatch = previewHref.match(/id=(\d+)/);
+      const bookId = bookIdMatch ? bookIdMatch[1] : null;
+
+      // 活動内容・出欠・記録者を抽出（列順が変わっても拾えるようヒューリスティック）
+      // 既知列: 日付, 児童名, 施設名, 活動内容, 出欠, 状態, 既読, 編集, プレビュー, 記録者, 最終更新
+      const activity = cells[3] || '';
+      const attendance = cells[4] || '';
+      // 記録者: 右側の最終更新前のセル。cells.length 差分で探す
+      let recorder = '';
+      if (cells.length >= 2) {
+        // 最終更新は 1〜2 個のセルを使う可能性あり。最終更新っぽいタイムスタンプでないセルを後ろから拾う
+        for (let i = cells.length - 1; i >= 0; i--) {
+          const t = cells[i];
+          if (/^\d{4}\/\d{1,2}\/\d{1,2}\s/.test(t)) continue; // タイムスタンプは skip
+          if (t.length > 1 && t.length < 20 && !/\d{4}/.test(t)) { recorder = t; break; }
+        }
+      }
+
+      if (!byChildId[cId]) byChildId[cId] = [];
+      byChildId[cId].push({
+        date: dateText,
+        activity,
+        attendance,
+        recorder,
+        bookId,
+      });
+      pageRows++;
+      extractedCount++;
+    });
+
+    if (pageRows === 0) break;
+    // 連続で期間外が大量に続くなら打ち切り（HUG は新しい順に返してくる想定）
+    if (outOfRangeStreak >= 50) break;
+    const hasNext = $(`a[href*="contact_book"][href*="page=${page + 1}"]`).length > 0;
+    if (!hasNext) break;
+  }
+  console.log(`[HUG] care records: extracted ${extractedCount} rows across ${Object.keys(byChildId).length} children`);
+  return byChildId;
+}
+
+function parseHugDate(s) {
+  const m = s.match(/^(\d{4})\/(\d{1,2})\/(\d{1,2})$/);
+  if (!m) return null;
+  return new Date(parseInt(m[1], 10), parseInt(m[2], 10) - 1, parseInt(m[3], 10));
+}
+
+function formatYmd(d) {
+  return `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}`;
+}
+
+/**
+ * ケア記録のプレビュー本文（本日の様子）を取得
+ */
+async function fetchHugCareRecordBody(cookies, bookId) {
+  const url = `${HUG_BASE_URL}/contact_book.php?mode=print&id=${bookId}`;
+  const res = await hugFetch(url, {}, cookies);
+  const html = await res.text();
+  const $ = cheerio.load(html);
+  $('script, style, nav, header, footer, button').remove();
+  $('#header, #footer, .print, #sidemenu').remove();
+  // 「本日の様子」テーブルのセルのうち、長文が含まれるセルを本文として採用
+  const bodies = [];
+  $('table tr').each((_, tr) => {
+    const tds = $(tr).find('td').map((_, td) => $(td).text().replace(/\s+/g, ' ').trim()).get();
+    for (const t of tds) {
+      if (t.length >= 10 && !/^\d{4}\/\d{1,2}\/\d{1,2}$/.test(t) && !t.includes('ビースマイリー')) {
+        bodies.push(t);
+      }
+    }
+  });
+  return bodies.join('\n');
+}
+
+/**
  * HUG児童名 → Firestore studentId 解決
  * families コレクションをスキャンし、lastName+firstName が一致し、
  * ビースマイリープラス湘南藤沢の利用児童を探す。
@@ -3633,6 +3767,17 @@ async function syncHugDocsCore(options = {}) {
   const cookies = await loginToHug();
   const situationRows = await scrapeHugSituationList(cookies);
   const nameIndex = await buildStudentNameIndex();
+
+  // ケア記録: 過去6ヶ月分を全児童一括スクレイプ
+  const toDate = new Date();
+  const fromDate = new Date();
+  fromDate.setMonth(fromDate.getMonth() - 6);
+  let careRecordsByCId = {};
+  try {
+    careRecordsByCId = await scrapeHugCareRecords(cookies, fromDate, toDate);
+  } catch (e) {
+    console.error('[HUG] care records scrape failed:', e.message);
+  }
 
   const summary = {
     totalChildren: situationRows.length,
@@ -3675,6 +3820,17 @@ async function syncHugDocsCore(options = {}) {
       }
     }
 
+    const careRecords = (careRecordsByCId[row.cId] || []).slice().sort((a, b) => b.date.localeCompare(a.date));
+    // 最新5件にはプレビュー本文を先行取得（9分タイムアウト内に収めるため上限）
+    for (const rec of careRecords.slice(0, 5)) {
+      if (!rec.bookId || rec.body) continue;
+      try {
+        rec.body = await fetchHugCareRecordBody(cookies, rec.bookId);
+      } catch (e) {
+        console.warn(`[HUG] care record body fetch failed id=${rec.bookId}:`, e.message);
+      }
+    }
+
     await db.collection('ai_student_profiles').doc(resolved.studentId).set({
       studentId: resolved.studentId,
       studentName: resolved.studentName,
@@ -3682,6 +3838,11 @@ async function syncHugDocsCore(options = {}) {
       hugCId: row.cId,
       hugDocs,
       latestPlanDate: row.latestPlanDate || 0,
+      hugCareRecords: careRecords,
+      hugCareRecordsRange: {
+        from: formatYmd(fromDate),
+        to: formatYmd(toDate),
+      },
       lastSyncedAt: FieldValue.serverTimestamp(),
     }, { merge: true });
     summary.synced++;
@@ -3724,6 +3885,32 @@ exports.syncHugDocs = onCall(
     } catch (e) {
       console.error('syncHugDocs error:', e);
       throw new HttpsError('internal', `HUG同期エラー: ${e.message}`);
+    }
+  }
+);
+
+/**
+ * ケア記録本文の遅延取得（フロントから個別記録を開くときに呼ぶ）。
+ * 事前フェッチ (最新5件) 以外の古い記録もこの callable で読み込める。
+ */
+exports.fetchHugCareRecordBody = onCall(
+  {
+    region: 'asia-northeast1',
+    memory: '256MiB',
+    timeoutSeconds: 60,
+    secrets: [hugUsername, hugPassword],
+  },
+  async (request) => {
+    if (!request.auth) throw new HttpsError('unauthenticated', '認証が必要です');
+    const bookId = request.data?.bookId;
+    if (!bookId) throw new HttpsError('invalid-argument', 'bookId が必要です');
+    try {
+      const cookies = await loginToHug();
+      const body = await fetchHugCareRecordBody(cookies, String(bookId));
+      return { success: true, bookId: String(bookId), body };
+    } catch (e) {
+      console.error('fetchHugCareRecordBody error:', e);
+      throw new HttpsError('internal', `HUG取得エラー: ${e.message}`);
     }
   }
 );

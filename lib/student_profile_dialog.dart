@@ -131,6 +131,9 @@ class _StudentProfileDialogState extends State<_StudentProfileDialog> {
                       ? (data!['latestPlanDate'] as num).toInt()
                       : 0;
                   final aiProfile = (data?['aiProfile'] as Map?)?.cast<String, dynamic>() ?? {};
+                  final careRecords =
+                      (data?['hugCareRecords'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+                  final careRange = (data?['hugCareRecordsRange'] as Map?)?.cast<String, dynamic>();
                   final lastSynced = data?['lastSyncedAt'];
                   final lastSyncedText = lastSynced is Timestamp
                       ? DateFormat('yyyy/MM/dd HH:mm').format(lastSynced.toDate())
@@ -160,6 +163,8 @@ class _StudentProfileDialogState extends State<_StudentProfileDialog> {
                             style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: c.textPrimary)),
                         const SizedBox(height: 8),
                         ..._docLabels.entries.map((e) => _buildDocCard(e.key, e.value, hugDocs, latestPlanDate)),
+                        const SizedBox(height: 20),
+                        _buildCareRecordsSection(careRecords, careRange),
                         const SizedBox(height: 20),
                         Text('AIが蓄積した知見',
                             style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: c.textPrimary)),
@@ -389,6 +394,44 @@ class _StudentProfileDialogState extends State<_StudentProfileDialog> {
     );
   }
 
+  Widget _buildCareRecordsSection(
+      List<Map<String, dynamic>> records, Map<String, dynamic>? range) {
+    final c = context.colors;
+    final rangeText = range == null
+        ? ''
+        : '（${range['from']} 〜 ${range['to']}）';
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Text('ケア記録 $rangeText',
+                style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: c.textPrimary)),
+            const SizedBox(width: 6),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: c.chipBg,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text('${records.length}件',
+                  style: TextStyle(fontSize: 11, color: c.textSecondary)),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        if (records.isEmpty)
+          Text('この期間のケア記録はありません。',
+              style: TextStyle(fontSize: 12, color: c.textSecondary))
+        else
+          ...records.map((r) => _CareRecordTile(record: r)),
+      ],
+    );
+  }
+
   List<Widget> _buildAiProfileSections(Map<String, dynamic> aiProfile) {
     const labels = {
       'strengths': '得意・好きなこと',
@@ -430,3 +473,178 @@ class _StudentProfileDialogState extends State<_StudentProfileDialog> {
     return widgets;
   }
 }
+
+/// ケア記録の1行。本文が未取得なら展開時にサーバから遅延取得する。
+class _CareRecordTile extends StatefulWidget {
+  final Map<String, dynamic> record;
+  const _CareRecordTile({required this.record});
+
+  @override
+  State<_CareRecordTile> createState() => _CareRecordTileState();
+}
+
+class _CareRecordTileState extends State<_CareRecordTile> {
+  bool _expanded = false;
+  bool _loading = false;
+  String? _lazyBody;
+  String? _lazyError;
+
+  Future<void> _toggle() async {
+    final next = !_expanded;
+    setState(() => _expanded = next);
+    if (!next) return;
+    final existing = (widget.record['body'] as String?) ?? _lazyBody;
+    if (existing != null && existing.isNotEmpty) return;
+    final bookId = widget.record['bookId'];
+    if (bookId == null) return;
+    setState(() {
+      _loading = true;
+      _lazyError = null;
+    });
+    try {
+      final callable = FirebaseFunctions.instanceFor(region: 'asia-northeast1')
+          .httpsCallable('fetchHugCareRecordBody');
+      final result = await callable.call({'bookId': bookId});
+      final body = (result.data as Map?)?['body'] as String? ?? '';
+      if (!mounted) return;
+      setState(() {
+        _lazyBody = body;
+        _loading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _lazyError = '$e';
+        _loading = false;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    final r = widget.record;
+    final date = r['date'] as String? ?? '';
+    final activity = r['activity'] as String? ?? '';
+    final attendance = r['attendance'] as String? ?? '';
+    final recorder = r['recorder'] as String? ?? '';
+    final bookId = r['bookId'];
+    final body = (r['body'] as String?) ?? _lazyBody ?? '';
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 6),
+      decoration: BoxDecoration(
+        color: c.tagBg,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: c.borderLight, width: 0.5),
+      ),
+      child: Column(
+        children: [
+          InkWell(
+            borderRadius: BorderRadius.circular(10),
+            onTap: bookId == null ? null : _toggle,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              child: Row(
+                children: [
+                  SizedBox(
+                    width: 76,
+                    child: Text(date,
+                        style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: c.textPrimary)),
+                  ),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 4,
+                          children: [
+                            if (activity.isNotEmpty)
+                              _chip(c, activity, c.textSecondary),
+                            if (attendance.isNotEmpty)
+                              _chip(c, attendance, c.textSecondary),
+                            if (recorder.isNotEmpty)
+                              Text(recorder,
+                                  style: TextStyle(
+                                      fontSize: 11, color: c.textTertiary)),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (bookId != null)
+                    IconButton(
+                      icon: const Icon(Icons.open_in_new, size: 16),
+                      color: c.textSecondary,
+                      tooltip: 'HUGで開く',
+                      constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                      padding: EdgeInsets.zero,
+                      onPressed: () {
+                        final url = Uri.parse(
+                            'https://www.hug-beesmiley.link/hug/wm/contact_book.php?mode=print&id=$bookId');
+                        launchUrl(url, mode: LaunchMode.externalApplication);
+                      },
+                    ),
+                  Icon(
+                    _expanded ? Icons.expand_less : Icons.expand_more,
+                    size: 18,
+                    color: c.textSecondary,
+                  ),
+                ],
+              ),
+            ),
+          ),
+          if (_expanded)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+              child: Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: c.scaffoldBg,
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: c.borderLight, width: 0.5),
+                ),
+                child: _loading
+                    ? const SizedBox(
+                        height: 32,
+                        child: Center(
+                            child: SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(strokeWidth: 2))))
+                    : _lazyError != null
+                        ? Text('取得失敗: $_lazyError',
+                            style: TextStyle(fontSize: 11, color: Colors.red.shade300))
+                        : body.isEmpty
+                            ? Text('本文はありません。',
+                                style: TextStyle(
+                                    fontSize: 12, color: c.textSecondary))
+                            : SelectableText(body,
+                                style: TextStyle(
+                                    fontSize: 12,
+                                    height: 1.6,
+                                    color: c.textPrimary)),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _chip(AppColorScheme c, String label, Color fg) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: c.chipBg,
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Text(label, style: TextStyle(fontSize: 10, color: fg)),
+    );
+  }
+}
+
