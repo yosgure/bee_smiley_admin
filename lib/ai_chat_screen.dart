@@ -535,9 +535,10 @@ class _AiChatScreenState extends State<AiChatScreen> {
       }
 
       if (!isFreeChat) {
-        final today = DateTime.now();
-        final startOfDay = DateTime(today.year, today.month, today.day);
-        final myUid = currentUser?.uid ?? '';
+        // セッションはメッセージ数で rotate する方針（日単位のリセットは廃止）。
+        // 最新セッションの messageCount がしきい値未満なら再利用、
+        // しきい値以上なら新規セッションを作成して会話が肥大化するのを防ぐ。
+        const sessionRotateThreshold = 100;
 
         final hugSnap = await FirebaseFirestore.instance
             .collection('ai_chat_sessions')
@@ -580,21 +581,19 @@ class _AiChatScreenState extends State<AiChatScreen> {
           }
           _pastSummaries = summaries;
 
-          final todaySessions = allSessions.where((doc) {
-            final createdAt = doc.data()['createdAt'] as Timestamp?;
-            return createdAt != null && createdAt.toDate().isAfter(startOfDay);
-          }).toList();
-
-          if (todaySessions.isNotEmpty) {
+          final latest = allSessions.first;
+          final latestMessageCount = (latest.data()['messageCount'] as num?)?.toInt() ?? 0;
+          if (latestMessageCount < sessionRotateThreshold) {
             if (mounted) {
               setState(() {
-                _sessionId = todaySessions.first.id;
+                _sessionId = latest.id;
                 _isLoading = false;
               });
             }
             _sendInitialMessageIfNeeded();
             return;
           }
+          // しきい値に達していたら下のフォールバックで新規セッションを作る
         }
       }
 
@@ -1576,11 +1575,14 @@ class _AiChatScreenState extends State<AiChatScreen> {
     }
 
     return StreamBuilder<QuerySnapshot>(
+      // 直近 40 件のみ表示。肥大化防止のため古いメッセージは履歴画面で閲覧する前提。
+      // limitToLast は createdAt 昇順+最後尾 limit の形で効率的に読み込める。
       stream: FirebaseFirestore.instance
           .collection('ai_chat_sessions')
           .doc(_sessionId)
           .collection('messages')
           .orderBy('createdAt', descending: false)
+          .limitToLast(40)
           .snapshots(),
       builder: (context, snapshot) {
         if (snapshot.hasError) {
