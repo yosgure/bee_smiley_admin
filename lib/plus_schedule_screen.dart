@@ -92,7 +92,8 @@ class _PlusScheduleContentState extends State<PlusScheduleContent> with Automati
     '放デイ': Colors.amber,
     '契約': AppColors.accent,
     '体験': Colors.green,
-    '欠席': Colors.red,
+    '欠席': Colors.red, // 旧データ互換用
+    '欠席（加算あり）': Colors.red,
     '欠席（加算なし）': Colors.red,
     '策定会議': Colors.deepPurple,
   };
@@ -100,7 +101,7 @@ class _PlusScheduleContentState extends State<PlusScheduleContent> with Automati
   // カスタマイズ可能なコース色
   Map<String, Color> _courseColors = {};
 
-  final List<String> _courseList = ['通常', 'モンテッソーリ', '感覚統合', '言語', '就学支援', '放デイ', '契約', '体験', '欠席', '欠席（加算なし）', '策定会議'];
+  final List<String> _courseList = ['通常', 'モンテッソーリ', '感覚統合', '言語', '就学支援', '放デイ', '契約', '体験', '欠席（加算あり）', '欠席（加算なし）', '策定会議'];
 
   // HUG欠席送信の失敗バナー（セッション内のみ）
   final List<Map<String, dynamic>> _failedAbsenceSends = [];
@@ -8833,7 +8834,7 @@ await _loadLessonsForWeek(showLoading: false);
                       // 児童に紐づく欠席・欠席（加算なし）選択時は即時に入力/確認を出し、
                       // 結果を _pendingAbsenceData に保持する（予定保存時にHUG送信）
                       if (studentName != null && studentName.isNotEmpty && absenceDate != null) {
-                        if (course == '欠席') {
+                        if (course == '欠席（加算あり）' || course == '欠席') {
                           Navigator.pop(dialogContext);
                           final note = await AbsenceRecordDialog.show(
                             context,
