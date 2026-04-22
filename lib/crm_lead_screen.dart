@@ -138,9 +138,10 @@ class CrmLeadScreen extends StatefulWidget {
 }
 
 class _CrmLeadScreenState extends State<CrmLeadScreen> {
-  int _viewMode = 0; // 0: kanban, 1: table, 2: dashboard
+  // 0: 督促, 1: パイプライン, 2: 入会済み, 3: 離脱, 4: 分析
+  int _viewMode = 0;
   String _sourceFilter = 'all';
-  String _stageFilter = 'all'; // table view用
+  String _stageFilter = 'all'; // 未使用（旧テーブル互換用に残置）
 
   void _close() {
     if (Navigator.canPop(context)) {
@@ -197,50 +198,40 @@ class _CrmLeadScreenState extends State<CrmLeadScreen> {
     return Container(
       padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
       color: context.colors.cardBg,
-      child: Row(
-        children: [
-          // ビュー切替
-          SegmentedButton<int>(
-            showSelectedIcon: false,
-            segments: const [
-              ButtonSegment(value: 0, label: Text('カンバン'), icon: Icon(Icons.view_kanban_outlined, size: 16)),
-              ButtonSegment(value: 1, label: Text('一覧'), icon: Icon(Icons.table_rows_outlined, size: 16)),
-              ButtonSegment(value: 2, label: Text('分析'), icon: Icon(Icons.bar_chart, size: 16)),
-            ],
-            selected: {_viewMode},
-            onSelectionChanged: (s) => setState(() => _viewMode = s.first),
-            style: ButtonStyle(
-              textStyle: WidgetStateProperty.all(const TextStyle(fontSize: 12)),
-              padding: WidgetStateProperty.all(
-                  const EdgeInsets.symmetric(horizontal: 10, vertical: 4)),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: [
+            SegmentedButton<int>(
+              showSelectedIcon: false,
+              segments: const [
+                ButtonSegment(value: 0, label: Text('督促'), icon: Icon(Icons.campaign_outlined, size: 16)),
+                ButtonSegment(value: 1, label: Text('パイプライン'), icon: Icon(Icons.timeline, size: 16)),
+                ButtonSegment(value: 2, label: Text('入会済み'), icon: Icon(Icons.check_circle_outline, size: 16)),
+                ButtonSegment(value: 3, label: Text('離脱'), icon: Icon(Icons.logout, size: 16)),
+                ButtonSegment(value: 4, label: Text('分析'), icon: Icon(Icons.bar_chart, size: 16)),
+              ],
+              selected: {_viewMode},
+              onSelectionChanged: (s) => setState(() => _viewMode = s.first),
+              style: ButtonStyle(
+                textStyle: WidgetStateProperty.all(const TextStyle(fontSize: 12)),
+                padding: WidgetStateProperty.all(
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4)),
+              ),
             ),
-          ),
-          const SizedBox(width: 12),
-          // 媒体フィルタ
-          _filterDropdown(
-            label: '媒体',
-            value: _sourceFilter,
-            items: [
-              const DropdownMenuItem(value: 'all', child: Text('すべて')),
-              ...CrmOptions.sources.map(
-                  (s) => DropdownMenuItem(value: s.id, child: Text(s.label))),
-            ],
-            onChanged: (v) => setState(() => _sourceFilter = v ?? 'all'),
-          ),
-          if (_viewMode == 1) ...[
-            const SizedBox(width: 8),
+            const SizedBox(width: 12),
             _filterDropdown(
-              label: 'ステージ',
-              value: _stageFilter,
+              label: '媒体',
+              value: _sourceFilter,
               items: [
                 const DropdownMenuItem(value: 'all', child: Text('すべて')),
-                ...CrmOptions.stages.map(
+                ...CrmOptions.sources.map(
                     (s) => DropdownMenuItem(value: s.id, child: Text(s.label))),
               ],
-              onChanged: (v) => setState(() => _stageFilter = v ?? 'all'),
+              onChanged: (v) => setState(() => _sourceFilter = v ?? 'all'),
             ),
           ],
-        ],
+        ),
       ),
     );
   }
@@ -302,13 +293,14 @@ class _CrmLeadScreenState extends State<CrmLeadScreen> {
         if (docs.isEmpty) return _emptyState();
         switch (_viewMode) {
           case 0:
-            return _CrmKanbanView(docs: docs);
+            return _CrmDunningView(docs: docs);
           case 1:
-            final list = _stageFilter == 'all'
-                ? docs
-                : docs.where((d) => (d.data()['stage'] ?? '') == _stageFilter).toList();
-            return _CrmTableView(docs: list);
+            return _CrmPipelineView(docs: docs);
           case 2:
+            return _CrmEnrolledView(docs: docs);
+          case 3:
+            return _CrmChurnView(docs: docs);
+          case 4:
           default:
             return _CrmDashboardView(docs: docs);
         }
@@ -917,6 +909,493 @@ class _LeadTableRow extends StatelessWidget {
 }
 
 // ============================================================
+// CRM-Phase2: 督促 / パイプライン / 入会済み / 離脱 ビュー
+// ============================================================
+
+/// Dunning 判定しきい値（CLAUDE.md の CRM Design Rules と同期）
+const int _staleConsideringDays = 3;
+const int _staleProcessingDays = 7;
+
+enum _DunningBucket { urgent, warning, today, upcoming }
+
+class _BucketedLead {
+  final QueryDocumentSnapshot<Map<String, dynamic>> doc;
+  final _DunningBucket bucket;
+  final String reasonText;
+  final int? daysIdle;
+  const _BucketedLead({
+    required this.doc,
+    required this.bucket,
+    required this.reasonText,
+    this.daysIdle,
+  });
+}
+
+class _CrmDunningView extends StatelessWidget {
+  final List<QueryDocumentSnapshot<Map<String, dynamic>>> docs;
+  const _CrmDunningView({required this.docs});
+
+  @override
+  Widget build(BuildContext context) {
+    final now = DateTime.now();
+    final todayStart = DateTime(now.year, now.month, now.day);
+    final todayEnd = todayStart.add(const Duration(days: 1));
+    final threeDaysLater = todayStart.add(const Duration(days: 4));
+
+    final buckets = <_DunningBucket, List<_BucketedLead>>{
+      _DunningBucket.urgent: [],
+      _DunningBucket.warning: [],
+      _DunningBucket.today: [],
+      _DunningBucket.upcoming: [],
+    };
+
+    for (final d in docs) {
+      final data = d.data();
+      final stage = data['stage'] as String? ?? 'considering';
+      if (stage != 'considering' && stage != 'onboarding') continue;
+      final lastActivityAt = (data['lastActivityAt'] as Timestamp?)?.toDate() ??
+          (data['updatedAt'] as Timestamp?)?.toDate() ??
+          (data['inquiredAt'] as Timestamp?)?.toDate();
+      final nextActionAt = (data['nextActionAt'] as Timestamp?)?.toDate();
+      final daysIdle = lastActivityAt == null
+          ? null
+          : now.difference(lastActivityAt).inDays;
+
+      if (stage == 'onboarding' &&
+          daysIdle != null &&
+          daysIdle >= _staleProcessingDays) {
+        buckets[_DunningBucket.urgent]!.add(_BucketedLead(
+            doc: d,
+            bucket: _DunningBucket.urgent,
+            reasonText: '入会手続中・$daysIdle日放置',
+            daysIdle: daysIdle));
+        continue;
+      }
+      if (stage == 'considering' &&
+          daysIdle != null &&
+          daysIdle >= _staleConsideringDays) {
+        buckets[_DunningBucket.warning]!.add(_BucketedLead(
+            doc: d,
+            bucket: _DunningBucket.warning,
+            reasonText: '検討中・$daysIdle日放置',
+            daysIdle: daysIdle));
+        continue;
+      }
+      if (nextActionAt != null &&
+          !nextActionAt.isBefore(todayStart) &&
+          nextActionAt.isBefore(todayEnd)) {
+        buckets[_DunningBucket.today]!.add(_BucketedLead(
+            doc: d,
+            bucket: _DunningBucket.today,
+            reasonText: '今日の予定',
+            daysIdle: daysIdle));
+        continue;
+      }
+      if (nextActionAt != null &&
+          nextActionAt.isBefore(threeDaysLater)) {
+        buckets[_DunningBucket.upcoming]!.add(_BucketedLead(
+            doc: d,
+            bucket: _DunningBucket.upcoming,
+            reasonText: '${DateFormat('M/d').format(nextActionAt)} 予定',
+            daysIdle: daysIdle));
+        continue;
+      }
+    }
+
+    // 各バケット内で放置日数の多い順/予定日の近い順に並べる
+    for (final b in buckets.values) {
+      b.sort((a, c) {
+        if (a.daysIdle != null && c.daysIdle != null) {
+          return c.daysIdle!.compareTo(a.daysIdle!);
+        }
+        return 0;
+      });
+    }
+
+    final totalCount = buckets.values.fold<int>(0, (s, l) => s + l.length);
+    if (totalCount == 0) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.check_circle_outline,
+                size: 56, color: context.colors.textTertiary),
+            const SizedBox(height: 12),
+            Text('今日の対応タスクはありません 🎉',
+                style: TextStyle(
+                    color: context.colors.textSecondary, fontSize: 14)),
+          ],
+        ),
+      );
+    }
+
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 88),
+      children: [
+        if (buckets[_DunningBucket.urgent]!.isNotEmpty)
+          _section(context, '🔴 緊急放置', buckets[_DunningBucket.urgent]!,
+              context.alerts.urgent),
+        if (buckets[_DunningBucket.warning]!.isNotEmpty)
+          _section(context, '🟠 要対応', buckets[_DunningBucket.warning]!,
+              context.alerts.warning),
+        if (buckets[_DunningBucket.today]!.isNotEmpty)
+          _section(context, '🟡 今日の予定', buckets[_DunningBucket.today]!,
+              context.alerts.warning),
+        if (buckets[_DunningBucket.upcoming]!.isNotEmpty)
+          _section(context, '🔵 明日以降（3日以内）', buckets[_DunningBucket.upcoming]!,
+              context.alerts.info),
+      ],
+    );
+  }
+
+  Widget _section(BuildContext context, String title,
+      List<_BucketedLead> items, AlertStyle style) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+            child: Row(
+              children: [
+                Text(title,
+                    style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.bold,
+                        color: context.colors.textPrimary)),
+                const SizedBox(width: 6),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: style.background,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: style.border, width: 0.6),
+                  ),
+                  child: Text('${items.length}',
+                      style: TextStyle(
+                          fontSize: 10,
+                          color: style.text,
+                          fontWeight: FontWeight.bold)),
+                ),
+              ],
+            ),
+          ),
+          ...items.map((b) => _DunningLeadRow(item: b, style: style)),
+        ],
+      ),
+    );
+  }
+}
+
+class _DunningLeadRow extends StatelessWidget {
+  final _BucketedLead item;
+  final AlertStyle style;
+  const _DunningLeadRow({required this.item, required this.style});
+
+  @override
+  Widget build(BuildContext context) {
+    final data = item.doc.data();
+    final childName = _childFullName(data);
+    final stage = data['stage'] as String? ?? '';
+    final nextAt = (data['nextActionAt'] as Timestamp?)?.toDate();
+    final nextNote = data['nextActionNote'] as String? ?? '';
+    final tel = data['parentTel'] as String? ?? '';
+    final stageColor = CrmOptions.stageColor(stage);
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 6),
+      decoration: BoxDecoration(
+        color: context.colors.cardBg,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: style.border, width: 0.8),
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(10),
+        onTap: () => Navigator.push(context,
+            MaterialPageRoute(builder: (_) => CrmLeadEditScreen(doc: item.doc))),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: stageColor.withValues(alpha: 0.18),
+                            borderRadius: BorderRadius.circular(4),
+                            border:
+                                Border.all(color: stageColor, width: 0.5),
+                          ),
+                          child: Text(CrmOptions.stageLabel(stage),
+                              style: TextStyle(
+                                  fontSize: 10,
+                                  color: stageColor,
+                                  fontWeight: FontWeight.bold)),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            childName.isEmpty ? '(児童名未入力)' : childName,
+                            style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.bold,
+                                color: context.colors.textPrimary),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(item.reasonText,
+                        style: TextStyle(fontSize: 11, color: style.text)),
+                    if (nextAt != null) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                          '次回: ${DateFormat('M/d').format(nextAt)} $nextNote',
+                          style: TextStyle(
+                              fontSize: 11,
+                              color: context.colors.textSecondary)),
+                    ],
+                  ],
+                ),
+              ),
+              if (tel.isNotEmpty)
+                IconButton(
+                  icon: Icon(Icons.phone, size: 18, color: style.icon),
+                  tooltip: '電話: $tel',
+                  onPressed: () {
+                    // 電話URI起動は url_launcher 経由、ここでは詳細画面誘導のみ
+                    Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                            builder: (_) => CrmLeadEditScreen(doc: item.doc)));
+                  },
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// パイプライン: 検討中 + 入会手続中 を次回対応期日昇順で並べる
+class _CrmPipelineView extends StatelessWidget {
+  final List<QueryDocumentSnapshot<Map<String, dynamic>>> docs;
+  const _CrmPipelineView({required this.docs});
+
+  @override
+  Widget build(BuildContext context) {
+    final filtered = docs.where((d) {
+      final stage = d.data()['stage'] as String? ?? '';
+      return stage == 'considering' || stage == 'onboarding';
+    }).toList()
+      ..sort((a, b) {
+        final aNext = (a.data()['nextActionAt'] as Timestamp?)?.toDate();
+        final bNext = (b.data()['nextActionAt'] as Timestamp?)?.toDate();
+        if (aNext == null && bNext == null) return 0;
+        if (aNext == null) return 1;
+        if (bNext == null) return -1;
+        return aNext.compareTo(bNext);
+      });
+    if (filtered.isEmpty) {
+      return Center(
+        child: Text('パイプライン対象のリードはありません',
+            style: TextStyle(color: context.colors.textSecondary)),
+      );
+    }
+    return _CrmTableView(docs: filtered);
+  }
+}
+
+/// 入会済み: won を入会日降順で
+class _CrmEnrolledView extends StatelessWidget {
+  final List<QueryDocumentSnapshot<Map<String, dynamic>>> docs;
+  const _CrmEnrolledView({required this.docs});
+
+  @override
+  Widget build(BuildContext context) {
+    final filtered = docs.where((d) => (d.data()['stage'] ?? '') == 'won').toList()
+      ..sort((a, b) {
+        final aDate = (a.data()['enrolledAt'] as Timestamp?)?.toDate();
+        final bDate = (b.data()['enrolledAt'] as Timestamp?)?.toDate();
+        if (aDate == null && bDate == null) return 0;
+        if (aDate == null) return 1;
+        if (bDate == null) return -1;
+        return bDate.compareTo(aDate);
+      });
+    if (filtered.isEmpty) {
+      return Center(
+        child: Text('入会済みリードはまだありません',
+            style: TextStyle(color: context.colors.textSecondary)),
+      );
+    }
+    return _CrmTableView(docs: filtered);
+  }
+}
+
+/// 離脱: lost + withdrawn。理由別件数バーを上に表示。
+class _CrmChurnView extends StatelessWidget {
+  final List<QueryDocumentSnapshot<Map<String, dynamic>>> docs;
+  const _CrmChurnView({required this.docs});
+
+  @override
+  Widget build(BuildContext context) {
+    final churned = docs.where((d) {
+      final s = d.data()['stage'] ?? '';
+      return s == 'lost' || s == 'withdrawn';
+    }).toList();
+
+    final lossCounts = <String, int>{};
+    final withdrawCounts = <String, int>{};
+    for (final d in churned) {
+      final data = d.data();
+      final stage = data['stage'];
+      if (stage == 'lost') {
+        final r = (data['lossReason'] as String?) ?? 'other';
+        lossCounts[r] = (lossCounts[r] ?? 0) + 1;
+      } else if (stage == 'withdrawn') {
+        final r = (data['withdrawReason'] as String?) ?? 'other';
+        withdrawCounts[r] = (withdrawCounts[r] ?? 0) + 1;
+      }
+    }
+
+    if (churned.isEmpty) {
+      return Center(
+        child: Text('離脱リードはありません',
+            style: TextStyle(color: context.colors.textSecondary)),
+      );
+    }
+
+    churned.sort((a, b) {
+      final aDate = (a.data()['updatedAt'] as Timestamp?)?.toDate();
+      final bDate = (b.data()['updatedAt'] as Timestamp?)?.toDate();
+      if (aDate == null && bDate == null) return 0;
+      if (aDate == null) return 1;
+      if (bDate == null) return -1;
+      return bDate.compareTo(aDate);
+    });
+
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 88),
+      children: [
+        if (lossCounts.isNotEmpty)
+          _reasonBlock(context, '失注理由',
+              CrmOptions.lossReasons, lossCounts, context.alerts.urgent),
+        if (withdrawCounts.isNotEmpty)
+          _reasonBlock(context, '退会理由',
+              CrmOptions.withdrawalReasons, withdrawCounts, context.alerts.warning),
+        const SizedBox(height: 12),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+          child: Text('全離脱リード（${churned.length}件）',
+              style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  color: context.colors.textPrimary)),
+        ),
+        ...churned.map((d) => _LeadTableRow(doc: d)),
+      ],
+    );
+  }
+
+  Widget _reasonBlock(
+      BuildContext context,
+      String title,
+      List<({String id, String label})> reasons,
+      Map<String, int> counts,
+      AlertStyle style) {
+    final total = counts.values.fold<int>(0, (s, n) => s + n);
+    final sorted = counts.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+    final topCompetitor = counts['competitor'] ?? 0;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: context.colors.cardBg,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: style.border, width: 0.6),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text('$title（$total件）',
+                  style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                      color: context.colors.textPrimary)),
+              if (title == '失注理由' && topCompetitor >= 3) ...[
+                const SizedBox(width: 8),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: context.alerts.urgent.background,
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(
+                        color: context.alerts.urgent.border, width: 0.6),
+                  ),
+                  child: Text('競合分析推奨',
+                      style: TextStyle(
+                          fontSize: 10,
+                          color: context.alerts.urgent.text,
+                          fontWeight: FontWeight.bold)),
+                ),
+              ],
+            ],
+          ),
+          const SizedBox(height: 8),
+          ...sorted.map((e) {
+            final label = CrmOptions.labelOf(reasons, e.key);
+            final ratio = total == 0 ? 0.0 : e.value / total;
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: Row(
+                children: [
+                  SizedBox(
+                      width: 140,
+                      child: Text(label,
+                          style: TextStyle(
+                              fontSize: 11,
+                              color: context.colors.textSecondary),
+                          overflow: TextOverflow.ellipsis)),
+                  Expanded(
+                    child: LinearProgressIndicator(
+                      value: ratio,
+                      backgroundColor:
+                          context.colors.borderLight.withValues(alpha: 0.4),
+                      valueColor: AlwaysStoppedAnimation(style.icon),
+                      minHeight: 6,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text('${e.value}',
+                      style: TextStyle(
+                          fontSize: 11,
+                          color: context.colors.textPrimary,
+                          fontWeight: FontWeight.bold)),
+                ],
+              ),
+            );
+          }),
+        ],
+      ),
+    );
+  }
+}
+
+// ============================================================
 // CRM-04: 分析ビュー
 // ============================================================
 class _CrmDashboardView extends StatelessWidget {
@@ -1205,6 +1684,11 @@ class _CrmLeadEditScreenState extends State<CrmLeadEditScreen> {
   final _lossDetailCtrl = TextEditingController();
   bool _reapproachOk = true;
 
+  // 退会
+  String? _withdrawReason;
+  DateTime? _withdrawnAt;
+  final _withdrawDetailCtrl = TextEditingController();
+
   final _memoCtrl = TextEditingController();
 
   bool _saving = false;
@@ -1254,6 +1738,9 @@ class _CrmLeadEditScreenState extends State<CrmLeadEditScreen> {
       _lossReason = d['lossReason'];
       _lossDetailCtrl.text = d['lossDetail'] ?? '';
       _reapproachOk = d['reapproachOk'] ?? true;
+      _withdrawReason = d['withdrawReason'];
+      _withdrawDetailCtrl.text = d['withdrawDetail'] ?? '';
+      _withdrawnAt = (d['withdrawnAt'] as Timestamp?)?.toDate();
       _memoCtrl.text = d['memo'] ?? '';
       _convertedFamilyId = d['convertedFamilyId'];
     }
@@ -1283,6 +1770,7 @@ class _CrmLeadEditScreenState extends State<CrmLeadEditScreen> {
       _trialNotesCtrl,
       _nextActionNoteCtrl,
       _lossDetailCtrl,
+      _withdrawDetailCtrl,
       _memoCtrl,
     ]) {
       c.dispose();
@@ -1297,6 +1785,29 @@ class _CrmLeadEditScreenState extends State<CrmLeadEditScreen> {
 
   Future<void> _save() async {
     if (!_canSave) return;
+    // 失注/退会への遷移時は理由必須
+    if (_stage == 'lost' && (_lossReason == null || _lossReason!.isEmpty)) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('失注理由を選択してください'), backgroundColor: Colors.orange));
+      return;
+    }
+    if (_stage == 'withdrawn' &&
+        (_withdrawReason == null || _withdrawReason!.isEmpty)) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('退会理由を選択してください'), backgroundColor: Colors.orange));
+      return;
+    }
+    // 旧ステージからの遷移ルール検証（新規作成時は検証不要）
+    if (_isEdit) {
+      final prevStage = widget.doc!.data()['stage'] as String? ?? 'considering';
+      if (!CrmOptions.canTransition(prevStage, _stage)) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(
+                '「${CrmOptions.stageLabel(prevStage)}」→「${CrmOptions.stageLabel(_stage)}」への遷移は許可されていません'),
+            backgroundColor: Colors.orange));
+        return;
+      }
+    }
     setState(() => _saving = true);
     final user = FirebaseAuth.instance.currentUser;
     final now = FieldValue.serverTimestamp();
@@ -1342,6 +1853,9 @@ class _CrmLeadEditScreenState extends State<CrmLeadEditScreen> {
       'lossReason': _lossReason,
       'lossDetail': _lossDetailCtrl.text.trim(),
       'reapproachOk': _reapproachOk,
+      'withdrawReason': _withdrawReason,
+      'withdrawDetail': _withdrawDetailCtrl.text.trim(),
+      'withdrawnAt': _withdrawnAt == null ? null : Timestamp.fromDate(_withdrawnAt!),
       'memo': _memoCtrl.text.trim(),
       'updatedAt': now,
       'updatedBy': user?.uid ?? '',
@@ -1788,7 +2302,7 @@ class _CrmLeadEditScreenState extends State<CrmLeadEditScreen> {
               hint: '例：受給者証取得後に再連絡'),
           if (_stage == 'lost') ...[
             const SizedBox(height: 16),
-            _section('失注情報'),
+            _section('失注情報（理由は必須）'),
             _lossReasonSelector(),
             const SizedBox(height: 8),
             _textField('失注詳細', _lossDetailCtrl, maxLines: 3),
@@ -1803,6 +2317,22 @@ class _CrmLeadEditScreenState extends State<CrmLeadEditScreen> {
               controlAffinity: ListTileControlAffinity.leading,
               contentPadding: EdgeInsets.zero,
             ),
+          ],
+          if (_stage == 'withdrawn') ...[
+            const SizedBox(height: 16),
+            _section('退会情報（理由は必須）'),
+            Row(
+              children: [
+                Expanded(
+                  child: _dateField('退会日', _withdrawnAt,
+                      (d) => setState(() => _withdrawnAt = d), nullable: true),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            _withdrawReasonSelector(),
+            const SizedBox(height: 8),
+            _textField('退会詳細', _withdrawDetailCtrl, maxLines: 3),
           ],
           const SizedBox(height: 16),
           _section('メモ'),
@@ -2215,6 +2745,35 @@ class _CrmLeadEditScreenState extends State<CrmLeadEditScreen> {
           );
         }),
       ],
+    );
+  }
+
+  Widget _withdrawReasonSelector() {
+    final warning = context.alerts.warning;
+    return Wrap(
+      spacing: 6,
+      runSpacing: 6,
+      children: CrmOptions.withdrawalReasons.map((s) {
+        final sel = _withdrawReason == s.id;
+        return GestureDetector(
+          onTap: () => setState(() => _withdrawReason = s.id),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: sel ? warning.background : context.colors.cardBg,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                  color: sel ? warning.border : context.colors.borderMedium,
+                  width: sel ? 1.5 : 0.8),
+            ),
+            child: Text(s.label,
+                style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: sel ? FontWeight.bold : FontWeight.normal,
+                    color: sel ? warning.text : context.colors.textPrimary)),
+          ),
+        );
+      }).toList(),
     );
   }
 
