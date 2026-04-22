@@ -1795,11 +1795,21 @@ class _ChatDetailViewState extends State<ChatDetailView> {
       // ロゴは絵文字より大きめに表示（絵文字は周囲に余白があるため）
       return Image.asset('assets/logo_beesmileymark.png', width: size * 1.4, height: size * 1.4);
     }
-    // CupertinoActionSheet 配下など Material の DefaultTextStyle が届かない場所では
-    // Flutter のデバッグ用黄色下線が出るため、decoration: none を明示
+    // Flutter Web のデフォルトフォントにはカラー絵文字がないため、
+    // プラットフォーム毎のカラー絵文字フォントをフォールバックに指定して暗い表示を回避
     return Text(
       stamp,
-      style: TextStyle(fontSize: size, decoration: TextDecoration.none),
+      style: TextStyle(
+        fontSize: size,
+        decoration: TextDecoration.none,
+        fontFamilyFallback: const [
+          'Apple Color Emoji',
+          'Segoe UI Emoji',
+          'Noto Color Emoji',
+          'Twemoji Mozilla',
+          'EmojiOne Color',
+        ],
+      ),
     );
   }
 

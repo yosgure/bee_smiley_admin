@@ -725,7 +725,19 @@ class _ChatMessageListState extends State<_ChatMessageList> {
     if (stamp == 'bee') {
       return Image.asset('assets/logo_beesmileymark.png', width: size * 1.4, height: size * 1.4);
     }
-    return Text(stamp, style: TextStyle(fontSize: size));
+    return Text(
+      stamp,
+      style: TextStyle(
+        fontSize: size,
+        fontFamilyFallback: const [
+          'Apple Color Emoji',
+          'Segoe UI Emoji',
+          'Noto Color Emoji',
+          'Twemoji Mozilla',
+          'EmojiOne Color',
+        ],
+      ),
+    );
   }
 
   Widget _buildStampChip(String msgId, String emoji, dynamic count, bool isMe) {
