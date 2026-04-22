@@ -3603,7 +3603,7 @@ async function fetchHugDocumentDetail(cookies, type, hugId) {
 async function scrapeHugCareRecords(cookies, fromDate, toDate) {
   const byChildId = {};
   let extractedCount = 0;
-  let debugSampled = false;
+  const debugAttempts = [];
 
   // URL パターンを複数試す（HUG 側の検索モードが不明なため）
   // 1) 期間指定・f_id 付きの search mode（HUGの検索フォーム送信を模倣）
@@ -3630,10 +3630,19 @@ async function scrapeHugCareRecords(cookies, fromDate, toDate) {
       if (seenPages.has(pageHash)) break;
       seenPages.add(pageHash);
 
-      if (!debugSampled && page === 1) {
-        debugSampled = true;
+      if (page === 1) {
         const tbodyRows = $('table tbody tr').length;
         const anyRows = $('table tr').length;
+        const formInputs = $('form input[name]').map((_, el) => $(el).attr('name')).get().slice(0, 20);
+        const firstRowCells = $('table tbody tr').first().find('td').map((_, td) => $(td).text().replace(/\s+/g, ' ').trim()).get().slice(0, 12);
+        debugAttempts.push({
+          url,
+          htmlLength: html.length,
+          tbodyRows,
+          anyRows,
+          formInputNames: formInputs,
+          firstRowCells,
+        });
         console.log(`[HUG] care records probe url=${url} tbodyRows=${tbodyRows} anyRows=${anyRows}`);
       }
 
@@ -3697,10 +3706,21 @@ async function scrapeHugCareRecords(cookies, fromDate, toDate) {
       if (!hasNext) break;
     }
 
-    // 最初のURLパターンで取得できたらそれで打ち切り
     if (attemptCount > 0) break;
   }
   console.log(`[HUG] care records: extracted ${extractedCount} rows across ${Object.keys(byChildId).length} children`);
+  // デバッグ情報を Firestore に書き出し（ログが見えない環境向け）
+  try {
+    await db.collection('hug_sync_logs').add({
+      kind: 'care_records_debug',
+      from: formatYmd(fromDate),
+      to: formatYmd(toDate),
+      extractedCount,
+      childrenCount: Object.keys(byChildId).length,
+      attempts: debugAttempts,
+      createdAt: FieldValue.serverTimestamp(),
+    });
+  } catch (_) {}
   return byChildId;
 }
 
