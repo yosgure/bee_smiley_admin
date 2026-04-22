@@ -2899,18 +2899,16 @@ async function saveToAttendance(cookies, params) {
   const attendValue = params.attendValue || '2';
   const FormData = require('form-data');
 
-  // 1. 編集URLを特定
-  const record = await findAttendanceRecord(cookies, childId, dateStr);
-  console.log(`[attendance] c_id=${childId} date=${dateStr} attend=${attendValue} → editUrl=${record.editUrl} r_id=${record.rId} s_id=${record.sId}`);
-  const editUrl = `${HUG_BASE_URL}/${record.editUrl}`;
-
-  // POST + verify をまとめて 1 サイクルとし、attend が反映されていなければ
-  // 編集ページ取得→POST→verify をやり直す（HUG が 302 を返しつつ実際には保存していない事例への対策）。
-  const MAX_CYCLES = 2;
+  // POST + verify をまとめて 1 サイクル。
+  // editUrl に id=insert が入る場合、1回目の POST はレコード作成(attend=1デフォルト)で終わり、
+  // 2回目以降で初めて attend 値が反映される。よって毎サイクル findAttendanceRecord を
+  // やり直して最新の editUrl（id=insert→numeric に切り替わった状態）を取得する。
+  const MAX_CYCLES = 3;
   let lastCheckedAttend = null;
   let lastBody = '';
   let lastStatus = 0;
   let lastErrorTexts = [];
+  let editUrl = '';
 
   for (let cycle = 0; cycle < MAX_CYCLES; cycle++) {
     if (cycle > 0) {
@@ -2918,7 +2916,13 @@ async function saveToAttendance(cookies, params) {
       console.log(`[attendance] retry cycle=${cycle + 1} for c_id=${childId} attend=${attendValue}`);
     }
 
-    // 編集ページを取得してフォームのhidden/select値を引き継ぐ（毎サイクル取り直す）
+    // 毎サイクル編集URLを取り直す（id=insert → numeric への切替を拾う）
+    const record = await findAttendanceRecord(cookies, childId, dateStr);
+    editUrl = `${HUG_BASE_URL}/${record.editUrl}`;
+    const isInsert = /[?&]id=insert(&|$)/.test(record.editUrl);
+    console.log(`[attendance] cycle=${cycle + 1} c_id=${childId} date=${dateStr} attend=${attendValue} editUrl=${record.editUrl} isInsert=${isInsert}`);
+
+    // 編集ページを取得してフォームのhidden/select値を引き継ぐ
     const editRes = await hugFetch(editUrl, {}, cookies);
     const editHtml = await editRes.text();
     const $ = cheerio.load(editHtml);
