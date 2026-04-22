@@ -1795,17 +1795,20 @@ class _ChatDetailViewState extends State<ChatDetailView> {
       // ロゴは絵文字より大きめに表示（絵文字は周囲に余白があるため）
       return Image.asset('assets/logo_beesmileymark.png', width: size * 1.4, height: size * 1.4);
     }
-    // Flutter Web のデフォルトフォントにはカラー絵文字がないため、
-    // プラットフォーム毎のカラー絵文字フォントをフォールバックに指定して暗い表示を回避
+    // canvaskit 環境では Theme の NotoSansJP が絵文字をモノクロで描画してしまい
+    // 自動フォールバック（Noto Color Emoji）が効かない。inherit:false で
+    // Theme の fontFamily を切り離し、カラー絵文字フォントに直接委ねる。
     return Text(
       stamp,
       style: TextStyle(
+        inherit: false,
         fontSize: size,
+        color: const Color(0xFF000000),
         decoration: TextDecoration.none,
+        fontFamily: 'Noto Color Emoji',
         fontFamilyFallback: const [
           'Apple Color Emoji',
           'Segoe UI Emoji',
-          'Noto Color Emoji',
           'Twemoji Mozilla',
           'EmojiOne Color',
         ],

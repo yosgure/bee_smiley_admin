@@ -728,11 +728,13 @@ class _ChatMessageListState extends State<_ChatMessageList> {
     return Text(
       stamp,
       style: TextStyle(
+        inherit: false,
         fontSize: size,
+        color: const Color(0xFF000000),
+        fontFamily: 'Noto Color Emoji',
         fontFamilyFallback: const [
           'Apple Color Emoji',
           'Segoe UI Emoji',
-          'Noto Color Emoji',
           'Twemoji Mozilla',
           'EmojiOne Color',
         ],
