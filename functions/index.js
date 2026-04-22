@@ -3666,15 +3666,29 @@ async function scrapeHugCareRecords(cookies, fromDate, toDate) {
         }
         outOfRangeStreak = 0;
 
-        const childLink = $tr.find('a[href*="profile_children.php"]').first();
-        const childHref = childLink.attr('href') || '';
-        const cIdMatch = childHref.match(/id=(\d+)/);
-        if (!cIdMatch) return;
-        const cId = cIdMatch[1];
+        // c_id 抽出: 行内の任意の a/button の href/onclick から c_id=\d+ を拾う。
+        // HUG の連絡帳一覧は profile_children.php ではなく編集ボタンの onclick や
+        // 印刷リンクの query に c_id を埋めているため、行全体を走査する。
+        const rowHtml = $.html($tr);
+        let cId = null;
+        const cIdDirect = rowHtml.match(/c_id=(\d+)/);
+        if (cIdDirect) {
+          cId = cIdDirect[1];
+        } else {
+          const profileLink = $tr.find('a[href*="profile_child"]').first().attr('href') || '';
+          const pm = profileLink.match(/id=(\d+)/);
+          if (pm) cId = pm[1];
+        }
+        if (!cId) return;
 
-        const previewHref = $tr.find('a[href*="contact_book"][href*="mode=print"]').first().attr('href') || '';
-        const bookIdMatch = previewHref.match(/id=(\d+)/);
-        const bookId = bookIdMatch ? bookIdMatch[1] : null;
+        const previewHref = $tr.find('a[href*="contact_book"][href*="mode=print"], a[href*="contact_book"][href*="mode=preview"]').first().attr('href') || '';
+        const bookIdMatch = previewHref.match(/[?&]id=(\d+)/);
+        let bookId = bookIdMatch ? bookIdMatch[1] : null;
+        if (!bookId) {
+          const editClick = $tr.find('[onclick*="contact_book"], [onclick*="mode=edit"]').first().attr('onclick') || '';
+          const rm = editClick.match(/[?&]id=(\d+)/) || rowHtml.match(/mode=edit[^"']*?[?&]id=(\d+)/);
+          if (rm) bookId = rm[1];
+        }
 
         const activity = cells[3] || '';
         const attendance = cells[4] || '';
