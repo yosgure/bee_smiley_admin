@@ -3621,7 +3621,7 @@ async function scrapeHugCareRecords(cookies, fromDate, toDate) {
     let attemptCount = 0;
     let outOfRangeStreak = 0;
 
-    for (let page = 1; page <= 30; page++) {
+    for (let page = 1; page <= 200; page++) {
       const url = buildUrl(page);
       const res = await hugFetch(url, {}, cookies);
       const html = await res.text();
@@ -3715,9 +3715,9 @@ async function scrapeHugCareRecords(cookies, fromDate, toDate) {
       });
 
       if (pageRows === 0) break;
-      if (outOfRangeStreak >= 50) break;
-      const hasNext = $(`a[href*="contact_book"][href*="page=${page + 1}"]`).length > 0;
-      if (!hasNext) break;
+      if (outOfRangeStreak >= 100) break;
+      // HUG のページャ仕様が不明なため hasNext 判定に頼らず、
+      // pageRows===0 か seenPages 重複検知で自然終了させる。
     }
 
     if (attemptCount > 0) break;
