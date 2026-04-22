@@ -163,7 +163,6 @@ class _StudentProfileDialogState extends State<_StudentProfileDialog> {
                             style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: c.textPrimary)),
                         const SizedBox(height: 8),
                         ..._docLabels.entries.map((e) => _buildDocCard(e.key, e.value, hugDocs, latestPlanDate)),
-                        const SizedBox(height: 20),
                         _buildCareRecordsSection(careRecords, careRange),
                         const SizedBox(height: 20),
                         Text('AIが蓄積した知見',
