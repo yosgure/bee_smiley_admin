@@ -3602,92 +3602,103 @@ async function fetchHugDocumentDetail(cookies, type, hugId) {
  */
 async function scrapeHugCareRecords(cookies, fromDate, toDate) {
   const byChildId = {};
-  const seenPages = new Set();
   let extractedCount = 0;
-  let outOfRangeStreak = 0; // 期間外の連続ヒット数（ソートで過去に外れたら打ち切るため）
+  let debugSampled = false;
 
-  // HUG 側でサーバ側フィルタが効くよう期間パラメータも一応送る（効かない場合はクライアントで除外）
-  const params = new URLSearchParams({
-    mode: 'search',
-    start_date: formatYmd(fromDate),
-    end_date: formatYmd(toDate),
-  });
+  // URL パターンを複数試す（HUG 側の検索モードが不明なため）
+  // 1) 期間指定・f_id 付きの search mode（HUGの検索フォーム送信を模倣）
+  // 2) モード指定なし（デフォルト一覧）
+  const fromStr = formatYmd(fromDate);
+  const toStr = formatYmd(toDate);
+  const urlBuilders = [
+    (page) => `${HUG_BASE_URL}/contact_book.php?mode=search&f_id=1&service[]=1&service[]=2&start_date=${encodeURIComponent(fromStr)}&end_date=${encodeURIComponent(toStr)}&page=${page}`,
+    (page) => `${HUG_BASE_URL}/contact_book.php?mode=search&page=${page}`,
+    (page) => `${HUG_BASE_URL}/contact_book.php?page=${page}`,
+  ];
 
-  for (let page = 1; page <= 30; page++) {
-    const url = `${HUG_BASE_URL}/contact_book.php?${params.toString()}&page=${page}`;
-    const res = await hugFetch(url, {}, cookies);
-    const html = await res.text();
-    const $ = cheerio.load(html);
-    const pageHash = html.length + ':' + (html.indexOf('<tbody') || 0);
-    if (seenPages.has(pageHash)) break;
-    seenPages.add(pageHash);
+  for (const buildUrl of urlBuilders) {
+    const seenPages = new Set();
+    let attemptCount = 0;
+    let outOfRangeStreak = 0;
 
-    let pageRows = 0;
-    $('table tbody tr, table tr').each((_, tr) => {
-      const $tr = $(tr);
-      const cells = $tr.find('td').map((_, td) => $(td).text().replace(/\s+/g, ' ').trim()).get();
-      if (cells.length === 0) return;
+    for (let page = 1; page <= 30; page++) {
+      const url = buildUrl(page);
+      const res = await hugFetch(url, {}, cookies);
+      const html = await res.text();
+      const $ = cheerio.load(html);
+      const pageHash = html.length + ':' + (html.indexOf('<tbody') || 0);
+      if (seenPages.has(pageHash)) break;
+      seenPages.add(pageHash);
 
-      // 日付セル（YYYY/MM/DD）を検出
-      let dateText = '';
-      for (const c of cells) {
-        if (/^\d{4}\/\d{1,2}\/\d{1,2}$/.test(c)) { dateText = c; break; }
+      if (!debugSampled && page === 1) {
+        debugSampled = true;
+        const tbodyRows = $('table tbody tr').length;
+        const anyRows = $('table tr').length;
+        console.log(`[HUG] care records probe url=${url} tbodyRows=${tbodyRows} anyRows=${anyRows}`);
       }
-      if (!dateText) return;
 
-      // 期間チェック
-      const recDate = parseHugDate(dateText);
-      if (!recDate) return;
-      if (recDate < fromDate || recDate > toDate) {
-        outOfRangeStreak++;
-        return;
-      }
-      outOfRangeStreak = 0;
+      let pageRows = 0;
+      $('table tbody tr, table tr').each((_, tr) => {
+        const $tr = $(tr);
+        const cells = $tr.find('td').map((_, td) => $(td).text().replace(/\s+/g, ' ').trim()).get();
+        if (cells.length === 0) return;
 
-      // c_id: 児童リンク or 行内リンクから取得
-      const childLink = $tr.find('a[href*="profile_children.php"]').first();
-      const childHref = childLink.attr('href') || '';
-      const cIdMatch = childHref.match(/id=(\d+)/);
-      if (!cIdMatch) return;
-      const cId = cIdMatch[1];
-
-      // プレビューID
-      const previewHref = $tr.find('a[href*="contact_book"][href*="mode=print"]').first().attr('href') || '';
-      const bookIdMatch = previewHref.match(/id=(\d+)/);
-      const bookId = bookIdMatch ? bookIdMatch[1] : null;
-
-      // 活動内容・出欠・記録者を抽出（列順が変わっても拾えるようヒューリスティック）
-      // 既知列: 日付, 児童名, 施設名, 活動内容, 出欠, 状態, 既読, 編集, プレビュー, 記録者, 最終更新
-      const activity = cells[3] || '';
-      const attendance = cells[4] || '';
-      // 記録者: 右側の最終更新前のセル。cells.length 差分で探す
-      let recorder = '';
-      if (cells.length >= 2) {
-        // 最終更新は 1〜2 個のセルを使う可能性あり。最終更新っぽいタイムスタンプでないセルを後ろから拾う
-        for (let i = cells.length - 1; i >= 0; i--) {
-          const t = cells[i];
-          if (/^\d{4}\/\d{1,2}\/\d{1,2}\s/.test(t)) continue; // タイムスタンプは skip
-          if (t.length > 1 && t.length < 20 && !/\d{4}/.test(t)) { recorder = t; break; }
+        let dateText = '';
+        for (const c of cells) {
+          if (/^\d{4}\/\d{1,2}\/\d{1,2}$/.test(c)) { dateText = c; break; }
         }
-      }
+        if (!dateText) return;
 
-      if (!byChildId[cId]) byChildId[cId] = [];
-      byChildId[cId].push({
-        date: dateText,
-        activity,
-        attendance,
-        recorder,
-        bookId,
+        const recDate = parseHugDate(dateText);
+        if (!recDate) return;
+        if (recDate < fromDate || recDate > toDate) {
+          outOfRangeStreak++;
+          return;
+        }
+        outOfRangeStreak = 0;
+
+        const childLink = $tr.find('a[href*="profile_children.php"]').first();
+        const childHref = childLink.attr('href') || '';
+        const cIdMatch = childHref.match(/id=(\d+)/);
+        if (!cIdMatch) return;
+        const cId = cIdMatch[1];
+
+        const previewHref = $tr.find('a[href*="contact_book"][href*="mode=print"]').first().attr('href') || '';
+        const bookIdMatch = previewHref.match(/id=(\d+)/);
+        const bookId = bookIdMatch ? bookIdMatch[1] : null;
+
+        const activity = cells[3] || '';
+        const attendance = cells[4] || '';
+        let recorder = '';
+        if (cells.length >= 2) {
+          for (let i = cells.length - 1; i >= 0; i--) {
+            const t = cells[i];
+            if (/^\d{4}\/\d{1,2}\/\d{1,2}\s/.test(t)) continue;
+            if (t.length > 1 && t.length < 20 && !/\d{4}/.test(t)) { recorder = t; break; }
+          }
+        }
+
+        if (!byChildId[cId]) byChildId[cId] = [];
+        byChildId[cId].push({
+          date: dateText,
+          activity,
+          attendance,
+          recorder,
+          bookId,
+        });
+        pageRows++;
+        attemptCount++;
+        extractedCount++;
       });
-      pageRows++;
-      extractedCount++;
-    });
 
-    if (pageRows === 0) break;
-    // 連続で期間外が大量に続くなら打ち切り（HUG は新しい順に返してくる想定）
-    if (outOfRangeStreak >= 50) break;
-    const hasNext = $(`a[href*="contact_book"][href*="page=${page + 1}"]`).length > 0;
-    if (!hasNext) break;
+      if (pageRows === 0) break;
+      if (outOfRangeStreak >= 50) break;
+      const hasNext = $(`a[href*="contact_book"][href*="page=${page + 1}"]`).length > 0;
+      if (!hasNext) break;
+    }
+
+    // 最初のURLパターンで取得できたらそれで打ち切り
+    if (attemptCount > 0) break;
   }
   console.log(`[HUG] care records: extracted ${extractedCount} rows across ${Object.keys(byChildId).length} children`);
   return byChildId;
