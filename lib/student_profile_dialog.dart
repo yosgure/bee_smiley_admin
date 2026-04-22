@@ -504,7 +504,11 @@ class _CareRecordTileState extends State<_CareRecordTile> {
     try {
       final callable = FirebaseFunctions.instanceFor(region: 'asia-northeast1')
           .httpsCallable('fetchHugCareRecordBody');
-      final result = await callable.call({'bookId': bookId});
+      final result = await callable.call({
+        'bookId': bookId,
+        if (widget.record['cId'] != null) 'cId': widget.record['cId'],
+        if (widget.record['sId'] != null) 'sId': widget.record['sId'],
+      });
       final body = (result.data as Map?)?['body'] as String? ?? '';
       if (!mounted) return;
       setState(() {
@@ -584,8 +588,17 @@ class _CareRecordTileState extends State<_CareRecordTile> {
                       constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
                       padding: EdgeInsets.zero,
                       onPressed: () {
+                        final cId = r['cId'];
+                        final sId = r['sId'];
+                        final params = <String, String>{
+                          'mode': 'preview',
+                          'id': '$bookId',
+                          if (cId != null) 'c_id': '$cId',
+                          if (sId != null) 's_id': '$sId',
+                        };
                         final url = Uri.parse(
-                            'https://www.hug-beesmiley.link/hug/wm/contact_book.php?mode=print&id=$bookId');
+                            'https://www.hug-beesmiley.link/hug/wm/contact_book.php')
+                            .replace(queryParameters: params);
                         launchUrl(url, mode: LaunchMode.externalApplication);
                       },
                     ),
