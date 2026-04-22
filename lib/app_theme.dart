@@ -293,6 +293,97 @@ class AppColorScheme extends ThemeExtension<AppColorScheme> {
 extension AppThemeX on BuildContext {
   AppColorScheme get colors => Theme.of(this).extension<AppColorScheme>()!;
   bool get isDark => Theme.of(this).brightness == Brightness.dark;
+  AlertPalette get alerts => AlertPalette.of(this);
+}
+
+// ================================================
+// アラート色トークン（WCAG AA 4.5:1 以上のコントラストを担保）
+// 赤背景に赤文字といった低コントラスト表現を防ぐため、全アラートは
+// context.alerts.{warning|urgent|info|success} を経由して取得する。
+// ================================================
+class AlertStyle {
+  final Color background;
+  final Color border;
+  final Color text;
+  final Color icon;
+  const AlertStyle({
+    required this.background,
+    required this.border,
+    required this.text,
+    required this.icon,
+  });
+}
+
+class AlertPalette {
+  final AlertStyle warning;
+  final AlertStyle urgent;
+  final AlertStyle info;
+  final AlertStyle success;
+  const AlertPalette({
+    required this.warning,
+    required this.urgent,
+    required this.info,
+    required this.success,
+  });
+
+  static AlertPalette of(BuildContext context) {
+    return Theme.of(context).brightness == Brightness.dark ? _dark : _light;
+  }
+
+  // ダーク: 赤背景に赤文字の低コントラスト表現を避け、オレンジ寄りの縁取り + 温白文字
+  static const AlertPalette _dark = AlertPalette(
+    warning: AlertStyle(
+      background: Color(0xFF3A1515),
+      border: Color(0xFFFFB74D),
+      text: Color(0xFFFFF3E0),
+      icon: Color(0xFFFFB74D),
+    ),
+    urgent: AlertStyle(
+      background: Color(0xFF4A2C1A),
+      border: Color(0xFFFF7043),
+      text: Color(0xFFFFFFFF),
+      icon: Color(0xFFFF7043),
+    ),
+    info: AlertStyle(
+      background: Color(0xFF1A2A3A),
+      border: Color(0xFF64B5F6),
+      text: Color(0xFFE3F2FD),
+      icon: Color(0xFF64B5F6),
+    ),
+    success: AlertStyle(
+      background: Color(0xFF1B2E1B),
+      border: Color(0xFF81C784),
+      text: Color(0xFFE8F5E9),
+      icon: Color(0xFF81C784),
+    ),
+  );
+
+  static const AlertPalette _light = AlertPalette(
+    warning: AlertStyle(
+      background: Color(0xFFFFF8E1),
+      border: Color(0xFFFFB300),
+      text: Color(0xFF4E3B00),
+      icon: Color(0xFFE65100),
+    ),
+    urgent: AlertStyle(
+      background: Color(0xFFFDEBE9),
+      border: Color(0xFFE53935),
+      text: Color(0xFF7F1D1D),
+      icon: Color(0xFFC62828),
+    ),
+    info: AlertStyle(
+      background: Color(0xFFE3F2FD),
+      border: Color(0xFF1E88E5),
+      text: Color(0xFF0D47A1),
+      icon: Color(0xFF1976D2),
+    ),
+    success: AlertStyle(
+      background: Color(0xFFE8F5E9),
+      border: Color(0xFF2E7D32),
+      text: Color(0xFF1B5E20),
+      icon: Color(0xFF2E7D32),
+    ),
+  );
 }
 
 // ================================================

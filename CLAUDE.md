@@ -24,3 +24,26 @@
 - サーバー起動後、ユーザーに「localhost:<ポート番号> で確認してください」と伝えること
 - 確認時はホットリロード（r）ではなくホットリスタート（R）を使うこと（定数・マップ・static変数の変更はホットリロードでは反映されないため）
 - 本番環境 (bee-smiley-admin.web.app) での確認はデプロイ後のみ
+
+## CRM Design Rules
+
+### User Segmentation
+- CRM は 2 種類のユーザーを想定: 経営者（ダッシュボード中心）と現場スタッフ（タスク中心）
+- 現場スタッフのデフォルト表示は「督促タブ」、経営者は「分析タブ」（将来的にロール別分岐）
+- カード情報密度は現場向けは高め、経営者向けは可視化優先
+
+### Stage Transitions
+- ステージ遷移は DAG: `検討中 → 入会手続中 → 入会 → 退会` / `(any) → 失注`
+- `失注` と `退会` への遷移時は理由を選択必須（`CrmOptions.lossReasons` / `CrmOptions.withdrawalReasons`）
+- `検討中` → `入会` の直接遷移は禁止（必ず `入会手続中` を経由）
+- 遷移可否は `CrmOptions.canTransition(from, to)` で検証
+
+### Alert Thresholds（`crm_lead_screen.dart` に定数化）
+- `STALE_CONSIDERING_DAYS = 3`
+- `STALE_PROCESSING_DAYS = 7`
+- `RECIPIENT_CARD_STALE_DAYS = 14`
+
+### Design Tokens
+- アラート色は `context.alerts.{warning|urgent|info|success}` を必ず経由する（`Colors.red` / `Colors.blue` の直接指定禁止）
+- 全テキストは WCAG AA コントラスト（4.5:1）を満たすこと
+- 定義は `lib/app_theme.dart` の `AlertPalette`

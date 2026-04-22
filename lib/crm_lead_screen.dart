@@ -13,18 +13,36 @@ import 'main.dart';
 // ============================================================
 class CrmOptions {
   /// パイプライン上に並べるステージ（左→右へ前進）
+  /// withdrawn は「入会」からのみ遷移可能（入会後に退会したケース）。
   static const List<({String id, String label, Color color})> stages = [
     (id: 'considering', label: '検討中', color: Color(0xFFFF9800)),
     (id: 'onboarding', label: '入会手続中', color: Color(0xFF9C27B0)),
     (id: 'won', label: '入会', color: Color(0xFF4CAF50)),
     (id: 'lost', label: '失注', color: Color(0xFF9E9E9E)),
+    (id: 'withdrawn', label: '退会', color: Color(0xFF6D4C41)),
   ];
 
-  /// カンバンに表示する進行中ステージ（won/lostを除外）
+  /// カンバンに表示する進行中ステージ（won/lost/withdrawnを除外）
   static const List<String> kanbanStages = [
     'considering',
     'onboarding',
   ];
+
+  /// ステージ遷移の許可ルール（from → allowed to）。
+  /// 「検討中」から直接「入会」へはスキップ禁止（入会手続中を経由）。
+  /// 「退会」は「入会」からのみ可能。
+  static const Map<String, List<String>> allowedStageTransitions = {
+    'considering': ['onboarding', 'lost'],
+    'onboarding': ['won', 'lost', 'considering'],
+    'won': ['withdrawn'],
+    'lost': ['considering'],
+    'withdrawn': [],
+  };
+
+  static bool canTransition(String from, String to) {
+    if (from == to) return true;
+    return allowedStageTransitions[from]?.contains(to) ?? false;
+  }
 
   static const List<({String id, String label})> sources = [
     (id: 'instagram', label: 'Instagram'),
@@ -40,14 +58,26 @@ class CrmOptions {
   ];
 
   static const List<({String id, String label})> lossReasons = [
-    (id: 'price', label: '料金'),
-    (id: 'distance', label: '距離・通所負担'),
-    (id: 'schedule', label: '曜日・時間が合わず'),
-    (id: 'competitor', label: '他社決定'),
-    (id: 'no_reply', label: '連絡途絶'),
-    (id: 'family_reason', label: '家庭事情'),
-    (id: 'capacity', label: '受け入れ枠なし'),
-    (id: 'not_match', label: '支援内容ミスマッチ'),
+    (id: 'competitor', label: '他事業所に決定'),
+    (id: 'permit_rejected', label: '受給者証が下りなかった'),
+    (id: 'no_reply', label: '連絡が取れなくなった'),
+    (id: 'price', label: '料金・費用面'),
+    (id: 'distance', label: 'アクセス・立地'),
+    (id: 'capacity', label: '空き枠のタイミング不一致'),
+    (id: 'policy_mismatch', label: '事業所の方針と合わない'),
+    (id: 'family_reason', label: '保護者の事情（引越し等）'),
+    (id: 'trial_mismatch', label: '体験後に合わないと判断'),
+    (id: 'other', label: 'その他'),
+  ];
+
+  /// 退会理由（入会→退会遷移時に必須入力）
+  static const List<({String id, String label})> withdrawalReasons = [
+    (id: 'graduation', label: '卒業（就学等）'),
+    (id: 'relocation', label: '引越し'),
+    (id: 'transfer', label: '他事業所へ移行'),
+    (id: 'child_decision', label: '本人の意向'),
+    (id: 'parent_policy', label: '保護者の方針変更'),
+    (id: 'economic', label: '経済的理由'),
     (id: 'other', label: 'その他'),
   ];
 
@@ -661,7 +691,8 @@ class _LeadKanbanCard extends StatelessWidget {
     final nextAt = (d['nextActionAt'] as Timestamp?)?.toDate();
     final nextNote = d['nextActionNote'] as String? ?? '';
     final overdue = nextAt != null && nextAt.isBefore(DateTime.now());
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final alerts = context.alerts;
+    final alertStyle = overdue ? alerts.urgent : alerts.info;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
@@ -669,10 +700,8 @@ class _LeadKanbanCard extends StatelessWidget {
         color: context.colors.cardBg,
         borderRadius: BorderRadius.circular(10),
         border: Border.all(
-          color: overdue
-              ? Colors.red.shade300
-              : (isDark ? const Color(0xFF3A3D42) : const Color(0xFFE4E7EB)),
-          width: 1,
+          color: overdue ? alerts.urgent.border : context.colors.borderLight,
+          width: overdue ? 1.2 : 1,
         ),
       ),
       child: InkWell(
@@ -707,31 +736,24 @@ class _LeadKanbanCard extends StatelessWidget {
               if (nextAt != null) ...[
                 const SizedBox(height: 6),
                 Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
                   decoration: BoxDecoration(
-                    color: overdue
-                        ? Colors.red.withValues(alpha: 0.1)
-                        : Colors.blue.withValues(alpha: 0.08),
+                    color: alertStyle.background,
+                    border: Border.all(color: alertStyle.border, width: 0.8),
                     borderRadius: BorderRadius.circular(4),
                   ),
                   child: Row(
                     children: [
                       Icon(
-                          overdue
-                              ? Icons.warning_amber
-                              : Icons.schedule,
-                          size: 11,
-                          color: overdue ? Colors.red : Colors.blue),
+                        overdue ? Icons.warning_amber : Icons.schedule,
+                        size: 11,
+                        color: alertStyle.icon,
+                      ),
                       const SizedBox(width: 4),
                       Expanded(
                         child: Text(
                           '${DateFormat('M/d').format(nextAt)} $nextNote',
-                          style: TextStyle(
-                              fontSize: 10,
-                              color: overdue
-                                  ? Colors.red.shade700
-                                  : Colors.blue.shade700),
+                          style: TextStyle(fontSize: 10, color: alertStyle.text),
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
@@ -870,7 +892,7 @@ class _LeadTableRow extends StatelessWidget {
                         context,
                         overdue ? Icons.warning_amber : Icons.schedule,
                         '次回: ${DateFormat('M/d').format(nextAt)}',
-                        color: overdue ? Colors.red : Colors.blue),
+                        color: overdue ? context.alerts.urgent.icon : context.alerts.info.icon),
                 ],
               ),
             ],
@@ -1413,6 +1435,8 @@ class _CrmLeadEditScreenState extends State<CrmLeadEditScreen> {
     try {
       await widget.doc!.reference.update({
         'activities': FieldValue.arrayUnion([entry]),
+        // 督促タブで「最終アクションからの経過日数」を算出するため最終活動日を保存
+        'lastActivityAt': Timestamp.fromDate(result['at']),
         'updatedAt': FieldValue.serverTimestamp(),
       });
       if (mounted) setState(() {});
@@ -2195,6 +2219,7 @@ class _CrmLeadEditScreenState extends State<CrmLeadEditScreen> {
   }
 
   Widget _lossReasonSelector() {
+    final urgent = context.alerts.urgent;
     return Wrap(
       spacing: 6,
       runSpacing: 6,
@@ -2205,23 +2230,17 @@ class _CrmLeadEditScreenState extends State<CrmLeadEditScreen> {
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
             decoration: BoxDecoration(
-              color: sel
-                  ? Colors.red.withValues(alpha: 0.12)
-                  : context.colors.cardBg,
+              color: sel ? urgent.background : context.colors.cardBg,
               borderRadius: BorderRadius.circular(14),
               border: Border.all(
-                  color: sel
-                      ? Colors.red.shade400
-                      : context.colors.borderMedium,
+                  color: sel ? urgent.border : context.colors.borderMedium,
                   width: sel ? 1.5 : 0.8),
             ),
             child: Text(s.label,
                 style: TextStyle(
                     fontSize: 12,
                     fontWeight: sel ? FontWeight.bold : FontWeight.normal,
-                    color: sel
-                        ? Colors.red.shade700
-                        : context.colors.textPrimary)),
+                    color: sel ? urgent.text : context.colors.textPrimary)),
           ),
         );
       }).toList(),
