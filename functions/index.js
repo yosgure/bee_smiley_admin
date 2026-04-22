@@ -2849,28 +2849,40 @@ async function findAttendanceRecord(cookies, childId, dateStr) {
     throw new Error(`${dateStr} の出席表が見つかりません (f_id=1)。HUG上で該当日の出席レコードが作成されているか確認してください。`);
   }
 
-  // 各編集URLにアクセスして c_id を特定
-  const editPromises = editUrlStrs.map(async (u) => {
-    try {
-      const r = await hugFetch(`${HUG_BASE_URL}/${u}`, {}, cookies);
-      const h = await r.text();
-      const $ = cheerio.load(h);
-      const cId = $('input[name="c_id"]').attr('value') || '';
-      const fId = $('input[name="f_id"]').attr('value') || '';
-      const rId = $('input[name="r_id"]').attr('value') || '';
-      const sId = $('input[name="s_id"]').attr('value') || '';
-      return { editUrl: u, cId, fId, rId, sId };
-    } catch (e) {
-      return { editUrl: u, cId: '', fId: '', rId: '', sId: '', error: e.message };
+  // 個別編集ページの取得は HUG 側で時折空レスポンスや切断が起きるため、
+  // 最大2回までリトライする（連続失敗が「時々失敗する」現象の主因）
+  const fetchEditPage = async (u) => {
+    let lastErr = null;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const r = await hugFetch(`${HUG_BASE_URL}/${u}`, {}, cookies);
+        const h = await r.text();
+        const $ = cheerio.load(h);
+        const cId = $('input[name="c_id"]').attr('value') || '';
+        const fId = $('input[name="f_id"]').attr('value') || '';
+        const rId = $('input[name="r_id"]').attr('value') || '';
+        const sId = $('input[name="s_id"]').attr('value') || '';
+        // c_id が取れなかったらセッション切れ/ロード失敗の可能性があるので再試行
+        if (!cId && attempt === 0) {
+          await new Promise((res) => setTimeout(res, 300));
+          continue;
+        }
+        return { editUrl: u, cId, fId, rId, sId };
+      } catch (e) {
+        lastErr = e;
+        if (attempt === 0) await new Promise((res) => setTimeout(res, 300));
+      }
     }
-  });
-  const results = await Promise.all(editPromises);
+    return { editUrl: u, cId: '', fId: '', rId: '', sId: '', error: lastErr?.message || 'unknown' };
+  };
+  const results = await Promise.all(editUrlStrs.map(fetchEditPage));
 
   const match = results.find((r) => String(r.cId) === String(childId));
   if (!match) {
+    const emptyCount = results.filter((r) => !r.cId).length;
     throw new Error(
       `c_id=${childId} の出席レコードが ${dateStr} 内に見つかりません。` +
-      `検査対象: ${results.length}件, c_ids=${results.map(r => r.cId).join(',')}`
+      `検査対象: ${results.length}件, 空レス: ${emptyCount}件, c_ids=${results.map(r => r.cId).join(',')}`
     );
   }
   return match;
@@ -2967,22 +2979,31 @@ async function saveToAttendance(cookies, params) {
   const body = await postRes.text();
   console.log('[attendance] response status:', postRes.status, 'Location:', postRes.headers.get('location'));
 
-  // 302でもHUG側で保存されていない場合があるため、編集ページを再取得して attend が期待値になっているか検証
+  // 302でもHUG側で保存されていない場合があるため、編集ページを再取得して attend が期待値になっているか検証。
+  // HUG 側の反映遅延で verify が先に走る事例があるため、不一致時は 1 回だけ待って再確認する。
   if (postRes.status === 302 || postRes.status === 200) {
     try {
-      const verifyRes = await hugFetch(editUrl, {}, cookies);
-      const verifyHtml = await verifyRes.text();
-      const $v = cheerio.load(verifyHtml);
-      const checkedAttend = $v('input[name="attend"]').filter((_, el) => $v(el).attr('checked') !== undefined).attr('value');
-      console.log(`[attendance] verify: checked attend=${checkedAttend}, expected=${attendValue}`);
-      if (String(checkedAttend) === String(attendValue)) return true;
+      let checkedAttend = null;
+      let verifyErrorMsg = null;
+      for (let attempt = 0; attempt < 2; attempt++) {
+        if (attempt > 0) await new Promise((res) => setTimeout(res, 500));
+        try {
+          const verifyRes = await hugFetch(editUrl, {}, cookies);
+          const verifyHtml = await verifyRes.text();
+          const $v = cheerio.load(verifyHtml);
+          checkedAttend = $v('input[name="attend"]').filter((_, el) => $v(el).attr('checked') !== undefined).attr('value');
+          console.log(`[attendance] verify(attempt=${attempt + 1}): checked attend=${checkedAttend}, expected=${attendValue}`);
+          if (String(checkedAttend) === String(attendValue)) return true;
+        } catch (e) {
+          verifyErrorMsg = e.message;
+        }
+      }
       throw new Error(
-        `HUG保存に失敗しました（送信後の確認で attend=${checkedAttend || '未設定'} のまま）。期待: ${attendValue}`
+        `HUG保存に失敗しました（送信後の確認で attend=${checkedAttend || '未設定'} のまま）。期待: ${attendValue}${verifyErrorMsg ? ' / verifyErr=' + verifyErrorMsg : ''}`
       );
     } catch (verifyErr) {
       if (verifyErr.message.startsWith('HUG保存に失敗しました')) throw verifyErr;
       console.error('[attendance] verify error:', verifyErr.message);
-      // 検証自体が失敗した場合は、元のレスポンスが302なら成功扱い
       if (postRes.status === 302) return true;
     }
   }
