@@ -1346,18 +1346,23 @@ class _ChatDetailViewState extends State<ChatDetailView> {
             ],
             const SizedBox(width: 4),
             Expanded(
-              child: Focus(
-                onKeyEvent: (node, event) {
-                  if (_textController.value.composing.isValid) return KeyEventResult.ignored;
-                  if (event is KeyDownEvent && event.logicalKey == LogicalKeyboardKey.enter && !HardwareKeyboard.instance.isShiftPressed) { _sendMessage(); return KeyEventResult.handled; }
-                  return KeyEventResult.ignored;
-                },
-                child: TextField(
-                  controller: _textController, focusNode: _focusNode, maxLines: null, minLines: 1, keyboardType: TextInputType.multiline,
-                  style: TextStyle(fontSize: 15, height: 1.5, fontFamily: 'NotoSansJP', fontFamilyFallback: ['Hiragino Sans', 'Roboto', 'sans-serif']),
-                  decoration: InputDecoration(hintText: 'メッセージを入力', filled: true, fillColor: context.colors.chipBg, border: OutlineInputBorder(borderRadius: BorderRadius.circular(20), borderSide: BorderSide.none), contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6), isDense: true),
-                  contextMenuBuilder: (ctx, editableTextState) => AdaptiveTextSelectionToolbar.editableText(
-                    editableTextState: editableTextState,
+              // 長文入力時に TextField が無限に伸びて送信ボタンをキーボード外に押し出すのを防ぐ。
+              // 上限高さを設け、超えたら内部スクロール。
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 140),
+                child: Focus(
+                  onKeyEvent: (node, event) {
+                    if (_textController.value.composing.isValid) return KeyEventResult.ignored;
+                    if (event is KeyDownEvent && event.logicalKey == LogicalKeyboardKey.enter && !HardwareKeyboard.instance.isShiftPressed) { _sendMessage(); return KeyEventResult.handled; }
+                    return KeyEventResult.ignored;
+                  },
+                  child: TextField(
+                    controller: _textController, focusNode: _focusNode, maxLines: null, minLines: 1, keyboardType: TextInputType.multiline,
+                    style: TextStyle(fontSize: 15, height: 1.5, fontFamily: 'NotoSansJP', fontFamilyFallback: ['Hiragino Sans', 'Roboto', 'sans-serif']),
+                    decoration: InputDecoration(hintText: 'メッセージを入力', filled: true, fillColor: context.colors.chipBg, border: OutlineInputBorder(borderRadius: BorderRadius.circular(20), borderSide: BorderSide.none), contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6), isDense: true),
+                    contextMenuBuilder: (ctx, editableTextState) => AdaptiveTextSelectionToolbar.editableText(
+                      editableTextState: editableTextState,
+                    ),
                   ),
                 ),
               ),
