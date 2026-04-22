@@ -17,6 +17,7 @@ class _HugMappingScreenState extends State<HugMappingScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
   bool _isFetching = false;
+  bool _isSyncingAll = false;
 
   Map<String, String> _childMapping = {};
   Map<String, String> _staffMapping = {};
@@ -74,6 +75,45 @@ class _HugMappingScreenState extends State<HugMappingScreen>
         .collection('hug_settings')
         .doc('staff_mapping')
         .set(_staffMapping);
+  }
+
+  /// 全児童のHUGプロファイルを一括同期
+  Future<void> _syncAllHugDocs() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('全児童のプロファイルを同期'),
+        content: const Text('マッピング済みの全児童についてHUG情報を取得し直します。数分かかることがあります。'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('キャンセル')),
+          ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('同期開始')),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    setState(() => _isSyncingAll = true);
+    try {
+      final callable = FirebaseFunctions.instanceFor(region: 'asia-northeast1')
+          .httpsCallable('syncHugDocs', options: HttpsCallableOptions(timeout: const Duration(minutes: 9)));
+      final result = await callable.call();
+      final data = (result.data as Map?) ?? {};
+      final synced = data['synced'] ?? 0;
+      final total = data['totalChildren'] ?? 0;
+      final unmapped = data['skippedUnmapped'] ?? 0;
+      final errors = (data['errors'] as List?)?.length ?? 0;
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('同期完了: $synced件/$total件 同期、未マッピング: $unmapped件、エラー: $errors件')),
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('一括同期エラー: $e'), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isSyncingAll = false);
+    }
   }
 
   /// hugからマッピング候補を自動取得
@@ -143,6 +183,20 @@ class _HugMappingScreenState extends State<HugMappingScreen>
           ],
         ),
         actions: [
+          _isSyncingAll
+              ? const Padding(
+                  padding: EdgeInsets.all(16),
+                  child: SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: Colors.white)),
+                )
+              : IconButton(
+                  icon: const Icon(Icons.sync),
+                  tooltip: '全児童のプロファイルを同期',
+                  onPressed: _syncAllHugDocs,
+                ),
           _isFetching
               ? const Padding(
                   padding: EdgeInsets.all(16),
