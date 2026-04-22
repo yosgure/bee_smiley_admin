@@ -535,48 +535,45 @@ class _CareRecordTileState extends State<_CareRecordTile> {
     final bookId = r['bookId'];
     final body = (r['body'] as String?) ?? _lazyBody ?? '';
 
+    final subtitleParts = <String>[];
+    if (activity.isNotEmpty) subtitleParts.add(activity);
+    if (attendance.isNotEmpty) subtitleParts.add(attendance);
+    if (recorder.isNotEmpty) subtitleParts.add(recorder);
+    final subtitle = subtitleParts.join(' ・ ');
+
     return Container(
-      margin: const EdgeInsets.only(bottom: 6),
+      margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
         color: c.tagBg,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(12),
         border: Border.all(color: c.borderLight, width: 0.5),
       ),
       child: Column(
         children: [
           InkWell(
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(12),
             onTap: bookId == null ? null : _toggle,
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
               child: Row(
                 children: [
-                  SizedBox(
-                    width: 76,
-                    child: Text(date,
-                        style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: c.textPrimary)),
-                  ),
+                  Icon(Icons.check_circle, size: 16, color: Colors.green),
+                  const SizedBox(width: 10),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Wrap(
-                          spacing: 6,
-                          runSpacing: 4,
-                          children: [
-                            if (activity.isNotEmpty)
-                              _chip(c, activity, c.textSecondary),
-                            if (attendance.isNotEmpty)
-                              _chip(c, attendance, c.textSecondary),
-                            if (recorder.isNotEmpty)
-                              Text(recorder,
-                                  style: TextStyle(
-                                      fontSize: 11, color: c.textTertiary)),
-                          ],
-                        ),
+                        Text(date,
+                            style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500,
+                                color: c.textPrimary)),
+                        if (subtitle.isNotEmpty) ...[
+                          const SizedBox(height: 2),
+                          Text(subtitle,
+                              style: TextStyle(
+                                  fontSize: 11, color: c.textSecondary)),
+                        ],
                       ],
                     ),
                   ),
@@ -585,8 +582,6 @@ class _CareRecordTileState extends State<_CareRecordTile> {
                       icon: const Icon(Icons.open_in_new, size: 16),
                       color: c.textSecondary,
                       tooltip: 'HUGで開く',
-                      constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                      padding: EdgeInsets.zero,
                       onPressed: () {
                         final cId = r['cId'];
                         final sId = r['sId'];
@@ -602,11 +597,12 @@ class _CareRecordTileState extends State<_CareRecordTile> {
                         launchUrl(url, mode: LaunchMode.externalApplication);
                       },
                     ),
-                  Icon(
-                    _expanded ? Icons.expand_less : Icons.expand_more,
-                    size: 18,
-                    color: c.textSecondary,
-                  ),
+                  if (bookId != null)
+                    Icon(
+                      _expanded ? Icons.expand_less : Icons.expand_more,
+                      size: 20,
+                      color: c.textSecondary,
+                    ),
                 ],
               ),
             ),
@@ -614,12 +610,12 @@ class _CareRecordTileState extends State<_CareRecordTile> {
           if (_expanded)
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+              padding: const EdgeInsets.fromLTRB(14, 0, 14, 12),
               child: Container(
-                padding: const EdgeInsets.all(10),
+                padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
                   color: c.scaffoldBg,
-                  borderRadius: BorderRadius.circular(6),
+                  borderRadius: BorderRadius.circular(8),
                   border: Border.all(color: c.borderLight, width: 0.5),
                 ),
                 child: _loading
@@ -649,15 +645,5 @@ class _CareRecordTileState extends State<_CareRecordTile> {
     );
   }
 
-  Widget _chip(AppColorScheme c, String label, Color fg) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(
-        color: c.chipBg,
-        borderRadius: BorderRadius.circular(4),
-      ),
-      child: Text(label, style: TextStyle(fontSize: 10, color: fg)),
-    );
-  }
 }
 
