@@ -397,38 +397,127 @@ class _StudentProfileDialogState extends State<_StudentProfileDialog> {
   Widget _buildCareRecordsSection(
       List<Map<String, dynamic>> records, Map<String, dynamic>? range) {
     final c = context.colors;
-    final rangeText = range == null
-        ? ''
-        : '（${range['from']} 〜 ${range['to']}）';
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Text('ケア記録 $rangeText',
-                style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: c.textPrimary)),
-            const SizedBox(width: 6),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              decoration: BoxDecoration(
-                color: c.chipBg,
-                borderRadius: BorderRadius.circular(8),
+    final hasRecords = records.isNotEmpty;
+    final latestDate = hasRecords ? (records.first['date'] as String? ?? '') : '';
+    final statusText = !hasRecords
+        ? 'ケア記録はありません'
+        : latestDate.isNotEmpty
+            ? '作成日: $latestDate'
+            : '${records.length}件';
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      decoration: BoxDecoration(
+        color: c.tagBg,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: c.borderLight, width: 0.5),
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: hasRecords ? () => _showCareRecordsDialog(records, range) : null,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          child: Row(
+            children: [
+              Icon(
+                hasRecords ? Icons.check_circle : Icons.remove_circle_outline,
+                size: 16,
+                color: hasRecords ? Colors.green : c.textTertiary,
               ),
-              child: Text('${records.length}件',
-                  style: TextStyle(fontSize: 11, color: c.textSecondary)),
-            ),
-          ],
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('ケア記録',
+                        style: TextStyle(
+                            fontSize: 13,
+                            color: c.textPrimary,
+                            fontWeight: FontWeight.w500)),
+                    const SizedBox(height: 2),
+                    Text(statusText,
+                        style: TextStyle(fontSize: 11, color: c.textSecondary)),
+                  ],
+                ),
+              ),
+              if (hasRecords)
+                IconButton(
+                  icon: const Icon(Icons.list_alt, size: 18),
+                  color: c.textSecondary,
+                  tooltip: '過去のケア記録',
+                  onPressed: () => _showCareRecordsDialog(records, range),
+                ),
+            ],
+          ),
         ),
-        const SizedBox(height: 8),
-        if (records.isEmpty)
-          Text('この期間のケア記録はありません。',
-              style: TextStyle(fontSize: 12, color: c.textSecondary))
-        else
-          ...records.map((r) => _CareRecordTile(record: r)),
-      ],
+      ),
+    );
+  }
+
+  void _showCareRecordsDialog(
+      List<Map<String, dynamic>> records, Map<String, dynamic>? range) {
+    final c = context.colors;
+    final rangeText = range == null ? '' : '（${range['from']} 〜 ${range['to']}）';
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        backgroundColor: c.scaffoldBg,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        insetPadding: const EdgeInsets.symmetric(horizontal: 32, vertical: 40),
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxWidth: 640,
+            maxHeight: MediaQuery.of(context).size.height - 120,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(24, 20, 12, 16),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('ケア記録',
+                              style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600,
+                                  color: c.textPrimary)),
+                          if (rangeText.isNotEmpty)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 2),
+                              child: Text('${records.length}件 $rangeText',
+                                  style: TextStyle(
+                                      fontSize: 11, color: c.textSecondary)),
+                            ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      icon: Icon(Icons.close, size: 20, color: c.textTertiary),
+                      onPressed: () => Navigator.pop(ctx),
+                      splashRadius: 18,
+                    ),
+                  ],
+                ),
+              ),
+              Divider(height: 1, color: c.borderLight),
+              Flexible(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.fromLTRB(24, 16, 24, 16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: records.map((r) => _CareRecordTile(record: r)).toList(),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
