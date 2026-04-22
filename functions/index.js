@@ -2897,128 +2897,127 @@ async function findAttendanceRecord(cookies, childId, dateStr) {
 async function saveToAttendance(cookies, params) {
   const { childId, dateStr, content, recorderStaffId } = params;
   const attendValue = params.attendValue || '2';
+  const FormData = require('form-data');
 
   // 1. 編集URLを特定
   const record = await findAttendanceRecord(cookies, childId, dateStr);
   console.log(`[attendance] c_id=${childId} date=${dateStr} attend=${attendValue} → editUrl=${record.editUrl} r_id=${record.rId} s_id=${record.sId}`);
-
-  // 2. 編集ページを取得してフォームのhidden/select値を全部引き継ぐ
   const editUrl = `${HUG_BASE_URL}/${record.editUrl}`;
-  const editRes = await hugFetch(editUrl, {}, cookies);
-  const editHtml = await editRes.text();
-  const $ = cheerio.load(editHtml);
 
-  const fields = {};
-  // hidden を全部拾う
-  $('form input[type="hidden"]').each((_, el) => {
-    const name = $(el).attr('name');
-    const value = $(el).attr('value') || '';
-    if (name) fields[name] = value;
-  });
-  // select の selected 値を拾う
-  $('form select').each((_, el) => {
-    const name = $(el).attr('name');
-    if (!name) return;
-    const selected = $(el).find('option[selected]').attr('value');
-    if (selected !== undefined) fields[name] = selected;
-  });
-  // textarea の値
-  $('form textarea').each((_, el) => {
-    const name = $(el).attr('name');
-    const value = $(el).text() || '';
-    if (name) fields[name] = value;
-  });
-  // チェックされているradio
-  $('form input[type="radio"]:checked').each((_, el) => {
-    const name = $(el).attr('name');
-    const value = $(el).attr('value') || '';
-    if (name) fields[name] = value;
-  });
+  // POST + verify をまとめて 1 サイクルとし、attend が反映されていなければ
+  // 編集ページ取得→POST→verify をやり直す（HUG が 302 を返しつつ実際には保存していない事例への対策）。
+  const MAX_CYCLES = 2;
+  let lastCheckedAttend = null;
+  let lastBody = '';
+  let lastStatus = 0;
+  let lastErrorTexts = [];
 
-  const FormData = require('form-data');
-  const formData = new FormData();
-
-  // 後から上書きするフィールドは引き継ぎから除外
-  const skipKeys = new Set(['attend', 'attend_flg', 'absence_note', 'absence_note_staff', 'absence_note3', 'absence_note_staff3']);
-  for (const [key, value] of Object.entries(fields)) {
-    if (skipKeys.has(key)) continue;
-    formData.append(key, value);
-  }
-
-  // 出欠flg
-  formData.append('attend', attendValue);
-  formData.append('attend_flg', attendValue);
-
-  if (attendValue === '3') {
-    // 加算なし: 記入欄は非表示なので全部空
-    formData.append('absence_note_staff', '');
-    formData.append('absence_note', '');
-    formData.append('absence_note_staff3', '');
-    formData.append('absence_note3', '');
-  } else {
-    // 加算あり: 欠席時対応加算理由（記録者 + 本文）
-    formData.append('absence_note_staff', String(recorderStaffId || ''));
-    formData.append('absence_note', content || '');
-    // 画面上に _staff3 / 3 の複製もあるため同内容を入れておく
-    formData.append('absence_note_staff3', String(recorderStaffId || ''));
-    formData.append('absence_note3', content || '');
-  }
-
-  console.log(`[attendance] sending POST for c_id=${childId} recorder=${recorderStaffId} attend=${attendValue}`);
-
-  const postHeaders = {
-    ...formData.getHeaders(),
-    'Cookie': cookies,
-  };
-  const postRes = await fetch(`${HUG_BASE_URL}/attendance.php`, {
-    method: 'POST',
-    headers: postHeaders,
-    body: formData,
-    redirect: 'manual',
-  });
-  const body = await postRes.text();
-  console.log('[attendance] response status:', postRes.status, 'Location:', postRes.headers.get('location'));
-
-  // 302でもHUG側で保存されていない場合があるため、編集ページを再取得して attend が期待値になっているか検証。
-  // HUG 側の反映遅延で verify が先に走る事例があるため、不一致時は 1 回だけ待って再確認する。
-  if (postRes.status === 302 || postRes.status === 200) {
-    try {
-      let checkedAttend = null;
-      let verifyErrorMsg = null;
-      for (let attempt = 0; attempt < 2; attempt++) {
-        if (attempt > 0) await new Promise((res) => setTimeout(res, 500));
-        try {
-          const verifyRes = await hugFetch(editUrl, {}, cookies);
-          const verifyHtml = await verifyRes.text();
-          const $v = cheerio.load(verifyHtml);
-          checkedAttend = $v('input[name="attend"]').filter((_, el) => $v(el).attr('checked') !== undefined).attr('value');
-          console.log(`[attendance] verify(attempt=${attempt + 1}): checked attend=${checkedAttend}, expected=${attendValue}`);
-          if (String(checkedAttend) === String(attendValue)) return true;
-        } catch (e) {
-          verifyErrorMsg = e.message;
-        }
-      }
-      throw new Error(
-        `HUG保存に失敗しました（送信後の確認で attend=${checkedAttend || '未設定'} のまま）。期待: ${attendValue}${verifyErrorMsg ? ' / verifyErr=' + verifyErrorMsg : ''}`
-      );
-    } catch (verifyErr) {
-      if (verifyErr.message.startsWith('HUG保存に失敗しました')) throw verifyErr;
-      console.error('[attendance] verify error:', verifyErr.message);
-      if (postRes.status === 302) return true;
+  for (let cycle = 0; cycle < MAX_CYCLES; cycle++) {
+    if (cycle > 0) {
+      await new Promise((res) => setTimeout(res, 600));
+      console.log(`[attendance] retry cycle=${cycle + 1} for c_id=${childId} attend=${attendValue}`);
     }
+
+    // 編集ページを取得してフォームのhidden/select値を引き継ぐ（毎サイクル取り直す）
+    const editRes = await hugFetch(editUrl, {}, cookies);
+    const editHtml = await editRes.text();
+    const $ = cheerio.load(editHtml);
+
+    const fields = {};
+    $('form input[type="hidden"]').each((_, el) => {
+      const name = $(el).attr('name');
+      const value = $(el).attr('value') || '';
+      if (name) fields[name] = value;
+    });
+    $('form select').each((_, el) => {
+      const name = $(el).attr('name');
+      if (!name) return;
+      const selected = $(el).find('option[selected]').attr('value');
+      if (selected !== undefined) fields[name] = selected;
+    });
+    $('form textarea').each((_, el) => {
+      const name = $(el).attr('name');
+      const value = $(el).text() || '';
+      if (name) fields[name] = value;
+    });
+    $('form input[type="radio"]:checked').each((_, el) => {
+      const name = $(el).attr('name');
+      const value = $(el).attr('value') || '';
+      if (name) fields[name] = value;
+    });
+
+    const formData = new FormData();
+    const skipKeys = new Set(['attend', 'attend_flg', 'absence_note', 'absence_note_staff', 'absence_note3', 'absence_note_staff3']);
+    for (const [key, value] of Object.entries(fields)) {
+      if (skipKeys.has(key)) continue;
+      formData.append(key, value);
+    }
+    formData.append('attend', attendValue);
+    formData.append('attend_flg', attendValue);
+    if (attendValue === '3') {
+      formData.append('absence_note_staff', '');
+      formData.append('absence_note', '');
+      formData.append('absence_note_staff3', '');
+      formData.append('absence_note3', '');
+    } else {
+      formData.append('absence_note_staff', String(recorderStaffId || ''));
+      formData.append('absence_note', content || '');
+      formData.append('absence_note_staff3', String(recorderStaffId || ''));
+      formData.append('absence_note3', content || '');
+    }
+
+    // form action が未指定の場合は現在URL（editUrl）にPOSTされるのでそちらに合わせる。
+    // 過去の attendance.php への POST は mode/id が欠落して HUG が無効POSTとして扱うことがあり、
+    // 302 を返しつつ状態を更新しない原因になっていた。
+    const postUrl = editUrl;
+    console.log(`[attendance] sending POST (cycle=${cycle + 1}) url=${postUrl} c_id=${childId} recorder=${recorderStaffId} attend=${attendValue}`);
+
+    const postHeaders = {
+      ...formData.getHeaders(),
+      'Cookie': cookies,
+    };
+    const postRes = await fetch(postUrl, {
+      method: 'POST',
+      headers: postHeaders,
+      body: formData,
+      redirect: 'manual',
+    });
+    lastBody = await postRes.text();
+    lastStatus = postRes.status;
+    console.log(`[attendance] response status=${lastStatus} Location=${postRes.headers.get('location')}`);
+
+    if (lastStatus !== 302 && lastStatus !== 200) {
+      const $err = cheerio.load(lastBody);
+      const errorTexts = [];
+      $err('.error, .err, .alert, .warning, [class*="err"]').each((_, el) => {
+        const t = $err(el).text().trim();
+        if (t && t.length > 3) errorTexts.push(t);
+      });
+      lastErrorTexts = errorTexts;
+      continue; // 次サイクルへ
+    }
+
+    // verify を 2 回まで（反映遅延対策）
+    for (let vAttempt = 0; vAttempt < 2; vAttempt++) {
+      if (vAttempt > 0) await new Promise((res) => setTimeout(res, 500));
+      try {
+        const verifyRes = await hugFetch(editUrl, {}, cookies);
+        const verifyHtml = await verifyRes.text();
+        const $v = cheerio.load(verifyHtml);
+        lastCheckedAttend = $v('input[name="attend"]').filter((_, el) => $v(el).attr('checked') !== undefined).attr('value');
+        console.log(`[attendance] verify(cycle=${cycle + 1},attempt=${vAttempt + 1}): checked attend=${lastCheckedAttend}, expected=${attendValue}`);
+        if (String(lastCheckedAttend) === String(attendValue)) return true;
+      } catch (e) {
+        console.error('[attendance] verify fetch error:', e.message);
+      }
+    }
+    // ここに来たら保存未反映→次サイクルで再試行
   }
 
-  const $err = cheerio.load(body);
-  const errorTexts = [];
-  $err('.error, .err, .alert, .warning, [class*="err"]').each((_, el) => {
-    const t = $err(el).text().trim();
-    if (t && t.length > 3) errorTexts.push(t);
-  });
-  console.error('[attendance] errors:', JSON.stringify(errorTexts.slice(0, 5)));
   throw new Error(
-    errorTexts.length > 0
-      ? `HUGのバリデーションエラー: ${errorTexts.slice(0, 3).join(' / ')}`
-      : `HUG保存失敗 (attendance status=${postRes.status})`
+    lastErrorTexts.length > 0
+      ? `HUGのバリデーションエラー: ${lastErrorTexts.slice(0, 3).join(' / ')}`
+      : `HUG保存に失敗しました（${MAX_CYCLES}回再試行後も attend=${lastCheckedAttend || '未設定'} のまま）。期待: ${attendValue} status=${lastStatus}`
   );
 }
 
