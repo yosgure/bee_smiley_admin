@@ -1396,39 +1396,144 @@ class _CrmChurnView extends StatelessWidget {
 }
 
 // ============================================================
-// CRM-04: 分析ビュー
+// CRM-04: 分析ビュー（経営者向けダッシュボード）
 // ============================================================
-class _CrmDashboardView extends StatelessWidget {
+class _CrmDashboardView extends StatefulWidget {
   final List<QueryDocumentSnapshot<Map<String, dynamic>>> docs;
   const _CrmDashboardView({required this.docs});
 
   @override
+  State<_CrmDashboardView> createState() => _CrmDashboardViewState();
+}
+
+enum _PeriodFilter { all, thisMonth, lastMonth, last3Months, ytd }
+
+extension _PeriodFilterLabel on _PeriodFilter {
+  String get label {
+    switch (this) {
+      case _PeriodFilter.all:
+        return '全期間';
+      case _PeriodFilter.thisMonth:
+        return '今月';
+      case _PeriodFilter.lastMonth:
+        return '先月';
+      case _PeriodFilter.last3Months:
+        return '過去3ヶ月';
+      case _PeriodFilter.ytd:
+        return '年初来';
+    }
+  }
+
+  bool includes(DateTime? t, DateTime now) {
+    if (this == _PeriodFilter.all) return true;
+    if (t == null) return false;
+    switch (this) {
+      case _PeriodFilter.thisMonth:
+        return t.year == now.year && t.month == now.month;
+      case _PeriodFilter.lastMonth:
+        final prev = DateTime(now.year, now.month - 1);
+        return t.year == prev.year && t.month == prev.month;
+      case _PeriodFilter.last3Months:
+        final from = DateTime(now.year, now.month - 2);
+        return !t.isBefore(from);
+      case _PeriodFilter.ytd:
+        return t.year == now.year;
+      case _PeriodFilter.all:
+        return true;
+    }
+  }
+}
+
+class _CrmDashboardViewState extends State<_CrmDashboardView> {
+  _PeriodFilter _period = _PeriodFilter.all;
+
+  @override
   Widget build(BuildContext context) {
+    final now = DateTime.now();
+    final todayStart = DateTime(now.year, now.month, now.day);
+
+    // 期間フィルタ: inquiredAt で判定（問い合わせの流入期間ベース）
+    final docs = widget.docs
+        .where((d) => _period
+            .includes((d.data()['inquiredAt'] as Timestamp?)?.toDate(), now))
+        .toList();
+
     final stageCount = <String, int>{for (final s in CrmOptions.stages) s.id: 0};
-    final sourceCount = <String, int>{};
+    final sourceTotal = <String, int>{};
+    final sourceTrial = <String, int>{};
     final sourceWon = <String, int>{};
     final lossReasonCount = <String, int>{};
+    final withdrawReasonCount = <String, int>{};
+    final permitBucket = <String, int>{'none': 0, 'applying': 0, 'have': 0};
+    final permitWon = <String, int>{'none': 0, 'applying': 0, 'have': 0};
+
     int trialDoneCount = 0;
     int wonCount = 0;
     int lostCount = 0;
+    int withdrawnCount = 0;
     int totalInquiries = docs.length;
+
+    // ステージ滞留日数（更新待ちリードの検出）
+    const staleConsidering = _staleConsideringDays;
+    const staleProcessing = _staleProcessingDays;
+    final consideringIdleDays = <int>[];
+    final processingIdleDays = <int>[];
+    int staleConsideringCount = 0;
+    int staleProcessingCount = 0;
+
+    // 問い合わせ→初回体験 日数
+    final inquiryToTrialDays = <int>[];
 
     for (final doc in docs) {
       final d = doc.data();
       final stage = d['stage'] as String? ?? 'considering';
       stageCount[stage] = (stageCount[stage] ?? 0) + 1;
       final src = d['source'] as String? ?? 'other';
-      sourceCount[src] = (sourceCount[src] ?? 0) + 1;
+      sourceTotal[src] = (sourceTotal[src] ?? 0) + 1;
+
+      final permit = d['permitStatus'] as String? ?? 'none';
+      permitBucket[permit] = (permitBucket[permit] ?? 0) + 1;
+
+      final inquiredAt = (d['inquiredAt'] as Timestamp?)?.toDate();
+      final trialAt = (d['trialAt'] as Timestamp?)?.toDate();
+      final lastActivityAt = (d['lastActivityAt'] as Timestamp?)?.toDate() ??
+          (d['updatedAt'] as Timestamp?)?.toDate() ??
+          inquiredAt;
+
+      if (trialAt != null) {
+        trialDoneCount++;
+        sourceTrial[src] = (sourceTrial[src] ?? 0) + 1;
+        if (inquiredAt != null) {
+          final diff = trialAt.difference(inquiredAt).inDays;
+          if (diff >= 0 && diff <= 180) inquiryToTrialDays.add(diff);
+        }
+      }
       if (stage == 'won') {
         wonCount++;
         sourceWon[src] = (sourceWon[src] ?? 0) + 1;
+        permitWon[permit] = (permitWon[permit] ?? 0) + 1;
       }
       if (stage == 'lost') {
         lostCount++;
         final r = d['lossReason'] as String? ?? 'other';
         lossReasonCount[r] = (lossReasonCount[r] ?? 0) + 1;
       }
-      if (d['trialAt'] != null) trialDoneCount++;
+      if (stage == 'withdrawn') {
+        withdrawnCount++;
+        final r = d['withdrawReason'] as String? ?? 'other';
+        withdrawReasonCount[r] = (withdrawReasonCount[r] ?? 0) + 1;
+      }
+
+      if (stage == 'considering' && lastActivityAt != null) {
+        final idle = todayStart.difference(lastActivityAt).inDays;
+        consideringIdleDays.add(idle);
+        if (idle >= staleConsidering) staleConsideringCount++;
+      }
+      if (stage == 'onboarding' && lastActivityAt != null) {
+        final idle = todayStart.difference(lastActivityAt).inDays;
+        processingIdleDays.add(idle);
+        if (idle >= staleProcessing) staleProcessingCount++;
+      }
     }
 
     final winRate =
@@ -1437,13 +1542,26 @@ class _CrmDashboardView extends StatelessWidget {
         totalInquiries == 0 ? 0.0 : trialDoneCount * 100 / totalInquiries;
     final trialToWin =
         trialDoneCount == 0 ? 0.0 : wonCount * 100 / trialDoneCount;
+    final avgInquiryToTrial = inquiryToTrialDays.isEmpty
+        ? null
+        : inquiryToTrialDays.reduce((a, b) => a + b) /
+            inquiryToTrialDays.length;
+    final avgConsideringIdle = consideringIdleDays.isEmpty
+        ? null
+        : consideringIdleDays.reduce((a, b) => a + b) /
+            consideringIdleDays.length;
+    final avgProcessingIdle = processingIdleDays.isEmpty
+        ? null
+        : processingIdleDays.reduce((a, b) => a + b) /
+            processingIdleDays.length;
 
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 88),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // KPI
+          _periodSelector(),
+          const SizedBox(height: 12),
           Row(
             children: [
               _kpiCard(context, '総問い合わせ', '$totalInquiries', Colors.blue),
@@ -1471,33 +1589,366 @@ class _CrmDashboardView extends StatelessWidget {
           const SizedBox(height: 8),
           ...CrmOptions.stages.map((s) => _bar(context, s.label,
               stageCount[s.id] ?? 0, totalInquiries, s.color)),
+
           const SizedBox(height: 16),
-          _sectionTitle(context, '媒体別ファネル'),
+          _sectionTitle(context, '媒体別KPI'),
           const SizedBox(height: 8),
-          ...sourceCount.entries.map((e) {
-            final won = sourceWon[e.key] ?? 0;
-            final rate = e.value == 0 ? 0.0 : won * 100 / e.value;
-            return _sourceRow(
-                context,
-                CrmOptions.labelOf(CrmOptions.sources, e.key),
-                e.value,
-                won,
-                rate);
-          }),
+          _sourceKpiTable(sourceTotal, sourceTrial, sourceWon),
+
+          const SizedBox(height: 16),
+          _sectionTitle(context, 'ステージ滞留日数'),
+          const SizedBox(height: 8),
+          _stageIdleCard(
+              context,
+              '検討中',
+              avgConsideringIdle,
+              staleConsideringCount,
+              staleConsidering,
+              Colors.orange),
+          _stageIdleCard(
+              context,
+              '入会手続中',
+              avgProcessingIdle,
+              staleProcessingCount,
+              staleProcessing,
+              Colors.purple),
+
+          const SizedBox(height: 16),
+          _sectionTitle(context, '受給者証ステータス別ファネル'),
+          const SizedBox(height: 8),
+          _permitFunnel(permitBucket, permitWon),
+
+          const SizedBox(height: 16),
+          _sectionTitle(context, '問い合わせ → 初回体験 平均日数'),
+          const SizedBox(height: 8),
+          _avgDaysCard(
+              context,
+              avgInquiryToTrial,
+              inquiryToTrialDays.length,
+              '件の体験実績から算出'),
+
           if (lossReasonCount.isNotEmpty) ...[
             const SizedBox(height: 16),
-            _sectionTitle(context, '失注理由'),
+            _sectionTitle(context, '失注理由ランキング'),
             const SizedBox(height: 8),
-            ...lossReasonCount.entries.map((e) => _bar(
-                context,
-                CrmOptions.labelOf(CrmOptions.lossReasons, e.key),
-                e.value,
-                lostCount,
-                Colors.grey)),
+            ..._reasonRanking(lossReasonCount, CrmOptions.lossReasons,
+                lostCount, context.alerts.urgent),
+          ],
+          if (withdrawReasonCount.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            _sectionTitle(context, '退会理由ランキング'),
+            const SizedBox(height: 8),
+            ..._reasonRanking(
+                withdrawReasonCount,
+                CrmOptions.withdrawalReasons,
+                withdrawnCount,
+                context.alerts.warning),
           ],
         ],
       ),
     );
+  }
+
+  Widget _periodSelector() {
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: _PeriodFilter.values.map((p) {
+          final sel = _period == p;
+          return Padding(
+            padding: const EdgeInsets.only(right: 6),
+            child: GestureDetector(
+              onTap: () => setState(() => _period = p),
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: sel
+                      ? AppColors.primary.withValues(alpha: 0.12)
+                      : context.colors.cardBg,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                      color: sel
+                          ? AppColors.primary
+                          : context.colors.borderMedium,
+                      width: sel ? 1.2 : 0.8),
+                ),
+                child: Text(p.label,
+                    style: TextStyle(
+                        fontSize: 12,
+                        fontWeight:
+                            sel ? FontWeight.bold : FontWeight.normal,
+                        color: sel
+                            ? AppColors.primary
+                            : context.colors.textPrimary)),
+              ),
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  Widget _sourceKpiTable(Map<String, int> totals, Map<String, int> trials,
+      Map<String, int> wons) {
+    final rows = totals.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: context.colors.cardBg,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: context.colors.borderLight),
+      ),
+      child: Column(
+        children: [
+          _kpiTableHeader(),
+          const Divider(height: 12),
+          ...rows.map((e) {
+            final t = e.value;
+            final tr = trials[e.key] ?? 0;
+            final w = wons[e.key] ?? 0;
+            final trialRate = t == 0 ? 0.0 : tr * 100 / t;
+            final winRate = t == 0 ? 0.0 : w * 100 / t;
+            return Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: Row(
+                children: [
+                  Expanded(
+                      flex: 3,
+                      child: Text(
+                          CrmOptions.labelOf(CrmOptions.sources, e.key),
+                          style: TextStyle(
+                              fontSize: 12,
+                              color: context.colors.textPrimary))),
+                  Expanded(
+                      child: Text('$t',
+                          textAlign: TextAlign.right,
+                          style: const TextStyle(fontSize: 12))),
+                  Expanded(
+                      child: Text('$tr',
+                          textAlign: TextAlign.right,
+                          style: const TextStyle(fontSize: 12))),
+                  Expanded(
+                      child: Text('$w',
+                          textAlign: TextAlign.right,
+                          style: const TextStyle(fontSize: 12))),
+                  Expanded(
+                      child: Text('${trialRate.toStringAsFixed(0)}%',
+                          textAlign: TextAlign.right,
+                          style: TextStyle(
+                              fontSize: 12, color: Colors.teal.shade700))),
+                  Expanded(
+                      child: Text('${winRate.toStringAsFixed(0)}%',
+                          textAlign: TextAlign.right,
+                          style: const TextStyle(
+                              fontSize: 12, fontWeight: FontWeight.bold))),
+                ],
+              ),
+            );
+          }),
+        ],
+      ),
+    );
+  }
+
+  Widget _kpiTableHeader() {
+    final s = TextStyle(
+        fontSize: 11,
+        fontWeight: FontWeight.bold,
+        color: context.colors.textSecondary);
+    return Row(
+      children: [
+        Expanded(flex: 3, child: Text('媒体', style: s)),
+        Expanded(child: Text('問合せ', textAlign: TextAlign.right, style: s)),
+        Expanded(child: Text('体験', textAlign: TextAlign.right, style: s)),
+        Expanded(child: Text('入会', textAlign: TextAlign.right, style: s)),
+        Expanded(child: Text('体験率', textAlign: TextAlign.right, style: s)),
+        Expanded(child: Text('入会率', textAlign: TextAlign.right, style: s)),
+      ],
+    );
+  }
+
+  Widget _stageIdleCard(BuildContext context, String label, double? avgIdle,
+      int staleCount, int threshold, Color color) {
+    final urgent = context.alerts.urgent;
+    final hasAlert = staleCount > 0;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 6),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: context.colors.cardBg,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+            color: hasAlert ? urgent.border : context.colors.borderLight,
+            width: hasAlert ? 1.2 : 1),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 8,
+            height: 32,
+            decoration: BoxDecoration(
+                color: color, borderRadius: BorderRadius.circular(2)),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(label,
+                    style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: context.colors.textPrimary)),
+                const SizedBox(height: 2),
+                Text(
+                    '平均滞留: ${avgIdle == null ? '-' : '${avgIdle.toStringAsFixed(1)}日'}',
+                    style: TextStyle(
+                        fontSize: 11, color: context.colors.textSecondary)),
+              ],
+            ),
+          ),
+          if (hasAlert)
+            Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: urgent.background,
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: urgent.border, width: 0.6),
+              ),
+              child: Text('$threshold日+ $staleCount件',
+                  style: TextStyle(
+                      fontSize: 11,
+                      color: urgent.text,
+                      fontWeight: FontWeight.bold)),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _permitFunnel(Map<String, int> bucket, Map<String, int> won) {
+    // 未申請 → 申請中 → 取得済 → 入会 の順に漏斗を描画
+    final steps = [
+      ('none', '未申請'),
+      ('applying', '申請中'),
+      ('have', '取得済'),
+    ];
+    final maxVal = bucket.values.fold<int>(0, (a, b) => a > b ? a : b);
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: context.colors.cardBg,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: context.colors.borderLight),
+      ),
+      child: Column(
+        children: steps.map((e) {
+          final id = e.$1;
+          final label = e.$2;
+          final total = bucket[id] ?? 0;
+          final w = won[id] ?? 0;
+          final rate = total == 0 ? 0.0 : w * 100 / total;
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 6),
+            child: Row(
+              children: [
+                SizedBox(
+                    width: 60,
+                    child: Text(label,
+                        style: TextStyle(
+                            fontSize: 12,
+                            color: context.colors.textPrimary))),
+                Expanded(
+                  child: Stack(
+                    children: [
+                      Container(
+                        height: 18,
+                        decoration: BoxDecoration(
+                            color: context.colors.scaffoldBg,
+                            borderRadius: BorderRadius.circular(4)),
+                      ),
+                      FractionallySizedBox(
+                        widthFactor: maxVal == 0
+                            ? 0.0
+                            : (total / maxVal).clamp(0.0, 1.0),
+                        child: Container(
+                          height: 18,
+                          decoration: BoxDecoration(
+                              color: Colors.blue.withValues(alpha: 0.55),
+                              borderRadius: BorderRadius.circular(4)),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                SizedBox(
+                    width: 40,
+                    child: Text('$total件',
+                        textAlign: TextAlign.right,
+                        style: const TextStyle(fontSize: 11))),
+                SizedBox(
+                    width: 70,
+                    child: Text('入会$w(${rate.toStringAsFixed(0)}%)',
+                        textAlign: TextAlign.right,
+                        style: TextStyle(
+                            fontSize: 11,
+                            color: Colors.green.shade700,
+                            fontWeight: FontWeight.bold))),
+              ],
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  Widget _avgDaysCard(BuildContext context, double? avg, int sampleCount,
+      String hint) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: context.colors.cardBg,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: context.colors.borderLight),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Text(avg == null ? '—' : avg.toStringAsFixed(1),
+              style: TextStyle(
+                  fontSize: 28,
+                  fontWeight: FontWeight.bold,
+                  color: context.colors.textPrimary)),
+          const SizedBox(width: 6),
+          Text('日',
+              style: TextStyle(
+                  fontSize: 14, color: context.colors.textSecondary)),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Text('$sampleCount$hint',
+                style: TextStyle(
+                    fontSize: 11, color: context.colors.textSecondary)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  List<Widget> _reasonRanking(
+      Map<String, int> counts,
+      List<({String id, String label})> master,
+      int total,
+      AlertStyle style) {
+    final sorted = counts.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+    return sorted.map((e) {
+      final label = CrmOptions.labelOf(master, e.key);
+      return _bar(context, label, e.value, total, style.icon);
+    }).toList();
   }
 
   Widget _kpiCard(BuildContext context, String label, String value, Color color) {
