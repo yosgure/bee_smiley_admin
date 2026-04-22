@@ -3457,15 +3457,35 @@ async function scrapeHugSituationList(cookies) {
     if (!hasNext) break;
   }
 
-  // c_idごとに最新（count最大）のものだけ残す
-  const latestByChild = {};
+  // c_idごとに全行を集約し、ドキュメント種類ごとに「存在する最新行」を決定する
+  // （最新の作成回数で未作成でも、過去の作成回数に存在すればそちらを採用するため）
+  const byChild = {};
   for (const row of rows) {
-    if (!latestByChild[row.cId] || row.count > latestByChild[row.cId].count) {
-      latestByChild[row.cId] = row;
+    if (!byChild[row.cId]) {
+      byChild[row.cId] = {
+        cId: row.cId,
+        childName: row.childName,
+        facility: row.facility,
+        latestCount: 0,
+        docMeta: {}, // type -> { hugId, count }
+      };
+    }
+    const agg = byChild[row.cId];
+    if (row.count > agg.latestCount) {
+      agg.latestCount = row.count;
+      agg.childName = row.childName; // 最新の表示名を優先
+      agg.facility = row.facility;
+    }
+    for (const [type, hugId] of Object.entries(row.docIds)) {
+      if (!hugId) continue;
+      const prev = agg.docMeta[type];
+      if (!prev || row.count > prev.count) {
+        agg.docMeta[type] = { hugId, count: row.count };
+      }
     }
   }
-  console.log(`[HUG] scraped situation list: ${rows.length} rows, ${Object.keys(latestByChild).length} unique children`);
-  return Object.values(latestByChild);
+  console.log(`[HUG] scraped situation list: ${rows.length} rows, ${Object.keys(byChild).length} unique children`);
+  return Object.values(byChild);
 }
 
 /**
@@ -3589,18 +3609,20 @@ async function syncHugDocsCore(options = {}) {
     if (targetStudentId && resolved.studentId !== targetStudentId) continue;
 
     const hugDocs = {};
-    for (const [type, hugId] of Object.entries(row.docIds)) {
-      if (!hugId) {
+    for (const type of Object.keys(HUG_DOC_TYPES)) {
+      const meta = row.docMeta?.[type];
+      if (!meta) {
         hugDocs[type] = { status: 'not-created', fetchedAt: FieldValue.serverTimestamp() };
         continue;
       }
       try {
-        const detail = await fetchHugDocumentDetail(cookies, type, hugId);
+        const detail = await fetchHugDocumentDetail(cookies, type, meta.hugId);
         hugDocs[type] = {
-          hugId,
+          hugId: meta.hugId,
           rawText: detail.rawText,
           url: detail.url,
           status: 'ok',
+          planCount: meta.count,
           fetchedAt: FieldValue.serverTimestamp(),
         };
       } catch (e) {
@@ -3616,6 +3638,7 @@ async function syncHugDocsCore(options = {}) {
       familyUid: resolved.familyUid,
       hugCId: row.cId,
       hugDocs,
+      latestPlanCount: row.latestCount || 0,
       lastSyncedAt: FieldValue.serverTimestamp(),
     }, { merge: true });
     summary.synced++;

@@ -133,6 +133,9 @@ class _StudentProfileDialogState extends State<_StudentProfileDialog> {
                   }
                   final data = snapshot.data!.data() as Map<String, dynamic>?;
                   final hugDocs = (data?['hugDocs'] as Map?)?.cast<String, dynamic>() ?? {};
+                  final latestPlanCount = (data?['latestPlanCount'] is num)
+                      ? (data!['latestPlanCount'] as num).toInt()
+                      : 0;
                   final aiProfile = (data?['aiProfile'] as Map?)?.cast<String, dynamic>() ?? {};
                   final lastSynced = data?['lastSyncedAt'];
                   final lastSyncedText = lastSynced is Timestamp
@@ -162,7 +165,7 @@ class _StudentProfileDialogState extends State<_StudentProfileDialog> {
                         Text('HUG情報（自動取得）',
                             style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: c.textPrimary)),
                         const SizedBox(height: 8),
-                        ..._docLabels.entries.map((e) => _buildDocCard(e.key, e.value, hugDocs)),
+                        ..._docLabels.entries.map((e) => _buildDocCard(e.key, e.value, hugDocs, latestPlanCount)),
                         const SizedBox(height: 20),
                         Text('AIが蓄積した知見',
                             style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: c.textPrimary)),
@@ -184,13 +187,15 @@ class _StudentProfileDialogState extends State<_StudentProfileDialog> {
     );
   }
 
-  Widget _buildDocCard(String type, String label, Map<String, dynamic> hugDocs) {
+  Widget _buildDocCard(String type, String label, Map<String, dynamic> hugDocs, int latestPlanCount) {
     final c = context.colors;
     final d = (hugDocs[type] as Map?)?.cast<String, dynamic>() ?? {};
     final status = d['status'] as String?;
     final rawText = d['rawText'] as String? ?? '';
     final url = d['url'] as String? ?? '';
+    final planCount = (d['planCount'] is num) ? (d['planCount'] as num).toInt() : 0;
     final isOk = status == 'ok' && rawText.isNotEmpty;
+    final isOutdated = isOk && planCount > 0 && latestPlanCount > 0 && planCount < latestPlanCount;
     final isExpanded = _expandedType == type;
 
     IconData statusIcon;
@@ -199,8 +204,8 @@ class _StudentProfileDialogState extends State<_StudentProfileDialog> {
     switch (status) {
       case 'ok':
         statusIcon = Icons.check_circle;
-        statusColor = Colors.green;
-        statusText = '取得済';
+        statusColor = isOutdated ? Colors.blue : Colors.green;
+        statusText = planCount > 0 ? '作成回数: $planCount' : '取得済';
         break;
       case 'not-created':
         statusIcon = Icons.remove_circle_outline;
@@ -245,7 +250,7 @@ class _StudentProfileDialogState extends State<_StudentProfileDialog> {
                         Text(label, style: TextStyle(fontSize: 13, color: c.textPrimary, fontWeight: FontWeight.w500)),
                         const SizedBox(height: 2),
                         Text(
-                          isOk ? '$statusText (${rawText.length}文字)' : statusText,
+                          statusText,
                           style: TextStyle(fontSize: 11, color: c.textSecondary),
                         ),
                       ],
