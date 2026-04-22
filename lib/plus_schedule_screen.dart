@@ -8204,7 +8204,7 @@ await _loadLessonsForWeek(showLoading: false);
                             ),
                           ),
                         ),
-                        // 策定会議ボタン（児童プロファイルダイアログを開く）
+                        // プロファイルボタン（児童プロファイルダイアログを開く）
                         if (!isCustomEvent && studentName.isNotEmpty)
                           Builder(builder: (_) {
                             final student = _allStudents.firstWhere(
@@ -8227,7 +8227,7 @@ await _loadLessonsForWeek(showLoading: false);
                                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                                 ),
-                                child: const Text('策定会議'),
+                                child: const Text('プロファイル'),
                               ),
                             );
                           }),

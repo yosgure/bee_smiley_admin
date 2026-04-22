@@ -6,7 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'app_theme.dart';
 
 /// ai_student_profiles/{studentId} の HUG情報と AIプロファイルを表示するダイアログ。
-/// AI相談画面とプラスのスケジュール画面（策定会議ボタン）から共通で利用される。
+/// AI相談画面とプラスのスケジュール画面（プロファイルボタン）から共通で利用される。
 Future<void> showStudentProfileDialog(BuildContext context, {
   required String studentId,
   required String studentName,
@@ -29,6 +29,14 @@ class _StudentProfileDialog extends StatefulWidget {
 class _StudentProfileDialogState extends State<_StudentProfileDialog> {
   final _functions = FirebaseFunctions.instanceFor(region: 'asia-northeast1');
   String? _expandedType; // 今開いているドキュメント種類
+
+  String _formatPlanDate(int yyyymmdd) {
+    final y = yyyymmdd ~/ 10000;
+    final m = (yyyymmdd ~/ 100) % 100;
+    final d = yyyymmdd % 100;
+    if (y < 2000 || m < 1 || m > 12 || d < 1 || d > 31) return yyyymmdd.toString();
+    return '$y/$m/$d';
+  }
 
   static const Map<String, String> _docLabels = {
     'assessment': 'アセスメント',
@@ -87,24 +95,10 @@ class _StudentProfileDialogState extends State<_StudentProfileDialog> {
               padding: const EdgeInsets.fromLTRB(24, 20, 12, 16),
               child: Row(
                 children: [
-                  Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: c.aiAccent.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Icon(Icons.psychology_outlined, color: c.aiAccent, size: 20),
-                  ),
-                  const SizedBox(width: 12),
                   Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(widget.studentName,
-                            style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600, color: c.textPrimary)),
-                        Text('児童プロファイル',
-                            style: TextStyle(fontSize: 11, color: c.textSecondary)),
-                      ],
+                    child: Text(
+                      widget.studentName,
+                      style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600, color: c.textPrimary),
                     ),
                   ),
                   IconButton(
@@ -133,8 +127,8 @@ class _StudentProfileDialogState extends State<_StudentProfileDialog> {
                   }
                   final data = snapshot.data!.data() as Map<String, dynamic>?;
                   final hugDocs = (data?['hugDocs'] as Map?)?.cast<String, dynamic>() ?? {};
-                  final latestPlanCount = (data?['latestPlanCount'] is num)
-                      ? (data!['latestPlanCount'] as num).toInt()
+                  final latestPlanDate = (data?['latestPlanDate'] is num)
+                      ? (data!['latestPlanDate'] as num).toInt()
                       : 0;
                   final aiProfile = (data?['aiProfile'] as Map?)?.cast<String, dynamic>() ?? {};
                   final lastSynced = data?['lastSyncedAt'];
@@ -165,7 +159,7 @@ class _StudentProfileDialogState extends State<_StudentProfileDialog> {
                         Text('HUG情報（自動取得）',
                             style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: c.textPrimary)),
                         const SizedBox(height: 8),
-                        ..._docLabels.entries.map((e) => _buildDocCard(e.key, e.value, hugDocs, latestPlanCount)),
+                        ..._docLabels.entries.map((e) => _buildDocCard(e.key, e.value, hugDocs, latestPlanDate)),
                         const SizedBox(height: 20),
                         Text('AIが蓄積した知見',
                             style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: c.textPrimary)),
@@ -187,15 +181,15 @@ class _StudentProfileDialogState extends State<_StudentProfileDialog> {
     );
   }
 
-  Widget _buildDocCard(String type, String label, Map<String, dynamic> hugDocs, int latestPlanCount) {
+  Widget _buildDocCard(String type, String label, Map<String, dynamic> hugDocs, int latestPlanDate) {
     final c = context.colors;
     final d = (hugDocs[type] as Map?)?.cast<String, dynamic>() ?? {};
     final status = d['status'] as String?;
     final rawText = d['rawText'] as String? ?? '';
     final url = d['url'] as String? ?? '';
-    final planCount = (d['planCount'] is num) ? (d['planCount'] as num).toInt() : 0;
+    final planDate = (d['planDate'] is num) ? (d['planDate'] as num).toInt() : 0;
     final isOk = status == 'ok' && rawText.isNotEmpty;
-    final isOutdated = isOk && planCount > 0 && latestPlanCount > 0 && planCount < latestPlanCount;
+    final isOutdated = isOk && planDate > 0 && latestPlanDate > 0 && planDate < latestPlanDate;
     final isExpanded = _expandedType == type;
 
     IconData statusIcon;
@@ -205,7 +199,7 @@ class _StudentProfileDialogState extends State<_StudentProfileDialog> {
       case 'ok':
         statusIcon = Icons.check_circle;
         statusColor = isOutdated ? Colors.blue : Colors.green;
-        statusText = planCount > 0 ? '作成回数: $planCount' : '取得済';
+        statusText = planDate > 0 ? '作成日: ${_formatPlanDate(planDate)}' : '取得済';
         break;
       case 'not-created':
         statusIcon = Icons.remove_circle_outline;

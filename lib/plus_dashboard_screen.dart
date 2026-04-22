@@ -3115,7 +3115,7 @@ void _showStudentSelectionDialog(Function(Map<String, dynamic>) onSelect) {
                             ),
                           ),
                         ),
-                        // 策定会議ボタン（児童プロファイルダイアログを開く）
+                        // プロファイルボタン（児童プロファイルダイアログを開く）
                         Builder(builder: (_) {
                           final matchedStudent = _allStudents.firstWhere(
                             (s) => s['name'] == studentName,
@@ -3137,7 +3137,7 @@ void _showStudentSelectionDialog(Function(Map<String, dynamic>) onSelect) {
                                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                               ),
-                              child: const Text('策定会議'),
+                              child: const Text('プロファイル'),
                             ),
                           );
                         }),

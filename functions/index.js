@@ -3431,26 +3431,27 @@ async function scrapeHugSituationList(cookies) {
       const childName = childLink.text().trim();
       if (!childName) return;
 
-      // 各 td のテキストを取得。HUG 画面の列順に左右されないよう、
-      // 「教室」を含む td を施設、純粋な整数 or 数字混じり短文を作成回数と判定する。
+      // 状況一覧の「作成日」カラムは yyyy/mm/dd 形式の日付。
+      // 非数字を除去して YYYYMMDD の8桁整数を作り、新旧比較に使う。
       const tdTexts = $tr.find('td').map((_, td) => $(td).text().trim().replace(/\s+/g, ' ')).get();
       const facility = tdTexts.find((t) => t.includes('教室')) || tdTexts[1] || '';
-      let count = 0;
-      // 1) 完全一致の整数（1〜99）
+      let planDate = 0;
       for (const t of tdTexts) {
-        if (/^\d{1,2}$/.test(t)) { count = parseInt(t, 10); break; }
-      }
-      // 2) 見つからない場合は「2回」「第2回」「作成回数 2」等から抽出
-      if (count === 0) {
-        for (const t of tdTexts) {
-          const m = t.match(/(?:^|回|第|数)?\s*(\d{1,2})\s*回?$/);
-          if (m && t.length < 10) { count = parseInt(m[1], 10); break; }
+        const m = t.match(/^(\d{4})[\/\-.年](\d{1,2})[\/\-.月](\d{1,2})/);
+        if (m) {
+          planDate = parseInt(m[1] + m[2].padStart(2, '0') + m[3].padStart(2, '0'), 10);
+          break;
         }
       }
-      // 3) それでもダメなら .eq(2) から全非数字を除去して抽出
-      if (count === 0 && tdTexts[2]) {
-        const digits = tdTexts[2].replace(/[^0-9]/g, '');
-        if (digits) count = parseInt(digits, 10) || 0;
+      // フォールバック: 8桁の数字列（YYYYMMDD）が直接入っているケース
+      if (planDate === 0) {
+        for (const t of tdTexts) {
+          const digits = t.replace(/[^0-9]/g, '');
+          if (/^\d{8}$/.test(digits) && digits.startsWith('20')) {
+            planDate = parseInt(digits, 10);
+            break;
+          }
+        }
       }
 
       const docIds = {};
@@ -3465,12 +3466,7 @@ async function scrapeHugSituationList(cookies) {
         }
       }
 
-      if (!scrapeHugSituationList._sampled && Object.keys(docIds).length > 0) {
-        scrapeHugSituationList._sampled = true;
-        console.warn(`[HUG] sample row ${childName}: count=${count}, tdTexts=${JSON.stringify(tdTexts)}`);
-      }
-
-      rows.push({ cId, childName, count, facility, docIds });
+      rows.push({ cId, childName, planDate, facility, docIds });
     });
 
     if (rows.length === pageRowsBefore) break; // このページで行が見つからなければ終了
@@ -3480,8 +3476,8 @@ async function scrapeHugSituationList(cookies) {
     if (!hasNext) break;
   }
 
-  // c_idごとに全行を集約し、ドキュメント種類ごとに「存在する最新行」を決定する
-  // （最新の作成回数で未作成でも、過去の作成回数に存在すればそちらを採用するため）
+  // c_idごとに全行を集約し、ドキュメント種類ごとに「最新の作成日を持つ行」を選ぶ。
+  // 最新行でそのドキュメントが未作成でも、過去行に存在すればそちらにフォールバックする。
   const byChild = {};
   for (const row of rows) {
     if (!byChild[row.cId]) {
@@ -3489,21 +3485,21 @@ async function scrapeHugSituationList(cookies) {
         cId: row.cId,
         childName: row.childName,
         facility: row.facility,
-        latestCount: 0,
-        docMeta: {}, // type -> { hugId, count }
+        latestPlanDate: 0,
+        docMeta: {}, // type -> { hugId, planDate }
       };
     }
     const agg = byChild[row.cId];
-    if (row.count > agg.latestCount) {
-      agg.latestCount = row.count;
-      agg.childName = row.childName; // 最新の表示名を優先
+    if (row.planDate > agg.latestPlanDate) {
+      agg.latestPlanDate = row.planDate;
+      agg.childName = row.childName;
       agg.facility = row.facility;
     }
     for (const [type, hugId] of Object.entries(row.docIds)) {
       if (!hugId) continue;
       const prev = agg.docMeta[type];
-      if (!prev || row.count > prev.count) {
-        agg.docMeta[type] = { hugId, count: row.count };
+      if (!prev || row.planDate > prev.planDate) {
+        agg.docMeta[type] = { hugId, planDate: row.planDate };
       }
     }
   }
@@ -3645,7 +3641,7 @@ async function syncHugDocsCore(options = {}) {
           rawText: detail.rawText,
           url: detail.url,
           status: 'ok',
-          planCount: meta.count,
+          planDate: meta.planDate,
           fetchedAt: FieldValue.serverTimestamp(),
         };
       } catch (e) {
@@ -3661,7 +3657,7 @@ async function syncHugDocsCore(options = {}) {
       familyUid: resolved.familyUid,
       hugCId: row.cId,
       hugDocs,
-      latestPlanCount: row.latestCount || 0,
+      latestPlanDate: row.latestPlanDate || 0,
       lastSyncedAt: FieldValue.serverTimestamp(),
     }, { merge: true });
     summary.synced++;
