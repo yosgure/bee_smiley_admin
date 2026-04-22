@@ -3635,12 +3635,26 @@ async function scrapeHugCareRecords(cookies, fromDate, toDate) {
 
       const tbodyRows = $('table tbody tr').length;
       const firstRowCells = $('table tbody tr').first().find('td').map((_, td) => $(td).text().replace(/\s+/g, ' ').trim()).get().slice(0, 12);
+      const $firstRow = $('table tbody tr').first();
+      const firstRowAnchors = $firstRow.find('a').map((_, a) => ({
+        href: $(a).attr('href') || '',
+        onclick: $(a).attr('onclick') || '',
+        text: $(a).text().replace(/\s+/g, ' ').trim().slice(0, 20),
+      })).get().slice(0, 10);
+      const firstRowButtons = $firstRow.find('button').map((_, b) => ({
+        onclick: $(b).attr('onclick') || '',
+        text: $(b).text().replace(/\s+/g, ' ').trim().slice(0, 20),
+      })).get().slice(0, 10);
+      const firstRowHtml = ($.html($firstRow) || '').slice(0, 4000);
       debugAttempts.push({
         url,
         page,
         htmlLength: html.length,
         tbodyRows,
         firstRowCells,
+        firstRowAnchors,
+        firstRowButtons,
+        firstRowHtml,
       });
       console.log(`[HUG] care records probe url=${url} tbodyRows=${tbodyRows}`);
 
