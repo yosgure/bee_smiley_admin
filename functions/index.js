@@ -3646,6 +3646,20 @@ async function scrapeHugCareRecords(cookies, fromDate, toDate) {
         text: $(b).text().replace(/\s+/g, ' ').trim().slice(0, 20),
       })).get().slice(0, 10);
       const firstRowHtml = ($.html($firstRow) || '').slice(0, 4000);
+      const formInputNames = $('form input[name]').map((_, el) => $(el).attr('name')).get().slice(0, 40);
+      const formSelects = $('form select[name]').map((_, el) => {
+        const name = $(el).attr('name') || '';
+        const options = $(el).find('option').map((_, o) => ({
+          value: $(o).attr('value') || '',
+          text: $(o).text().replace(/\s+/g, ' ').trim().slice(0, 30),
+        })).get().slice(0, 5);
+        const optionCount = $(el).find('option').length;
+        return { name, optionCount, sampleOptions: options };
+      }).get().slice(0, 10);
+      const formActions = $('form').map((_, el) => ({
+        action: $(el).attr('action') || '',
+        method: $(el).attr('method') || '',
+      })).get().slice(0, 5);
       debugAttempts.push({
         url,
         page,
@@ -3655,6 +3669,9 @@ async function scrapeHugCareRecords(cookies, fromDate, toDate) {
         firstRowAnchors,
         firstRowButtons,
         firstRowHtml,
+        formInputNames,
+        formSelects,
+        formActions,
       });
       console.log(`[HUG] care records probe url=${url} tbodyRows=${tbodyRows}`);
 
