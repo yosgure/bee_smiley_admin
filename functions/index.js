@@ -3610,11 +3610,14 @@ async function scrapeHugCareRecords(cookies, fromDate, toDate) {
   // 2) モード指定なし（デフォルト一覧）
   const fromStr = formatYmd(fromDate);
   const toStr = formatYmd(toDate);
+  // 検索フォーム送信を模した URL は HUG のパラメータ仕様と合わず
+  // ページネーションが効かない（page=2 以降が page=1 と同じ結果になる）。
+  // 期間指定・施設指定のないデフォルト一覧を素直に辿る。
   const urlBuilders = [
-    (page) => `${HUG_BASE_URL}/contact_book.php?mode=search&f_id=1&service[]=1&service[]=2&start_date=${encodeURIComponent(fromStr)}&end_date=${encodeURIComponent(toStr)}&page=${page}`,
-    (page) => `${HUG_BASE_URL}/contact_book.php?mode=search&page=${page}`,
     (page) => `${HUG_BASE_URL}/contact_book.php?page=${page}`,
   ];
+  // fromStr/toStr は後段のクライアント側フィルタで使用
+  void fromStr; void toStr;
 
   for (const buildUrl of urlBuilders) {
     const seenPages = new Set();
@@ -3630,21 +3633,16 @@ async function scrapeHugCareRecords(cookies, fromDate, toDate) {
       if (seenPages.has(pageHash)) break;
       seenPages.add(pageHash);
 
-      if (page === 1) {
-        const tbodyRows = $('table tbody tr').length;
-        const anyRows = $('table tr').length;
-        const formInputs = $('form input[name]').map((_, el) => $(el).attr('name')).get().slice(0, 20);
-        const firstRowCells = $('table tbody tr').first().find('td').map((_, td) => $(td).text().replace(/\s+/g, ' ').trim()).get().slice(0, 12);
-        debugAttempts.push({
-          url,
-          htmlLength: html.length,
-          tbodyRows,
-          anyRows,
-          formInputNames: formInputs,
-          firstRowCells,
-        });
-        console.log(`[HUG] care records probe url=${url} tbodyRows=${tbodyRows} anyRows=${anyRows}`);
-      }
+      const tbodyRows = $('table tbody tr').length;
+      const firstRowCells = $('table tbody tr').first().find('td').map((_, td) => $(td).text().replace(/\s+/g, ' ').trim()).get().slice(0, 12);
+      debugAttempts.push({
+        url,
+        page,
+        htmlLength: html.length,
+        tbodyRows,
+        firstRowCells,
+      });
+      console.log(`[HUG] care records probe url=${url} tbodyRows=${tbodyRows}`);
 
       let pageRows = 0;
       $('table tbody tr, table tr').each((_, tr) => {
