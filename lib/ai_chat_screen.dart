@@ -969,6 +969,21 @@ class _AiChatScreenState extends State<AiChatScreen> {
     return false;
   }
 
+  /// モニタリング応答の表示用: [MON_JSON]...[/MON_JSON] と末尾案内文を除去
+  String _cleanMonitoringDisplay(String content) {
+    if (!_isMonitoringContent(content)) return content;
+    var cleaned = content.replaceAll(
+      RegExp(r'\[MON_JSON\][\s\S]*?\[/MON_JSON\]\s*'),
+      '',
+    );
+    // 末尾の案内文（※〜）を除去
+    cleaned = cleaned.replaceAll(
+      RegExp(r'※\s*上記考察案[\s\S]*$'),
+      '',
+    );
+    return cleaned.trimRight();
+  }
+
   /// モニタリング応答から JSON ブロックを抽出してパース。失敗時は null。
   Map<String, dynamic>? _parseMonitoringJson(String content) {
     // 1. 専用マーカーで囲まれたJSON
@@ -1137,7 +1152,6 @@ class _AiChatScreenState extends State<AiChatScreen> {
                         }),
                         editableField('長期目標に対する考察', longTermCtrl),
                         editableField('短期目標に対する考察', shortTermCtrl),
-                        editableField('備考欄', remarkCtrl, minLines: 2),
                       ],
                     ),
                   ),
@@ -1175,11 +1189,11 @@ class _AiChatScreenState extends State<AiChatScreen> {
       },
     );
 
-    // 編集結果を取り出す
+    // 編集結果を取り出す（備考は常に空欄）
     final considerations = itemCtrls.map((c) => c.text).toList();
     final finalLongTerm = longTermCtrl.text;
     final finalShortTerm = shortTermCtrl.text;
-    final finalRemark = remarkCtrl.text;
+    const finalRemark = '';
 
     for (final c in itemCtrls) c.dispose();
     longTermCtrl.dispose();
@@ -2231,7 +2245,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 SelectableText(
-                  content,
+                  _cleanMonitoringDisplay(content),
                   style: TextStyle(
                     fontSize: 15,
                     color: context.colors.textPrimary,
