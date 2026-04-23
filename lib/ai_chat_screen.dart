@@ -1025,44 +1025,98 @@ class _AiChatScreenState extends State<AiChatScreen> {
       return;
     }
 
-    // items 形式 (title + consideration) と旧 considerations 形式の両対応
-    final itemsRaw = parsed['items'] as List?;
-    final List<Map<String, String>> items;
-    if (itemsRaw != null && itemsRaw.isNotEmpty) {
-      items = itemsRaw.map((e) {
+    // AI生成の考察を抽出
+    final aiItemsRaw = parsed['items'] as List?;
+    final List<String> aiConsiderations;
+    if (aiItemsRaw != null && aiItemsRaw.isNotEmpty) {
+      aiConsiderations = aiItemsRaw.map((e) {
         final m = e is Map ? e : <String, dynamic>{};
-        return {
-          'title': (m['title'] ?? '').toString(),
-          'consideration': (m['consideration'] ?? '').toString(),
-        };
+        return (m['consideration'] ?? '').toString();
       }).toList();
     } else {
-      final old = (parsed['considerations'] as List?)?.map((e) => e.toString()).toList() ?? [];
-      items = old.asMap().entries
-          .map((e) => {'title': '項目 ${e.key + 1}', 'consideration': e.value})
-          .toList();
+      aiConsiderations = (parsed['considerations'] as List?)?.map((e) => e.toString()).toList() ?? [];
     }
     final longTerm = parsed['longTerm']?.toString() ?? '';
     final shortTerm = parsed['shortTerm']?.toString() ?? '';
-    final remark = parsed['remark']?.toString() ?? '';
 
-    if (items.isEmpty) {
+    // HUGから実際の目標を取得（真実のソース）
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => Center(child: CircularProgressIndicator()),
+    );
+
+    Map<String, dynamic>? formInfo;
+    try {
+      final callable = _functions.httpsCallable(
+        'getMonitoringFormInfo',
+        options: HttpsCallableOptions(timeout: const Duration(seconds: 90)),
+      );
+      final res = await callable.call({'studentId': widget.studentId});
+      formInfo = (res.data as Map?)?.cast<String, dynamic>();
+    } catch (e) {
       if (!mounted) return;
+      Navigator.of(context, rootNavigator: true).pop();
       await showDialog(
         context: context,
         builder: (ctx) => AlertDialog(
-          title: const Text('考察が空です'),
-          content: const Text('考察項目が1件も抽出できませんでした。'),
+          title: const Text('HUGから目標取得失敗'),
+          content: Text('$e', style: const TextStyle(fontSize: 12)),
+          actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('OK'))],
+        ),
+      );
+      return;
+    }
+    if (!mounted) return;
+    Navigator.of(context, rootNavigator: true).pop(); // close loading
+
+    final hugGoals = ((formInfo?['goals'] as List?) ?? []).map((g) {
+      final m = g is Map ? g : <String, dynamic>{};
+      return {
+        'id': (m['id'] ?? '').toString(),
+        'title': (m['title'] ?? '').toString(),
+      };
+    }).toList();
+    final targetKaisuu = formInfo?['targetKaisuu'];
+    final conflict = formInfo?['conflict'];
+
+    if (conflict != null) {
+      await showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('既に作成済みです'),
+          content: Text('作成回数${conflict['kaisuu']}のモニタリングは既に存在します（状態: ${conflict['status']}）。'),
           actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('OK'))],
         ),
       );
       return;
     }
 
+    if (hugGoals.isEmpty) {
+      await showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('HUGに目標がありません'),
+          content: const Text('個別支援計画書が未作成、または目標が設定されていません。'),
+          actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('OK'))],
+        ),
+      );
+      return;
+    }
+
+    // HUGの目標数に合わせて考察を配置（多ければ切り詰め、少なければ空欄で補完）
+    final mismatch = aiConsiderations.length != hugGoals.length;
+    final items = List.generate(hugGoals.length, (i) {
+      return {
+        'title': hugGoals[i]['title'] ?? '',
+        'consideration': i < aiConsiderations.length ? aiConsiderations[i] : '',
+      };
+    });
+
     final itemCtrls = items.map((it) => TextEditingController(text: it['consideration'])).toList();
     final longTermCtrl = TextEditingController(text: longTerm);
     final shortTermCtrl = TextEditingController(text: shortTerm);
-    final remarkCtrl = TextEditingController(text: remark);
 
     final result = await showDialog<bool>(
       context: context,
@@ -1122,10 +1176,18 @@ class _AiChatScreenState extends State<AiChatScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text('モニタリング下書き保存', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600, color: c.textPrimary)),
+                            Text('モニタリング下書き保存（作成回数 $targetKaisuu）',
+                                style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600, color: c.textPrimary)),
                             const SizedBox(height: 2),
-                            Text('最新の個別支援計画の「未作成」モニタリング枠にのみ新規作成します',
-                                style: TextStyle(fontSize: 11, color: c.textSecondary)),
+                            Text(
+                              mismatch
+                                  ? 'AI考察(${aiConsiderations.length})とHUG目標(${hugGoals.length})が不一致。内容を確認・編集してください'
+                                  : 'HUG目標${hugGoals.length}件に対する考察を入力',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: mismatch ? Colors.orange : c.textSecondary,
+                              ),
+                            ),
                           ],
                         ),
                       ),
@@ -1198,7 +1260,6 @@ class _AiChatScreenState extends State<AiChatScreen> {
     for (final c in itemCtrls) c.dispose();
     longTermCtrl.dispose();
     shortTermCtrl.dispose();
-    remarkCtrl.dispose();
 
     if (result != true || !mounted) return;
 
