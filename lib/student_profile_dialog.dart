@@ -299,13 +299,7 @@ class _StudentProfileDialogState extends State<_StudentProfileDialog> {
                       ],
                     ),
                   ),
-                  if (type == 'monitoring')
-                    IconButton(
-                      icon: const Icon(Icons.auto_awesome, size: 16),
-                      color: Colors.orange.shade700,
-                      tooltip: 'AIで下書き作成',
-                      onPressed: _generatingMonitoring ? null : _generateMonitoringDraft,
-                    ),
+                  // AI下書き作成ボタンは上書き事故により一時無効化
                   if (url.isNotEmpty)
                     IconButton(
                       icon: const Icon(Icons.open_in_new, size: 16),
