@@ -29,6 +29,7 @@ class _StudentProfileDialog extends StatefulWidget {
 class _StudentProfileDialogState extends State<_StudentProfileDialog> {
   final _functions = FirebaseFunctions.instanceFor(region: 'asia-northeast1');
   String? _expandedType; // 今開いているドキュメント種類
+  bool _generatingMonitoring = false;
 
   String _formatPlanDate(int yyyymmdd) {
     final y = yyyymmdd ~/ 10000;
@@ -45,6 +46,50 @@ class _StudentProfileDialogState extends State<_StudentProfileDialog> {
     'carePlanMain': '個別支援計画書',
     'monitoring': 'モニタリング',
   };
+
+  Future<void> _generateMonitoringDraft() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('AIでモニタリング下書きを作成'),
+        content: const Text(
+          '個別支援計画書と過去のケア記録をもとに、AIがモニタリングの考察を生成しHUGに下書き保存します。\n\n'
+          '・計画者: フィリップス ヒロコ\n'
+          '・目標達成度: 一部達成\n'
+          '・評価: 継続\n'
+          '・本人/ご家族/関係者の要望: 空欄\n\n'
+          'よろしいですか？',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('キャンセル')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('作成する')),
+        ],
+      ),
+    );
+    if (confirm != true) return;
+
+    setState(() => _generatingMonitoring = true);
+    try {
+      final callable = _functions.httpsCallable(
+        'saveMonitoringDraft',
+        options: HttpsCallableOptions(timeout: const Duration(seconds: 300)),
+      );
+      final result = await callable.call({'studentId': widget.studentId});
+      if (!mounted) return;
+      final data = (result.data as Map?) ?? {};
+      final goalCount = data['goalCount'] ?? 0;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('モニタリング下書きを保存しました（${goalCount}項目）')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('モニタリング下書き作成失敗: $e')),
+      );
+    } finally {
+      if (mounted) setState(() => _generatingMonitoring = false);
+    }
+  }
 
   Future<void> _sync() async {
     showDialog(
@@ -254,6 +299,13 @@ class _StudentProfileDialogState extends State<_StudentProfileDialog> {
                       ],
                     ),
                   ),
+                  if (type == 'monitoring')
+                    IconButton(
+                      icon: const Icon(Icons.auto_awesome, size: 16),
+                      color: Colors.orange.shade700,
+                      tooltip: 'AIで下書き作成',
+                      onPressed: _generatingMonitoring ? null : _generateMonitoringDraft,
+                    ),
                   if (url.isNotEmpty)
                     IconButton(
                       icon: const Icon(Icons.open_in_new, size: 16),
