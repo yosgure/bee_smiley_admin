@@ -275,8 +275,13 @@ class _AiChatScreenState extends State<AiChatScreen> {
           _showSlashMenu = false;
           _slashFilter = '';
         });
-        _textController.text = trigger;
-        _sendMessageWithScript(script);
+        // モニタリングは HUG の実目標をプリフェッチしてメッセージに注入
+        if (label == 'モニタリング') {
+          _sendMonitoringAutoTrigger(trigger, script);
+        } else {
+          _textController.text = trigger;
+          _sendMessageWithScript(script);
+        }
         return;
       }
       // 質問がなければ普通のタグ方式
@@ -462,6 +467,85 @@ class _AiChatScreenState extends State<AiChatScreen> {
     // メッセージ送信
     _textController.text = message;
     _sendMessageWithScript(script);
+  }
+
+  /// モニタリング自動送信: HUG 実目標をプリフェッチしてメッセージに注入
+  Future<void> _sendMonitoringAutoTrigger(String trigger, String script) async {
+    // ローディング状態表示
+    setState(() {
+      _pendingUserMessage = {
+        'role': 'user',
+        'content': trigger,
+        'createdAt': Timestamp.now(),
+        'status': 'sending',
+      };
+      _isWaitingForAiResponse = true;
+    });
+    _scrollToBottom();
+
+    List<Map<String, dynamic>> hugGoals = [];
+    int targetKaisuu = 0;
+    Map? conflict;
+    try {
+      final callable = _functions.httpsCallable(
+        'getMonitoringFormInfo',
+        options: HttpsCallableOptions(timeout: const Duration(seconds: 90)),
+      );
+      final res = await callable.call({'studentId': widget.studentId});
+      final data = (res.data as Map?) ?? {};
+      targetKaisuu = (data['targetKaisuu'] as num?)?.toInt() ?? 0;
+      conflict = data['conflict'] as Map?;
+      hugGoals = ((data['goals'] as List?) ?? []).map((g) {
+        final m = g is Map ? g : <String, dynamic>{};
+        return {
+          'title': (m['title'] ?? '').toString(),
+          'category': (m['category'] ?? '').toString(),
+          'goalText': (m['goalText'] ?? '').toString(),
+        };
+      }).toList();
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _pendingUserMessage = null;
+        _isWaitingForAiResponse = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('HUG目標の取得に失敗: $e')),
+      );
+      return;
+    }
+
+    if (hugGoals.isEmpty) {
+      if (!mounted) return;
+      setState(() {
+        _pendingUserMessage = null;
+        _isWaitingForAiResponse = false;
+      });
+      await showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('HUGに未作成のモニタリング枠がありません'),
+          content: Text(conflict != null
+              ? '作成回数${conflict['kaisuu']}は既に作成済み（${conflict['status']}）です'
+              : '個別支援計画書が未公開の可能性があります'),
+          actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('OK'))],
+        ),
+      );
+      return;
+    }
+
+    // HUG実目標をメッセージに注入
+    final goalsLines = hugGoals.asMap().entries.map((e) {
+      final i = e.key + 1;
+      final g = e.value;
+      return '$i. ${g['title']}';
+    }).join('\n');
+
+    final message =
+        '$trigger\n\n【HUGに登録済みの作成回数$targetKaisuu モニタリング目標（これら${hugGoals.length}項目に対して考察を生成してください。順序・項目数は厳守）】\n$goalsLines';
+
+    _textController.text = message;
+    await _sendMessageWithScript(script);
   }
 
   Future<void> _sendMessageWithScript(String script) async {
