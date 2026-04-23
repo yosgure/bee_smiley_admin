@@ -4,6 +4,36 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
 import 'app_theme.dart';
 
+/// 新ルール（月末を含む週の土曜まで）を初適用する月。
+/// この月以前は旧ルール（月初〜月末）として扱う。
+final DateTime kShiftRangeRolloutMonth = DateTime(2026, 6, 1);
+
+DateTime _dateOnly(DateTime d) => DateTime(d.year, d.month, d.day);
+
+/// 対象月の希望入力範囲の終了日。
+/// 新ルール: 月末を含む週（日曜始まり）の土曜日。
+/// 旧ルール: 月末。
+DateTime shiftRangeEnd(DateTime targetMonth) {
+  final last =
+      DateTime(targetMonth.year, targetMonth.month + 1, 0); // 月末
+  final rollout = _dateOnly(kShiftRangeRolloutMonth);
+  final tgt = DateTime(targetMonth.year, targetMonth.month, 1);
+  if (tgt.isBefore(rollout)) return last;
+  final daysToSat = 6 - (last.weekday % 7); // Sun=0 ... Sat=6
+  return last.add(Duration(days: daysToSat));
+}
+
+/// 対象月の希望入力範囲の開始日。
+/// 新ルール（ロールアウト後）: 前月の新ルール終了日の翌日。
+/// ロールアウト月本体: 月初。
+DateTime shiftRangeStart(DateTime targetMonth) {
+  final first = DateTime(targetMonth.year, targetMonth.month, 1);
+  final rollout = _dateOnly(kShiftRangeRolloutMonth);
+  if (!first.isAfter(rollout)) return first;
+  final prev = DateTime(targetMonth.year, targetMonth.month - 1, 1);
+  return shiftRangeEnd(prev).add(const Duration(days: 1));
+}
+
 /// 翌月シフト希望を入力するダイアログ。
 ///
 /// - `targetMonth`: 対象月の1日を渡す（例: 2026-05-01）
@@ -24,16 +54,19 @@ class _PlusShiftRequestDialogState extends State<PlusShiftRequestDialog> {
   String? _myStaffId;
   String? _myStaffName;
 
-  // 自分の入力
-  // _myNgDays: 通常の休み希望
-  // _myNgStrongDays: どうしても休みたい（強い希望）
-  // ※ _myNgStrongDays ⊆ _myNgDays の関係を保つ
-  final Set<int> _myNgDays = <int>{};
-  final Set<int> _myNgStrongDays = <int>{};
+  // 自分の入力（DateTime キー）
+  // 4 状態: なし / 休み希望 / 絶対休 / 半休 を排他的に表現する。
+  //   - 休み希望: _myNgDates に入り、_myNgStrongDates / _myHalfDates には入らない
+  //   - 絶対休: _myNgDates + _myNgStrongDates に入る（ngStrong ⊆ ng）
+  //   - 半休: _myHalfDates のみに入る（ng/strong には入らない）
+  final Set<DateTime> _myNgDates = <DateTime>{};
+  final Set<DateTime> _myNgStrongDates = <DateTime>{};
+  final Set<DateTime> _myHalfDates = <DateTime>{};
 
   String get _monthKey => DateFormat('yyyy-MM').format(widget.targetMonth);
-  int get _daysInMonth =>
-      DateTime(widget.targetMonth.year, widget.targetMonth.month + 1, 0).day;
+
+  DateTime get _rangeStart => _dateOnly(shiftRangeStart(widget.targetMonth));
+  DateTime get _rangeEnd => _dateOnly(shiftRangeEnd(widget.targetMonth));
 
   /// 締切 = 対象月の前月10日
   DateTime get _deadline => DateTime(
@@ -71,7 +104,9 @@ class _PlusShiftRequestDialogState extends State<PlusShiftRequestDialog> {
         }
       }
 
-      // 2. 自分の既存エントリを読む
+      // 2. 自分の既存エントリを対象月ドキュメントから読む。
+      //    新形式: ngDates/ngDaysStrongDates/halfDates（ISO 日付文字列）
+      //    旧形式: ngDays/ngDaysStrong（対象月の day-int）
       if (_myStaffId != null) {
         final doc = await FirebaseFirestore.instance
             .collection('plus_shift_requests')
@@ -82,10 +117,42 @@ class _PlusShiftRequestDialogState extends State<PlusShiftRequestDialog> {
               Map<String, dynamic>.from(doc.data()?['staffs'] ?? {});
           if (staffs[_myStaffId] is Map) {
             final mine = Map<String, dynamic>.from(staffs[_myStaffId] as Map);
-            final ngDays = (mine['ngDays'] as List?) ?? [];
-            _myNgDays.addAll(ngDays.map((e) => (e as num).toInt()));
-            final ngStrong = (mine['ngDaysStrong'] as List?) ?? [];
-            _myNgStrongDays.addAll(ngStrong.map((e) => (e as num).toInt()));
+            void collectDates(String field, Set<DateTime> target) {
+              final list = (mine[field] as List?) ?? const [];
+              for (final v in list) {
+                final d = DateTime.tryParse(v as String);
+                if (d == null) continue;
+                final dd = _dateOnly(d);
+                if (!dd.isBefore(_rangeStart) && !dd.isAfter(_rangeEnd)) {
+                  target.add(dd);
+                }
+              }
+            }
+
+            // 新形式優先
+            if (mine['ngDates'] is List ||
+                mine['ngStrongDates'] is List ||
+                mine['halfDates'] is List) {
+              collectDates('ngDates', _myNgDates);
+              collectDates('ngStrongDates', _myNgStrongDates);
+              collectDates('halfDates', _myHalfDates);
+            } else {
+              // 旧形式（対象月の day-int）
+              void collectDays(String field, Set<DateTime> target) {
+                final list = (mine[field] as List?) ?? const [];
+                for (final v in list) {
+                  final day = (v as num).toInt();
+                  target.add(DateTime(widget.targetMonth.year,
+                      widget.targetMonth.month, day));
+                }
+              }
+
+              collectDays('ngDays', _myNgDates);
+              collectDays('ngDaysStrong', _myNgStrongDates);
+            }
+            // 半休は ng/strong と排他
+            _myNgDates.removeAll(_myHalfDates);
+            _myNgStrongDates.removeAll(_myHalfDates);
           }
         }
       }
@@ -110,14 +177,37 @@ class _PlusShiftRequestDialogState extends State<PlusShiftRequestDialog> {
           .doc(_monthKey);
       final snapshot = await docRef.get();
 
-      final ngList = _myNgDays.toList()..sort();
-      // 強希望は通常希望の部分集合として保存
-      final ngStrongList =
-          _myNgStrongDays.where(_myNgDays.contains).toList()..sort();
+      String iso(DateTime d) => DateFormat('yyyy-MM-dd').format(d);
+      final ngDates = (_myNgDates.toList()..sort()).map(iso).toList();
+      final strongDates = (_myNgStrongDates
+              .where(_myNgDates.contains)
+              .toList()
+            ..sort())
+          .map(iso)
+          .toList();
+      final halfDates = (_myHalfDates.toList()..sort()).map(iso).toList();
+
+      // 下位互換: 対象月（yyyy-MM）に属する日の day-int も書いておく。
+      // 既存の集計・読み取りコードが ngDays を直接見ている場合に備える。
+      List<int> daysOfTargetMonth(Set<DateTime> src) => (src
+              .where((d) =>
+                  d.year == widget.targetMonth.year &&
+                  d.month == widget.targetMonth.month)
+              .map((d) => d.day)
+              .toList()
+            ..sort());
+
+      final legacyNgDays = daysOfTargetMonth(_myNgDates);
+      final legacyStrong =
+          daysOfTargetMonth(_myNgStrongDates).where(legacyNgDays.contains).toList();
+
       final myEntry = <String, dynamic>{
         'staffName': _myStaffName ?? '',
-        'ngDays': ngList,
-        'ngDaysStrong': ngStrongList,
+        'ngDates': ngDates,
+        'ngStrongDates': strongDates,
+        'halfDates': halfDates,
+        'ngDays': legacyNgDays,
+        'ngDaysStrong': legacyStrong,
         'updatedAt': FieldValue.serverTimestamp(),
       };
 
@@ -125,11 +215,11 @@ class _PlusShiftRequestDialogState extends State<PlusShiftRequestDialog> {
         final data = snapshot.data() ?? {};
         final existingStaffs =
             Map<String, dynamic>.from(data['staffs'] ?? {});
-        // 既存エントリがあれば submittedAt は保持、無ければ新規作成扱い
         if (existingStaffs.containsKey(_myStaffId)) {
           final prev =
               Map<String, dynamic>.from(existingStaffs[_myStaffId] as Map);
-          myEntry['submittedAt'] = prev['submittedAt'] ?? FieldValue.serverTimestamp();
+          myEntry['submittedAt'] =
+              prev['submittedAt'] ?? FieldValue.serverTimestamp();
         } else {
           myEntry['submittedAt'] = FieldValue.serverTimestamp();
         }
@@ -221,10 +311,13 @@ class _PlusShiftRequestDialogState extends State<PlusShiftRequestDialog> {
   }
 
   Widget _buildCalendar() {
-    final firstDay =
-        DateTime(widget.targetMonth.year, widget.targetMonth.month, 1);
-    final startWeekday = firstDay.weekday % 7; // 日=0, 月=1, ...
-    final totalCells = startWeekday + _daysInMonth;
+    // 日曜始まりで、範囲開始日の週頭〜範囲終了日の週末までを描画する。
+    final rangeStart = _rangeStart;
+    final rangeEnd = _rangeEnd;
+    final gridStart =
+        rangeStart.subtract(Duration(days: rangeStart.weekday % 7));
+    final gridEnd = rangeEnd.add(Duration(days: 6 - rangeEnd.weekday % 7));
+    final totalCells = gridEnd.difference(gridStart).inDays + 1;
     final rows = (totalCells / 7).ceil();
 
     const weekLabels = ['日', '月', '火', '水', '木', '金', '土'];
@@ -262,31 +355,37 @@ class _PlusShiftRequestDialogState extends State<PlusShiftRequestDialog> {
           Row(
             children: List.generate(7, (c) {
               final cellIndex = r * 7 + c;
-              final day = cellIndex - startWeekday + 1;
-              if (day < 1 || day > _daysInMonth) {
-                return const Expanded(child: SizedBox(height: 44));
+              final date = gridStart.add(Duration(days: cellIndex));
+              final inRange =
+                  !date.isBefore(rangeStart) && !date.isAfter(rangeEnd);
+              if (!inRange) {
+                return const Expanded(child: SizedBox(height: 48));
               }
-              final isNg = _myNgDays.contains(day);
-              final isStrong = _myNgStrongDays.contains(day);
-              final dow = DateTime(
-                widget.targetMonth.year,
-                widget.targetMonth.month,
-                day,
-              ).weekday; // 月=1, ..., 日=7
+              final isNg = _myNgDates.contains(date);
+              final isStrong = _myNgStrongDates.contains(date);
+              final isHalf = _myHalfDates.contains(date);
+              final dow = date.weekday; // 月=1, ..., 日=7
               final dayColor = dow == 7
                   ? Colors.red
                   : dow == 6
                       ? Colors.blue
                       : context.colors.textPrimary;
-              // 3状態: なし → 休 → 絶対休 → なし
+              // 4状態: なし → 休み希望 → 絶対休 → 半休 → なし
               final Color bgColor;
-              if (isStrong) {
+              if (isHalf) {
+                bgColor = Colors.orange.shade600;
+              } else if (isStrong) {
                 bgColor = Colors.red.shade800;
               } else if (isNg) {
                 bgColor = Colors.red.shade400;
               } else {
                 bgColor = context.colors.tagBg;
               }
+              final isOtherMonth = date.month != widget.targetMonth.month;
+              final dayLabel =
+                  isOtherMonth ? '${date.month}/${date.day}' : '${date.day}';
+              final labelFontSize = isOtherMonth ? 11.0 : 14.0;
+              final markedFg = isNg || isStrong || isHalf;
               return Expanded(
                 child: Padding(
                   padding: const EdgeInsets.all(2),
@@ -297,14 +396,17 @@ class _PlusShiftRequestDialogState extends State<PlusShiftRequestDialog> {
                       borderRadius: BorderRadius.circular(6),
                       onTap: () {
                         setState(() {
-                          // なし → 休 → 絶対休 → なし の順に循環
-                          if (!isNg) {
-                            _myNgDays.add(day);
-                          } else if (!isStrong) {
-                            _myNgStrongDays.add(day);
+                          // なし → 休み希望 → 絶対休 → 半休 → なし
+                          if (isHalf) {
+                            _myHalfDates.remove(date);
+                          } else if (isStrong) {
+                            _myNgDates.remove(date);
+                            _myNgStrongDates.remove(date);
+                            _myHalfDates.add(date);
+                          } else if (isNg) {
+                            _myNgStrongDates.add(date);
                           } else {
-                            _myNgDays.remove(day);
-                            _myNgStrongDays.remove(day);
+                            _myNgDates.add(date);
                           }
                         });
                       },
@@ -314,14 +416,23 @@ class _PlusShiftRequestDialogState extends State<PlusShiftRequestDialog> {
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                             Text(
-                              '$day',
+                              dayLabel,
                               style: TextStyle(
-                                fontSize: 14,
+                                fontSize: labelFontSize,
                                 fontWeight: FontWeight.bold,
-                                color: isNg ? Colors.white : dayColor,
+                                color: markedFg ? Colors.white : dayColor,
                               ),
                             ),
-                            if (isStrong)
+                            if (isHalf)
+                              const Text(
+                                '半休',
+                                style: TextStyle(
+                                  fontSize: 9,
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              )
+                            else if (isStrong)
                               const Text(
                                 '絶対休',
                                 style: TextStyle(
@@ -441,7 +552,7 @@ class _PlusShiftRequestDialogState extends State<PlusShiftRequestDialog> {
                                   const SizedBox(width: 6),
                                   Expanded(
                                     child: Text(
-                                      '日付をタップ: 1回目「休み希望」→ 2回目「絶対休」→ 3回目 解除',
+                                      '日付をタップ: 1「休み希望」→ 2「絶対休」→ 3「半休」→ 4 解除',
                                       style: TextStyle(fontSize: 12, color: ctx.colors.textPrimary),
                                     ),
                                   ),
@@ -454,11 +565,13 @@ class _PlusShiftRequestDialogState extends State<PlusShiftRequestDialog> {
                           _buildCalendar(),
                           const SizedBox(height: 8),
                           // 凡例
-                          Row(
+                          Wrap(
+                            spacing: 12,
+                            runSpacing: 4,
                             children: [
                               _stateLegend(Colors.red.shade400, '休み希望'),
-                              const SizedBox(width: 12),
                               _stateLegend(Colors.red.shade800, '絶対休'),
+                              _stateLegend(Colors.orange.shade600, '半休'),
                             ],
                           ),
                           const SizedBox(height: 8),
@@ -554,22 +667,36 @@ class _PlusShiftDecisionDialogState extends State<PlusShiftDecisionDialog> {
   // プラスのスタッフ一覧 {id, name, furigana}
   final List<Map<String, dynamic>> _plusStaffs = [];
 
-  // 提出データ（希望） staffId → Set<int days>
-  final Map<String, Set<int>> _requestedOffDays = {};
-  // 提出データ（強希望: 絶対休） staffId → Set<int days>
-  final Map<String, Set<int>> _requestedStrongOffDays = {};
+  // 提出データ（希望） staffId → Set<DateTime>
+  final Map<String, Set<DateTime>> _requestedOffDates = {};
+  // 提出データ（強希望: 絶対休） staffId → Set<DateTime>
+  final Map<String, Set<DateTime>> _requestedStrongOffDates = {};
+  // 提出データ（半休） staffId → Set<DateTime>
+  final Map<String, Set<DateTime>> _requestedHalfDates = {};
 
-  // 現在の決定状態: day(int) → Set<staffId>
-  // 初期値: 希望データ + 既存 plus_shifts の isWorking:false を統合
-  final Map<int, Set<String>> _offDays = {};
+  // 現在の決定状態: date → Set<staffId>
+  final Map<DateTime, Set<String>> _offDates = {};
 
-  // 保存前に上書きするために、元の plus_shifts.days をそのまま持っておく
-  Map<String, dynamic> _originalDays = {};
-  bool _originalExists = false;
+  // 保存前に上書きするために、元の plus_shifts.days をそのまま月キーごとに保持
+  // monthKey(yyyy-MM) → { dayKey(int as str) → slots-list }
+  final Map<String, Map<String, dynamic>> _originalDaysByMonth = {};
+  final Set<String> _existingShiftDocs = <String>{};
 
   String get _monthKey => DateFormat('yyyy-MM').format(widget.targetMonth);
-  int get _daysInMonth =>
-      DateTime(widget.targetMonth.year, widget.targetMonth.month + 1, 0).day;
+
+  DateTime get _rangeStart => _dateOnly(shiftRangeStart(widget.targetMonth));
+  DateTime get _rangeEnd => _dateOnly(shiftRangeEnd(widget.targetMonth));
+
+  /// 範囲に跨る月キー一覧（plus_shifts の読み書き対象）
+  List<String> get _involvedMonthKeys {
+    final set = <String>{};
+    for (var d = _rangeStart;
+        !d.isAfter(_rangeEnd);
+        d = d.add(const Duration(days: 1))) {
+      set.add(DateFormat('yyyy-MM').format(d));
+    }
+    return set.toList()..sort();
+  }
 
   @override
   void initState() {
@@ -596,7 +723,7 @@ class _PlusShiftDecisionDialogState extends State<PlusShiftDecisionDialog> {
       _plusStaffs.sort((a, b) =>
           (a['furigana'] as String).compareTo(b['furigana'] as String));
 
-      // 2. 希望データ
+      // 2. 希望データ（対象月ドキュメント）
       final reqDoc = await FirebaseFirestore.instance
           .collection('plus_shift_requests')
           .doc(_monthKey)
@@ -605,40 +732,83 @@ class _PlusShiftDecisionDialogState extends State<PlusShiftDecisionDialog> {
         final staffs =
             Map<String, dynamic>.from(reqDoc.data()?['staffs'] ?? {});
         staffs.forEach((staffId, v) {
-          if (v is Map) {
-            final entry = Map<String, dynamic>.from(v);
-            final days = ((entry['ngDays'] as List?) ?? [])
-                .map((e) => (e as num).toInt())
-                .toSet();
-            _requestedOffDays[staffId] = days;
-            final strongDays = ((entry['ngDaysStrong'] as List?) ?? [])
-                .map((e) => (e as num).toInt())
-                .toSet();
-            _requestedStrongOffDays[staffId] = strongDays;
-            for (final d in days) {
-              _offDays.putIfAbsent(d, () => <String>{}).add(staffId);
+          if (v is! Map) return;
+          final entry = Map<String, dynamic>.from(v);
+          Set<DateTime> parseDates(String field) {
+            final out = <DateTime>{};
+            final list = (entry[field] as List?) ?? const [];
+            for (final x in list) {
+              final d = DateTime.tryParse(x as String);
+              if (d == null) continue;
+              final dd = _dateOnly(d);
+              if (!dd.isBefore(_rangeStart) && !dd.isAfter(_rangeEnd)) {
+                out.add(dd);
+              }
             }
+            return out;
+          }
+
+          final hasNewFields = entry['ngDates'] is List ||
+              entry['ngStrongDates'] is List ||
+              entry['halfDates'] is List;
+          Set<DateTime> ng;
+          Set<DateTime> strong;
+          Set<DateTime> half;
+          if (hasNewFields) {
+            ng = parseDates('ngDates');
+            strong = parseDates('ngStrongDates');
+            half = parseDates('halfDates');
+          } else {
+            // 旧形式 day-int（対象月）
+            Set<DateTime> parseDays(String field) {
+              final out = <DateTime>{};
+              for (final n in (entry[field] as List?) ?? const []) {
+                final day = (n as num).toInt();
+                final d = DateTime(widget.targetMonth.year,
+                    widget.targetMonth.month, day);
+                if (!d.isBefore(_rangeStart) && !d.isAfter(_rangeEnd)) {
+                  out.add(d);
+                }
+              }
+              return out;
+            }
+
+            ng = parseDays('ngDays');
+            strong = parseDays('ngDaysStrong');
+            half = <DateTime>{};
+          }
+          _requestedOffDates[staffId] = ng;
+          _requestedStrongOffDates[staffId] = strong;
+          _requestedHalfDates[staffId] = half;
+          for (final d in ng) {
+            _offDates.putIfAbsent(d, () => <String>{}).add(staffId);
           }
         });
       }
 
-      // 3. 既存 plus_shifts
-      final shiftDoc = await FirebaseFirestore.instance
-          .collection('plus_shifts')
-          .doc(_monthKey)
-          .get();
-      if (shiftDoc.exists) {
-        _originalExists = true;
-        _originalDays =
-            Map<String, dynamic>.from(shiftDoc.data()?['days'] ?? {});
-        _originalDays.forEach((dayKey, slots) {
+      // 3. 既存 plus_shifts（範囲に跨る月すべて）
+      for (final mk in _involvedMonthKeys) {
+        final shiftDoc = await FirebaseFirestore.instance
+            .collection('plus_shifts')
+            .doc(mk)
+            .get();
+        if (!shiftDoc.exists) continue;
+        _existingShiftDocs.add(mk);
+        final days = Map<String, dynamic>.from(shiftDoc.data()?['days'] ?? {});
+        _originalDaysByMonth[mk] = days;
+        final parts = mk.split('-');
+        final y = int.parse(parts[0]);
+        final m = int.parse(parts[1]);
+        days.forEach((dayKey, slots) {
           final day = int.tryParse(dayKey);
           if (day == null || slots is! List) return;
+          final date = DateTime(y, m, day);
+          if (date.isBefore(_rangeStart) || date.isAfter(_rangeEnd)) return;
           for (final slot in slots) {
             if (slot is Map && slot['isWorking'] == false) {
               final staffId = slot['staffId'] as String?;
               if (staffId != null) {
-                _offDays.putIfAbsent(day, () => <String>{}).add(staffId);
+                _offDates.putIfAbsent(date, () => <String>{}).add(staffId);
               }
             }
           }
@@ -654,86 +824,101 @@ class _PlusShiftDecisionDialogState extends State<PlusShiftDecisionDialog> {
   Future<void> _save() async {
     setState(() => _saving = true);
     try {
-      // 新しい days マップを組み立てる（既存を基準に差分反映）
-      final newDays = <String, dynamic>{};
-      _originalDays.forEach((k, v) {
-        if (v is List) {
-          newDays[k] = v.map((e) {
-            if (e is Map) return Map<String, dynamic>.from(e);
-            return e;
-          }).toList();
-        } else {
-          newDays[k] = v;
-        }
-      });
+      // 範囲は複数のカレンダー月に跨る可能性があるので、月ごとの plus_shifts doc を更新する。
+      for (final mk in _involvedMonthKeys) {
+        final parts = mk.split('-');
+        final y = int.parse(parts[0]);
+        final m = int.parse(parts[1]);
+        final monthFirst = DateTime(y, m, 1);
+        final monthLast = DateTime(y, m + 1, 0);
+        final overlapStart =
+            _rangeStart.isAfter(monthFirst) ? _rangeStart : monthFirst;
+        final overlapEnd =
+            _rangeEnd.isBefore(monthLast) ? _rangeEnd : monthLast;
 
-      // 対象月の全日をイテレート
-      for (int day = 1; day <= _daysInMonth; day++) {
-        final dayKey = day.toString();
-        final offSet = _offDays[day] ?? <String>{};
-
-        final existingSlots = (newDays[dayKey] as List?)
-                ?.map((e) => Map<String, dynamic>.from(e as Map))
-                .toList() ??
-            <Map<String, dynamic>>[];
-
-        // A) 休み指定すべき staffId を isWorking:false で upsert
-        for (final staffId in offSet) {
-          final idx = existingSlots
-              .indexWhere((s) => s['staffId'] == staffId);
-          if (idx >= 0) {
-            existingSlots[idx] = {
-              ...existingSlots[idx],
-              'isWorking': false,
-            };
+        final original = _originalDaysByMonth[mk] ?? <String, dynamic>{};
+        final newDays = <String, dynamic>{};
+        original.forEach((k, v) {
+          if (v is List) {
+            newDays[k] = v.map((e) {
+              if (e is Map) return Map<String, dynamic>.from(e);
+              return e;
+            }).toList();
           } else {
-            final staff = _plusStaffs.firstWhere(
-              (s) => s['id'] == staffId,
-              orElse: () => <String, dynamic>{'name': ''},
-            );
-            existingSlots.add({
-              'staffId': staffId,
-              'name': staff['name'] ?? '',
-              'isWorking': false,
-            });
+            newDays[k] = v;
+          }
+        });
+
+        // overlap 範囲の日だけを反映する（他月分や範囲外の日は既存値を尊重）
+        for (var day = overlapStart.day;
+            !DateTime(y, m, day).isAfter(overlapEnd);
+            day++) {
+          final date = DateTime(y, m, day);
+          final dayKey = day.toString();
+          final offSet = _offDates[date] ?? <String>{};
+
+          final existingSlots = (newDays[dayKey] as List?)
+                  ?.map((e) => Map<String, dynamic>.from(e as Map))
+                  .toList() ??
+              <Map<String, dynamic>>[];
+
+          // A) 休み指定 staffId を isWorking:false で upsert
+          for (final staffId in offSet) {
+            final idx =
+                existingSlots.indexWhere((s) => s['staffId'] == staffId);
+            if (idx >= 0) {
+              existingSlots[idx] = {
+                ...existingSlots[idx],
+                'isWorking': false,
+              };
+            } else {
+              final staff = _plusStaffs.firstWhere(
+                (s) => s['id'] == staffId,
+                orElse: () => <String, dynamic>{'name': ''},
+              );
+              existingSlots.add({
+                'staffId': staffId,
+                'name': staff['name'] ?? '',
+                'isWorking': false,
+              });
+            }
+          }
+
+          // B) 休み指定されていないが isWorking:false のものは出勤に戻す
+          for (int i = 0; i < existingSlots.length; i++) {
+            final slot = existingSlots[i];
+            final sid = slot['staffId'];
+            if (sid is String &&
+                slot['isWorking'] == false &&
+                !offSet.contains(sid)) {
+              existingSlots[i] = {
+                ...slot,
+                'isWorking': true,
+              };
+            }
+          }
+
+          if (existingSlots.isNotEmpty) {
+            newDays[dayKey] = existingSlots;
+          } else {
+            newDays.remove(dayKey);
           }
         }
 
-        // B) 休み指定されていないが isWorking:false のものは出勤に戻す
-        for (int i = 0; i < existingSlots.length; i++) {
-          final slot = existingSlots[i];
-          final sid = slot['staffId'];
-          if (sid is String &&
-              slot['isWorking'] == false &&
-              !offSet.contains(sid)) {
-            existingSlots[i] = {
-              ...slot,
-              'isWorking': true,
-            };
-          }
-        }
-
-        if (existingSlots.isNotEmpty) {
-          newDays[dayKey] = existingSlots;
+        final docRef =
+            FirebaseFirestore.instance.collection('plus_shifts').doc(mk);
+        if (_existingShiftDocs.contains(mk)) {
+          await docRef.update({
+            'days': newDays,
+            'updatedAt': FieldValue.serverTimestamp(),
+          });
         } else {
-          newDays.remove(dayKey);
+          await docRef.set({
+            'classroom': 'ビースマイリープラス湘南藤沢',
+            'days': newDays,
+            'updatedAt': FieldValue.serverTimestamp(),
+          });
         }
-      }
-
-      final docRef = FirebaseFirestore.instance
-          .collection('plus_shifts')
-          .doc(_monthKey);
-      if (_originalExists) {
-        await docRef.update({
-          'days': newDays,
-          'updatedAt': FieldValue.serverTimestamp(),
-        });
-      } else {
-        await docRef.set({
-          'classroom': 'ビースマイリープラス湘南藤沢',
-          'days': newDays,
-          'updatedAt': FieldValue.serverTimestamp(),
-        });
       }
 
       if (mounted) {
@@ -754,16 +939,14 @@ class _PlusShiftDecisionDialogState extends State<PlusShiftDecisionDialog> {
     }
   }
 
-  Future<void> _showDayEditPopup(int day) async {
-    final currentOff = Set<String>.from(_offDays[day] ?? {});
+  Future<void> _showDayEditPopup(DateTime date) async {
+    final currentOff = Set<String>.from(_offDates[date] ?? {});
     final result = await showDialog<Set<String>>(
       context: context,
       builder: (ctx) {
         final localOff = Set<String>.from(currentOff);
         return StatefulBuilder(
           builder: (ctx, setLocal) {
-            final date = DateTime(widget.targetMonth.year,
-                widget.targetMonth.month, day);
             return AlertDialog(
               title: Text(
                   '${DateFormat('M/d(E)', 'ja').format(date)} の休みを決定'),
@@ -796,8 +979,26 @@ class _PlusShiftDecisionDialogState extends State<PlusShiftDecisionDialog> {
                                 style: TextStyle(fontSize: 13),
                               ),
                             ),
-                            if ((_requestedStrongOffDays[staff['id']] ?? {})
-                                .contains(day))
+                            if ((_requestedHalfDates[staff['id']] ?? {})
+                                .contains(date))
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: Colors.orange.shade600,
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: const Text(
+                                  '半休希望',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              )
+                            else if ((_requestedStrongOffDates[staff['id']] ?? {})
+                                .contains(date))
                               Container(
                                 padding: const EdgeInsets.symmetric(
                                     horizontal: 6, vertical: 2),
@@ -814,8 +1015,8 @@ class _PlusShiftDecisionDialogState extends State<PlusShiftDecisionDialog> {
                                   ),
                                 ),
                               )
-                            else if ((_requestedOffDays[staff['id']] ?? {})
-                                .contains(day))
+                            else if ((_requestedOffDates[staff['id']] ?? {})
+                                .contains(date))
                               Container(
                                 padding: const EdgeInsets.symmetric(
                                     horizontal: 6, vertical: 2),
@@ -856,9 +1057,9 @@ class _PlusShiftDecisionDialogState extends State<PlusShiftDecisionDialog> {
     if (result != null) {
       setState(() {
         if (result.isEmpty) {
-          _offDays.remove(day);
+          _offDates.remove(date);
         } else {
-          _offDays[day] = result;
+          _offDates[date] = result;
         }
       });
     }
@@ -871,7 +1072,7 @@ class _PlusShiftDecisionDialogState extends State<PlusShiftDecisionDialog> {
     final dialogHeight = screenSize.height * 0.88;
 
     final submittedCount = _plusStaffs
-        .where((s) => _requestedOffDays.containsKey(s['id']))
+        .where((s) => _requestedOffDates.containsKey(s['id']))
         .length;
 
     return Dialog(
@@ -986,6 +1187,8 @@ class _PlusShiftDecisionDialogState extends State<PlusShiftDecisionDialog> {
                             borderColor: Colors.orange.shade400),
                         const SizedBox(width: 12),
                         _legendSwatch(Colors.red.shade800, '絶対休'),
+                        const SizedBox(width: 12),
+                        _legendSwatch(Colors.orange.shade600, '半休希望'),
                         const Spacer(),
                         Text(
                           '※「シフトに反映」を押すと実シフトに書き込まれます',
@@ -1004,13 +1207,17 @@ class _PlusShiftDecisionDialogState extends State<PlusShiftDecisionDialog> {
 
   Widget _buildCalendar() {
     // 月曜始まり 7列表示。日曜列は定休日としてグレーアウト。
-    final firstDay =
-        DateTime(widget.targetMonth.year, widget.targetMonth.month, 1);
-    // weekday: 月=1 → 列0, 火=2 → 1, ..., 土=6 → 5, 日=7 → 6
-    final startOffset = (firstDay.weekday - 1) % 7;
+    // 範囲（_rangeStart 〜 _rangeEnd）を包む週単位で描画する。
+    final rangeStart = _rangeStart;
+    final rangeEnd = _rangeEnd;
+    // グリッド開始 = rangeStart を含む週の月曜
+    final gridStart =
+        rangeStart.subtract(Duration(days: (rangeStart.weekday - 1) % 7));
+    // グリッド終端 = rangeEnd を含む週の日曜
+    final gridEnd = rangeEnd.add(Duration(days: (7 - rangeEnd.weekday) % 7));
 
     const labels7 = ['月', '火', '水', '木', '金', '土', '日'];
-    final totalCells = startOffset + _daysInMonth;
+    final totalCells = gridEnd.difference(gridStart).inDays + 1;
     final rows = (totalCells / 7).ceil();
 
     return Padding(
@@ -1066,12 +1273,13 @@ class _PlusShiftDecisionDialogState extends State<PlusShiftDecisionDialog> {
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: List.generate(7, (c) {
                       final cellIndex = r * 7 + c;
-                      final day = cellIndex - startOffset + 1;
-                      final isInMonth =
-                          day >= 1 && day <= _daysInMonth;
+                      final date =
+                          gridStart.add(Duration(days: cellIndex));
+                      final inRange = !date.isBefore(rangeStart) &&
+                          !date.isAfter(rangeEnd);
                       return Expanded(
                         child: _buildDayCell(
-                          day: isInMonth ? day : null,
+                          date: inRange ? date : null,
                           columnIndex: c,
                         ),
                       );
@@ -1086,7 +1294,7 @@ class _PlusShiftDecisionDialogState extends State<PlusShiftDecisionDialog> {
     );
   }
 
-  Widget _buildDayCell({required int? day, required int columnIndex}) {
+  Widget _buildDayCell({required DateTime? date, required int columnIndex}) {
     final isSun = columnIndex == 6;
     final isSat = columnIndex == 5;
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -1095,6 +1303,13 @@ class _PlusShiftDecisionDialogState extends State<PlusShiftDecisionDialog> {
         : isSat
             ? Colors.blue.shade400
             : context.colors.textPrimary;
+    final isOtherMonth =
+        date != null && date.month != widget.targetMonth.month;
+    final dayLabel = date == null
+        ? ''
+        : isOtherMonth
+            ? '${date.month}/${date.day}'
+            : '${date.day}';
 
     // 日曜は定休表示
     if (isSun) {
@@ -1108,9 +1323,9 @@ class _PlusShiftDecisionDialogState extends State<PlusShiftDecisionDialog> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (day != null)
+            if (date != null)
               Text(
-                '$day',
+                dayLabel,
                 style: TextStyle(
                   fontSize: 12,
                   color: isDark ? Colors.red.shade300 : Colors.red.shade300,
@@ -1130,7 +1345,7 @@ class _PlusShiftDecisionDialogState extends State<PlusShiftDecisionDialog> {
       );
     }
 
-    if (day == null) {
+    if (date == null) {
       return Container(
         constraints: const BoxConstraints(minHeight: 80),
         decoration: BoxDecoration(
@@ -1140,17 +1355,59 @@ class _PlusShiftDecisionDialogState extends State<PlusShiftDecisionDialog> {
       );
     }
 
-    final offStaffIds = _offDays[day] ?? <String>{};
+    final offStaffIds = _offDates[date] ?? <String>{};
+    // 半休希望（休みではないので _offDates には含まれない）
+    final halfStaffIds = <String>{};
+    _requestedHalfDates.forEach((sid, dates) {
+      if (dates.contains(date) && !offStaffIds.contains(sid)) {
+        halfStaffIds.add(sid);
+      }
+    });
     final chips = <Widget>[];
+    for (final staffId in halfStaffIds) {
+      final staff = _plusStaffs.firstWhere(
+        (s) => s['id'] == staffId,
+        orElse: () => <String, dynamic>{'name': '?'},
+      );
+      chips.add(
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+          decoration: BoxDecoration(
+            color: Colors.orange.shade600,
+            borderRadius: BorderRadius.circular(4),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                '半',
+                style: TextStyle(
+                    fontSize: 10,
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(width: 2),
+              Text(
+                staff['name'] as String,
+                style: const TextStyle(
+                    fontSize: 10,
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
     for (final staffId in offStaffIds) {
       final staff = _plusStaffs.firstWhere(
         (s) => s['id'] == staffId,
         orElse: () => <String, dynamic>{'name': '?'},
       );
       final isRequested =
-          (_requestedOffDays[staffId] ?? {}).contains(day);
+          (_requestedOffDates[staffId] ?? {}).contains(date);
       final isStrong =
-          (_requestedStrongOffDays[staffId] ?? {}).contains(day);
+          (_requestedStrongOffDates[staffId] ?? {}).contains(date);
       final Color chipBg;
       final Color chipFg;
       Border? chipBorder;
@@ -1202,7 +1459,7 @@ class _PlusShiftDecisionDialogState extends State<PlusShiftDecisionDialog> {
     }
 
     return InkWell(
-      onTap: () => _showDayEditPopup(day),
+      onTap: () => _showDayEditPopup(date),
       child: Container(
         constraints: const BoxConstraints(minHeight: 80),
         decoration: BoxDecoration(
@@ -1216,7 +1473,7 @@ class _PlusShiftDecisionDialogState extends State<PlusShiftDecisionDialog> {
             Row(
               children: [
                 Text(
-                  '$day',
+                  dayLabel,
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.bold,
