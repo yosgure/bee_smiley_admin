@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'web_helpers_stub.dart'
@@ -961,8 +962,300 @@ class _AiChatScreenState extends State<AiChatScreen> {
     }
   }
 
+  /// AIメッセージがモニタリング考察案かどうかを判定
+  bool _isMonitoringContent(String content) {
+    if (content.contains('# モニタリング考察案')) return true;
+    return false;
+  }
+
+  /// モニタリング応答から JSON ブロックを抽出してパース。失敗時は null。
+  Map<String, dynamic>? _parseMonitoringJson(String content) {
+    final fenceMatch = RegExp(r'```json\s*([\s\S]*?)```').firstMatch(content);
+    String? jsonStr = fenceMatch?.group(1)?.trim();
+    if (jsonStr == null || jsonStr.isEmpty) {
+      final objMatch = RegExp(r'\{[\s\S]*?"considerations"[\s\S]*\}').firstMatch(content);
+      jsonStr = objMatch?.group(0);
+    }
+    if (jsonStr == null) return null;
+    try {
+      final parsed = json.decode(jsonStr);
+      if (parsed is! Map) return null;
+      return Map<String, dynamic>.from(parsed);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// モニタリング専用の保存ダイアログ（安全ガード付き）
+  Future<void> _showMonitoringSaveDialog(String content) async {
+    final parsed = _parseMonitoringJson(content);
+    if (parsed == null) {
+      if (!mounted) return;
+      await showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('モニタリングのJSONが取得できません'),
+          content: const Text('AIの応答にJSONブロックが見つかりませんでした。もう一度 /モニタリング を実行してください。'),
+          actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('OK'))],
+        ),
+      );
+      return;
+    }
+
+    final considerations = (parsed['considerations'] as List?)?.map((e) => e.toString()).toList() ?? [];
+    final longTerm = parsed['longTerm']?.toString() ?? '';
+    final shortTerm = parsed['shortTerm']?.toString() ?? '';
+    final remark = parsed['remark']?.toString() ?? '';
+
+    if (considerations.isEmpty) {
+      if (!mounted) return;
+      await showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('考察が空です'),
+          content: const Text('考察項目が1件も抽出できませんでした。'),
+          actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('OK'))],
+        ),
+      );
+      return;
+    }
+
+    bool confirmChecked = false;
+
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setState) {
+            final c = context.colors;
+            return Dialog(
+              backgroundColor: c.scaffoldBg,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              insetPadding: const EdgeInsets.symmetric(horizontal: 32, vertical: 40),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 620),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(24, 20, 24, 16),
+                      child: Row(
+                        children: [
+                          Icon(Icons.shield_outlined, color: c.aiAccent, size: 24),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text('モニタリング下書き保存', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600, color: c.textPrimary)),
+                                const SizedBox(height: 2),
+                                Text('最新の個別支援計画の「未作成」モニタリング枠にのみ新規作成します',
+                                    style: TextStyle(fontSize: 11, color: c.textSecondary)),
+                              ],
+                            ),
+                          ),
+                          IconButton(
+                            icon: Icon(Icons.close, size: 20, color: c.textTertiary),
+                            onPressed: () => Navigator.pop(ctx, false),
+                            splashRadius: 18,
+                          ),
+                        ],
+                      ),
+                    ),
+                    Divider(height: 1, color: c.borderLight),
+                    Flexible(
+                      child: SingleChildScrollView(
+                        padding: const EdgeInsets.fromLTRB(24, 16, 24, 16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: Colors.orange.withOpacity(0.08),
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(color: Colors.orange.withOpacity(0.3)),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text('書き込みルール（自動適用）', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: c.textPrimary)),
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    '・状態が「未作成」の最新サイクルのみ対象\n'
+                                    '・既に考察が入っていれば書き込み中止\n'
+                                    '・目標達成度=一部達成 / 評価=継続 / 計画者=フィリップスヒロコ / 下書き\n'
+                                    '・本人/家族/関係者の要望は空欄',
+                                    style: TextStyle(fontSize: 11, height: 1.7, color: c.textSecondary),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                            Text('${considerations.length}項目の考察', style: TextStyle(fontSize: 12, color: c.textSecondary)),
+                            const SizedBox(height: 8),
+                            ...List.generate(considerations.length, (i) {
+                              return Container(
+                                margin: const EdgeInsets.only(bottom: 8),
+                                padding: const EdgeInsets.all(10),
+                                decoration: BoxDecoration(
+                                  color: c.tagBg,
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text('項目 ${i + 1}', style: TextStyle(fontSize: 11, color: c.textSecondary)),
+                                    const SizedBox(height: 4),
+                                    Text(considerations[i], style: TextStyle(fontSize: 12, height: 1.6, color: c.textPrimary)),
+                                  ],
+                                ),
+                              );
+                            }),
+                            if (longTerm.isNotEmpty) ...[
+                              const SizedBox(height: 8),
+                              Text('長期目標に対する考察', style: TextStyle(fontSize: 11, color: c.textSecondary)),
+                              const SizedBox(height: 4),
+                              Text(longTerm, style: TextStyle(fontSize: 12, height: 1.6, color: c.textPrimary)),
+                            ],
+                            if (shortTerm.isNotEmpty) ...[
+                              const SizedBox(height: 10),
+                              Text('短期目標に対する考察', style: TextStyle(fontSize: 11, color: c.textSecondary)),
+                              const SizedBox(height: 4),
+                              Text(shortTerm, style: TextStyle(fontSize: 12, height: 1.6, color: c.textPrimary)),
+                            ],
+                            if (remark.isNotEmpty) ...[
+                              const SizedBox(height: 10),
+                              Text('備考', style: TextStyle(fontSize: 11, color: c.textSecondary)),
+                              const SizedBox(height: 4),
+                              Text(remark, style: TextStyle(fontSize: 12, height: 1.6, color: c.textPrimary)),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ),
+                    Divider(height: 1, color: c.borderLight),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          CheckboxListTile(
+                            value: confirmChecked,
+                            onChanged: (v) => setState(() => confirmChecked = v ?? false),
+                            dense: true,
+                            controlAffinity: ListTileControlAffinity.leading,
+                            title: Text(
+                              '内容を確認した。未作成のモニタリング枠に新規下書きとして保存する。',
+                              style: TextStyle(fontSize: 12, color: c.textPrimary),
+                            ),
+                          ),
+                          Row(
+                            children: [
+                              const Spacer(),
+                              TextButton(
+                                onPressed: () => Navigator.pop(ctx, false),
+                                child: Text('キャンセル', style: TextStyle(color: c.textSecondary)),
+                              ),
+                              const SizedBox(width: 8),
+                              ElevatedButton.icon(
+                                onPressed: confirmChecked ? () => Navigator.pop(ctx, true) : null,
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: c.aiAccent,
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                  elevation: 0,
+                                ),
+                                icon: const Icon(Icons.cloud_upload_outlined, size: 16),
+                                label: const Text('HUGに下書き保存', style: TextStyle(fontWeight: FontWeight.w600)),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+
+    if (result != true || !mounted) return;
+
+    // 送信中ダイアログ
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) {
+        final c = context.colors;
+        return Dialog(
+          backgroundColor: c.scaffoldBg,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(28, 28, 28, 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SizedBox(width: 40, height: 40, child: CircularProgressIndicator(strokeWidth: 3, color: c.aiAccent)),
+                const SizedBox(height: 16),
+                Text('HUGへ送信中...', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: c.textPrimary)),
+                const SizedBox(height: 4),
+                Text('安全チェック〜保存まで30秒ほどかかります', style: TextStyle(fontSize: 11, color: c.textSecondary)),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+
+    try {
+      final callable = _functions.httpsCallable(
+        'createMonitoringDraft',
+        options: HttpsCallableOptions(timeout: const Duration(seconds: 180)),
+      );
+      final res = await callable.call({
+        'studentId': widget.studentId,
+        'considerations': considerations,
+        'longTerm': longTerm,
+        'shortTerm': shortTerm,
+        'remark': remark,
+      });
+      if (!mounted) return;
+      Navigator.of(context, rootNavigator: true).pop(); // close progress
+      final data = (res.data as Map?) ?? {};
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('モニタリング（作成回数${data['kaisuu']}）を下書き保存しました'),
+          backgroundColor: Colors.green,
+          duration: const Duration(seconds: 3),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      Navigator.of(context, rootNavigator: true).pop();
+      await showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('モニタリング保存に失敗しました'),
+          content: Text('$e', style: const TextStyle(fontSize: 12)),
+          actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('OK'))],
+        ),
+      );
+    }
+  }
+
   /// AI生成コンテンツをhugに送信するダイアログを表示
   Future<void> _showSaveContentDialog(String content, {String? defaultCommandLabel}) async {
+    // モニタリング応答の場合は専用ダイアログへ
+    if (_isMonitoringContent(content) || defaultCommandLabel == 'モニタリング') {
+      await _showMonitoringSaveDialog(content);
+      return;
+    }
     final textController = TextEditingController(text: content);
     // 初期日付: 欠席連絡など「欠席日」を含む質問がエリシテーションにあればそれを使う
     DateTime selectedDate = _resolveInitialDateFromElicitation() ?? DateTime.now();
