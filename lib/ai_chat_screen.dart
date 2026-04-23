@@ -534,18 +534,18 @@ class _AiChatScreenState extends State<AiChatScreen> {
       return;
     }
 
-    // HUG実目標をメッセージに注入
+    // HUG実目標を commandScript に注入（ユーザーメッセージには含めない）
     final goalsLines = hugGoals.asMap().entries.map((e) {
       final i = e.key + 1;
       final g = e.value;
       return '$i. ${g['title']}';
     }).join('\n');
 
-    final message =
-        '$trigger\n\n【HUGに登録済みの作成回数$targetKaisuu モニタリング目標（これら${hugGoals.length}項目に対して考察を生成してください。順序・項目数は厳守）】\n$goalsLines';
+    final enrichedScript =
+        '【HUGに登録済みの作成回数$targetKaisuu モニタリング目標（これら${hugGoals.length}項目に対して考察を生成してください。順序・項目数は厳守）】\n$goalsLines\n\n---\n\n$script';
 
-    _textController.text = message;
-    await _sendMessageWithScript(script);
+    _textController.text = '/モニタリング';
+    await _sendMessageWithScript(enrichedScript);
   }
 
   Future<void> _sendMessageWithScript(String script) async {
