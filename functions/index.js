@@ -4221,6 +4221,35 @@ async function postMonitoringDraft(cookies, { fields, goals, content }) {
   return { ok, status: res.status };
 }
 
+/**
+ * 診断用: ai_student_profiles に保存された monitoring の rawText を返す（上書き前の最終同期時点の内容）
+ */
+exports.getCachedMonitoringText = onCall(
+  { region: 'asia-northeast1' },
+  async (request) => {
+    if (!request.auth) throw new HttpsError('unauthenticated', '認証が必要です');
+    const { studentId, hugCId } = request.data || {};
+    let doc;
+    if (studentId) {
+      const snap = await db.collection('ai_student_profiles').doc(studentId).get();
+      if (snap.exists) doc = snap;
+    } else if (hugCId) {
+      const q = await db.collection('ai_student_profiles')
+        .where('hugCId', '==', String(hugCId)).limit(1).get();
+      if (!q.empty) doc = q.docs[0];
+    }
+    if (!doc) throw new HttpsError('not-found', 'プロファイルが見つかりません');
+    const p = doc.data() || {};
+    return {
+      studentId: doc.id,
+      studentName: p.studentName || '',
+      hugCId: p.hugCId || '',
+      monitoring: p.hugDocs?.monitoring || null,
+      lastSyncedAt: p.lastSyncedAt?.toDate?.()?.toISOString?.() || null,
+    };
+  }
+);
+
 exports.saveMonitoringDraft = onCall(
   {
     region: 'asia-northeast1',
