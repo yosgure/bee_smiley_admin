@@ -265,6 +265,19 @@ class _AiChatScreenState extends State<AiChatScreen> {
     }
 
     if (questions.isEmpty) {
+      // autoSend: true なら入力不要で即送信
+      if (cmd['autoSend'] == true) {
+        final script = cmd['script'] as String? ?? '';
+        final label = cmd['label'] as String? ?? '';
+        final trigger = cmd['autoSendMessage'] as String? ?? '/$label';
+        setState(() {
+          _showSlashMenu = false;
+          _slashFilter = '';
+        });
+        _textController.text = trigger;
+        _sendMessageWithScript(script);
+        return;
+      }
       // 質問がなければ普通のタグ方式
       setState(() {
         _showSlashMenu = false;
