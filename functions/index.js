@@ -4171,24 +4171,22 @@ exports.createMonitoringDraft = onCall(
 
     const cookies = await loginToHug();
 
-    // ガード1: モニタリング一覧で「最新 kaisuu が未作成」であることを確認
-    const list = await scrapeMonitoringList(cookies, String(hugCId));
-    if (list.length === 0) {
-      // 未作成以前にリスト取得失敗の可能性もあるが、0件なら新規作成可能と判断
-      console.warn('[monitoring] list empty for cId=' + hugCId);
-    }
-    const activeRows = list.filter((r) => r.status !== 'deleted');
-    const latest = activeRows[0] || null;
-    // 最新行が存在し、かつ status が not_created でない場合は中止
-    if (latest && latest.status !== 'not_created') {
-      throw new HttpsError(
-        'failed-precondition',
-        `作成回数${latest.kaisuu}のモニタリングは既に存在します（状態: ${latest.status}）。上書きを避けるため書き込みを中止しました。`
-      );
+    // ガード1: INSERT フォームを先に取得し、HUGが自動セットする origin_kaisuu を確定
+    const form = await fetchMonitoringInsertForm(cookies, String(hugCId), fId);
+    const targetKaisuu = parseInt(form.fields['origin_kaisuu'] || '0', 10);
+    if (!targetKaisuu) {
+      throw new HttpsError('failed-precondition', 'HUGから作成回数を取得できませんでした');
     }
 
-    // ガード2: INSERT フォーム取得、id=insert を確認
-    const form = await fetchMonitoringInsertForm(cookies, String(hugCId), fId);
+    // ガード2: モニタリング一覧を取得し、対象 kaisuu の非削除行が存在しないことを確認
+    const list = await scrapeMonitoringList(cookies, String(hugCId));
+    const conflict = list.find((r) => r.kaisuu === targetKaisuu && r.status !== 'deleted');
+    if (conflict) {
+      throw new HttpsError(
+        'failed-precondition',
+        `作成回数${targetKaisuu}のモニタリングは既に存在します（状態: ${conflict.status}）。上書きを避けるため書き込みを中止しました。`
+      );
+    }
     const idField = form.fields['id'];
     if (idField !== 'insert') {
       throw new HttpsError(
