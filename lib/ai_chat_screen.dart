@@ -964,19 +964,27 @@ class _AiChatScreenState extends State<AiChatScreen> {
 
   /// AIメッセージがモニタリング考察案かどうかを判定
   bool _isMonitoringContent(String content) {
-    if (content.contains('# モニタリング考察案')) return true;
+    if (content.contains('モニタリング考察案')) return true;
+    if (content.contains('[MON_JSON]')) return true;
     return false;
   }
 
   /// モニタリング応答から JSON ブロックを抽出してパース。失敗時は null。
   Map<String, dynamic>? _parseMonitoringJson(String content) {
-    final fenceMatch = RegExp(r'```json\s*([\s\S]*?)```').firstMatch(content);
-    String? jsonStr = fenceMatch?.group(1)?.trim();
+    // 1. 専用マーカーで囲まれたJSON
+    final tagMatch = RegExp(r'\[MON_JSON\]\s*([\s\S]*?)\s*\[/MON_JSON\]').firstMatch(content);
+    String? jsonStr = tagMatch?.group(1)?.trim();
+    // 2. フォールバック: フェンス
     if (jsonStr == null || jsonStr.isEmpty) {
-      final objMatch = RegExp(r'\{[\s\S]*?"considerations"[\s\S]*\}').firstMatch(content);
+      final fenceMatch = RegExp(r'```json\s*([\s\S]*?)```').firstMatch(content);
+      jsonStr = fenceMatch?.group(1)?.trim();
+    }
+    // 3. フォールバック: considerations を含む最大のJSONオブジェクト
+    if (jsonStr == null || jsonStr.isEmpty) {
+      final objMatch = RegExp(r'\{[\s\S]*"considerations"[\s\S]*\}').firstMatch(content);
       jsonStr = objMatch?.group(0);
     }
-    if (jsonStr == null) return null;
+    if (jsonStr == null || jsonStr.isEmpty) return null;
     try {
       final parsed = json.decode(jsonStr);
       if (parsed is! Map) return null;
@@ -1252,7 +1260,9 @@ class _AiChatScreenState extends State<AiChatScreen> {
   /// AI生成コンテンツをhugに送信するダイアログを表示
   Future<void> _showSaveContentDialog(String content, {String? defaultCommandLabel}) async {
     // モニタリング応答の場合は専用ダイアログへ
-    if (_isMonitoringContent(content) || defaultCommandLabel == 'モニタリング') {
+    final isMonitoringCommand = defaultCommandLabel != null &&
+        defaultCommandLabel.startsWith('モニタリング');
+    if (_isMonitoringContent(content) || isMonitoringCommand) {
       await _showMonitoringSaveDialog(content);
       return;
     }
