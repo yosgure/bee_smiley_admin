@@ -4145,6 +4145,49 @@ async function fetchMonitoringInsertForm(cookies, cId, fId) {
  *   - shortTerm: 短期目標考察
  *   - remark: 備考欄
  */
+/**
+ * モニタリング INSERT フォームの情報を返す（事前確認用）
+ * goals: [{id, category, goalText}], targetKaisuu: number
+ * conflict: 既に同じ kaisuu に記録が存在する場合は情報を含める
+ */
+exports.getMonitoringFormInfo = onCall(
+  {
+    region: 'asia-northeast1',
+    memory: '256MiB',
+    timeoutSeconds: 90,
+    secrets: [hugUsername, hugPassword],
+  },
+  async (request) => {
+    if (!request.auth) throw new HttpsError('unauthenticated', '認証が必要です');
+    const { studentId } = request.data || {};
+    if (!studentId) throw new HttpsError('invalid-argument', 'studentId が必要です');
+
+    const profileDoc = await db.collection('ai_student_profiles').doc(studentId).get();
+    if (!profileDoc.exists) throw new HttpsError('not-found', 'プロファイルが見つかりません');
+    const profile = profileDoc.data() || {};
+    const hugCId = profile.hugCId;
+    if (!hugCId) throw new HttpsError('failed-precondition', 'hugCId 未マッピング');
+
+    const cookies = await loginToHug();
+    const form = await fetchMonitoringInsertForm(cookies, String(hugCId), '1');
+    const targetKaisuu = parseInt(form.fields['origin_kaisuu'] || '0', 10);
+    const list = await scrapeMonitoringList(cookies, String(hugCId));
+    const conflict = list.find((r) => r.kaisuu === targetKaisuu && r.status !== 'deleted') || null;
+
+    return {
+      targetKaisuu,
+      idField: form.fields['id'] || '',
+      goals: form.goals.map((g) => ({
+        id: g.id,
+        category: g.category,
+        goalText: g.goalText,
+        title: `[${g.category}] ${g.goalText}`,
+      })),
+      conflict: conflict ? { kaisuu: conflict.kaisuu, status: conflict.status } : null,
+    };
+  }
+);
+
 exports.createMonitoringDraft = onCall(
   {
     region: 'asia-northeast1',
