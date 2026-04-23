@@ -1010,12 +1010,28 @@ class _AiChatScreenState extends State<AiChatScreen> {
       return;
     }
 
-    final considerations = (parsed['considerations'] as List?)?.map((e) => e.toString()).toList() ?? [];
+    // items 形式 (title + consideration) と旧 considerations 形式の両対応
+    final itemsRaw = parsed['items'] as List?;
+    final List<Map<String, String>> items;
+    if (itemsRaw != null && itemsRaw.isNotEmpty) {
+      items = itemsRaw.map((e) {
+        final m = e is Map ? e : <String, dynamic>{};
+        return {
+          'title': (m['title'] ?? '').toString(),
+          'consideration': (m['consideration'] ?? '').toString(),
+        };
+      }).toList();
+    } else {
+      final old = (parsed['considerations'] as List?)?.map((e) => e.toString()).toList() ?? [];
+      items = old.asMap().entries
+          .map((e) => {'title': '項目 ${e.key + 1}', 'consideration': e.value})
+          .toList();
+    }
     final longTerm = parsed['longTerm']?.toString() ?? '';
     final shortTerm = parsed['shortTerm']?.toString() ?? '';
     final remark = parsed['remark']?.toString() ?? '';
 
-    if (considerations.isEmpty) {
+    if (items.isEmpty) {
       if (!mounted) return;
       await showDialog(
         context: context,
@@ -1028,170 +1044,147 @@ class _AiChatScreenState extends State<AiChatScreen> {
       return;
     }
 
-    bool confirmChecked = false;
+    final itemCtrls = items.map((it) => TextEditingController(text: it['consideration'])).toList();
+    final longTermCtrl = TextEditingController(text: longTerm);
+    final shortTermCtrl = TextEditingController(text: shortTerm);
+    final remarkCtrl = TextEditingController(text: remark);
 
     final result = await showDialog<bool>(
       context: context,
       builder: (ctx) {
-        return StatefulBuilder(
-          builder: (ctx, setState) {
-            final c = context.colors;
-            return Dialog(
-              backgroundColor: c.scaffoldBg,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-              insetPadding: const EdgeInsets.symmetric(horizontal: 32, vertical: 40),
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 620),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(24, 20, 24, 16),
-                      child: Row(
-                        children: [
-                          Icon(Icons.shield_outlined, color: c.aiAccent, size: 24),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text('モニタリング下書き保存', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600, color: c.textPrimary)),
-                                const SizedBox(height: 2),
-                                Text('最新の個別支援計画の「未作成」モニタリング枠にのみ新規作成します',
-                                    style: TextStyle(fontSize: 11, color: c.textSecondary)),
-                              ],
-                            ),
-                          ),
-                          IconButton(
-                            icon: Icon(Icons.close, size: 20, color: c.textTertiary),
-                            onPressed: () => Navigator.pop(ctx, false),
-                            splashRadius: 18,
-                          ),
-                        ],
-                      ),
-                    ),
-                    Divider(height: 1, color: c.borderLight),
-                    Flexible(
-                      child: SingleChildScrollView(
-                        padding: const EdgeInsets.fromLTRB(24, 16, 24, 16),
+        final c = context.colors;
+
+        Widget editableField(String title, TextEditingController ctrl, {int minLines = 3}) {
+          return Container(
+            margin: const EdgeInsets.only(bottom: 10),
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: c.tagBg,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: c.borderLight, width: 0.5),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: TextStyle(fontSize: 12, color: c.textSecondary, fontWeight: FontWeight.w600)),
+                const SizedBox(height: 6),
+                TextField(
+                  controller: ctrl,
+                  minLines: minLines,
+                  maxLines: null,
+                  style: TextStyle(fontSize: 12, height: 1.6, color: c.textPrimary),
+                  decoration: const InputDecoration(
+                    border: InputBorder.none,
+                    isDense: true,
+                    contentPadding: EdgeInsets.zero,
+                  ),
+                ),
+              ],
+            ),
+          );
+        }
+
+        return Dialog(
+          backgroundColor: c.scaffoldBg,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          insetPadding: const EdgeInsets.symmetric(horizontal: 32, vertical: 40),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxWidth: 680,
+              maxHeight: MediaQuery.of(context).size.height - 80,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 20, 24, 16),
+                  child: Row(
+                    children: [
+                      Icon(Icons.cloud_upload_outlined, color: c.aiAccent, size: 24),
+                      const SizedBox(width: 12),
+                      Expanded(
                         child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Container(
-                              padding: const EdgeInsets.all(12),
-                              decoration: BoxDecoration(
-                                color: Colors.orange.withOpacity(0.08),
-                                borderRadius: BorderRadius.circular(10),
-                                border: Border.all(color: Colors.orange.withOpacity(0.3)),
-                              ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text('書き込みルール（自動適用）', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: c.textPrimary)),
-                                  const SizedBox(height: 6),
-                                  Text(
-                                    '・状態が「未作成」の最新サイクルのみ対象\n'
-                                    '・既に考察が入っていれば書き込み中止\n'
-                                    '・目標達成度=一部達成 / 評価=継続 / 計画者=フィリップスヒロコ / 下書き\n'
-                                    '・本人/家族/関係者の要望は空欄',
-                                    style: TextStyle(fontSize: 11, height: 1.7, color: c.textSecondary),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(height: 16),
-                            Text('${considerations.length}項目の考察', style: TextStyle(fontSize: 12, color: c.textSecondary)),
-                            const SizedBox(height: 8),
-                            ...List.generate(considerations.length, (i) {
-                              return Container(
-                                margin: const EdgeInsets.only(bottom: 8),
-                                padding: const EdgeInsets.all(10),
-                                decoration: BoxDecoration(
-                                  color: c.tagBg,
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text('項目 ${i + 1}', style: TextStyle(fontSize: 11, color: c.textSecondary)),
-                                    const SizedBox(height: 4),
-                                    Text(considerations[i], style: TextStyle(fontSize: 12, height: 1.6, color: c.textPrimary)),
-                                  ],
-                                ),
-                              );
-                            }),
-                            if (longTerm.isNotEmpty) ...[
-                              const SizedBox(height: 8),
-                              Text('長期目標に対する考察', style: TextStyle(fontSize: 11, color: c.textSecondary)),
-                              const SizedBox(height: 4),
-                              Text(longTerm, style: TextStyle(fontSize: 12, height: 1.6, color: c.textPrimary)),
-                            ],
-                            if (shortTerm.isNotEmpty) ...[
-                              const SizedBox(height: 10),
-                              Text('短期目標に対する考察', style: TextStyle(fontSize: 11, color: c.textSecondary)),
-                              const SizedBox(height: 4),
-                              Text(shortTerm, style: TextStyle(fontSize: 12, height: 1.6, color: c.textPrimary)),
-                            ],
-                            if (remark.isNotEmpty) ...[
-                              const SizedBox(height: 10),
-                              Text('備考', style: TextStyle(fontSize: 11, color: c.textSecondary)),
-                              const SizedBox(height: 4),
-                              Text(remark, style: TextStyle(fontSize: 12, height: 1.6, color: c.textPrimary)),
-                            ],
+                            Text('モニタリング下書き保存', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600, color: c.textPrimary)),
+                            const SizedBox(height: 2),
+                            Text('最新の個別支援計画の「未作成」モニタリング枠にのみ新規作成します',
+                                style: TextStyle(fontSize: 11, color: c.textSecondary)),
                           ],
                         ),
                       ),
-                    ),
-                    Divider(height: 1, color: c.borderLight),
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          CheckboxListTile(
-                            value: confirmChecked,
-                            onChanged: (v) => setState(() => confirmChecked = v ?? false),
-                            dense: true,
-                            controlAffinity: ListTileControlAffinity.leading,
-                            title: Text(
-                              '内容を確認した。未作成のモニタリング枠に新規下書きとして保存する。',
-                              style: TextStyle(fontSize: 12, color: c.textPrimary),
-                            ),
-                          ),
-                          Row(
-                            children: [
-                              const Spacer(),
-                              TextButton(
-                                onPressed: () => Navigator.pop(ctx, false),
-                                child: Text('キャンセル', style: TextStyle(color: c.textSecondary)),
-                              ),
-                              const SizedBox(width: 8),
-                              ElevatedButton.icon(
-                                onPressed: confirmChecked ? () => Navigator.pop(ctx, true) : null,
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: c.aiAccent,
-                                  foregroundColor: Colors.white,
-                                  padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                                  elevation: 0,
-                                ),
-                                icon: const Icon(Icons.cloud_upload_outlined, size: 16),
-                                label: const Text('HUGに下書き保存', style: TextStyle(fontWeight: FontWeight.w600)),
-                              ),
-                            ],
-                          ),
-                        ],
+                      IconButton(
+                        icon: Icon(Icons.close, size: 20, color: c.textTertiary),
+                        onPressed: () => Navigator.pop(ctx, false),
+                        splashRadius: 18,
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
-            );
-          },
+                Divider(height: 1, color: c.borderLight),
+                Flexible(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.fromLTRB(24, 16, 24, 16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        ...List.generate(items.length, (i) {
+                          final title = items[i]['title']?.isNotEmpty == true
+                              ? items[i]['title']!
+                              : '項目 ${i + 1}';
+                          return editableField(title, itemCtrls[i]);
+                        }),
+                        editableField('長期目標に対する考察', longTermCtrl),
+                        editableField('短期目標に対する考察', shortTermCtrl),
+                        editableField('備考欄', remarkCtrl, minLines: 2),
+                      ],
+                    ),
+                  ),
+                ),
+                Divider(height: 1, color: c.borderLight),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+                  child: Row(
+                    children: [
+                      const Spacer(),
+                      TextButton(
+                        onPressed: () => Navigator.pop(ctx, false),
+                        child: Text('キャンセル', style: TextStyle(color: c.textSecondary)),
+                      ),
+                      const SizedBox(width: 8),
+                      ElevatedButton.icon(
+                        onPressed: () => Navigator.pop(ctx, true),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: c.aiAccent,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          elevation: 0,
+                        ),
+                        icon: const Icon(Icons.cloud_upload_outlined, size: 16),
+                        label: const Text('HUGに下書き保存', style: TextStyle(fontWeight: FontWeight.w600)),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
         );
       },
     );
+
+    // 編集結果を取り出す
+    final considerations = itemCtrls.map((c) => c.text).toList();
+    final finalLongTerm = longTermCtrl.text;
+    final finalShortTerm = shortTermCtrl.text;
+    final finalRemark = remarkCtrl.text;
+
+    for (final c in itemCtrls) c.dispose();
+    longTermCtrl.dispose();
+    shortTermCtrl.dispose();
+    remarkCtrl.dispose();
 
     if (result != true || !mounted) return;
 
@@ -1229,9 +1222,9 @@ class _AiChatScreenState extends State<AiChatScreen> {
       final res = await callable.call({
         'studentId': widget.studentId,
         'considerations': considerations,
-        'longTerm': longTerm,
-        'shortTerm': shortTerm,
-        'remark': remark,
+        'longTerm': finalLongTerm,
+        'shortTerm': finalShortTerm,
+        'remark': finalRemark,
       });
       if (!mounted) return;
       Navigator.of(context, rootNavigator: true).pop(); // close progress
