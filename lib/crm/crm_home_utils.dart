@@ -94,12 +94,15 @@ enum CrmTodayCategory {
   trialScheduling,
   /// 契約あと一歩（onboarding + 感触 positive 想定）
   almostContract,
+  /// 担当者未設定（責めず「今日決めると良い」側で浮上）
+  assigneeMissing,
 }
 
 String crmTodayCategoryLabel(CrmTodayCategory c) => switch (c) {
       CrmTodayCategory.replyDue => '返信待ち',
       CrmTodayCategory.trialScheduling => '見学日程調整',
       CrmTodayCategory.almostContract => '契約あと一歩',
+      CrmTodayCategory.assigneeMissing => '担当を決める',
     };
 
 /// 「今日進めると良い」判定。
@@ -127,6 +130,15 @@ List<CrmTodayCategory> todayCategoriesFor(CrmLead lead, {DateTime? now}) {
 
   if (lead.stage == 'onboarding') {
     cats.add(CrmTodayCategory.almostContract);
+  }
+
+  // 担当者未設定は責めず、柔らかく「決めると良い」側へ。
+  // 対応終了ステージは除外。assigneeUid/Name どちらも空のケースを対象。
+  final hasAssignee =
+      (lead.assigneeUid != null && lead.assigneeUid!.isNotEmpty) ||
+          (lead.assigneeName != null && lead.assigneeName!.isNotEmpty);
+  if (!hasAssignee) {
+    cats.add(CrmTodayCategory.assigneeMissing);
   }
 
   return cats;
@@ -194,6 +206,7 @@ class CrmHomeSummary {
   final int todayReplyDue;
   final int todayTrialScheduling;
   final int todayAlmostContract;
+  final int todayAssigneeMissing;
 
   const CrmHomeSummary({
     required this.urgentTotal,
@@ -204,6 +217,7 @@ class CrmHomeSummary {
     required this.todayReplyDue,
     required this.todayTrialScheduling,
     required this.todayAlmostContract,
+    required this.todayAssigneeMissing,
   });
 
   bool get isAllClear => urgentTotal == 0;
@@ -212,7 +226,7 @@ class CrmHomeSummary {
 /// リード群からホーム用サマリを計算する。
 CrmHomeSummary summarizeForHome(Iterable<CrmLead> leads, {DateTime? now}) {
   int overdue = 0, trialMiss = 0, stalled = 0, noNext = 0;
-  int reply = 0, trial = 0, almost = 0;
+  int reply = 0, trial = 0, almost = 0, assignee = 0;
 
   for (final lead in leads) {
     final reasons = urgentReasonsFor(lead, now: now);
@@ -238,6 +252,8 @@ CrmHomeSummary summarizeForHome(Iterable<CrmLead> leads, {DateTime? now}) {
           trial++;
         case CrmTodayCategory.almostContract:
           almost++;
+        case CrmTodayCategory.assigneeMissing:
+          assignee++;
       }
     }
   }
@@ -251,6 +267,7 @@ CrmHomeSummary summarizeForHome(Iterable<CrmLead> leads, {DateTime? now}) {
     todayReplyDue: reply,
     todayTrialScheduling: trial,
     todayAlmostContract: almost,
+    todayAssigneeMissing: assignee,
   );
 }
 

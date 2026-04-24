@@ -108,7 +108,8 @@ class _CrmHomeScreenState extends State<CrmHomeScreen> {
             const SizedBox(height: 24),
             _UrgentSection(
               rows: filteredRows,
-              totalUrgent: urgentRows.length,
+              totalLeadCount: urgentRows.length,
+              totalObservations: summary.urgentTotal,
               activeFilter: _filter,
               onClearFilter: () => setState(() => _filter = null),
               onOpenLead: widget.onOpenLead,
@@ -126,17 +127,26 @@ class _CrmHomeScreenState extends State<CrmHomeScreen> {
     );
   }
 
-  ({int enrolled, int goal}) _calcMonthly(List<CrmLead> leads, DateTime now) {
+  ({int enrolled, int goal, int inquired, int trial}) _calcMonthly(
+      List<CrmLead> leads, DateTime now) {
     final monthStart = DateTime(now.year, now.month, 1);
-    var count = 0;
+    var enrolled = 0, inquired = 0, trial = 0;
     for (final l in leads) {
       final e = l.enrolledAt;
       if (e != null && !e.isBefore(monthStart) && e.isBefore(now)) {
-        count++;
+        enrolled++;
+      }
+      final iq = l.inquiredAt;
+      if (iq != null && !iq.isBefore(monthStart) && iq.isBefore(now)) {
+        inquired++;
+      }
+      final t = l.trialAt;
+      if (t != null && !t.isBefore(monthStart) && t.isBefore(now)) {
+        trial++;
       }
     }
     // 目標値は未実装。暫定で 10 固定。設定機能は別フェーズ。
-    return (enrolled: count, goal: 10);
+    return (enrolled: enrolled, goal: 10, inquired: inquired, trial: trial);
   }
 
   int _calcTomorrow(List<CrmLead> leads, DateTime now) {
@@ -204,7 +214,7 @@ class _Greeting extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           Text(
-            '今日整えたいのは $urgentLeadCount 件、契約あと一歩は $almostContractCount 件です。$suffix。',
+            '今日整えたいのは $urgentLeadCount 人、契約あと一歩は $almostContractCount 人です。$suffix。',
             style: TextStyle(fontSize: 13, color: c.textSecondary, height: 1.5),
           ),
         ],
@@ -218,7 +228,7 @@ class _Greeting extends StatelessWidget {
 class _TopCardsRow extends StatelessWidget {
   final CrmHomeSummary summary;
   final int uniqueLeadCount;
-  final ({int enrolled, int goal}) monthly;
+  final ({int enrolled, int goal, int inquired, int trial}) monthly;
   final CrmUrgentReason? activeFilter;
   final ValueChanged<CrmUrgentReason> onTapFilter;
 
@@ -241,7 +251,12 @@ class _TopCardsRow extends StatelessWidget {
         onTapFilter: onTapFilter,
       );
       final today = _TodayCard(summary: summary);
-      final monthlyCard = _MonthlyCard(enrolled: monthly.enrolled, goal: monthly.goal);
+      final monthlyCard = _MonthlyCard(
+        enrolled: monthly.enrolled,
+        goal: monthly.goal,
+        inquired: monthly.inquired,
+        trial: monthly.trial,
+      );
       final insight = const _InsightCard();
 
       if (!isWide) {
@@ -358,14 +373,14 @@ class _UrgentMainCard extends StatelessWidget {
               const SizedBox(width: 4),
               Padding(
                 padding: const EdgeInsets.only(top: 14),
-                child: Text('件のリード',
+                child: Text('人',
                     style: TextStyle(fontSize: 12, color: a.text)),
               ),
             ],
           ),
           const SizedBox(height: 4),
           Text(
-            '整えたい観点は合計 ${summary.urgentTotal} 件（同じリードで複数該当する場合があります）',
+            '確認ポイントは合計 ${summary.urgentTotal} 件（同じリードで複数該当する場合があります）',
             style: TextStyle(
                 fontSize: 11,
                 color: a.text.withValues(alpha: 0.75),
@@ -489,6 +504,7 @@ class _TodayCard extends StatelessWidget {
           _row(context, '返信待ち', summary.todayReplyDue),
           _row(context, '見学日程調整', summary.todayTrialScheduling),
           _row(context, '契約あと一歩', summary.todayAlmostContract),
+          _row(context, '担当を決める', summary.todayAssigneeMissing),
         ],
       ),
     );
@@ -509,7 +525,7 @@ class _TodayCard extends StatelessWidget {
                   fontWeight: FontWeight.w700,
                   color: c.textPrimary)),
           const SizedBox(width: 2),
-          Text('件',
+          Text('人',
               style: TextStyle(fontSize: 10, color: c.textTertiary)),
         ],
       ),
@@ -520,7 +536,14 @@ class _TodayCard extends StatelessWidget {
 class _MonthlyCard extends StatelessWidget {
   final int enrolled;
   final int goal;
-  const _MonthlyCard({required this.enrolled, required this.goal});
+  final int inquired;
+  final int trial;
+  const _MonthlyCard({
+    required this.enrolled,
+    required this.goal,
+    required this.inquired,
+    required this.trial,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -560,7 +583,7 @@ class _MonthlyCard extends StatelessWidget {
               const SizedBox(width: 4),
               Padding(
                 padding: const EdgeInsets.only(bottom: 4),
-                child: Text('/ $goal 人',
+                child: Text('/ $goal 人 入会',
                     style:
                         TextStyle(fontSize: 12, color: c.textSecondary)),
               ),
@@ -577,13 +600,31 @@ class _MonthlyCard extends StatelessWidget {
                   Color(0xFFFF9A8B)),
             ),
           ),
-          const SizedBox(height: 8),
-          Text(
-            enrolled == 0
-                ? '今月の入会はこれから'
-                : '今月すでに $enrolled 人 入会いただきました',
-            style: TextStyle(fontSize: 11, color: c.textSecondary),
-          ),
+          const SizedBox(height: 10),
+          _subRow(context, '問い合わせ', inquired),
+          _subRow(context, '体験実施', trial),
+        ],
+      ),
+    );
+  }
+
+  Widget _subRow(BuildContext context, String label, int count) {
+    final c = context.colors;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        children: [
+          Expanded(
+              child: Text(label,
+                  style: TextStyle(fontSize: 11, color: c.textTertiary))),
+          Text('$count',
+              style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: c.textSecondary)),
+          const SizedBox(width: 2),
+          Text('人',
+              style: TextStyle(fontSize: 10, color: c.textTertiary)),
         ],
       ),
     );
@@ -633,7 +674,8 @@ class _InsightCard extends StatelessWidget {
 
 class _UrgentSection extends StatelessWidget {
   final List<CrmUrgentRow> rows;
-  final int totalUrgent;
+  final int totalLeadCount;
+  final int totalObservations;
   final CrmUrgentReason? activeFilter;
   final VoidCallback onClearFilter;
   final void Function(QueryDocumentSnapshot<Map<String, dynamic>> doc)
@@ -642,7 +684,8 @@ class _UrgentSection extends StatelessWidget {
 
   const _UrgentSection({
     required this.rows,
-    required this.totalUrgent,
+    required this.totalLeadCount,
+    required this.totalObservations,
     required this.activeFilter,
     required this.onClearFilter,
     required this.onOpenLead,
@@ -657,7 +700,7 @@ class _UrgentSection extends StatelessWidget {
       children: [
         Row(
           children: [
-            Text('今すぐ対応リスト',
+            Text('今日整えたいリード',
                 style: TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w700,
@@ -673,8 +716,8 @@ class _UrgentSection extends StatelessWidget {
             const Spacer(),
             Text(
               activeFilter == null
-                  ? '対象リード ${rows.length}件'
-                  : '絞り込み中 ${rows.length}件 / 全 $totalUrgent件',
+                  ? '$totalLeadCount人 / $totalObservations件の確認ポイント'
+                  : '絞り込み中 ${rows.length}人 / 全 $totalLeadCount人',
               style: TextStyle(fontSize: 12, color: c.textSecondary),
             ),
           ],
