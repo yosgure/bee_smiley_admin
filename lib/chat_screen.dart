@@ -11,6 +11,8 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:intl/intl.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:desktop_drop/desktop_drop.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/gestures.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
@@ -947,8 +949,9 @@ class _ChatDetailViewState extends State<ChatDetailView> {
   final FocusNode _focusNode = FocusNode();
   final currentUser = FirebaseAuth.instance.currentUser;
   bool _isUploading = false;
-  // デフォルトで＋（折りたたみ）。タップすると展開して添付アイコンが出る
-  bool _iconsExpanded = false;
+  bool _isDraggingOver = false;
+  Timer? _draftSaveTimer;
+  String get _draftKey => 'chat_draft_${widget.roomId}';
 
   // 返信対象: {messageId, senderName, preview, type}
   Map<String, dynamic>? _replyTo;
@@ -1014,19 +1017,59 @@ class _ChatDetailViewState extends State<ChatDetailView> {
     if (widget.initialDraft.isNotEmpty) {
       _textController.text = widget.initialDraft;
     }
+    _loadPersistedDraft();
     _textController.addListener(() {
-      // 文字を入力し始めたらアイコン群を自動で折りたたむ
-      if (_iconsExpanded && _textController.text.isNotEmpty) {
-        setState(() => _iconsExpanded = false);
-      }
       widget.onDraftChanged?.call(_textController.text);
+      _scheduleDraftSave();
       // @メンション検知（グループチャットのみ）
       if (widget.isGroup) _checkMention();
     });
   }
 
+  Future<void> _loadPersistedDraft() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final saved = prefs.getString(_draftKey);
+      if (!mounted) return;
+      if (saved != null && saved.isNotEmpty && _textController.text.isEmpty) {
+        _textController.text = saved;
+        _textController.selection = TextSelection.collapsed(offset: saved.length);
+      }
+    } catch (_) {}
+  }
+
+  void _scheduleDraftSave() {
+    _draftSaveTimer?.cancel();
+    _draftSaveTimer = Timer(const Duration(milliseconds: 500), _persistDraft);
+  }
+
+  Future<void> _persistDraft() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final text = _textController.text;
+      if (text.isEmpty) {
+        await prefs.remove(_draftKey);
+      } else {
+        await prefs.setString(_draftKey, text);
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _clearPersistedDraft() async {
+    _draftSaveTimer?.cancel();
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_draftKey);
+    } catch (_) {}
+  }
+
   @override
-  void dispose() { _textController.dispose(); _scrollController.dispose(); _focusNode.dispose(); super.dispose(); }
+  void dispose() {
+    _draftSaveTimer?.cancel();
+    _persistDraft();
+    _textController.dispose(); _scrollController.dispose(); _focusNode.dispose();
+    super.dispose();
+  }
 
   void _checkMention() {
     final text = _textController.text;
@@ -1224,11 +1267,21 @@ class _ChatDetailViewState extends State<ChatDetailView> {
           children: [
             if (_isUploading) const Padding(padding: EdgeInsets.only(bottom: 8), child: LinearProgressIndicator()),
             if (_replyTo != null) _buildReplyPreviewBar(),
-            // 入力エリア全体を角丸コンテナで囲む
-            Container(
+            // 入力エリア全体を角丸コンテナで囲む（ドラッグ&ドロップ対応）
+            DropTarget(
+              onDragEntered: (_) => setState(() => _isDraggingOver = true),
+              onDragExited: (_) => setState(() => _isDraggingOver = false),
+              onDragDone: (detail) {
+                setState(() => _isDraggingOver = false);
+                _handleDroppedFiles(detail.files);
+              },
+              child: Container(
               decoration: BoxDecoration(
                 color: context.colors.chipBg,
                 borderRadius: BorderRadius.circular(16),
+                border: _isDraggingOver
+                    ? Border.all(color: AppColors.primary, width: 2)
+                    : null,
               ),
               child: Column(
                 children: [
@@ -1258,7 +1311,7 @@ class _ChatDetailViewState extends State<ChatDetailView> {
                         ),
                       ),
                     ),
-                  // アイコンバー
+                  // アイコンバー（クリップ1つに統合）
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     child: Row(
@@ -1266,20 +1319,8 @@ class _ChatDetailViewState extends State<ChatDetailView> {
                         IconButton(
                           icon: Icon(Icons.attach_file, color: _isUploading ? context.colors.borderMedium : context.colors.textSecondary, size: 22),
                           constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
-                          tooltip: 'ファイルを添付',
-                          onPressed: _isUploading ? null : _pickAndUploadFile,
-                        ),
-                        IconButton(
-                          icon: Icon(Icons.image_outlined, color: _isUploading ? context.colors.borderMedium : context.colors.textSecondary, size: 22),
-                          constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
-                          tooltip: '画像を送信',
-                          onPressed: _isUploading ? null : _pickAndUploadImage,
-                        ),
-                        IconButton(
-                          icon: Icon(Icons.videocam_outlined, color: _isUploading ? context.colors.borderMedium : context.colors.textSecondary, size: 22),
-                          constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
-                          tooltip: '動画を送信',
-                          onPressed: _isUploading ? null : _pickAndUploadVideo,
+                          tooltip: '写真・動画・ファイルを添付',
+                          onPressed: _isUploading ? null : _pickAndUploadAny,
                         ),
                         const Spacer(),
                         // 送信ボタン（青丸）
@@ -1297,6 +1338,7 @@ class _ChatDetailViewState extends State<ChatDetailView> {
                   ),
                 ],
               ),
+            ),
             ),
           ],
         ),
@@ -1318,32 +1360,16 @@ class _ChatDetailViewState extends State<ChatDetailView> {
             Row(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-            if (!_iconsExpanded)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 6),
-                child: GestureDetector(
-                  onTap: () => setState(() => _iconsExpanded = true),
-                  child: Container(
-                    width: 28, height: 28, margin: const EdgeInsets.only(right: 4),
-                    decoration: BoxDecoration(color: context.colors.borderLight, shape: BoxShape.circle),
-                    child: Icon(Icons.add, color: context.colors.textSecondary, size: 18),
-                  ),
-                ),
-              )
-            else ...[
-              Padding(
-                padding: const EdgeInsets.only(bottom: 4),
-                child: IconButton(icon: Icon(Icons.attach_file, color: context.colors.textSecondary, size: 20), constraints: const BoxConstraints(minWidth: 28, minHeight: 28), padding: EdgeInsets.zero, onPressed: _isUploading ? null : _pickAndUploadFile),
+            Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: IconButton(
+                icon: Icon(Icons.attach_file, color: _isUploading ? context.colors.borderMedium : context.colors.textSecondary, size: 22),
+                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                padding: EdgeInsets.zero,
+                tooltip: '写真・動画・ファイルを添付',
+                onPressed: _isUploading ? null : _pickAndUploadAny,
               ),
-              Padding(
-                padding: const EdgeInsets.only(bottom: 4),
-                child: IconButton(icon: Icon(Icons.image, color: context.colors.textSecondary, size: 20), constraints: const BoxConstraints(minWidth: 28, minHeight: 28), padding: EdgeInsets.zero, onPressed: _isUploading ? null : _pickAndUploadImage),
-              ),
-              Padding(
-                padding: const EdgeInsets.only(bottom: 4),
-                child: IconButton(icon: Icon(Icons.videocam, color: context.colors.textSecondary, size: 20), constraints: const BoxConstraints(minWidth: 28, minHeight: 28), padding: EdgeInsets.zero, onPressed: _isUploading ? null : _pickAndUploadVideo),
-              ),
-            ],
+            ),
             const SizedBox(width: 4),
             Expanded(
               // 長文入力時に TextField が無限に伸びて送信ボタンをキーボード外に押し出すのを防ぐ。
@@ -2065,96 +2091,161 @@ class _ChatDetailViewState extends State<ChatDetailView> {
     );
   }
 
-  Future<void> _pickAndUploadImage() async {
+  Future<void> _pickAndUploadAny() async {
+    if (_isUploading) return;
     _dismissKeyboard();
-    final picker = ImagePicker();
-    final XFile? image = await picker.pickImage(source: ImageSource.gallery);
-    if (image == null) return;
-    setState(() => _isUploading = true);
-    try {
-      final Uint8List fileBytes = await image.readAsBytes();
-      final String fileName = '${DateTime.now().millisecondsSinceEpoch}_${image.name}';
-      final ref = FirebaseStorage.instance.ref().child('chat_uploads/${widget.roomId}/$fileName');
-      await ref.putData(fileBytes, SettableMetadata(contentType: 'image/jpeg'));
-      final url = await ref.getDownloadURL();
-      await _sendMessage(type: 'image', url: url, text: _textController.text);
-      _textController.clear();
-    } catch (e) { ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('アップロード失敗: $e'))); }
-    finally { setState(() => _isUploading = false); }
-  }
-
-  Future<void> _pickAndUploadVideo() async {
-    _dismissKeyboard();
-    final picker = ImagePicker();
-    final XFile? video = await picker.pickVideo(
-      source: ImageSource.gallery,
-      maxDuration: const Duration(minutes: 10),
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.any,
+      withData: true,
+      allowMultiple: true,
     );
-    if (video == null) return;
-    setState(() => _isUploading = true);
-    try {
-      final Uint8List bytes = await video.readAsBytes();
-      // 50MB 制限
-      if (bytes.length > 50 * 1024 * 1024) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('動画サイズが大きすぎます (50MBまで)')),
+    if (result == null || result.files.isEmpty) return;
+    const imageExts = {'jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'heic'};
+    const videoExts = {'mp4', 'mov', 'avi', 'webm', 'mkv', 'm4v'};
+    for (final file in result.files) {
+      final bytes = file.bytes;
+      if (bytes == null) continue;
+      if (!mounted) return;
+      setState(() => _isUploading = true);
+      try {
+        final name = file.name;
+        final ext = name.contains('.') ? name.split('.').last.toLowerCase() : '';
+        final fileName = '${DateTime.now().millisecondsSinceEpoch}_$name';
+        final ref = FirebaseStorage.instance
+            .ref()
+            .child('chat_uploads/${widget.roomId}/$fileName');
+        if (imageExts.contains(ext)) {
+          final contentType = ext == 'png'
+              ? 'image/png'
+              : ext == 'gif'
+                  ? 'image/gif'
+                  : ext == 'webp'
+                      ? 'image/webp'
+                      : 'image/jpeg';
+          await ref.putData(bytes, SettableMetadata(contentType: contentType));
+          final url = await ref.getDownloadURL();
+          await _sendMessage(type: 'image', url: url, text: _textController.text);
+        } else if (videoExts.contains(ext)) {
+          if (bytes.length > 50 * 1024 * 1024) {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('動画サイズが大きすぎます (50MBまで)')),
+              );
+            }
+            continue;
+          }
+          final contentType = ext == 'mov' ? 'video/quicktime' : 'video/mp4';
+          await ref.putData(bytes, SettableMetadata(contentType: contentType));
+          final url = await ref.getDownloadURL();
+          await _sendMessage(
+            type: 'video',
+            url: url,
+            fileName: name,
+            text: _textController.text,
+            fileSize: bytes.length,
+          );
+        } else {
+          await ref.putData(bytes);
+          final url = await ref.getDownloadURL();
+          await _sendMessage(
+            type: 'file',
+            url: url,
+            fileName: name,
+            text: _textController.text,
+            fileSize: file.size,
           );
         }
-        return;
+        _textController.clear();
+        _clearPersistedDraft();
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context)
+              .showSnackBar(SnackBar(content: Text('アップロード失敗: $e')));
+        }
+      } finally {
+        if (mounted) setState(() => _isUploading = false);
       }
-      final String ext = video.name.split('.').last.toLowerCase();
-      final String contentType =
-          ext == 'mov' ? 'video/quicktime' : 'video/mp4';
-      final String fileName =
-          '${DateTime.now().millisecondsSinceEpoch}_${video.name}';
-      final ref = FirebaseStorage.instance
-          .ref()
-          .child('chat_uploads/${widget.roomId}/$fileName');
-      await ref.putData(bytes, SettableMetadata(contentType: contentType));
-      final url = await ref.getDownloadURL();
-      await _sendMessage(
-        type: 'video',
-        url: url,
-        fileName: video.name,
-        text: _textController.text,
-        fileSize: bytes.length,
-      );
-      _textController.clear();
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('動画アップロード失敗: $e')));
-      }
-    } finally {
-      if (mounted) setState(() => _isUploading = false);
     }
   }
 
-  Future<void> _pickAndUploadFile() async {
-    _dismissKeyboard();
-    final result = await FilePicker.platform.pickFiles(type: FileType.any, withData: true);
-    if (result == null) return;
-    setState(() => _isUploading = true);
-    try {
-      final PlatformFile file = result.files.first;
-      final Uint8List? fileBytes = file.bytes;
-      if (fileBytes == null) throw Exception('データ取得失敗');
-      final String fileName = '${DateTime.now().millisecondsSinceEpoch}_${file.name}';
-      final ref = FirebaseStorage.instance.ref().child('chat_uploads/${widget.roomId}/$fileName');
-      await ref.putData(fileBytes);
-      final url = await ref.getDownloadURL();
-      await _sendMessage(type: 'file', url: url, fileName: file.name, text: _textController.text, fileSize: file.size);
-      _textController.clear();
-    } catch (e) { ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('アップロード失敗: $e'))); }
-    finally { setState(() => _isUploading = false); }
+  Future<void> _handleDroppedFiles(List<XFile> files) async {
+    if (files.isEmpty) return;
+    const imageExts = {'jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'heic'};
+    const videoExts = {'mp4', 'mov', 'avi', 'webm', 'mkv', 'm4v'};
+    for (final file in files) {
+      if (!mounted) return;
+      setState(() => _isUploading = true);
+      try {
+        final bytes = await file.readAsBytes();
+        final name = file.name;
+        final ext = name.contains('.') ? name.split('.').last.toLowerCase() : '';
+        final fileName = '${DateTime.now().millisecondsSinceEpoch}_$name';
+        final ref = FirebaseStorage.instance
+            .ref()
+            .child('chat_uploads/${widget.roomId}/$fileName');
+        if (imageExts.contains(ext)) {
+          final contentType = ext == 'png'
+              ? 'image/png'
+              : ext == 'gif'
+                  ? 'image/gif'
+                  : ext == 'webp'
+                      ? 'image/webp'
+                      : 'image/jpeg';
+          await ref.putData(bytes, SettableMetadata(contentType: contentType));
+          final url = await ref.getDownloadURL();
+          await _sendMessage(type: 'image', url: url, text: _textController.text);
+          _textController.clear();
+          _clearPersistedDraft();
+        } else if (videoExts.contains(ext)) {
+          if (bytes.length > 50 * 1024 * 1024) {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('動画サイズが大きすぎます (50MBまで)')),
+              );
+            }
+            continue;
+          }
+          final contentType = ext == 'mov' ? 'video/quicktime' : 'video/mp4';
+          await ref.putData(bytes, SettableMetadata(contentType: contentType));
+          final url = await ref.getDownloadURL();
+          await _sendMessage(
+            type: 'video',
+            url: url,
+            fileName: name,
+            text: _textController.text,
+            fileSize: bytes.length,
+          );
+          _textController.clear();
+          _clearPersistedDraft();
+        } else {
+          await ref.putData(bytes);
+          final url = await ref.getDownloadURL();
+          await _sendMessage(
+            type: 'file',
+            url: url,
+            fileName: name,
+            text: _textController.text,
+            fileSize: bytes.length,
+          );
+          _textController.clear();
+          _clearPersistedDraft();
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context)
+              .showSnackBar(SnackBar(content: Text('アップロード失敗: $e')));
+        }
+      } finally {
+        if (mounted) setState(() => _isUploading = false);
+      }
+    }
   }
 
   Future<void> _sendMessage({String type = 'text', String? url, String? fileName, String? text, int? fileSize, String? thumbnailUrl, int? durationMs}) async {
     final msgText = text ?? _textController.text;
     if (msgText.trim().isEmpty && type == 'text') return;
     _dismissKeyboard();
-    if (type == 'text') _textController.clear();
+    if (type == 'text') { _textController.clear(); _clearPersistedDraft(); }
     final roomRef = FirebaseFirestore.instance.collection('chat_rooms').doc(widget.roomId);
     final data = <String, dynamic>{
       'senderId': currentUser!.uid,
