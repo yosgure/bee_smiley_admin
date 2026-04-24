@@ -7,6 +7,7 @@ import '../app_theme.dart';
 import '../crm_lead_screen.dart' show CrmOptions;
 import 'crm_home_utils.dart';
 import 'crm_lead_model.dart';
+import 'crm_lead_side_panel.dart';
 
 /// 「今日整えたいこと」カードで使う柔らかめのアンバー。
 /// `context.alerts.warning` より彩度を落とし、赤みを抑えたトーンにする。
@@ -47,14 +48,8 @@ class _SoftAmber {
 /// 行クリック時は `onOpenLead` を呼び出し、呼び出し側で詳細画面を開く。
 class CrmHomeScreen extends StatefulWidget {
   final List<QueryDocumentSnapshot<Map<String, dynamic>>> docs;
-  final void Function(QueryDocumentSnapshot<Map<String, dynamic>> doc)
-      onOpenLead;
 
-  const CrmHomeScreen({
-    super.key,
-    required this.docs,
-    required this.onOpenLead,
-  });
+  const CrmHomeScreen({super.key, required this.docs});
 
   @override
   State<CrmHomeScreen> createState() => _CrmHomeScreenState();
@@ -64,8 +59,32 @@ class _CrmHomeScreenState extends State<CrmHomeScreen> {
   /// Urgent List の絞り込み（null=全件）
   CrmUrgentReason? _filter;
 
+  /// 右サイドパネルで開いているリード（null=閉じている）
+  DocumentReference<Map<String, dynamic>>? _selectedLeadRef;
+
   @override
   Widget build(BuildContext context) {
+    return LayoutBuilder(builder: (context, cons) {
+      final wide = cons.maxWidth >= 1100;
+      final home = _buildHome(context);
+      if (_selectedLeadRef == null) return home;
+      final panel = CrmLeadSidePanel(
+        leadRef: _selectedLeadRef!,
+        onClose: () => setState(() => _selectedLeadRef = null),
+      );
+      if (wide) {
+        return Row(
+          children: [
+            Expanded(child: home),
+            SizedBox(width: 560, child: panel),
+          ],
+        );
+      }
+      return panel;
+    });
+  }
+
+  Widget _buildHome(BuildContext context) {
     final now = DateTime.now();
     final tod = crmTimeOfDay(now);
 
@@ -112,7 +131,7 @@ class _CrmHomeScreenState extends State<CrmHomeScreen> {
               totalObservations: summary.urgentTotal,
               activeFilter: _filter,
               onClearFilter: () => setState(() => _filter = null),
-              onOpenLead: widget.onOpenLead,
+              onOpenLead: _openLeadInPanel,
               docById: docById,
             ),
             const SizedBox(height: 32),
@@ -163,6 +182,10 @@ class _CrmHomeScreenState extends State<CrmHomeScreen> {
       }
     }
     return count;
+  }
+
+  void _openLeadInPanel(QueryDocumentSnapshot<Map<String, dynamic>> doc) {
+    setState(() => _selectedLeadRef = doc.reference);
   }
 
   String _currentUserName() {

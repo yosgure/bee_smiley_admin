@@ -296,14 +296,7 @@ class _CrmLeadScreenState extends State<CrmLeadScreen> {
         if (docs.isEmpty) return _emptyState();
         switch (_viewMode) {
           case 0:
-            return CrmHomeScreen(
-              docs: docs,
-              onOpenLead: (doc) => Navigator.push(
-                context,
-                MaterialPageRoute(
-                    builder: (_) => CrmLeadEditScreen(doc: doc)),
-              ),
-            );
+            return CrmHomeScreen(docs: docs);
           case 1:
             return _CrmDunningView(docs: docs);
           case 2:
