@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:csv/csv.dart';
 import 'app_theme.dart';
+import 'crm/crm_home_screen.dart';
 import 'main.dart';
 import 'services/undo_service.dart';
 
@@ -139,7 +140,7 @@ class CrmLeadScreen extends StatefulWidget {
 }
 
 class _CrmLeadScreenState extends State<CrmLeadScreen> {
-  // 0: 督促, 1: パイプライン, 2: 入会済み, 3: 離脱, 4: 分析
+  // 0: ホーム, 1: 督促, 2: パイプライン, 3: 入会済み, 4: 離脱, 5: 分析
   int _viewMode = 0;
   String _sourceFilter = 'all';
   String _stageFilter = 'all'; // 未使用（旧テーブル互換用に残置）
@@ -206,11 +207,12 @@ class _CrmLeadScreenState extends State<CrmLeadScreen> {
             SegmentedButton<int>(
               showSelectedIcon: false,
               segments: const [
-                ButtonSegment(value: 0, label: Text('督促'), icon: Icon(Icons.campaign_outlined, size: 16)),
-                ButtonSegment(value: 1, label: Text('パイプライン'), icon: Icon(Icons.timeline, size: 16)),
-                ButtonSegment(value: 2, label: Text('入会済み'), icon: Icon(Icons.check_circle_outline, size: 16)),
-                ButtonSegment(value: 3, label: Text('離脱'), icon: Icon(Icons.logout, size: 16)),
-                ButtonSegment(value: 4, label: Text('分析'), icon: Icon(Icons.bar_chart, size: 16)),
+                ButtonSegment(value: 0, label: Text('ホーム'), icon: Icon(Icons.home_outlined, size: 16)),
+                ButtonSegment(value: 1, label: Text('督促'), icon: Icon(Icons.campaign_outlined, size: 16)),
+                ButtonSegment(value: 2, label: Text('パイプライン'), icon: Icon(Icons.timeline, size: 16)),
+                ButtonSegment(value: 3, label: Text('入会済み'), icon: Icon(Icons.check_circle_outline, size: 16)),
+                ButtonSegment(value: 4, label: Text('離脱'), icon: Icon(Icons.logout, size: 16)),
+                ButtonSegment(value: 5, label: Text('分析'), icon: Icon(Icons.bar_chart, size: 16)),
               ],
               selected: {_viewMode},
               onSelectionChanged: (s) => setState(() => _viewMode = s.first),
@@ -294,14 +296,23 @@ class _CrmLeadScreenState extends State<CrmLeadScreen> {
         if (docs.isEmpty) return _emptyState();
         switch (_viewMode) {
           case 0:
-            return _CrmDunningView(docs: docs);
+            return CrmHomeScreen(
+              docs: docs,
+              onOpenLead: (doc) => Navigator.push(
+                context,
+                MaterialPageRoute(
+                    builder: (_) => CrmLeadEditScreen(doc: doc)),
+              ),
+            );
           case 1:
-            return _CrmPipelineView(docs: docs);
+            return _CrmDunningView(docs: docs);
           case 2:
-            return _CrmEnrolledView(docs: docs);
+            return _CrmPipelineView(docs: docs);
           case 3:
-            return _CrmChurnView(docs: docs);
+            return _CrmEnrolledView(docs: docs);
           case 4:
+            return _CrmChurnView(docs: docs);
+          case 5:
           default:
             return _CrmDashboardView(docs: docs);
         }
