@@ -5,6 +5,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:csv/csv.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
+import 'services/undo_service.dart';
 
 class FamilyCsvImportScreen extends StatefulWidget {
   final VoidCallback? onBack;
@@ -75,6 +76,8 @@ class _FamilyCsvImportScreenState extends State<FamilyCsvImportScreen> {
     int successCount = 0;
     int errorCount = 0;
     List<String> errorLogs = [];
+    // Undo 用: 作成成功した (uid, docId) を追跡
+    final created = <Map<String, String>>[];
 
     final functions = FirebaseFunctions.instanceFor(region: 'asia-northeast1');
 
@@ -160,6 +163,11 @@ class _FamilyCsvImportScreenState extends State<FamilyCsvImportScreen> {
 
         if (result.data['success'] == true) {
           successCount++;
+          final uid = (result.data['uid'] ?? '') as String;
+          final docId = (result.data['docId'] ?? '') as String;
+          if (uid.isNotEmpty || docId.isNotEmpty) {
+            created.add({'uid': uid, 'docId': docId});
+          }
         } else {
           throw Exception(result.data['message'] ?? '不明なエラー');
         }
@@ -170,11 +178,50 @@ class _FamilyCsvImportScreenState extends State<FamilyCsvImportScreen> {
       }
     }
 
-    setState(() {
-      _isLoading = false;
-      _statusMessage = '完了！\n成功: $successCount 件\n失敗: $errorCount 件\n\n${errorLogs.join('\n')}';
-      if (successCount > 0) _csvData = [];
-    });
+    if (mounted) {
+      setState(() {
+        _isLoading = false;
+        _statusMessage =
+            '完了！\n成功: $successCount 件\n失敗: $errorCount 件\n\n${errorLogs.join('\n')}';
+        if (successCount > 0) _csvData = [];
+      });
+    }
+
+    if (created.isNotEmpty && mounted) {
+      await _showImportUndoSnackBar(
+        label: '保護者 $successCount 件を新規登録',
+        created: created,
+      );
+    }
+  }
+
+  /// 新規登録を取り消す Snackbar を表示する（Auth＋Firestore を Cloud Function 経由で削除）。
+  Future<void> _showImportUndoSnackBar({
+    required String label,
+    required List<Map<String, String>> created,
+  }) async {
+    final functions = FirebaseFunctions.instanceFor(region: 'asia-northeast1');
+    await UndoService.run<List<Map<String, String>>>(
+      context: context,
+      label: label,
+      doneMessage: '$label しました',
+      window: const Duration(seconds: 60),
+      captureSnapshot: () async => created,
+      execute: () async {},
+      undo: (snap) async {
+        for (final e in snap) {
+          try {
+            await functions.httpsCallable('deleteParentAccount').call({
+              if ((e['uid'] ?? '').isNotEmpty) 'targetUid': e['uid'],
+              if ((e['docId'] ?? '').isNotEmpty) 'familyDocId': e['docId'],
+            });
+          } catch (err) {
+            // 個別失敗はログのみ（残りは継続）
+            debugPrint('Undo delete failed for ${e['docId']}: $err');
+          }
+        }
+      },
+    );
   }
 
   // ============================================
@@ -191,6 +238,7 @@ class _FamilyCsvImportScreenState extends State<FamilyCsvImportScreen> {
     int successCount = 0;
     int errorCount = 0;
     List<String> errorLogs = [];
+    final created = <Map<String, String>>[];
 
     final functions = FirebaseFunctions.instanceFor(region: 'asia-northeast1');
 
@@ -282,6 +330,11 @@ class _FamilyCsvImportScreenState extends State<FamilyCsvImportScreen> {
 
         if (result.data['success'] == true) {
           successCount++;
+          final uid = (result.data['uid'] ?? '') as String;
+          final docId = (result.data['docId'] ?? '') as String;
+          if (uid.isNotEmpty || docId.isNotEmpty) {
+            created.add({'uid': uid, 'docId': docId});
+          }
         } else {
           throw Exception(result.data['message'] ?? '不明なエラー');
         }
@@ -292,11 +345,21 @@ class _FamilyCsvImportScreenState extends State<FamilyCsvImportScreen> {
       }
     }
 
-    setState(() {
-      _isLoading = false;
-      _statusMessage = '完了！\n成功: $successCount 件\n失敗: $errorCount 件\n\n${errorLogs.join('\n')}';
-      if (successCount > 0) _csvData = [];
-    });
+    if (mounted) {
+      setState(() {
+        _isLoading = false;
+        _statusMessage =
+            '完了！\n成功: $successCount 件\n失敗: $errorCount 件\n\n${errorLogs.join('\n')}';
+        if (successCount > 0) _csvData = [];
+      });
+    }
+
+    if (created.isNotEmpty && mounted) {
+      await _showImportUndoSnackBar(
+        label: '保護者 $successCount 件を新規登録',
+        created: created,
+      );
+    }
   }
 
   // ============================================
@@ -314,6 +377,8 @@ class _FamilyCsvImportScreenState extends State<FamilyCsvImportScreen> {
     int skipCount = 0;
     int errorCount = 0;
     List<String> logs = [];
+    // Undo 用: 更新対象の pre-state を保持（docId -> data）
+    final preStates = <String, Map<String, dynamic>>{};
 
     final firestore = FirebaseFirestore.instance;
 
@@ -357,6 +422,11 @@ class _FamilyCsvImportScreenState extends State<FamilyCsvImportScreen> {
         }
 
         final docId = querySnapshot.docs.first.id;
+        // pre-state を保存（初回のみ）
+        if (!preStates.containsKey(docId)) {
+          preStates[docId] =
+              Map<String, dynamic>.from(querySnapshot.docs.first.data());
+        }
         final firstRow = rows.first;
 
         // 保護者情報を取得（最初の行から）
@@ -424,11 +494,35 @@ class _FamilyCsvImportScreenState extends State<FamilyCsvImportScreen> {
       }
     }
 
-    setState(() {
-      _isLoading = false;
-      _statusMessage = '完了！\n更新: $updateCount 件\nスキップ: $skipCount 件\nエラー: $errorCount 件\n\n${logs.join('\n')}';
-      if (updateCount > 0) _csvData = [];
-    });
+    if (mounted) {
+      setState(() {
+        _isLoading = false;
+        _statusMessage =
+            '完了！\n更新: $updateCount 件\nスキップ: $skipCount 件\nエラー: $errorCount 件\n\n${logs.join('\n')}';
+        if (updateCount > 0) _csvData = [];
+      });
+    }
+
+    if (preStates.isNotEmpty && mounted) {
+      await UndoService.run<Map<String, Map<String, dynamic>>>(
+        context: context,
+        label: '保護者 $updateCount 件を一括更新',
+        doneMessage: '保護者 $updateCount 件を一括更新しました',
+        window: const Duration(seconds: 60),
+        captureSnapshot: () async => preStates,
+        execute: () async {},
+        undo: (snap) async {
+          final batch = FirebaseFirestore.instance.batch();
+          snap.forEach((docId, data) {
+            batch.set(
+              FirebaseFirestore.instance.collection('families').doc(docId),
+              data,
+            );
+          });
+          await batch.commit();
+        },
+      );
+    }
   }
 
   @override

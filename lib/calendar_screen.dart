@@ -13,6 +13,7 @@ import 'app_theme.dart';
 import 'main.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'classroom_utils.dart';
+import 'services/undo_service.dart';
 
 class CalendarScreen extends StatefulWidget {
   const CalendarScreen({super.key});
@@ -2200,41 +2201,131 @@ Future<void> _saveDisplayDate(DateTime date) async {
   }
 
   Future<void> _executeRecurringDelete(DocumentSnapshot doc, Map<String, dynamic> data, DateTime startTime, String option, String? recurrenceGroupId) async {
-    switch (option) {
-      case 'this':
-        await doc.reference.delete();
-        break;
-      case 'future':
-        if (recurrenceGroupId != null) {
-          final query = await _eventsRef.where('recurrenceGroupId', isEqualTo: recurrenceGroupId).get();
-          final batch = FirebaseFirestore.instance.batch();
-          for (var eventDoc in query.docs) {
-            final eventData = eventDoc.data() as Map<String, dynamic>;
-            final eventStart = (eventData['startTime'] as Timestamp).toDate();
-            if (!eventStart.isBefore(startTime)) batch.delete(eventDoc.reference);
-          }
-          await batch.commit();
-        } else {
-          final recurrenceRule = data['recurrenceRule'] as String?;
-          if (recurrenceRule != null) {
-            final untilDate = startTime.subtract(const Duration(days: 1));
-            final untilStr = '${untilDate.year}${untilDate.month.toString().padLeft(2, '0')}${untilDate.day.toString().padLeft(2, '0')}T235959Z';
-            String newRule = recurrenceRule.contains('UNTIL=') ? recurrenceRule.replaceAll(RegExp(r'UNTIL=[^;]+'), 'UNTIL=$untilStr') : '$recurrenceRule;UNTIL=$untilStr';
-            await doc.reference.update({'recurrenceRule': newRule});
-          }
-        }
-        break;
-      case 'all':
-        if (recurrenceGroupId != null) {
-          final query = await _eventsRef.where('recurrenceGroupId', isEqualTo: recurrenceGroupId).get();
-          final batch = FirebaseFirestore.instance.batch();
-          for (var eventDoc in query.docs) batch.delete(eventDoc.reference);
-          await batch.commit();
-        } else {
-          await doc.reference.delete();
-        }
-        break;
+    // 'this' は単一削除。Undo を付ける。
+    if (option == 'this') {
+      if (!mounted) return;
+      await UndoService.deleteDoc(
+        context: context,
+        label: '予定を削除',
+        doneMessage: '予定を削除しました',
+        docRef: doc.reference,
+      );
+      return;
     }
+
+    // どのドキュメントが影響を受けるかを先に特定し、スナップショットとして保持する。
+    if (!mounted) return;
+    await UndoService.run<Map<String, dynamic>>(
+      context: context,
+      label: option == 'all' ? '定期予定をすべて削除' : 'これ以降の定期予定を削除',
+      captureSnapshot: () async {
+        final docs = <Map<String, dynamic>>[];
+        String? recRuleBefore;
+        String? recRuleDocPath;
+        if (option == 'future' && recurrenceGroupId == null) {
+          // ルール更新のみのケース: 元の recurrenceRule を保存
+          recRuleBefore = data['recurrenceRule'] as String?;
+          recRuleDocPath = doc.reference.path;
+        } else {
+          final query = recurrenceGroupId != null
+              ? await _eventsRef
+                  .where('recurrenceGroupId', isEqualTo: recurrenceGroupId)
+                  .get()
+              : null;
+          if (query != null) {
+            for (var eventDoc in query.docs) {
+              final eventData = eventDoc.data() as Map<String, dynamic>;
+              if (option == 'future') {
+                final eventStart =
+                    (eventData['startTime'] as Timestamp).toDate();
+                if (eventStart.isBefore(startTime)) continue;
+              }
+              docs.add({
+                'path': eventDoc.reference.path,
+                'data': eventData,
+              });
+            }
+          } else if (option == 'all') {
+            docs.add({
+              'path': doc.reference.path,
+              'data': data,
+            });
+          }
+        }
+        return {
+          'mode': option,
+          'docs': docs,
+          'recRuleBefore': recRuleBefore,
+          'recRuleDocPath': recRuleDocPath,
+        };
+      },
+      execute: () async {
+        switch (option) {
+          case 'future':
+            if (recurrenceGroupId != null) {
+              final query = await _eventsRef
+                  .where('recurrenceGroupId', isEqualTo: recurrenceGroupId)
+                  .get();
+              final batch = FirebaseFirestore.instance.batch();
+              for (var eventDoc in query.docs) {
+                final eventData = eventDoc.data() as Map<String, dynamic>;
+                final eventStart =
+                    (eventData['startTime'] as Timestamp).toDate();
+                if (!eventStart.isBefore(startTime)) {
+                  batch.delete(eventDoc.reference);
+                }
+              }
+              await batch.commit();
+            } else {
+              final recurrenceRule = data['recurrenceRule'] as String?;
+              if (recurrenceRule != null) {
+                final untilDate = startTime.subtract(const Duration(days: 1));
+                final untilStr =
+                    '${untilDate.year}${untilDate.month.toString().padLeft(2, '0')}${untilDate.day.toString().padLeft(2, '0')}T235959Z';
+                String newRule = recurrenceRule.contains('UNTIL=')
+                    ? recurrenceRule.replaceAll(
+                        RegExp(r'UNTIL=[^;]+'), 'UNTIL=$untilStr')
+                    : '$recurrenceRule;UNTIL=$untilStr';
+                await doc.reference.update({'recurrenceRule': newRule});
+              }
+            }
+            break;
+          case 'all':
+            if (recurrenceGroupId != null) {
+              final query = await _eventsRef
+                  .where('recurrenceGroupId', isEqualTo: recurrenceGroupId)
+                  .get();
+              final batch = FirebaseFirestore.instance.batch();
+              for (var eventDoc in query.docs) {
+                batch.delete(eventDoc.reference);
+              }
+              await batch.commit();
+            } else {
+              await doc.reference.delete();
+            }
+            break;
+        }
+      },
+      undo: (snap) async {
+        final recRuleBefore = snap['recRuleBefore'] as String?;
+        final recRuleDocPath = snap['recRuleDocPath'] as String?;
+        if (recRuleDocPath != null) {
+          // recurrenceRule を元に戻す
+          await FirebaseFirestore.instance.doc(recRuleDocPath).update({
+            'recurrenceRule': recRuleBefore,
+          });
+          return;
+        }
+        final docs = (snap['docs'] as List).cast<Map<String, dynamic>>();
+        final batch = FirebaseFirestore.instance.batch();
+        for (final d in docs) {
+          final path = d['path'] as String;
+          final data = Map<String, dynamic>.from(d['data'] as Map);
+          batch.set(FirebaseFirestore.instance.doc(path), data);
+        }
+        await batch.commit();
+      },
+    );
   }
 
   Widget _buildDetailRow(IconData icon, String text) {

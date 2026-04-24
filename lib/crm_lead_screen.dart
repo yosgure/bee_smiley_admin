@@ -7,6 +7,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:csv/csv.dart';
 import 'app_theme.dart';
 import 'main.dart';
+import 'services/undo_service.dart';
 
 // ============================================================
 // CRM-00: 選択肢マスタ
@@ -443,6 +444,8 @@ class _CrmLeadScreenState extends State<CrmLeadScreen> {
     int skipped = 0;
     WriteBatch batch = fs.batch();
     int inBatch = 0;
+    // Undo 用: 作成したリード doc ID を追跡
+    final createdIds = <String>[];
 
     // 進捗スナックバー
     final messenger = ScaffoldMessenger.of(context);
@@ -532,7 +535,9 @@ class _CrmLeadScreenState extends State<CrmLeadScreen> {
           'updatedAt': FieldValue.serverTimestamp(),
           'createdBy': 'import:notion:${user?.uid ?? ''}',
         };
-        batch.set(col.doc(), data);
+        final docRef = col.doc();
+        batch.set(docRef, data);
+        createdIds.add(docRef.id);
         inBatch++;
         ok++;
         if (inBatch >= 400) {
@@ -543,8 +548,30 @@ class _CrmLeadScreenState extends State<CrmLeadScreen> {
       }
       if (inBatch > 0) await batch.commit();
       messenger.hideCurrentSnackBar();
-      _snack('インポート完了: $ok件（スキップ $skipped）', Colors.green);
       if (mounted) setState(() {});
+      if (createdIds.isNotEmpty && mounted) {
+        await UndoService.run<List<String>>(
+          context: context,
+          label: 'リード $ok 件をインポート',
+          doneMessage: 'インポート完了: $ok件（スキップ $skipped）',
+          window: const Duration(seconds: 60),
+          captureSnapshot: () async => createdIds,
+          execute: () async {},
+          undo: (snap) async {
+            // 400件ずつバッチ削除
+            for (int i = 0; i < snap.length; i += 400) {
+              final end = (i + 400).clamp(0, snap.length);
+              final b = fs.batch();
+              for (final id in snap.sublist(i, end)) {
+                b.delete(col.doc(id));
+              }
+              await b.commit();
+            }
+          },
+        );
+      } else {
+        _snack('インポート完了: $ok件（スキップ $skipped）', Colors.green);
+      }
     } catch (e) {
       messenger.hideCurrentSnackBar();
       _snack('インポート失敗: $e', Colors.red);
