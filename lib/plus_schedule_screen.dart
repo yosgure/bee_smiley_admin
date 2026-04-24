@@ -19,6 +19,7 @@ import 'complaint_screen.dart';
 import 'meeting_minutes_screen.dart';
 import 'crm_lead_screen.dart';
 import 'absence_record_dialog.dart';
+import 'services/undo_service.dart';
 
 // 講師名・教室名クリック時に生徒編集ダイアログの発火を抑制するフラグ
 bool _quickEditTappedGlobal = false;
@@ -579,11 +580,24 @@ Map<String, dynamic>? _getCellMemo(DateTime date, int slotIndex) {
     }
   }
   
-  // タスクを完了（削除）
+  // タスクを完了（削除）。Undo で復活可能。
   Future<void> _completeTask(String taskId) async {
+    if (!mounted) return;
     try {
-      await FirebaseFirestore.instance.collection('plus_tasks').doc(taskId).delete();
-      await _loadAllTasks();
+      await UndoService.deleteDoc(
+        context: context,
+        label: 'タスクを完了',
+        doneMessage: 'タスクを完了しました',
+        docRef: FirebaseFirestore.instance
+            .collection('plus_tasks')
+            .doc(taskId),
+        postDelete: () async {
+          if (mounted) await _loadAllTasks();
+        },
+        postRestore: () async {
+          if (mounted) await _loadAllTasks();
+        },
+      );
     } catch (e) {
       debugPrint('Error completing task: $e');
     }
@@ -4914,9 +4928,32 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
                 ),
               );
               if (confirm == true) {
-                await _deleteCellMemo(date, slotIndex);
                 if (dialogContext.mounted) Navigator.pop(dialogContext);
-                scaffoldMessenger.showSnackBar(const SnackBar(content: Text('メモを削除しました')));
+                if (!mounted) return;
+                final dateStr = DateFormat('yyyy-MM-dd').format(date);
+                final docId = '${dateStr}_$slotIndex';
+                await UndoService.deleteDoc(
+                  context: context,
+                  label: 'コマメモを削除',
+                  doneMessage: 'メモを削除しました',
+                  docRef: FirebaseFirestore.instance
+                      .collection('plus_cell_memos')
+                      .doc(docId),
+                  postDelete: () async {
+                    if (mounted) {
+                      setState(() => _cellMemos.remove(docId));
+                    }
+                  },
+                  postRestore: () async {
+                    final restored = await FirebaseFirestore.instance
+                        .collection('plus_cell_memos')
+                        .doc(docId)
+                        .get();
+                    if (mounted && restored.exists) {
+                      setState(() => _cellMemos[docId] = restored.data()!);
+                    }
+                  },
+                );
               }
             },
           ),
@@ -6577,135 +6614,162 @@ for (var staff in _staffList.where((s) => s['showInSchedule'] != false)) {
   // 先週のスケジュールを今週にコピー
   Future<void> _copyFromPreviousWeek() async {
     final previousWeekStart = _weekStart.subtract(const Duration(days: 7));
+    final currentWeekStartDate =
+        DateTime(_weekStart.year, _weekStart.month, _weekStart.day);
+    final currentWeekEndDate = currentWeekStartDate
+        .add(const Duration(days: 5, hours: 23, minutes: 59, seconds: 59));
 
     try {
-      // 1. 先週のシフトに必要な月docを全て取得
-      final previousMonthKeys = <String>{};
-      for (int i = 0; i < 6; i++) {
-        previousMonthKeys.add(DateFormat('yyyy-MM').format(previousWeekStart.add(Duration(days: i))));
-      }
-      final previousMonthDocs = <String, Map<String, dynamic>>{};
-      for (final mk in previousMonthKeys) {
-        final d = await FirebaseFirestore.instance.collection('plus_shifts').doc(mk).get();
-        if (d.exists) previousMonthDocs[mk] = Map<String, dynamic>.from(d.data()?['days'] ?? {});
-      }
-
-      // 2. 先週のレッスンを取得（dateフィールドで週をフィルタリング）
-      final previousWeekStartDate = DateTime(previousWeekStart.year, previousWeekStart.month, previousWeekStart.day);
-      final previousWeekEndDate = previousWeekStartDate.add(const Duration(days: 5, hours: 23, minutes: 59, seconds: 59));
-
-      final previousLessonsSnapshot = await FirebaseFirestore.instance
-          .collection('plus_lessons')
-          .where('date', isGreaterThanOrEqualTo: Timestamp.fromDate(previousWeekStartDate))
-          .where('date', isLessThanOrEqualTo: Timestamp.fromDate(previousWeekEndDate))
-          .get();
-
-      debugPrint('先週のレッスン数: ${previousLessonsSnapshot.docs.length}');
-
-      // 3. 先週のシフトを今週にコピー（月またぎ対応：targetMonthKey -> dayKey -> shifts）
-      final shiftUpdatesByMonth = <String, Map<String, List<Map<String, dynamic>>>>{};
-      // ローカルキャッシュ更新用
-      final localUpdates = <String, List<Map<String, dynamic>>>{};
-      for (int dayIndex = 0; dayIndex < 6; dayIndex++) {
-        final previousDate = previousWeekStart.add(Duration(days: dayIndex));
-        final currentDate = _weekStart.add(Duration(days: dayIndex));
-        final prevMk = DateFormat('yyyy-MM').format(previousDate);
-        final prevDayKey = previousDate.day.toString();
-        final curMk = DateFormat('yyyy-MM').format(currentDate);
-        final curDayKey = currentDate.day.toString();
-
-        final prevDays = previousMonthDocs[prevMk];
-        if (prevDays != null && prevDays.containsKey(prevDayKey)) {
-          final shifts = prevDays[prevDayKey];
-          if (shifts is List) {
-            final copied = shifts.map((s) => Map<String, dynamic>.from(s as Map)).toList();
-            shiftUpdatesByMonth.putIfAbsent(curMk, () => {})[curDayKey] = copied;
-            localUpdates[_dateKey(currentDate)] = copied;
+      await UndoService.run<Map<String, dynamic>>(
+        context: context,
+        label: '先週のスケジュールをコピー',
+        doneMessage: '先週のスケジュールをコピーしました',
+        captureSnapshot: () async =>
+            _captureWeekSnapshot(currentWeekStartDate, currentWeekEndDate),
+        execute: () async {
+          // 1. 先週のシフトに必要な月docを全て取得
+          final previousMonthKeys = <String>{};
+          for (int i = 0; i < 6; i++) {
+            previousMonthKeys.add(DateFormat('yyyy-MM')
+                .format(previousWeekStart.add(Duration(days: i))));
           }
-        }
-      }
+          final previousMonthDocs = <String, Map<String, dynamic>>{};
+          for (final mk in previousMonthKeys) {
+            final d = await FirebaseFirestore.instance
+                .collection('plus_shifts')
+                .doc(mk)
+                .get();
+            if (d.exists) {
+              previousMonthDocs[mk] =
+                  Map<String, dynamic>.from(d.data()?['days'] ?? {});
+            }
+          }
 
-      // シフトをFirestoreに保存（月ごとに分けて）
-      for (final entry in shiftUpdatesByMonth.entries) {
-        final mk = entry.key;
-        final updates = entry.value;
-        final shiftDocRef = FirebaseFirestore.instance.collection('plus_shifts').doc(mk);
-        final shiftDoc = await shiftDocRef.get();
+          // 2. 先週のレッスンを取得
+          final previousWeekStartDate = DateTime(previousWeekStart.year,
+              previousWeekStart.month, previousWeekStart.day);
+          final previousWeekEndDate = previousWeekStartDate.add(
+              const Duration(days: 5, hours: 23, minutes: 59, seconds: 59));
 
-        if (shiftDoc.exists) {
-          final existingDays = Map<String, dynamic>.from(shiftDoc.data()?['days'] ?? {});
-          updates.forEach((key, value) {
-            existingDays[key] = value;
-          });
-          await shiftDocRef.update({
-            'days': existingDays,
-            'updatedAt': FieldValue.serverTimestamp(),
-          });
-        } else {
-          await shiftDocRef.set({
-            'classroom': 'ビースマイリープラス湘南藤沢',
-            'days': updates,
-            'updatedAt': FieldValue.serverTimestamp(),
-          });
-        }
-      }
+          final previousLessonsSnapshot = await FirebaseFirestore.instance
+              .collection('plus_lessons')
+              .where('date',
+                  isGreaterThanOrEqualTo:
+                      Timestamp.fromDate(previousWeekStartDate))
+              .where('date',
+                  isLessThanOrEqualTo: Timestamp.fromDate(previousWeekEndDate))
+              .get();
 
-      if (localUpdates.isNotEmpty) {
-        setState(() {
-          localUpdates.forEach((key, value) {
-            _shiftData[key] = value;
-          });
-        });
-      }
-      
-      // 4. 今週の既存レッスンを削除
-      final currentWeekStartDate = DateTime(_weekStart.year, _weekStart.month, _weekStart.day);
-      final currentWeekEndDate = currentWeekStartDate.add(const Duration(days: 5, hours: 23, minutes: 59, seconds: 59));
-      
-      final existingLessonsSnapshot = await FirebaseFirestore.instance
-          .collection('plus_lessons')
-          .where('date', isGreaterThanOrEqualTo: Timestamp.fromDate(currentWeekStartDate))
-          .where('date', isLessThanOrEqualTo: Timestamp.fromDate(currentWeekEndDate))
-          .get();
-      
-      // バッチで既存レッスンを削除
-      final deleteBatch = FirebaseFirestore.instance.batch();
-      for (final doc in existingLessonsSnapshot.docs) {
-        deleteBatch.delete(doc.reference);
-      }
-      await deleteBatch.commit();
-      
-      // 5. 先週のレッスンを今週にコピー（日付を+7日）
-      if (previousLessonsSnapshot.docs.isNotEmpty) {
-        final addBatch = FirebaseFirestore.instance.batch();
-        
-        for (final doc in previousLessonsSnapshot.docs) {
-          final data = doc.data();
-          final previousDate = (data['date'] as Timestamp).toDate();
-          final newDate = previousDate.add(const Duration(days: 7));
-          
-          final newRef = FirebaseFirestore.instance.collection('plus_lessons').doc();
-          addBatch.set(newRef, {
-            ...data,
-            'date': Timestamp.fromDate(newDate),
-            'createdAt': FieldValue.serverTimestamp(),
-            'updatedAt': FieldValue.serverTimestamp(),
-          });
-        }
-        
-        await addBatch.commit();
-        debugPrint('今週にコピーしたレッスン数: ${previousLessonsSnapshot.docs.length}');
-      }
-      
-      // レッスンデータを再読み込み
-      await _loadLessonsForWeek();
-      await _loadShiftData();
-      
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('先週のスケジュールをコピーしました')),
-        );
-      }
+          // 3. 先週のシフトを今週にコピー
+          final shiftUpdatesByMonth =
+              <String, Map<String, List<Map<String, dynamic>>>>{};
+          final localUpdates = <String, List<Map<String, dynamic>>>{};
+          for (int dayIndex = 0; dayIndex < 6; dayIndex++) {
+            final previousDate =
+                previousWeekStart.add(Duration(days: dayIndex));
+            final currentDate = _weekStart.add(Duration(days: dayIndex));
+            final prevMk = DateFormat('yyyy-MM').format(previousDate);
+            final prevDayKey = previousDate.day.toString();
+            final curMk = DateFormat('yyyy-MM').format(currentDate);
+            final curDayKey = currentDate.day.toString();
+
+            final prevDays = previousMonthDocs[prevMk];
+            if (prevDays != null && prevDays.containsKey(prevDayKey)) {
+              final shifts = prevDays[prevDayKey];
+              if (shifts is List) {
+                final copied = shifts
+                    .map((s) => Map<String, dynamic>.from(s as Map))
+                    .toList();
+                shiftUpdatesByMonth.putIfAbsent(curMk, () => {})[curDayKey] =
+                    copied;
+                localUpdates[_dateKey(currentDate)] = copied;
+              }
+            }
+          }
+
+          for (final entry in shiftUpdatesByMonth.entries) {
+            final mk = entry.key;
+            final updates = entry.value;
+            final shiftDocRef = FirebaseFirestore.instance
+                .collection('plus_shifts')
+                .doc(mk);
+            final shiftDoc = await shiftDocRef.get();
+
+            if (shiftDoc.exists) {
+              final existingDays =
+                  Map<String, dynamic>.from(shiftDoc.data()?['days'] ?? {});
+              updates.forEach((key, value) {
+                existingDays[key] = value;
+              });
+              await shiftDocRef.update({
+                'days': existingDays,
+                'updatedAt': FieldValue.serverTimestamp(),
+              });
+            } else {
+              await shiftDocRef.set({
+                'classroom': 'ビースマイリープラス湘南藤沢',
+                'days': updates,
+                'updatedAt': FieldValue.serverTimestamp(),
+              });
+            }
+          }
+
+          if (localUpdates.isNotEmpty && mounted) {
+            setState(() {
+              localUpdates.forEach((key, value) {
+                _shiftData[key] = value;
+              });
+            });
+          }
+
+          // 4. 今週の既存レッスンを削除
+          final existingLessonsSnapshot = await FirebaseFirestore.instance
+              .collection('plus_lessons')
+              .where('date',
+                  isGreaterThanOrEqualTo:
+                      Timestamp.fromDate(currentWeekStartDate))
+              .where('date',
+                  isLessThanOrEqualTo: Timestamp.fromDate(currentWeekEndDate))
+              .get();
+
+          final deleteBatch = FirebaseFirestore.instance.batch();
+          for (final doc in existingLessonsSnapshot.docs) {
+            deleteBatch.delete(doc.reference);
+          }
+          await deleteBatch.commit();
+
+          // 5. 先週のレッスンを今週にコピー（日付を+7日）
+          if (previousLessonsSnapshot.docs.isNotEmpty) {
+            final addBatch = FirebaseFirestore.instance.batch();
+            for (final doc in previousLessonsSnapshot.docs) {
+              final data = doc.data();
+              final previousDate = (data['date'] as Timestamp).toDate();
+              final newDate = previousDate.add(const Duration(days: 7));
+              final newRef = FirebaseFirestore.instance
+                  .collection('plus_lessons')
+                  .doc();
+              addBatch.set(newRef, {
+                ...data,
+                'date': Timestamp.fromDate(newDate),
+                'createdAt': FieldValue.serverTimestamp(),
+                'updatedAt': FieldValue.serverTimestamp(),
+              });
+            }
+            await addBatch.commit();
+          }
+
+          await _loadLessonsForWeek();
+          await _loadShiftData();
+        },
+        undo: (snap) async {
+          await _restoreWeekSnapshot(snap);
+          if (mounted) {
+            await _loadLessonsForWeek();
+            await _loadShiftData();
+            setState(() {});
+          }
+        },
+      );
     } catch (e) {
       debugPrint('Error copying from previous week: $e');
       if (mounted) {
@@ -6714,6 +6778,117 @@ for (var staff in _staffList.where((s) => s['showInSchedule'] != false)) {
         );
       }
     }
+  }
+
+  /// 指定週（[weekStart], [weekEnd]）の plus_shifts / plus_lessons の
+  /// 現在の状態をスナップショットとして取得する。
+  Future<Map<String, dynamic>> _captureWeekSnapshot(
+    DateTime weekStart,
+    DateTime weekEnd,
+  ) async {
+    // shifts: 各日について pre-existing days[dayKey] を保存（null は「キー無し」）
+    final shiftsByMonth = <String, Map<String, dynamic>>{};
+    for (int i = 0; i < 6; i++) {
+      final d = weekStart.add(Duration(days: i));
+      final mk = DateFormat('yyyy-MM').format(d);
+      shiftsByMonth.putIfAbsent(mk, () => {});
+    }
+    for (final mk in shiftsByMonth.keys) {
+      final doc = await FirebaseFirestore.instance
+          .collection('plus_shifts')
+          .doc(mk)
+          .get();
+      final days = doc.exists
+          ? Map<String, dynamic>.from(doc.data()?['days'] ?? {})
+          : <String, dynamic>{};
+      final result = <String, dynamic>{};
+      for (int i = 0; i < 6; i++) {
+        final d = weekStart.add(Duration(days: i));
+        if (DateFormat('yyyy-MM').format(d) != mk) continue;
+        final dk = d.day.toString();
+        result[dk] = days.containsKey(dk) ? days[dk] : null;
+      }
+      shiftsByMonth[mk] = {
+        'docExists': doc.exists,
+        'days': result,
+      };
+    }
+
+    final lessonsSnap = await FirebaseFirestore.instance
+        .collection('plus_lessons')
+        .where('date', isGreaterThanOrEqualTo: Timestamp.fromDate(weekStart))
+        .where('date', isLessThanOrEqualTo: Timestamp.fromDate(weekEnd))
+        .get();
+    final lessons = lessonsSnap.docs
+        .map((d) => {'id': d.id, 'data': d.data()})
+        .toList();
+
+    return {
+      'weekStart': Timestamp.fromDate(weekStart),
+      'weekEnd': Timestamp.fromDate(weekEnd),
+      'shiftsByMonth': shiftsByMonth,
+      'lessons': lessons,
+    };
+  }
+
+  /// スナップショットから plus_shifts / plus_lessons の状態を復元する。
+  Future<void> _restoreWeekSnapshot(Map<String, dynamic> snap) async {
+    final weekStart = (snap['weekStart'] as Timestamp).toDate();
+    final weekEnd = (snap['weekEnd'] as Timestamp).toDate();
+
+    // shifts 復元
+    final shiftsByMonth =
+        Map<String, dynamic>.from(snap['shiftsByMonth'] as Map);
+    for (final entry in shiftsByMonth.entries) {
+      final mk = entry.key;
+      final info = Map<String, dynamic>.from(entry.value as Map);
+      final docExisted = info['docExists'] as bool;
+      final preDays = Map<String, dynamic>.from(info['days'] as Map);
+      final docRef =
+          FirebaseFirestore.instance.collection('plus_shifts').doc(mk);
+      final cur = await docRef.get();
+      final curDays =
+          cur.exists ? Map<String, dynamic>.from(cur.data()?['days'] ?? {}) : <String, dynamic>{};
+      preDays.forEach((dk, preValue) {
+        if (preValue == null) {
+          curDays.remove(dk);
+        } else {
+          curDays[dk] = preValue;
+        }
+      });
+      if (cur.exists) {
+        await docRef.update({
+          'days': curDays,
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+      } else if (docExisted || curDays.isNotEmpty) {
+        await docRef.set({
+          'classroom': 'ビースマイリープラス湘南藤沢',
+          'days': curDays,
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+      }
+    }
+
+    // lessons 復元: 現在の週のレッスンを一掃 → スナップショット時のレッスンを元の ID で再作成
+    final curLessons = await FirebaseFirestore.instance
+        .collection('plus_lessons')
+        .where('date', isGreaterThanOrEqualTo: Timestamp.fromDate(weekStart))
+        .where('date', isLessThanOrEqualTo: Timestamp.fromDate(weekEnd))
+        .get();
+    final batch = FirebaseFirestore.instance.batch();
+    for (final d in curLessons.docs) {
+      batch.delete(d.reference);
+    }
+    final lessons = (snap['lessons'] as List).cast<Map<String, dynamic>>();
+    for (final l in lessons) {
+      final id = l['id'] as String;
+      final data = Map<String, dynamic>.from(l['data'] as Map);
+      final ref =
+          FirebaseFirestore.instance.collection('plus_lessons').doc(id);
+      batch.set(ref, data);
+    }
+    await batch.commit();
   }
 
   // 現在の週のシフトとレッスンをコピー
@@ -6747,94 +6922,109 @@ for (var staff in _staffList.where((s) => s['showInSchedule'] != false)) {
   Future<void> _pasteWeekShifts() async {
     if (_copiedWeekShifts == null && _copiedWeekLessons == null) return;
 
+    final currentWeekStartDate =
+        DateTime(_weekStart.year, _weekStart.month, _weekStart.day);
+    final currentWeekEndDate = currentWeekStartDate
+        .add(const Duration(days: 5, hours: 23, minutes: 59, seconds: 59));
+
     try {
-      final weekKey = DateFormat('yyyy-MM-dd').format(_weekStart);
+      await UndoService.run<Map<String, dynamic>>(
+        context: context,
+        label: 'スケジュールを貼り付け',
+        doneMessage: 'スケジュールを貼り付けました',
+        captureSnapshot: () async =>
+            _captureWeekSnapshot(currentWeekStartDate, currentWeekEndDate),
+        execute: () async {
+          final weekKey = DateFormat('yyyy-MM-dd').format(_weekStart);
 
-      // シフトの貼り付け（月またぎ対応：targetMonthKey -> dayKey -> shifts）
-      if (_copiedWeekShifts != null) {
-        final updatesByMonth = <String, Map<String, List<Map<String, dynamic>>>>{};
-        final localUpdates = <String, List<Map<String, dynamic>>>{};
+          // シフトの貼り付け
+          if (_copiedWeekShifts != null) {
+            final updatesByMonth =
+                <String, Map<String, List<Map<String, dynamic>>>>{};
+            final localUpdates = <String, List<Map<String, dynamic>>>{};
 
-        for (int dayIndex = 0; dayIndex < 6; dayIndex++) {
-          final date = _weekStart.add(Duration(days: dayIndex));
-          final mk = DateFormat('yyyy-MM').format(date);
-          final dayKey = date.day.toString();
+            for (int dayIndex = 0; dayIndex < 6; dayIndex++) {
+              final date = _weekStart.add(Duration(days: dayIndex));
+              final mk = DateFormat('yyyy-MM').format(date);
+              final dayKey = date.day.toString();
 
-          if (_copiedWeekShifts!.containsKey(dayIndex)) {
-            final shifts = _copiedWeekShifts![dayIndex]!;
-            updatesByMonth.putIfAbsent(mk, () => {})[dayKey] = shifts;
-            localUpdates[_dateKey(date)] = shifts;
+              if (_copiedWeekShifts!.containsKey(dayIndex)) {
+                final shifts = _copiedWeekShifts![dayIndex]!;
+                updatesByMonth.putIfAbsent(mk, () => {})[dayKey] = shifts;
+                localUpdates[_dateKey(date)] = shifts;
+              }
+            }
+
+            for (final entry in updatesByMonth.entries) {
+              final mk = entry.key;
+              final updates = entry.value;
+              final docRef = FirebaseFirestore.instance
+                  .collection('plus_shifts')
+                  .doc(mk);
+              final doc = await docRef.get();
+
+              if (doc.exists) {
+                final existingDays =
+                    Map<String, dynamic>.from(doc.data()?['days'] ?? {});
+                updates.forEach((key, value) {
+                  existingDays[key] = value;
+                });
+                await docRef.update({
+                  'days': existingDays,
+                  'updatedAt': FieldValue.serverTimestamp(),
+                });
+              } else {
+                await docRef.set({
+                  'classroom': 'ビースマイリープラス湘南藤沢',
+                  'days': updates,
+                  'updatedAt': FieldValue.serverTimestamp(),
+                });
+              }
+            }
+
+            if (mounted) {
+              setState(() {
+                localUpdates.forEach((key, value) {
+                  _shiftData[key] = value;
+                });
+              });
+            }
           }
-        }
 
-        // 月ごとにFirestoreに保存
-        for (final entry in updatesByMonth.entries) {
-          final mk = entry.key;
-          final updates = entry.value;
-          final docRef = FirebaseFirestore.instance.collection('plus_shifts').doc(mk);
-          final doc = await docRef.get();
+          // レッスンの貼り付け
+          if (_copiedWeekLessons != null && _copiedWeekLessons!.isNotEmpty) {
+            final batch = FirebaseFirestore.instance.batch();
+            final lessonsRef = FirebaseFirestore.instance
+                .collection('plus_lessons')
+                .doc(weekKey)
+                .collection('items');
 
-          if (doc.exists) {
-            final existingDays = Map<String, dynamic>.from(doc.data()?['days'] ?? {});
-            updates.forEach((key, value) {
-              existingDays[key] = value;
-            });
-            await docRef.update({
-              'days': existingDays,
-              'updatedAt': FieldValue.serverTimestamp(),
-            });
-          } else {
-            await docRef.set({
-              'classroom': 'ビースマイリープラス湘南藤沢',
-              'days': updates,
-              'updatedAt': FieldValue.serverTimestamp(),
-            });
+            final existingLessons = await lessonsRef.get();
+            for (final doc in existingLessons.docs) {
+              batch.delete(doc.reference);
+            }
+            for (final lesson in _copiedWeekLessons!) {
+              final newRef = lessonsRef.doc();
+              batch.set(newRef, {
+                ...lesson,
+                'createdAt': FieldValue.serverTimestamp(),
+                'updatedAt': FieldValue.serverTimestamp(),
+              });
+            }
+            await batch.commit();
+
+            await _loadLessonsForWeek();
           }
-        }
-
-        // ローカルデータを更新
-        setState(() {
-          localUpdates.forEach((key, value) {
-            _shiftData[key] = value;
-          });
-        });
-      }
-      
-      // レッスンの貼り付け
-      if (_copiedWeekLessons != null && _copiedWeekLessons!.isNotEmpty) {
-        final batch = FirebaseFirestore.instance.batch();
-        final lessonsRef = FirebaseFirestore.instance
-            .collection('plus_lessons')
-            .doc(weekKey)
-            .collection('items');
-        
-        // 既存のレッスンを削除
-        final existingLessons = await lessonsRef.get();
-        for (final doc in existingLessons.docs) {
-          batch.delete(doc.reference);
-        }
-        
-        // 新しいレッスンを追加
-        for (final lesson in _copiedWeekLessons!) {
-          final newRef = lessonsRef.doc();
-          batch.set(newRef, {
-            ...lesson,
-            'createdAt': FieldValue.serverTimestamp(),
-            'updatedAt': FieldValue.serverTimestamp(),
-          });
-        }
-        
-        await batch.commit();
-        
-        // ローカルデータを更新
-        await _loadLessonsForWeek();
-      }
-      
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('スケジュールを貼り付けました')),
-        );
-      }
+        },
+        undo: (snap) async {
+          await _restoreWeekSnapshot(snap);
+          if (mounted) {
+            await _loadLessonsForWeek();
+            await _loadShiftData();
+            setState(() {});
+          }
+        },
+      );
     } catch (e) {
       debugPrint('Error pasting: $e');
       if (mounted) {
@@ -6847,13 +7037,12 @@ for (var staff in _staffList.where((s) => s['showInSchedule'] != false)) {
 
   Future<void> _copyFromPreviousMonth(String fromMonth, String toMonth) async {
     try {
-      // 前月のデータを取得
-      final fromDoc = await FirebaseFirestore.instance
+      // 前月ドキュメント存在チェック（無ければ何もしない）
+      final fromCheck = await FirebaseFirestore.instance
           .collection('plus_shifts')
           .doc(fromMonth)
           .get();
-      
-      if (!fromDoc.exists) {
+      if (!fromCheck.exists) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('前月のシフトデータがありません')),
@@ -6861,43 +7050,75 @@ for (var staff in _staffList.where((s) => s['showInSchedule'] != false)) {
         }
         return;
       }
-      
-      final fromData = fromDoc.data()!;
-      final fromDays = fromData['days'] as Map<String, dynamic>? ?? {};
-      
-      // 今月のドキュメントに保存
-      await FirebaseFirestore.instance
-          .collection('plus_shifts')
-          .doc(toMonth)
-          .set({
-            'classroom': fromData['classroom'] ?? 'ビースマイリープラス湘南藤沢',
+      if (!mounted) return;
+
+      await UndoService.run<Map<String, dynamic>>(
+        context: context,
+        label: '前月のスケジュールをコピー',
+        doneMessage: '前月のスケジュールをコピーしました',
+        captureSnapshot: () async {
+          final toDoc = await FirebaseFirestore.instance
+              .collection('plus_shifts')
+              .doc(toMonth)
+              .get();
+          return {
+            'toMonth': toMonth,
+            'docExists': toDoc.exists,
+            'data': toDoc.exists ? toDoc.data() : null,
+          };
+        },
+        execute: () async {
+          final fromDoc = await FirebaseFirestore.instance
+              .collection('plus_shifts')
+              .doc(fromMonth)
+              .get();
+          final fromData = fromDoc.data()!;
+          final fromDays = fromData['days'] as Map<String, dynamic>? ?? {};
+
+          await FirebaseFirestore.instance
+              .collection('plus_shifts')
+              .doc(toMonth)
+              .set({
+            'classroom':
+                fromData['classroom'] ?? 'ビースマイリープラス湘南藤沢',
             'days': fromDays,
             'copiedFrom': fromMonth,
             'updatedAt': FieldValue.serverTimestamp(),
           });
-      
-      // ローカルデータを更新（toMonth の dateKey で書き込む）
-      setState(() {
-        // toMonth の既存キャッシュをクリア
-        _shiftData.removeWhere((k, _) => k.startsWith('$toMonth-'));
-        _holidays.removeWhere((k) => k.startsWith('$toMonth-'));
 
-        fromDays.forEach((dayKey, value) {
-          if (value is List) {
-            final dateKey = '$toMonth-${dayKey.padLeft(2, '0')}';
-            _shiftData[dateKey] = List<Map<String, dynamic>>.from(
-              value.map((e) => Map<String, dynamic>.from(e as Map)),
-            );
+          if (mounted) {
+            setState(() {
+              _shiftData.removeWhere((k, _) => k.startsWith('$toMonth-'));
+              _holidays.removeWhere((k) => k.startsWith('$toMonth-'));
+              fromDays.forEach((dayKey, value) {
+                if (value is List) {
+                  final dateKey = '$toMonth-${dayKey.padLeft(2, '0')}';
+                  _shiftData[dateKey] = List<Map<String, dynamic>>.from(
+                    value.map((e) => Map<String, dynamic>.from(e as Map)),
+                  );
+                }
+              });
+              _loadedShiftMonths.add(toMonth);
+            });
           }
-        });
-        _loadedShiftMonths.add(toMonth);
-      });
-      
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('前月のスケジュールをコピーしました')),
-        );
-      }
+        },
+        undo: (snap) async {
+          final docRef = FirebaseFirestore.instance
+              .collection('plus_shifts')
+              .doc(snap['toMonth'] as String);
+          final docExisted = snap['docExists'] as bool;
+          if (docExisted) {
+            await docRef.set(Map<String, dynamic>.from(snap['data'] as Map));
+          } else {
+            await docRef.delete();
+          }
+          if (mounted) {
+            _loadedShiftMonths.remove(snap['toMonth']);
+            await _loadShiftData();
+            setState(() {});
+          }
+        },
+      );
     } catch (e) {
       debugPrint('Error copying shifts: $e');
       if (mounted) {
@@ -9475,21 +9696,23 @@ void _showColorPickerDialog(String course, Color currentColor, Function(Color) o
               }
               
               Navigator.pop(dialogContext);
-              
-              try {
-                await FirebaseFirestore.instance
-    .collection('plus_lessons')
-    .doc(lessonId)
-    .delete();
+              if (!mounted) return;
 
-if (!mounted) return;
-await _loadLessonsForWeek(showLoading: false);
-                
-                if (mounted) {
-                  scaffoldMessenger.showSnackBar(
-                    const SnackBar(content: Text('削除しました')),
-                  );
-                }
+              try {
+                await UndoService.deleteDoc(
+                  context: context,
+                  label: '${lesson['studentName']} のレッスンを削除',
+                  doneMessage: 'レッスンを削除しました',
+                  docRef: FirebaseFirestore.instance
+                      .collection('plus_lessons')
+                      .doc(lessonId),
+                  postDelete: () async {
+                    if (mounted) await _loadLessonsForWeek(showLoading: false);
+                  },
+                  postRestore: () async {
+                    if (mounted) await _loadLessonsForWeek(showLoading: false);
+                  },
+                );
               } catch (e) {
                 debugPrint('Error deleting lesson: $e');
                 if (mounted) {

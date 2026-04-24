@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import 'app_theme.dart';
 import 'classroom_utils.dart';
+import 'services/undo_service.dart';
 
 /// ビースマイリーダッシュボードのコンテンツウィジェット
 class BeeDashboardContent extends StatefulWidget {
@@ -2297,18 +2298,60 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
           TextButton(
             onPressed: () async {
               final id = course['id'] as String;
-              await FirebaseFirestore.instance
-                  .collection('bee_dashboard_courses')
-                  .doc(id)
-                  .delete();
-
-              _courses.removeWhere((c) => c['id'] == id);
-              _schedule.remove(id);
-              await _saveScheduleToFirestore();
-
               Navigator.pop(dialogContext);
-              onComplete();
-              setState(() {});
+              if (!mounted) return;
+              await UndoService.run<Map<String, dynamic>>(
+                context: context,
+                label: 'コース削除',
+                doneMessage: '$courseNameを削除しました',
+                captureSnapshot: () async {
+                  final courseDoc = await FirebaseFirestore.instance
+                      .collection('bee_dashboard_courses')
+                      .doc(id)
+                      .get();
+                  return {
+                    'courseId': id,
+                    'courseData': courseDoc.exists ? courseDoc.data() : null,
+                    'coursesListCopy': _courses
+                        .map((c) => Map<String, dynamic>.from(c))
+                        .toList(),
+                    'scheduleEntryForCourse': _schedule[id],
+                  };
+                },
+                execute: () async {
+                  await FirebaseFirestore.instance
+                      .collection('bee_dashboard_courses')
+                      .doc(id)
+                      .delete();
+                  _courses.removeWhere((c) => c['id'] == id);
+                  _schedule.remove(id);
+                  await _saveScheduleToFirestore();
+                  onComplete();
+                  if (mounted) setState(() {});
+                },
+                undo: (snap) async {
+                  final data = snap['courseData'] as Map<String, dynamic>?;
+                  if (data != null) {
+                    await FirebaseFirestore.instance
+                        .collection('bee_dashboard_courses')
+                        .doc(id)
+                        .set(data);
+                  }
+                  final entry =
+                      snap['scheduleEntryForCourse'] as Map<String, List<Map<String, dynamic>>>?;
+                  if (entry != null) {
+                    _schedule[id] = entry;
+                    await _saveScheduleToFirestore();
+                  }
+                  final coursesCopy = (snap['coursesListCopy'] as List)
+                      .cast<Map<String, dynamic>>();
+                  _courses
+                    ..clear()
+                    ..addAll(coursesCopy);
+                  onComplete();
+                  if (mounted) setState(() {});
+                },
+              );
             },
             style: TextButton.styleFrom(foregroundColor: AppColors.error),
             child: const Text('削除'),

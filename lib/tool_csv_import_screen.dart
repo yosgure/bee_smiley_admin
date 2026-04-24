@@ -4,6 +4,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:csv/csv.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'app_theme.dart';
+import 'services/undo_service.dart';
 
 class ToolCsvImportScreen extends StatefulWidget {
   final VoidCallback? onBack;
@@ -51,6 +52,8 @@ class _ToolCsvImportScreenState extends State<ToolCsvImportScreen> {
     final firestore = FirebaseFirestore.instance;
     int successCount = 0;
     int errorCount = 0;
+    // Undo 用に作成した doc ID を追跡
+    final createdIds = <String>[];
 
     for (int i = 1; i < _csvData.length; i++) {
       final row = _csvData[i];
@@ -58,7 +61,7 @@ class _ToolCsvImportScreenState extends State<ToolCsvImportScreen> {
       if (row.isEmpty) continue;
 
       try {
-        await firestore.collection('tools').add({
+        final ref = await firestore.collection('tools').add({
           'name': row[0].toString().trim(),
           'furigana': row.length > 1 ? row[1].toString().trim() : '',
           'task': row.length > 2 ? row[2].toString().trim() : '',
@@ -68,17 +71,40 @@ class _ToolCsvImportScreenState extends State<ToolCsvImportScreen> {
           'createdAt': FieldValue.serverTimestamp(),
         });
         successCount++;
+        createdIds.add(ref.id);
       } catch (e) {
         errorCount++;
         debugPrint('Error: $e');
       }
     }
 
-    setState(() {
-      _isLoading = false;
-      _statusMessage = '完了！\n成功: $successCount 件\n失敗: $errorCount 件';
-      if (successCount > 0) _csvData = [];
-    });
+    if (mounted) {
+      setState(() {
+        _isLoading = false;
+        _statusMessage = '完了！\n成功: $successCount 件\n失敗: $errorCount 件';
+        if (successCount > 0) _csvData = [];
+      });
+    }
+
+    if (createdIds.isNotEmpty && mounted) {
+      await UndoService.run<List<String>>(
+        context: context,
+        label: '教具 $successCount 件を登録',
+        doneMessage: '教具 $successCount 件を登録しました',
+        window: const Duration(seconds: 60),
+        captureSnapshot: () async => createdIds,
+        execute: () async {},
+        undo: (snap) async {
+          final batch = FirebaseFirestore.instance.batch();
+          for (final id in snap) {
+            batch.delete(FirebaseFirestore.instance
+                .collection('tools')
+                .doc(id));
+          }
+          await batch.commit();
+        },
+      );
+    }
   }
 
   @override

@@ -5,6 +5,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:csv/csv.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
+import 'services/undo_service.dart';
 
 class StaffCsvImportScreen extends StatefulWidget {
   final VoidCallback? onBack;
@@ -65,6 +66,7 @@ class _StaffCsvImportScreenState extends State<StaffCsvImportScreen> {
     int successCount = 0;
     int errorCount = 0;
     List<String> errorLogs = [];
+    final created = <Map<String, String>>[];
 
     for (int i = 1; i < _csvData.length; i++) {
       final row = _csvData[i];
@@ -92,7 +94,7 @@ class _StaffCsvImportScreenState extends State<StaffCsvImportScreen> {
           .toList();
 
       try {
-        await _functions.httpsCallable('createStaffAccount').call({
+        final result = await _functions.httpsCallable('createStaffAccount').call({
           'loginId': loginId,
           'staffData': {
             'name': name,
@@ -105,17 +107,48 @@ class _StaffCsvImportScreenState extends State<StaffCsvImportScreen> {
         });
 
         successCount++;
+        final uid = (result.data['uid'] ?? '') as String;
+        final docId = (result.data['docId'] ?? '') as String;
+        if (uid.isNotEmpty || docId.isNotEmpty) {
+          created.add({'uid': uid, 'docId': docId});
+        }
       } catch (e) {
         errorCount++;
         errorLogs.add('$name ($loginId): $e');
       }
     }
 
-    setState(() {
-      _isLoading = false;
-      _statusMessage = '完了！\n成功: $successCount 件\n失敗: $errorCount 件\n\n${errorLogs.join('\n')}';
-      if (successCount > 0) _csvData = [];
-    });
+    if (mounted) {
+      setState(() {
+        _isLoading = false;
+        _statusMessage =
+            '完了！\n成功: $successCount 件\n失敗: $errorCount 件\n\n${errorLogs.join('\n')}';
+        if (successCount > 0) _csvData = [];
+      });
+    }
+
+    if (created.isNotEmpty && mounted) {
+      await UndoService.run<List<Map<String, String>>>(
+        context: context,
+        label: 'スタッフ $successCount 件を新規登録',
+        doneMessage: 'スタッフ $successCount 件を新規登録しました',
+        window: const Duration(seconds: 60),
+        captureSnapshot: () async => created,
+        execute: () async {},
+        undo: (snap) async {
+          for (final e in snap) {
+            try {
+              await _functions.httpsCallable('deleteStaffAccount').call({
+                if ((e['uid'] ?? '').isNotEmpty) 'targetUid': e['uid'],
+                if ((e['docId'] ?? '').isNotEmpty) 'staffDocId': e['docId'],
+              });
+            } catch (err) {
+              debugPrint('Undo delete staff failed: $err');
+            }
+          }
+        },
+      );
+    }
   }
 
   @override
