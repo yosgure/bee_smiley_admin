@@ -280,7 +280,7 @@ class _TopCardsRow extends StatelessWidget {
         inquired: monthly.inquired,
         trial: monthly.trial,
       );
-      final insight = const _InsightCard();
+      final insight = _InsightCard(summary: summary);
 
       if (!isWide) {
         return Column(
@@ -655,11 +655,48 @@ class _MonthlyCard extends StatelessWidget {
 }
 
 class _InsightCard extends StatelessWidget {
-  const _InsightCard();
+  final CrmHomeSummary summary;
+  const _InsightCard({required this.summary});
+
+  /// 優先度順に気づき候補を並べ、最初の1本を表示する。
+  /// ルールベース検知（Phase 4 の insights コレクション連携）の前段として、
+  /// 手元サマリから即座に出せる気づきを返す。
+  ({String text, String? action})? _pickInsight() {
+    if (summary.todayAssigneeMissing >= 5) {
+      return (
+        text: '担当未設定のリードが ${summary.todayAssigneeMissing} 人います。'
+            '誰が持つかを決めると、対応が動きやすくなります。',
+        action: '担当を決める'
+      );
+    }
+    if (summary.contractStalled >= 3) {
+      return (
+        text: '入会手続き中で止まっているリードが ${summary.contractStalled} 件あります。'
+            '停滞理由の確認がおすすめです。',
+        action: null,
+      );
+    }
+    if (summary.trialFollowupMissing >= 3) {
+      return (
+        text: '体験後のフォローがまだのリードが ${summary.trialFollowupMissing} 件。'
+            '温度感が下がる前に接触したい時期です。',
+        action: null,
+      );
+    }
+    if (summary.noNextAction >= 5) {
+      return (
+        text: '次の一手が未設定のリードが ${summary.noNextAction} 件。'
+            '先の動きが見えると、対応が迷わなくなります。',
+        action: null,
+      );
+    }
+    return null;
+  }
 
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
+    final insight = _pickInsight();
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -683,10 +720,19 @@ class _InsightCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 10),
-          Text(
-            '今日の気づきは特にありません',
-            style: TextStyle(fontSize: 12, color: c.textTertiary, height: 1.5),
-          ),
+          if (insight == null)
+            Text(
+              '今日の気づきは特にありません',
+              style:
+                  TextStyle(fontSize: 12, color: c.textTertiary, height: 1.5),
+            )
+          else ...[
+            Text(
+              insight.text,
+              style: TextStyle(
+                  fontSize: 12, color: c.textPrimary, height: 1.5),
+            ),
+          ],
         ],
       ),
     );
@@ -986,17 +1032,54 @@ class _UrgentRowTile extends StatelessWidget {
       return Text('次の一手を決める',
           style: TextStyle(fontSize: 12, color: c.textTertiary));
     }
+    final isOverdue = at != null && at.isBefore(DateTime.now());
     final dateStr =
         at == null ? '' : DateFormat('M/d HH:mm', 'ja').format(at);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (dateStr.isNotEmpty)
-          Text(dateStr,
-              style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: c.textPrimary)),
+        Row(
+          children: [
+            if (dateStr.isNotEmpty)
+              Flexible(
+                child: Text(dateStr,
+                    style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: c.textPrimary),
+                    overflow: TextOverflow.ellipsis),
+              ),
+            if (isOverdue) ...[
+              const SizedBox(width: 4),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFE67E22).withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(3),
+                ),
+                child: const Text('期限超過',
+                    style: TextStyle(
+                        fontSize: 9,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFFD35400))),
+              ),
+            ] else if (at != null) ...[
+              const SizedBox(width: 4),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1976D2).withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(3),
+                ),
+                child: const Text('次回予定',
+                    style: TextStyle(
+                        fontSize: 9,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF1565C0))),
+              ),
+            ],
+          ],
+        ),
         if (note.isNotEmpty)
           Text(note,
               style: TextStyle(fontSize: 11, color: c.textSecondary),

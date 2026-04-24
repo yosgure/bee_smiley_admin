@@ -180,13 +180,18 @@ class _CrmLeadScreenState extends State<CrmLeadScreen> {
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _openNewLead,
-        backgroundColor: AppColors.primary,
-        icon: const Icon(Icons.add, color: Colors.white),
-        label: const Text('新規リード',
-            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-      ),
+      // ホームタブ（_viewMode==0）では右サイドパネルや記録フォームと
+      // 操作競合するため FAB を非表示にする。新規登録は他タブから。
+      floatingActionButton: _viewMode == 0
+          ? null
+          : FloatingActionButton.extended(
+              onPressed: _openNewLead,
+              backgroundColor: AppColors.primary,
+              icon: const Icon(Icons.add, color: Colors.white),
+              label: const Text('新規リード',
+                  style: TextStyle(
+                      color: Colors.white, fontWeight: FontWeight.bold)),
+            ),
       body: Column(
         children: [
           _buildToolbar(),

@@ -308,39 +308,53 @@ class _NextActionBlock extends StatelessWidget {
     final at = lead.nextActionAt;
     final note = lead.nextActionNote;
     final typeId = lead.nextActionType;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isOverdue = at != null && at.isBefore(DateTime.now());
+
+    // ダーク/ライトで浮かない落ち着いたアンバー
+    final bg = hasNext
+        ? (isDark ? const Color(0xFF2A2319) : const Color(0xFFFFF0D4))
+        : c.cardBg;
+    final borderC = hasNext
+        ? const Color(0xFFFFB74D).withValues(alpha: 0.5)
+        : c.borderLight;
+    final amberText =
+        isDark ? const Color(0xFFFFE0B2) : const Color(0xFF5D4037);
+    final amberIcon =
+        isDark ? const Color(0xFFFFB74D) : const Color(0xFFE67E22);
 
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: c.cardBg,
+        color: bg,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-            color: hasNext
-                ? const Color(0xFFFFCC80).withValues(alpha: 0.6)
-                : c.borderLight),
-        gradient: hasNext
-            ? LinearGradient(
-                colors: [
-                  const Color(0xFFFFF6E5).withValues(alpha: 0.8),
-                  c.cardBg,
-                ],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              )
-            : null,
+        border: Border.all(color: borderC),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              const Text('💫', style: TextStyle(fontSize: 16)),
+              Icon(Icons.auto_awesome, size: 16, color: amberIcon),
               const SizedBox(width: 6),
               Text('次の一手',
                   style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w700,
-                      color: c.textPrimary)),
+                      color: hasNext ? amberText : c.textPrimary)),
+              if (hasNext && isOverdue) ...[
+                const SizedBox(width: 8),
+                _statusTag(context,
+                    label: '期限超過',
+                    color: const Color(0xFFE67E22),
+                    isDark: isDark),
+              ] else if (hasNext && at != null) ...[
+                const SizedBox(width: 8),
+                _statusTag(context,
+                    label: '次回予定',
+                    color: const Color(0xFF1976D2),
+                    isDark: isDark),
+              ],
             ],
           ),
           const SizedBox(height: 10),
@@ -351,7 +365,7 @@ class _NextActionBlock extends StatelessWidget {
                 style: TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w700,
-                    color: c.textPrimary),
+                    color: amberText),
               ),
             const SizedBox(height: 4),
             Text(
@@ -359,7 +373,9 @@ class _NextActionBlock extends StatelessWidget {
                 if (typeId != null) _typeLabel(typeId),
                 if (note.isNotEmpty) note,
               ].where((s) => s.isNotEmpty).join(' / '),
-              style: TextStyle(fontSize: 13, color: c.textSecondary),
+              style: TextStyle(
+                  fontSize: 13,
+                  color: amberText.withValues(alpha: 0.85)),
             ),
           ] else ...[
             Text(
@@ -375,8 +391,8 @@ class _NextActionBlock extends StatelessWidget {
             children: [
               _actionBtn(
                 context,
-                icon: Icons.check_circle_outline,
-                label: '対応した',
+                icon: Icons.edit_note,
+                label: '対応を記録',
                 primary: true,
                 onTap: () => _scrollToRecordForm(context),
               ),
@@ -384,7 +400,7 @@ class _NextActionBlock extends StatelessWidget {
                 _actionBtn(
                   context,
                   icon: Icons.call,
-                  label: '今かける',
+                  label: '電話番号を確認',
                   onTap: () => _callPhone(context, lead.parentTel),
                 ),
               _actionBtn(
@@ -411,6 +427,25 @@ class _NextActionBlock extends StatelessWidget {
       if (t.id == id) return t.label;
     }
     return id;
+  }
+
+  Widget _statusTag(BuildContext context,
+      {required String label,
+      required Color color,
+      required bool isDark}) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: isDark ? 0.2 : 0.12),
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: color.withValues(alpha: 0.4)),
+      ),
+      child: Text(label,
+          style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
+              color: isDark ? color : color.withValues(alpha: 0.9))),
+    );
   }
 
   Widget _actionBtn(
@@ -464,7 +499,7 @@ class _NextActionBlock extends StatelessWidget {
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-            content: Text('電話番号をコピーしました: $tel'),
+            content: Text('電話番号をクリップボードにコピー: $tel'),
             duration: const Duration(seconds: 2)),
       );
     }
