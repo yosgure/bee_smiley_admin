@@ -102,33 +102,31 @@ String crmTodayCategoryLabel(CrmTodayCategory c) => switch (c) {
       CrmTodayCategory.almostContract => '契約あと一歩',
     };
 
-/// 「今日進めると良い」判定。督促には該当しないが今日触れると良いものを返す。
+/// 「今日進めると良い」判定。
+///
+/// 方針:
+/// - replyDue / trialScheduling は督促と重複しないよう、urgent がないときのみ計上。
+/// - almostContract は「入会手続中のリード総数」と一致させるため、停滞・期限切れに
+///   関わらず onboarding 全件を計上する（停滞は別途 urgent 側にも現れる）。
+///   これにより「契約あと一歩」の件数が直感的な入会手続中件数と一致する。
 List<CrmTodayCategory> todayCategoriesFor(CrmLead lead, {DateTime? now}) {
   if (lead.isClosed) return const [];
-  if (urgentReasonsFor(lead, now: now).isNotEmpty) return const [];
-
   final ref = now ?? DateTime.now();
   final cats = <CrmTodayCategory>[];
+  final urgent = urgentReasonsFor(lead, now: now);
 
-  // 今日が予定日
-  final na = lead.nextActionAt;
-  if (na != null && _isSameDay(na, ref)) {
-    cats.add(CrmTodayCategory.replyDue);
-  }
-
-  // 見学日程調整: トライアル未設定 / 検討中ステージ
-  if (lead.stage == 'considering' && lead.trialAt == null) {
-    cats.add(CrmTodayCategory.trialScheduling);
-  }
-
-  // 契約あと一歩: onboarding 中で動きがまだ生きている（停滞前）
-  if (lead.stage == 'onboarding') {
-    final last = lead.lastContactAt ?? lead.inquiredAt;
-    if (last == null ||
-        ref.difference(last).inDays <
-            CrmUrgentThresholds.staleProcessingDays) {
-      cats.add(CrmTodayCategory.almostContract);
+  if (urgent.isEmpty) {
+    final na = lead.nextActionAt;
+    if (na != null && _isSameDay(na, ref)) {
+      cats.add(CrmTodayCategory.replyDue);
     }
+    if (lead.stage == 'considering' && lead.trialAt == null) {
+      cats.add(CrmTodayCategory.trialScheduling);
+    }
+  }
+
+  if (lead.stage == 'onboarding') {
+    cats.add(CrmTodayCategory.almostContract);
   }
 
   return cats;
@@ -230,16 +228,16 @@ CrmHomeSummary summarizeForHome(Iterable<CrmLead> leads, {DateTime? now}) {
           noNext++;
       }
     }
-    if (reasons.isEmpty) {
-      for (final c in todayCategoriesFor(lead, now: now)) {
-        switch (c) {
-          case CrmTodayCategory.replyDue:
-            reply++;
-          case CrmTodayCategory.trialScheduling:
-            trial++;
-          case CrmTodayCategory.almostContract:
-            almost++;
-        }
+    // todayCategoriesFor 側で urgent との重複制御を行うため、常に呼び出す。
+    // almostContract は onboarding 全件に重複計上される（督促と両立しうる）。
+    for (final c in todayCategoriesFor(lead, now: now)) {
+      switch (c) {
+        case CrmTodayCategory.replyDue:
+          reply++;
+        case CrmTodayCategory.trialScheduling:
+          trial++;
+        case CrmTodayCategory.almostContract:
+          almost++;
       }
     }
   }

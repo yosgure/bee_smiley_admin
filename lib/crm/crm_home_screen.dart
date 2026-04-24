@@ -8,6 +8,39 @@ import '../crm_lead_screen.dart' show CrmOptions;
 import 'crm_home_utils.dart';
 import 'crm_lead_model.dart';
 
+/// 「今日整えたいこと」カードで使う柔らかめのアンバー。
+/// `context.alerts.warning` より彩度を落とし、赤みを抑えたトーンにする。
+/// 責める UI を避けるため、主要カードは専用トーンを使う。
+class _SoftAmber {
+  final Color background;
+  final Color border;
+  final Color text;
+  final Color icon;
+  const _SoftAmber({
+    required this.background,
+    required this.border,
+    required this.text,
+    required this.icon,
+  });
+
+  static _SoftAmber of(BuildContext context) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    return dark
+        ? const _SoftAmber(
+            background: Color(0xFF2C2519),
+            border: Color(0xFFFFCC80),
+            text: Color(0xFFFFE0B2),
+            icon: Color(0xFFFFB74D),
+          )
+        : const _SoftAmber(
+            background: Color(0xFFFFF6E5),
+            border: Color(0xFFFFCC80),
+            text: Color(0xFF5D4037),
+            icon: Color(0xFFF57C00),
+          );
+  }
+}
+
 /// 新 CRM ホーム（入会グロース司令塔）。
 /// Phase 2: Greeting / Top Cards / Urgent List / Closing の骨格を提供する。
 /// サイドパネル（リード作業パネル）は Phase 3 で追加。
@@ -43,6 +76,8 @@ class _CrmHomeScreenState extends State<CrmHomeScreen> {
     final filteredRows = _filter == null
         ? urgentRows
         : urgentRows.where((r) => r.reasons.contains(_filter)).toList();
+    final uniqueLeadCount = urgentRows.length;
+    // 理由件数の合計は重複（1リードに複数理由）を含むため、ユニーク数より大きくなりうる。
 
     final monthly = _calcMonthly(leads, now);
     final userName = _currentUserName();
@@ -56,13 +91,14 @@ class _CrmHomeScreenState extends State<CrmHomeScreen> {
           children: [
             _Greeting(
               userName: userName,
-              urgentCount: summary.urgentTotal,
+              urgentLeadCount: uniqueLeadCount,
               almostContractCount: summary.todayAlmostContract,
               tod: tod,
             ),
             const SizedBox(height: 16),
             _TopCardsRow(
               summary: summary,
+              uniqueLeadCount: uniqueLeadCount,
               monthly: monthly,
               activeFilter: _filter,
               onTapFilter: (f) => setState(() {
@@ -133,12 +169,12 @@ class _CrmHomeScreenState extends State<CrmHomeScreen> {
 
 class _Greeting extends StatelessWidget {
   final String userName;
-  final int urgentCount;
+  final int urgentLeadCount;
   final int almostContractCount;
   final CrmTimeOfDay tod;
   const _Greeting({
     required this.userName,
-    required this.urgentCount,
+    required this.urgentLeadCount,
     required this.almostContractCount,
     required this.tod,
   });
@@ -168,7 +204,7 @@ class _Greeting extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           Text(
-            '今日の優先対応は $urgentCount 件、契約あと一歩が $almostContractCount 件です。$suffix。',
+            '今日整えたいのは $urgentLeadCount 件、契約あと一歩は $almostContractCount 件です。$suffix。',
             style: TextStyle(fontSize: 13, color: c.textSecondary, height: 1.5),
           ),
         ],
@@ -181,12 +217,14 @@ class _Greeting extends StatelessWidget {
 
 class _TopCardsRow extends StatelessWidget {
   final CrmHomeSummary summary;
+  final int uniqueLeadCount;
   final ({int enrolled, int goal}) monthly;
   final CrmUrgentReason? activeFilter;
   final ValueChanged<CrmUrgentReason> onTapFilter;
 
   const _TopCardsRow({
     required this.summary,
+    required this.uniqueLeadCount,
     required this.monthly,
     required this.activeFilter,
     required this.onTapFilter,
@@ -198,6 +236,7 @@ class _TopCardsRow extends StatelessWidget {
       final isWide = cons.maxWidth >= 900;
       final urgent = _UrgentMainCard(
         summary: summary,
+        uniqueLeadCount: uniqueLeadCount,
         activeFilter: activeFilter,
         onTapFilter: onTapFilter,
       );
@@ -242,18 +281,19 @@ class _TopCardsRow extends StatelessWidget {
 
 class _UrgentMainCard extends StatelessWidget {
   final CrmHomeSummary summary;
+  final int uniqueLeadCount;
   final CrmUrgentReason? activeFilter;
   final ValueChanged<CrmUrgentReason> onTapFilter;
 
   const _UrgentMainCard({
     required this.summary,
+    required this.uniqueLeadCount,
     required this.activeFilter,
     required this.onTapFilter,
   });
 
   @override
   Widget build(BuildContext context) {
-    final c = context.colors;
     if (summary.isAllClear) {
       final s = context.alerts.success;
       return Container(
@@ -287,13 +327,13 @@ class _UrgentMainCard extends StatelessWidget {
       );
     }
 
-    final w = context.alerts.warning;
+    final a = _SoftAmber.of(context);
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: w.background,
+        color: a.background,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: w.border.withValues(alpha: 0.5)),
+        border: Border.all(color: a.border.withValues(alpha: 0.5)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -301,54 +341,60 @@ class _UrgentMainCard extends StatelessWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              Icon(Icons.notifications_active_outlined,
-                  color: w.icon, size: 22),
+              Icon(Icons.wb_twilight, color: a.icon, size: 22),
               const SizedBox(width: 8),
-              Text('今すぐ対応',
+              Text('今日整えたいこと',
                   style: TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w700,
-                      color: w.text)),
+                      color: a.text)),
               const Spacer(),
-              Text('${summary.urgentTotal}',
+              Text('$uniqueLeadCount',
                   style: TextStyle(
                       fontSize: 36,
                       fontWeight: FontWeight.w800,
-                      color: w.icon,
+                      color: a.icon,
                       height: 1.0)),
               const SizedBox(width: 4),
               Padding(
                 padding: const EdgeInsets.only(top: 14),
-                child: Text('件',
-                    style: TextStyle(
-                        fontSize: 12, color: w.text)),
+                child: Text('件のリード',
+                    style: TextStyle(fontSize: 12, color: a.text)),
               ),
             ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 4),
+          Text(
+            '整えたい観点は合計 ${summary.urgentTotal} 件（同じリードで複数該当する場合があります）',
+            style: TextStyle(
+                fontSize: 11,
+                color: a.text.withValues(alpha: 0.75),
+                height: 1.4),
+          ),
+          const SizedBox(height: 10),
           _breakdownRow(
             context,
             icon: Icons.schedule,
             label: '期限切れ',
             count: summary.overdueCount,
             reason: CrmUrgentReason.overdue,
-            textColor: w.text,
+            textColor: a.text,
           ),
           _breakdownRow(
             context,
             icon: Icons.assignment_late_outlined,
-            label: '体験後フォロー漏れ',
+            label: '体験後のフォローがまだ',
             count: summary.trialFollowupMissing,
             reason: CrmUrgentReason.trialFollowupMissing,
-            textColor: w.text,
+            textColor: a.text,
           ),
           _breakdownRow(
             context,
             icon: Icons.hourglass_bottom,
-            label: '契約停滞',
+            label: '契約が少し止まっている',
             count: summary.contractStalled,
             reason: CrmUrgentReason.contractStalled,
-            textColor: w.text,
+            textColor: a.text,
           ),
           _breakdownRow(
             context,
@@ -356,7 +402,7 @@ class _UrgentMainCard extends StatelessWidget {
             label: '次の一手を決める',
             count: summary.noNextAction,
             reason: CrmUrgentReason.noNextAction,
-            textColor: c.textSecondary,
+            textColor: a.text,
           ),
         ],
       ),
@@ -625,9 +671,12 @@ class _UrgentSection extends StatelessWidget {
               ),
             ],
             const Spacer(),
-            Text('${rows.length} / $totalUrgent 件',
-                style:
-                    TextStyle(fontSize: 12, color: c.textSecondary)),
+            Text(
+              activeFilter == null
+                  ? '対象リード ${rows.length}件'
+                  : '絞り込み中 ${rows.length}件 / 全 $totalUrgent件',
+              style: TextStyle(fontSize: 12, color: c.textSecondary),
+            ),
           ],
         ),
         const SizedBox(height: 8),
@@ -745,11 +794,11 @@ class _UrgentSection extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Expanded(flex: 25, child: Text('名前', style: hs())),
-          Expanded(flex: 10, child: Text('状態', style: hs())),
-          Expanded(flex: 15, child: Text('理由', style: hs())),
-          Expanded(flex: 25, child: Text('次の一手', style: hs())),
-          Expanded(flex: 15, child: Text('最終接触', style: hs())),
+          Expanded(flex: 22, child: Text('名前', style: hs())),
+          Expanded(flex: 9, child: Text('状態', style: hs())),
+          Expanded(flex: 18, child: Text('理由', style: hs())),
+          Expanded(flex: 27, child: Text('次の一手', style: hs())),
+          Expanded(flex: 14, child: Text('最終接触', style: hs())),
           Expanded(flex: 10, child: Text('担当', style: hs())),
         ],
       ),
@@ -783,12 +832,12 @@ class _UrgentRowTile extends StatelessWidget {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            Expanded(flex: 25, child: _nameCell(context, lead)),
-            Expanded(flex: 10, child: _stageBadge(context, lead.stage)),
-            Expanded(flex: 15, child: _reasonTag(context, row.topReason)),
-            Expanded(flex: 25, child: _nextActionCell(context, lead)),
+            Expanded(flex: 22, child: _nameCell(context, lead)),
+            Expanded(flex: 9, child: _stageBadge(context, lead.stage)),
+            Expanded(flex: 18, child: _reasonTag(context, row.topReason)),
+            Expanded(flex: 27, child: _nextActionCell(context, lead)),
             Expanded(
-                flex: 15,
+                flex: 14,
                 child: Text(
                   crmRelativeTime(lead.lastContactAt ?? lead.inquiredAt),
                   style: TextStyle(fontSize: 12, color: c.textSecondary),
@@ -844,24 +893,20 @@ class _UrgentRowTile extends StatelessWidget {
   }
 
   Widget _reasonTag(BuildContext context, CrmUrgentReason r) {
-    final style = switch (r) {
-      CrmUrgentReason.overdue => context.alerts.warning,
-      CrmUrgentReason.trialFollowupMissing => context.alerts.warning,
-      CrmUrgentReason.contractStalled => context.alerts.info,
-      CrmUrgentReason.noNextAction => context.alerts.info,
-    };
+    final a = _SoftAmber.of(context);
+    final s = _reasonStyle(context, r, a);
     return Container(
       margin: const EdgeInsets.only(right: 8),
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
-        color: style.background,
+        color: s.background,
         borderRadius: BorderRadius.circular(4),
-        border: Border.all(color: style.border.withValues(alpha: 0.4)),
+        border: Border.all(color: s.border.withValues(alpha: 0.4)),
       ),
       child: Text(
         crmUrgentReasonLabel(r),
         style: TextStyle(
-            fontSize: 10, fontWeight: FontWeight.w700, color: style.text),
+            fontSize: 10, fontWeight: FontWeight.w700, color: s.text),
         overflow: TextOverflow.ellipsis,
       ),
     );
@@ -896,6 +941,23 @@ class _UrgentRowTile extends StatelessWidget {
   }
 }
 
+/// reason ごとの配色（責めない UI のため softer amber / info を使い分け）
+({Color background, Color border, Color text}) _reasonStyle(
+  BuildContext context,
+  CrmUrgentReason r,
+  _SoftAmber a,
+) {
+  switch (r) {
+    case CrmUrgentReason.overdue:
+    case CrmUrgentReason.trialFollowupMissing:
+      return (background: a.background, border: a.border, text: a.text);
+    case CrmUrgentReason.contractStalled:
+    case CrmUrgentReason.noNextAction:
+      final i = context.alerts.info;
+      return (background: i.background, border: i.border, text: i.text);
+  }
+}
+
 class _UrgentCard extends StatelessWidget {
   final CrmUrgentRow row;
   final QueryDocumentSnapshot<Map<String, dynamic>>? doc;
@@ -911,12 +973,7 @@ class _UrgentCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = context.colors;
     final lead = row.lead;
-    final style = switch (row.topReason) {
-      CrmUrgentReason.overdue => context.alerts.warning,
-      CrmUrgentReason.trialFollowupMissing => context.alerts.warning,
-      CrmUrgentReason.contractStalled => context.alerts.info,
-      CrmUrgentReason.noNextAction => context.alerts.info,
-    };
+    final style = _reasonStyle(context, row.topReason, _SoftAmber.of(context));
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
