@@ -43,6 +43,8 @@ dependencies:
   url_launcher: ^6.3.2
   file_picker: ^10.3.6
   csv: ^6.0.0
+  desktop_drop: ^0.6.0
+  cross_file: ^0.3.4
 
   # Video
   video_player: ^2.9.2
