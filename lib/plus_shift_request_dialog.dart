@@ -55,13 +55,15 @@ class _PlusShiftRequestDialogState extends State<PlusShiftRequestDialog> {
   String? _myStaffName;
 
   // 自分の入力（DateTime キー）
-  // 4 状態: なし / 休み希望 / 絶対休 / 半休 を排他的に表現する。
-  //   - 休み希望: _myNgDates に入り、_myNgStrongDates / _myHalfDates には入らない
-  //   - 絶対休: _myNgDates + _myNgStrongDates に入る（ngStrong ⊆ ng）
-  //   - 半休: _myHalfDates のみに入る（ng/strong には入らない）
+  // 5 状態: なし / 休み希望 / 絶対休 / 午前休 / 午後休 を排他的に表現する。
+  //   - 休み希望: _myNgDates のみ
+  //   - 絶対休: _myNgDates + _myNgStrongDates（ngStrong ⊆ ng）
+  //   - 午前休: _myHalfAmDates のみ
+  //   - 午後休: _myHalfPmDates のみ
   final Set<DateTime> _myNgDates = <DateTime>{};
   final Set<DateTime> _myNgStrongDates = <DateTime>{};
-  final Set<DateTime> _myHalfDates = <DateTime>{};
+  final Set<DateTime> _myHalfAmDates = <DateTime>{};
+  final Set<DateTime> _myHalfPmDates = <DateTime>{};
 
   String get _monthKey => DateFormat('yyyy-MM').format(widget.targetMonth);
 
@@ -132,10 +134,19 @@ class _PlusShiftRequestDialogState extends State<PlusShiftRequestDialog> {
             // 新形式優先
             if (mine['ngDates'] is List ||
                 mine['ngStrongDates'] is List ||
-                mine['halfDates'] is List) {
+                mine['halfDates'] is List ||
+                mine['halfAmDates'] is List ||
+                mine['halfPmDates'] is List) {
               collectDates('ngDates', _myNgDates);
               collectDates('ngStrongDates', _myNgStrongDates);
-              collectDates('halfDates', _myHalfDates);
+              if (mine['halfAmDates'] is List ||
+                  mine['halfPmDates'] is List) {
+                collectDates('halfAmDates', _myHalfAmDates);
+                collectDates('halfPmDates', _myHalfPmDates);
+              } else {
+                // 旧 halfDates のみ存在 → 全て午前休として復元
+                collectDates('halfDates', _myHalfAmDates);
+              }
             } else {
               // 旧形式（対象月の day-int）
               void collectDays(String field, Set<DateTime> target) {
@@ -151,8 +162,12 @@ class _PlusShiftRequestDialogState extends State<PlusShiftRequestDialog> {
               collectDays('ngDaysStrong', _myNgStrongDates);
             }
             // 半休は ng/strong と排他
-            _myNgDates.removeAll(_myHalfDates);
-            _myNgStrongDates.removeAll(_myHalfDates);
+            _myNgDates.removeAll(_myHalfAmDates);
+            _myNgDates.removeAll(_myHalfPmDates);
+            _myNgStrongDates.removeAll(_myHalfAmDates);
+            _myNgStrongDates.removeAll(_myHalfPmDates);
+            // 午前/午後の重複も排他
+            _myHalfPmDates.removeAll(_myHalfAmDates);
           }
         }
       }
@@ -185,7 +200,12 @@ class _PlusShiftRequestDialogState extends State<PlusShiftRequestDialog> {
             ..sort())
           .map(iso)
           .toList();
-      final halfDates = (_myHalfDates.toList()..sort()).map(iso).toList();
+      final halfAmDates = (_myHalfAmDates.toList()..sort()).map(iso).toList();
+      final halfPmDates = (_myHalfPmDates.toList()..sort()).map(iso).toList();
+      // 旧形式互換: 全半休の合算
+      final halfAll = <DateTime>{..._myHalfAmDates, ..._myHalfPmDates}.toList()
+        ..sort();
+      final halfDates = halfAll.map(iso).toList();
 
       // 下位互換: 対象月（yyyy-MM）に属する日の day-int も書いておく。
       // 既存の集計・読み取りコードが ngDays を直接見ている場合に備える。
@@ -205,6 +225,8 @@ class _PlusShiftRequestDialogState extends State<PlusShiftRequestDialog> {
         'staffName': _myStaffName ?? '',
         'ngDates': ngDates,
         'ngStrongDates': strongDates,
+        'halfAmDates': halfAmDates,
+        'halfPmDates': halfPmDates,
         'halfDates': halfDates,
         'ngDays': legacyNgDays,
         'ngDaysStrong': legacyStrong,
@@ -292,6 +314,108 @@ class _PlusShiftRequestDialogState extends State<PlusShiftRequestDialog> {
     );
   }
 
+  /// 日付セル長押し/タップ位置にポップアップメニューを開いて状態を切替える。
+  Future<void> _showStatePicker(DateTime date, Offset globalPos) async {
+    final overlay =
+        Overlay.of(context).context.findRenderObject() as RenderBox?;
+    if (overlay == null) return;
+    final isNg = _myNgDates.contains(date);
+    final isStrong = _myNgStrongDates.contains(date);
+    final isHalfAm = _myHalfAmDates.contains(date);
+    final isHalfPm = _myHalfPmDates.contains(date);
+    final hasAny = isNg || isStrong || isHalfAm || isHalfPm;
+
+    Widget itemRow(Color color, String label, bool selected) {
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+              width: 12,
+              height: 12,
+              decoration: BoxDecoration(
+                  color: color, borderRadius: BorderRadius.circular(2))),
+          const SizedBox(width: 8),
+          Text(label,
+              style: TextStyle(
+                  fontSize: 13,
+                  fontWeight:
+                      selected ? FontWeight.w700 : FontWeight.w500)),
+          if (selected) ...[
+            const SizedBox(width: 6),
+            const Icon(Icons.check, size: 14),
+          ],
+        ],
+      );
+    }
+
+    final selected = await showMenu<String>(
+      context: context,
+      position: RelativeRect.fromLTRB(
+        globalPos.dx,
+        globalPos.dy,
+        overlay.size.width - globalPos.dx,
+        overlay.size.height - globalPos.dy,
+      ),
+      items: [
+        PopupMenuItem<String>(
+          value: 'ng',
+          child:
+              itemRow(Colors.red.shade400, '休み希望', isNg && !isStrong),
+        ),
+        PopupMenuItem<String>(
+          value: 'strong',
+          child: itemRow(Colors.red.shade800, '絶対休み', isStrong),
+        ),
+        PopupMenuItem<String>(
+          value: 'halfAm',
+          child: itemRow(Colors.orange.shade600, '午前休', isHalfAm),
+        ),
+        PopupMenuItem<String>(
+          value: 'halfPm',
+          child: itemRow(Colors.amber.shade800, '午後休', isHalfPm),
+        ),
+        if (hasAny) const PopupMenuDivider(),
+        if (hasAny)
+          const PopupMenuItem<String>(
+            value: 'clear',
+            child: Row(
+              children: [
+                Icon(Icons.clear, size: 14),
+                SizedBox(width: 8),
+                Text('解除', style: TextStyle(fontSize: 13)),
+              ],
+            ),
+          ),
+      ],
+    );
+    if (selected == null || !mounted) return;
+    setState(() {
+      // すべての集合からこの日付を抜いてから、選択状態を立てる
+      _myNgDates.remove(date);
+      _myNgStrongDates.remove(date);
+      _myHalfAmDates.remove(date);
+      _myHalfPmDates.remove(date);
+      switch (selected) {
+        case 'ng':
+          _myNgDates.add(date);
+          break;
+        case 'strong':
+          _myNgDates.add(date);
+          _myNgStrongDates.add(date);
+          break;
+        case 'halfAm':
+          _myHalfAmDates.add(date);
+          break;
+        case 'halfPm':
+          _myHalfPmDates.add(date);
+          break;
+        case 'clear':
+          // 既に全部削除済み
+          break;
+      }
+    });
+  }
+
   Widget _stateLegend(Color color, String label) {
     return Row(
       mainAxisSize: MainAxisSize.min,
@@ -363,29 +487,37 @@ class _PlusShiftRequestDialogState extends State<PlusShiftRequestDialog> {
               }
               final isNg = _myNgDates.contains(date);
               final isStrong = _myNgStrongDates.contains(date);
-              final isHalf = _myHalfDates.contains(date);
+              final isHalfAm = _myHalfAmDates.contains(date);
+              final isHalfPm = _myHalfPmDates.contains(date);
               final dow = date.weekday; // 月=1, ..., 日=7
               final dayColor = dow == 7
                   ? Colors.red
                   : dow == 6
                       ? Colors.blue
                       : context.colors.textPrimary;
-              // 4状態: なし → 休み希望 → 絶対休 → 半休 → なし
               final Color bgColor;
-              if (isHalf) {
+              final String? badgeLabel;
+              if (isHalfAm) {
                 bgColor = Colors.orange.shade600;
+                badgeLabel = '午前休';
+              } else if (isHalfPm) {
+                bgColor = Colors.amber.shade800;
+                badgeLabel = '午後休';
               } else if (isStrong) {
                 bgColor = Colors.red.shade800;
+                badgeLabel = '絶対休';
               } else if (isNg) {
                 bgColor = Colors.red.shade400;
+                badgeLabel = '休';
               } else {
                 bgColor = context.colors.tagBg;
+                badgeLabel = null;
               }
               final isOtherMonth = date.month != widget.targetMonth.month;
               final dayLabel =
                   isOtherMonth ? '${date.month}/${date.day}' : '${date.day}';
               final labelFontSize = isOtherMonth ? 11.0 : 14.0;
-              final markedFg = isNg || isStrong || isHalf;
+              final markedFg = isNg || isStrong || isHalfAm || isHalfPm;
               return Expanded(
                 child: Padding(
                   padding: const EdgeInsets.all(2),
@@ -394,22 +526,9 @@ class _PlusShiftRequestDialogState extends State<PlusShiftRequestDialog> {
                     borderRadius: BorderRadius.circular(6),
                     child: InkWell(
                       borderRadius: BorderRadius.circular(6),
-                      onTap: () {
-                        setState(() {
-                          // なし → 休み希望 → 絶対休 → 半休 → なし
-                          if (isHalf) {
-                            _myHalfDates.remove(date);
-                          } else if (isStrong) {
-                            _myNgDates.remove(date);
-                            _myNgStrongDates.remove(date);
-                            _myHalfDates.add(date);
-                          } else if (isNg) {
-                            _myNgStrongDates.add(date);
-                          } else {
-                            _myNgDates.add(date);
-                          }
-                        });
-                      },
+                      onTapDown: (details) =>
+                          _showStatePicker(date, details.globalPosition),
+                      onTap: () {}, // onTapDown を使うため空
                       child: SizedBox(
                         height: 48,
                         child: Column(
@@ -423,29 +542,11 @@ class _PlusShiftRequestDialogState extends State<PlusShiftRequestDialog> {
                                 color: markedFg ? Colors.white : dayColor,
                               ),
                             ),
-                            if (isHalf)
-                              const Text(
-                                '半休',
-                                style: TextStyle(
+                            if (badgeLabel != null)
+                              Text(
+                                badgeLabel,
+                                style: const TextStyle(
                                   fontSize: 9,
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              )
-                            else if (isStrong)
-                              const Text(
-                                '絶対休',
-                                style: TextStyle(
-                                  fontSize: 9,
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              )
-                            else if (isNg)
-                              const Text(
-                                '休',
-                                style: TextStyle(
-                                  fontSize: 10,
                                   color: Colors.white,
                                   fontWeight: FontWeight.bold,
                                 ),
@@ -552,7 +653,7 @@ class _PlusShiftRequestDialogState extends State<PlusShiftRequestDialog> {
                                   const SizedBox(width: 6),
                                   Expanded(
                                     child: Text(
-                                      '日付をタップ: 1「休み希望」→ 2「絶対休」→ 3「半休」→ 4 解除',
+                                      '日付をタップしてメニューから「休み希望 / 絶対休み / 午前休 / 午後休 / 解除」を選択',
                                       style: TextStyle(fontSize: 12, color: ctx.colors.textPrimary),
                                     ),
                                   ),
@@ -570,8 +671,9 @@ class _PlusShiftRequestDialogState extends State<PlusShiftRequestDialog> {
                             runSpacing: 4,
                             children: [
                               _stateLegend(Colors.red.shade400, '休み希望'),
-                              _stateLegend(Colors.red.shade800, '絶対休'),
-                              _stateLegend(Colors.orange.shade600, '半休'),
+                              _stateLegend(Colors.red.shade800, '絶対休み'),
+                              _stateLegend(Colors.orange.shade600, '午前休'),
+                              _stateLegend(Colors.amber.shade800, '午後休'),
                             ],
                           ),
                           const SizedBox(height: 8),
@@ -671,8 +773,10 @@ class _PlusShiftDecisionDialogState extends State<PlusShiftDecisionDialog> {
   final Map<String, Set<DateTime>> _requestedOffDates = {};
   // 提出データ（強希望: 絶対休） staffId → Set<DateTime>
   final Map<String, Set<DateTime>> _requestedStrongOffDates = {};
-  // 提出データ（半休） staffId → Set<DateTime>
-  final Map<String, Set<DateTime>> _requestedHalfDates = {};
+  // 提出データ（午前休） staffId → Set<DateTime>
+  final Map<String, Set<DateTime>> _requestedHalfAmDates = {};
+  // 提出データ（午後休） staffId → Set<DateTime>
+  final Map<String, Set<DateTime>> _requestedHalfPmDates = {};
 
   // 現在の決定状態: date → Set<staffId>
   final Map<DateTime, Set<String>> _offDates = {};
@@ -750,14 +854,25 @@ class _PlusShiftDecisionDialogState extends State<PlusShiftDecisionDialog> {
 
           final hasNewFields = entry['ngDates'] is List ||
               entry['ngStrongDates'] is List ||
-              entry['halfDates'] is List;
+              entry['halfDates'] is List ||
+              entry['halfAmDates'] is List ||
+              entry['halfPmDates'] is List;
           Set<DateTime> ng;
           Set<DateTime> strong;
-          Set<DateTime> half;
+          Set<DateTime> halfAm;
+          Set<DateTime> halfPm;
           if (hasNewFields) {
             ng = parseDates('ngDates');
             strong = parseDates('ngStrongDates');
-            half = parseDates('halfDates');
+            if (entry['halfAmDates'] is List ||
+                entry['halfPmDates'] is List) {
+              halfAm = parseDates('halfAmDates');
+              halfPm = parseDates('halfPmDates');
+            } else {
+              // 旧 halfDates のみ → 全て午前休として扱う
+              halfAm = parseDates('halfDates');
+              halfPm = <DateTime>{};
+            }
           } else {
             // 旧形式 day-int（対象月）
             Set<DateTime> parseDays(String field) {
@@ -775,11 +890,13 @@ class _PlusShiftDecisionDialogState extends State<PlusShiftDecisionDialog> {
 
             ng = parseDays('ngDays');
             strong = parseDays('ngDaysStrong');
-            half = <DateTime>{};
+            halfAm = <DateTime>{};
+            halfPm = <DateTime>{};
           }
           _requestedOffDates[staffId] = ng;
           _requestedStrongOffDates[staffId] = strong;
-          _requestedHalfDates[staffId] = half;
+          _requestedHalfAmDates[staffId] = halfAm;
+          _requestedHalfPmDates[staffId] = halfPm;
           for (final d in ng) {
             _offDates.putIfAbsent(d, () => <String>{}).add(staffId);
           }
@@ -979,7 +1096,7 @@ class _PlusShiftDecisionDialogState extends State<PlusShiftDecisionDialog> {
                                 style: TextStyle(fontSize: 13),
                               ),
                             ),
-                            if ((_requestedHalfDates[staff['id']] ?? {})
+                            if ((_requestedHalfAmDates[staff['id']] ?? {})
                                 .contains(date))
                               Container(
                                 padding: const EdgeInsets.symmetric(
@@ -989,7 +1106,25 @@ class _PlusShiftDecisionDialogState extends State<PlusShiftDecisionDialog> {
                                   borderRadius: BorderRadius.circular(4),
                                 ),
                                 child: const Text(
-                                  '半休希望',
+                                  '午前休',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              )
+                            else if ((_requestedHalfPmDates[staff['id']] ?? {})
+                                .contains(date))
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: Colors.amber.shade800,
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: const Text(
+                                  '午後休',
                                   style: TextStyle(
                                     fontSize: 10,
                                     color: Colors.white,
@@ -1186,9 +1321,11 @@ class _PlusShiftDecisionDialogState extends State<PlusShiftDecisionDialog> {
                             Colors.orange.shade100, '希望（未確定）',
                             borderColor: Colors.orange.shade400),
                         const SizedBox(width: 12),
-                        _legendSwatch(Colors.red.shade800, '絶対休'),
+                        _legendSwatch(Colors.red.shade800, '絶対休み'),
                         const SizedBox(width: 12),
-                        _legendSwatch(Colors.orange.shade600, '半休希望'),
+                        _legendSwatch(Colors.orange.shade600, '午前休'),
+                        const SizedBox(width: 12),
+                        _legendSwatch(Colors.amber.shade800, '午後休'),
                         const Spacer(),
                         Text(
                           '※「シフトに反映」を押すと実シフトに書き込まれます',
@@ -1357,47 +1494,59 @@ class _PlusShiftDecisionDialogState extends State<PlusShiftDecisionDialog> {
 
     final offStaffIds = _offDates[date] ?? <String>{};
     // 半休希望（休みではないので _offDates には含まれない）
-    final halfStaffIds = <String>{};
-    _requestedHalfDates.forEach((sid, dates) {
+    final halfAmStaffIds = <String>{};
+    final halfPmStaffIds = <String>{};
+    _requestedHalfAmDates.forEach((sid, dates) {
       if (dates.contains(date) && !offStaffIds.contains(sid)) {
-        halfStaffIds.add(sid);
+        halfAmStaffIds.add(sid);
+      }
+    });
+    _requestedHalfPmDates.forEach((sid, dates) {
+      if (dates.contains(date) && !offStaffIds.contains(sid)) {
+        halfPmStaffIds.add(sid);
       }
     });
     final chips = <Widget>[];
-    for (final staffId in halfStaffIds) {
-      final staff = _plusStaffs.firstWhere(
-        (s) => s['id'] == staffId,
-        orElse: () => <String, dynamic>{'name': '?'},
-      );
-      chips.add(
-        Container(
+
+    Widget halfChip(Color color, String tag, String name) => Container(
           padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
           decoration: BoxDecoration(
-            color: Colors.orange.shade600,
+            color: color,
             borderRadius: BorderRadius.circular(4),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Text(
-                '半',
-                style: TextStyle(
-                    fontSize: 10,
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold),
-              ),
+              Text(tag,
+                  style: const TextStyle(
+                      fontSize: 10,
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold)),
               const SizedBox(width: 2),
-              Text(
-                staff['name'] as String,
-                style: const TextStyle(
-                    fontSize: 10,
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold),
-              ),
+              Text(name,
+                  style: const TextStyle(
+                      fontSize: 10,
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold)),
             ],
           ),
-        ),
+        );
+
+    for (final staffId in halfAmStaffIds) {
+      final staff = _plusStaffs.firstWhere(
+        (s) => s['id'] == staffId,
+        orElse: () => <String, dynamic>{'name': '?'},
       );
+      chips.add(halfChip(
+          Colors.orange.shade600, '前', staff['name'] as String));
+    }
+    for (final staffId in halfPmStaffIds) {
+      final staff = _plusStaffs.firstWhere(
+        (s) => s['id'] == staffId,
+        orElse: () => <String, dynamic>{'name': '?'},
+      );
+      chips.add(halfChip(
+          Colors.amber.shade800, '後', staff['name'] as String));
     }
     for (final staffId in offStaffIds) {
       final staff = _plusStaffs.firstWhere(
