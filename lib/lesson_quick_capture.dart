@@ -57,11 +57,12 @@ Future<List<Map<String, dynamic>>> fetchCurrentLessonStudents({
       .where('slotIndex', isEqualTo: slot)
       .get();
 
-  // 自分が担当（teachers に staff doc id or uid を含む）かつ
+  // 自分が担当（teachers にはスタッフ名が入る。空白を除いた正規化名で照合）かつ
   // 生徒名が allStudents のいずれかと一致するもの
-  final myStaffIds = await _resolveMyStaffIds(user.uid);
+  final myNames = await _resolveMyStaffNames(user.uid);
 
-  String norm(String s) => s.replaceAll(RegExp(r'\s+'), '');
+  String norm(String s) => s.replaceAll(RegExp(r'[\s　]'), '');
+  final myNamesNorm = myNames.map(norm).toSet();
 
   final byName = <String, Map<String, dynamic>>{};
   for (final s in allStudents) {
@@ -73,7 +74,8 @@ Future<List<Map<String, dynamic>>> fetchCurrentLessonStudents({
   for (final doc in snap.docs) {
     final data = doc.data();
     final teachers = (data['teachers'] as List?)?.cast<dynamic>() ?? [];
-    final mine = teachers.any((t) => myStaffIds.contains(t.toString()));
+    final mine =
+        teachers.any((t) => myNamesNorm.contains(norm(t.toString())));
     if (!mine) continue;
     final sn = data['studentName'] as String? ?? '';
     if (sn.isEmpty) continue;
@@ -89,18 +91,27 @@ Future<List<Map<String, dynamic>>> fetchCurrentLessonStudents({
   return result;
 }
 
-Future<Set<String>> _resolveMyStaffIds(String uid) async {
-  final ids = <String>{uid};
+Future<Set<String>> _resolveMyStaffNames(String uid) async {
+  final names = <String>{};
   try {
     final snap = await FirebaseFirestore.instance
         .collection('staffs')
         .where('uid', isEqualTo: uid)
         .get();
     for (final d in snap.docs) {
-      ids.add(d.id);
+      final data = d.data();
+      final n = data['name'] as String?;
+      if (n != null && n.isNotEmpty) names.add(n);
+      // 旧データ互換: 苗字/名前が分かれている場合
+      final last = data['lastName'] as String?;
+      final first = data['firstName'] as String?;
+      if (last != null && first != null) {
+        names.add('$last $first');
+        names.add('$last$first');
+      }
     }
   } catch (_) {}
-  return ids;
+  return names;
 }
 
 /// 撮影 → 圧縮アップロード → 該当生徒の今週分の下書きアセスメントに追記。
