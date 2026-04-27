@@ -96,13 +96,21 @@ class _PlusScheduleContentState extends State<PlusScheduleContent> with Automati
     '欠席': Colors.red, // 旧データ互換用
     '欠席（加算あり）': Colors.red,
     '欠席（加算なし）': Colors.red,
+    '欠席（HUG登録なし）': Colors.red,
     '策定会議': Colors.deepPurple,
   };
 
   // カスタマイズ可能なコース色
   Map<String, Color> _courseColors = {};
 
-  final List<String> _courseList = ['通常', 'モンテッソーリ', '感覚統合', '言語', '就学支援', '放デイ', '契約', '体験', '欠席（加算あり）', '欠席（加算なし）', '策定会議'];
+  final List<String> _courseList = ['通常', 'モンテッソーリ', '感覚統合', '言語', '就学支援', '放デイ', '契約', '体験', '欠席（加算あり）', '欠席（加算なし）', '欠席（HUG登録なし）', '策定会議'];
+
+  // 欠席系コース（メインリストでは別扱い）
+  static const List<String> _absenceCourses = [
+    '欠席（加算あり）',
+    '欠席（加算なし）',
+    '欠席（HUG登録なし）',
+  ];
 
   // HUG欠席送信の失敗バナー（セッション内のみ）
   final List<Map<String, dynamic>> _failedAbsenceSends = [];
@@ -9011,6 +9019,11 @@ await _loadLessonsForWeek(showLoading: false);
     String? studentName,
     DateTime? absenceDate,
   }) {
+    // メインリストには欠席系を出さない（上段のカードに集約）
+    final mainCourses = _courseList
+        .where((c) => !_absenceCourses.contains(c))
+        .toList();
+
     showDialog(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
@@ -9020,85 +9033,273 @@ await _loadLessonsForWeek(showLoading: false);
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             title: const Text('内容を選択', style: TextStyle(fontSize: 18)),
             content: SizedBox(
-              width: 350,
+              width: 380,
               child: Column(
                 mainAxisSize: MainAxisSize.min,
-                children: _courseList.map((course) {
-                  final color = _courseColors[course] ?? Colors.blue;
-                  return ListTile(
-                    leading: GestureDetector(
-                      onTap: () {
-                        _showColorPickerDialog(course, color, (newColor) {
-                          _saveCourseColor(course, newColor);
-                          setDialogState(() {});
-                        });
-                      },
-                      child: MouseRegion(
-                        cursor: SystemMouseCursors.click,
-                        child: Container(
-                          width: 24,
-                          height: 24,
-                          decoration: BoxDecoration(
-                            color: color,
-                            borderRadius: BorderRadius.circular(4),
-                            border: Border.all(color: context.colors.iconMuted),
-                          ),
-                          child: const Icon(Icons.edit, size: 14, color: Colors.white),
+                children: [
+                  // 欠席にする（3カード横並び）
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(0, 4, 0, 4),
+                    child: IntrinsicHeight(
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                        _buildAbsenceCard(
+                          dialogContext: dialogContext,
+                          currentCourse: currentCourse,
+                          course: '欠席（加算あり）',
+                          title: '加算あり',
+                          onSelect: onSelect,
+                          studentName: studentName,
+                          absenceDate: absenceDate,
                         ),
+                        const SizedBox(width: 8),
+                        _buildAbsenceCard(
+                          dialogContext: dialogContext,
+                          currentCourse: currentCourse,
+                          course: '欠席（加算なし）',
+                          title: '加算なし',
+                          onSelect: onSelect,
+                          studentName: studentName,
+                          absenceDate: absenceDate,
+                        ),
+                        const SizedBox(width: 8),
+                        _buildAbsenceCard(
+                          dialogContext: dialogContext,
+                          currentCourse: currentCourse,
+                          course: '欠席（HUG登録なし）',
+                          title: 'HUG登録なし',
+                          onSelect: onSelect,
+                          studentName: studentName,
+                          absenceDate: absenceDate,
+                        ),
+                      ],
                       ),
                     ),
-                    title: Text(course),
-                    trailing: currentCourse == course
-                        ? const Icon(Icons.check, color: AppColors.primary)
-                        : null,
-                    onTap: () async {
-                      // 児童に紐づく欠席・欠席（加算なし）選択時は即時に入力/確認を出し、
-                      // 結果を _pendingAbsenceData に保持する（予定保存時にHUG送信）
-                      if (studentName != null && studentName.isNotEmpty && absenceDate != null) {
-                        if (course == '欠席（加算あり）' || course == '欠席') {
-                          Navigator.pop(dialogContext);
-                          final note = await AbsenceRecordDialog.show(
-                            context,
-                            studentName: studentName,
-                            absenceDate: absenceDate,
-                          );
-                          if (note == null) return; // キャンセル時はコース変更もなし
-                          _pendingAbsenceData = {
-                            'category': '欠席連絡',
-                            'content': note,
-                            'studentName': studentName,
-                            'absenceDate': absenceDate,
-                          };
-                          onSelect(course);
-                          return;
-                        }
-                        if (course == '欠席（加算なし）') {
-                          Navigator.pop(dialogContext);
-                          final ok = await _confirmNoAddAbsence(studentName, absenceDate);
-                          if (!ok) return;
-                          _pendingAbsenceData = {
-                            'category': '欠席（加算なし）',
-                            'content': '',
-                            'studentName': studentName,
-                            'absenceDate': absenceDate,
-                          };
-                          onSelect(course);
-                          return;
-                        }
-                      }
-                      Navigator.pop(dialogContext);
-                      // 欠席以外を選び直した場合は保留データをクリア
-                      _pendingAbsenceData = null;
-                      onSelect(course);
-                    },
-                  );
-                }).toList(),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 6),
+                    child: Divider(height: 1, color: context.colors.borderLight),
+                  ),
+                  // 通常コース
+                  ...mainCourses.map((course) {
+                    final color = _courseColors[course] ?? Colors.blue;
+                    return ListTile(
+                      leading: GestureDetector(
+                        onTap: () {
+                          _showColorPickerDialog(course, color, (newColor) {
+                            _saveCourseColor(course, newColor);
+                            setDialogState(() {});
+                          });
+                        },
+                        child: MouseRegion(
+                          cursor: SystemMouseCursors.click,
+                          child: Container(
+                            width: 24,
+                            height: 24,
+                            decoration: BoxDecoration(
+                              color: color,
+                              borderRadius: BorderRadius.circular(4),
+                              border: Border.all(color: context.colors.iconMuted),
+                            ),
+                            child: const Icon(Icons.edit, size: 14, color: Colors.white),
+                          ),
+                        ),
+                      ),
+                      title: Text(course),
+                      trailing: currentCourse == course
+                          ? const Icon(Icons.check, color: AppColors.primary)
+                          : null,
+                      onTap: () {
+                        Navigator.pop(dialogContext);
+                        // 欠席以外を選び直した場合は保留データをクリア
+                        _pendingAbsenceData = null;
+                        onSelect(course);
+                      },
+                    );
+                  }),
+                ],
               ),
             ),
           );
         },
       ),
     );
+  }
+
+  Widget _buildAbsenceCard({
+    required BuildContext dialogContext,
+    required String currentCourse,
+    required String course,
+    required String title,
+    required Function(String) onSelect,
+    String? studentName,
+    DateTime? absenceDate,
+  }) {
+    final isCurrent = currentCourse == course;
+    return Expanded(
+      child: InkWell(
+        borderRadius: BorderRadius.circular(10),
+        onTap: () => _handleAbsenceCourseSelected(
+          course: course,
+          dialogContext: dialogContext,
+          onSelect: onSelect,
+          studentName: studentName,
+          absenceDate: absenceDate,
+        ),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+          decoration: BoxDecoration(
+            color: isCurrent
+                ? Colors.red.withValues(alpha: 0.10)
+                : context.colors.cardBg,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: isCurrent
+                  ? Colors.red.shade400
+                  : context.colors.borderMedium,
+              width: isCurrent ? 1.4 : 0.6,
+            ),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Stack(
+                alignment: Alignment.center,
+                clipBehavior: Clip.none,
+                children: [
+                  Container(
+                    width: 32,
+                    height: 32,
+                    decoration: BoxDecoration(
+                      color: Colors.red.shade400,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(Icons.event_busy,
+                        color: Colors.white, size: 18),
+                  ),
+                  if (isCurrent)
+                    Positioned(
+                      right: -4,
+                      top: -4,
+                      child: Container(
+                        padding: const EdgeInsets.all(2),
+                        decoration: const BoxDecoration(
+                          color: AppColors.primary,
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(Icons.check,
+                            color: Colors.white, size: 11),
+                      ),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text(
+                title,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: context.colors.textPrimary,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _handleAbsenceCourseSelected({
+    required String course,
+    required BuildContext dialogContext,
+    required Function(String) onSelect,
+    String? studentName,
+    DateTime? absenceDate,
+  }) async {
+    // 児童紐付きでないカスタムイベント等は確認なしで反映
+    if (studentName == null || studentName.isEmpty || absenceDate == null) {
+      Navigator.pop(dialogContext);
+      _pendingAbsenceData = null;
+      onSelect(course);
+      return;
+    }
+
+    if (course == '欠席（加算あり）') {
+      Navigator.pop(dialogContext);
+      final note = await AbsenceRecordDialog.show(
+        context,
+        studentName: studentName,
+        absenceDate: absenceDate,
+      );
+      if (note == null) return;
+      _pendingAbsenceData = {
+        'category': '欠席連絡',
+        'content': note,
+        'studentName': studentName,
+        'absenceDate': absenceDate,
+      };
+      onSelect(course);
+      return;
+    }
+
+    if (course == '欠席（加算なし）') {
+      Navigator.pop(dialogContext);
+      final ok = await _confirmNoAddAbsence(studentName, absenceDate);
+      if (!ok) return;
+      _pendingAbsenceData = {
+        'category': '欠席（加算なし）',
+        'content': '',
+        'studentName': studentName,
+        'absenceDate': absenceDate,
+      };
+      onSelect(course);
+      return;
+    }
+
+    if (course == '欠席（HUG登録なし）') {
+      Navigator.pop(dialogContext);
+      final ok = await _confirmHugSkipAbsence(studentName, absenceDate);
+      if (!ok) return;
+      // HUG送信しない: 保留データはクリア
+      _pendingAbsenceData = null;
+      onSelect(course);
+      return;
+    }
+  }
+
+  Future<bool> _confirmHugSkipAbsence(String studentName, DateTime date) async {
+    final df = DateFormat('yyyy/MM/dd (E)', 'ja');
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: context.colors.cardBg,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        title: const Text('欠席（HUG登録なし）として登録', style: TextStyle(fontSize: 16)),
+        content: Text(
+          '$studentName さんを ${df.format(date)} の欠席として登録します。\n\n'
+          '※ HUGには登録されません。HUG側は別途手動で対応してください。',
+          style: const TextStyle(fontSize: 13),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text('キャンセル', style: TextStyle(color: context.colors.textSecondary)),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red.shade400,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('登録'),
+          ),
+        ],
+      ),
+    );
+    return result == true;
   }
 
   Future<bool> _confirmNoAddAbsence(String studentName, DateTime date) async {
