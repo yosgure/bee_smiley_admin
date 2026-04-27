@@ -5,6 +5,7 @@ import 'assessment_edit_screen.dart';
 import 'assessment_detail_screen.dart';
 import 'app_theme.dart';
 import 'classroom_utils.dart';
+import 'lesson_quick_capture.dart';
 import 'main.dart';
 
 class AssessmentScreen extends StatefulWidget {
@@ -26,6 +27,11 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
   String? _selectedClassroom;
 
   List<Map<String, dynamic>> _allStudents = [];
+
+  // 「今のレッスン」セクション用：自分が現在の枠で担当している生徒
+  List<Map<String, dynamic>> _currentLessonStudents = [];
+  int? _currentSlotIndex;
+  bool _quickCaptureBusy = false;
 
   String? _selectedStudentId;
   String _selectedStudentName = '';
@@ -130,10 +136,49 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
             _showSidebar = false;
           }
         });
+        _loadCurrentLessonStudents();
       }
     } catch (e) {
       debugPrint('Error: $e');
       if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _loadCurrentLessonStudents() async {
+    final slot = currentSlotIndex();
+    if (slot == null) {
+      if (mounted) {
+        setState(() {
+          _currentSlotIndex = null;
+          _currentLessonStudents = [];
+        });
+      }
+      return;
+    }
+    try {
+      final list = await fetchCurrentLessonStudents(allStudents: _allStudents);
+      if (mounted) {
+        setState(() {
+          _currentSlotIndex = slot;
+          _currentLessonStudents = list;
+        });
+      }
+    } catch (e) {
+      debugPrint('current lesson load error: $e');
+    }
+  }
+
+  Future<void> _onQuickCaptureTap(Map<String, dynamic> student) async {
+    if (_quickCaptureBusy) return;
+    setState(() => _quickCaptureBusy = true);
+    try {
+      await quickCapturePhoto(
+        context: context,
+        studentId: student['id'] as String,
+        studentName: student['name'] as String,
+      );
+    } finally {
+      if (mounted) setState(() => _quickCaptureBusy = false);
     }
   }
 
@@ -305,6 +350,7 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
             ),
           ),
           const SizedBox(height: 6),
+          if (_currentLessonStudents.isNotEmpty) _buildCurrentLessonSection(),
           Expanded(
             child: _isLoading
                 ? Center(child: CircularProgressIndicator(color: AppColors.primary))
@@ -312,6 +358,58 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
                     ? Center(child: Text('該当する児童がいません', style: TextStyle(color: context.colors.textTertiary, fontSize: 13)))
                     : _buildStudentListWithIndex(students),
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCurrentLessonSection() {
+    final slot = _currentSlotIndex;
+    final label = slot != null ? slotLabel(slot) : '';
+    return Container(
+      margin: const EdgeInsets.fromLTRB(8, 4, 8, 8),
+      decoration: BoxDecoration(
+        color: AppColors.primary.withOpacity(0.06),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.primary.withOpacity(0.25), width: 0.6),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 10, 10, 6),
+            child: Row(
+              children: [
+                Icon(Icons.photo_camera_rounded, size: 16, color: AppColors.primary),
+                const SizedBox(width: 6),
+                Text(
+                  '今のレッスン',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.primary,
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  label,
+                  style: TextStyle(fontSize: 11, color: context.colors.textSecondary),
+                ),
+                const Spacer(),
+                Tooltip(
+                  message: 'タップで撮影 → 今週の下書きに自動追加',
+                  child: Icon(Icons.help_outline,
+                      size: 14, color: context.colors.textHint),
+                ),
+              ],
+            ),
+          ),
+          ..._currentLessonStudents.map((s) => _CurrentLessonTile(
+                name: s['name'] as String? ?? '',
+                onTap: () => _onQuickCaptureTap(s),
+                disabled: _quickCaptureBusy,
+              )),
+          const SizedBox(height: 6),
         ],
       ),
     );
@@ -445,7 +543,17 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
                 final data = doc.data() as Map<String, dynamic>;
                 final date = (data['date'] as Timestamp).toDate();
                 final records = List<Map<String, dynamic>>.from(data['entries'] ?? []);
-                final toolNames = records.map((r) => r['tool'] as String? ?? '不明').join('、');
+                final toolNames = records
+                    .where((r) => r['isQuickDraft'] != true)
+                    .map((r) => r['tool'] as String? ?? '不明')
+                    .join('、');
+                int photoCount = 0;
+                for (final r in records) {
+                  final m = r['mediaItems'] as List?;
+                  if (m != null) photoCount += m.length;
+                }
+                final hasOnlyQuickDraft = records.isNotEmpty &&
+                    records.every((r) => r['isQuickDraft'] == true);
 
                 return _RecordCard(
                   onTap: () => _openDetail(doc),
@@ -460,13 +568,19 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
                           ),
                           const SizedBox(width: 8),
                           _buildStatusBadge(data['isPublished'] == true),
+                          if (photoCount > 0) ...[
+                            const SizedBox(width: 6),
+                            _buildPhotoBadge(photoCount, hasOnlyQuickDraft),
+                          ],
                           const Spacer(),
                           Icon(Icons.chevron_right_rounded, color: context.colors.textTertiary, size: 18),
                         ],
                       ),
                       const SizedBox(height: 6),
                       Text(
-                        toolNames.isEmpty ? '記録なし' : toolNames,
+                        hasOnlyQuickDraft
+                            ? '写真のみ（教具・コメント未入力）'
+                            : (toolNames.isEmpty ? '記録なし' : toolNames),
                         style: TextStyle(color: context.colors.textSecondary, fontSize: 12, height: 1.4),
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
@@ -589,6 +703,28 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
     );
   }
 
+  Widget _buildPhotoBadge(int count, bool emphasize) {
+    final color = emphasize ? AppColors.primary : context.colors.textSecondary;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.10),
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: color.withOpacity(0.4), width: 0.5),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.photo_camera_rounded, size: 10, color: color),
+          const SizedBox(width: 3),
+          Text('$count',
+              style: TextStyle(
+                  fontSize: 10, fontWeight: FontWeight.bold, color: color)),
+        ],
+      ),
+    );
+  }
+
   Widget _buildStatusBadge(bool isPublished) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
@@ -606,6 +742,112 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
           fontSize: 10,
           fontWeight: FontWeight.bold,
           color: isPublished ? Colors.green.shade700 : AppColors.accent.shade700,
+        ),
+      ),
+    );
+  }
+}
+
+class _CurrentLessonTile extends StatefulWidget {
+  final String name;
+  final VoidCallback onTap;
+  final bool disabled;
+
+  const _CurrentLessonTile({
+    required this.name,
+    required this.onTap,
+    required this.disabled,
+  });
+
+  @override
+  State<_CurrentLessonTile> createState() => _CurrentLessonTileState();
+}
+
+class _CurrentLessonTileState extends State<_CurrentLessonTile> {
+  bool _hover = false;
+  bool _pressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final firstChar = widget.name.isNotEmpty ? widget.name[0] : '?';
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hover = true),
+      onExit: (_) => setState(() => _hover = false),
+      cursor: widget.disabled
+          ? SystemMouseCursors.forbidden
+          : SystemMouseCursors.click,
+      child: GestureDetector(
+        onTapDown: (_) => setState(() => _pressed = true),
+        onTapCancel: () => setState(() => _pressed = false),
+        onTapUp: (_) => setState(() => _pressed = false),
+        onTap: widget.disabled ? null : widget.onTap,
+        behavior: HitTestBehavior.opaque,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 80),
+          margin: const EdgeInsets.fromLTRB(8, 2, 8, 2),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          decoration: BoxDecoration(
+            color: _pressed
+                ? AppColors.primary.withOpacity(0.18)
+                : _hover
+                    ? AppColors.primary.withOpacity(0.10)
+                    : Colors.white.withOpacity(0.6),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withOpacity(0.18),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Center(
+                  child: Text(
+                    firstChar,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.primary,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  widget.name,
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: context.colors.textPrimary,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: AppColors.primary,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.photo_camera_rounded, size: 14, color: Colors.white),
+                    SizedBox(width: 4),
+                    Text('撮影',
+                        style: TextStyle(
+                            fontSize: 11,
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold)),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
