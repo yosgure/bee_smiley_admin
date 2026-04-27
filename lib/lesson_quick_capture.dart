@@ -19,7 +19,8 @@ const Duration _slotDuration = Duration(minutes: 90);
 
 const List<String> _slotLabels = ['9:30〜', '11:00〜', '14:00〜', '15:30〜'];
 
-/// 現在時刻が属するレッスンスロット index を返す（時間外なら null）
+/// 現在時刻が属するレッスンスロット index を返す（時間外なら null）。
+/// plus_lessons 用のスロット判定。calendar_events は startTime/endTime で個別判定するため使わない。
 int? currentSlotIndex([DateTime? now]) {
   final n = now ?? DateTime.now();
   final t = Duration(hours: n.hour, minutes: n.minute);
@@ -34,60 +35,130 @@ int? currentSlotIndex([DateTime? now]) {
 String slotLabel(int slotIndex) =>
     (slotIndex >= 0 && slotIndex < _slotLabels.length) ? _slotLabels[slotIndex] : '';
 
-/// 現在のレッスン枠で、自分が担当する生徒一覧を返す。
+/// 現在時刻ラベル（セクション見出し用）
+String currentLessonLabel(DateTime now) {
+  final slot = currentSlotIndex(now);
+  if (slot != null) return slotLabel(slot);
+  return DateFormat('HH:mm').format(now);
+}
+
+/// 現在進行中のレッスンで、自分が担当する生徒一覧を返す。
+/// 通常レッスン（calendar_events: startTime/endTime/staffNames/studentIds 等）と
+/// プラスレッスン（plus_lessons: slotIndex/teachers/studentName）の両方を照合する。
 /// allStudents は assessment_screen の _allStudents と同形式
 /// ({id, name, kana, classroom, classrooms}) を想定。
 Future<List<Map<String, dynamic>>> fetchCurrentLessonStudents({
   required List<Map<String, dynamic>> allStudents,
 }) async {
-  final slot = currentSlotIndex();
-  if (slot == null) return [];
-
   final user = FirebaseAuth.instance.currentUser;
   if (user == null) return [];
 
-  // 今日の plus_lessons を取得
   final now = DateTime.now();
   final dayStart = DateTime(now.year, now.month, now.day);
   final dayEnd = dayStart.add(const Duration(days: 1));
-  final snap = await FirebaseFirestore.instance
-      .collection('plus_lessons')
-      .where('date', isGreaterThanOrEqualTo: Timestamp.fromDate(dayStart))
-      .where('date', isLessThan: Timestamp.fromDate(dayEnd))
-      .where('slotIndex', isEqualTo: slot)
-      .get();
 
-  // 自分が担当（teachers にはスタッフ名が入る。空白を除いた正規化名で照合）かつ
-  // 生徒名が allStudents のいずれかと一致するもの
   final myNames = await _resolveMyStaffNames(user.uid);
-
   String norm(String s) => s.replaceAll(RegExp(r'[\s　]'), '');
   final myNamesNorm = myNames.map(norm).toSet();
+  if (myNamesNorm.isEmpty) {
+    debugPrint('[QuickCapture] 自分のスタッフ名が解決できませんでした (uid=${user.uid})');
+  }
 
   final byName = <String, Map<String, dynamic>>{};
+  final byId = <String, Map<String, dynamic>>{};
   for (final s in allStudents) {
     byName[norm(s['name'] as String? ?? '')] = s;
+    final id = s['id'] as String?;
+    if (id != null) byId[id] = s;
   }
 
   final result = <Map<String, dynamic>>[];
   final seen = <String>{};
-  for (final doc in snap.docs) {
-    final data = doc.data();
-    final teachers = (data['teachers'] as List?)?.cast<dynamic>() ?? [];
-    final mine =
-        teachers.any((t) => myNamesNorm.contains(norm(t.toString())));
-    if (!mine) continue;
-    final sn = data['studentName'] as String? ?? '';
-    if (sn.isEmpty) continue;
-    final match = byName[norm(sn)];
-    if (match == null) continue;
-    if (seen.add(match['id'] as String)) {
-      result.add(match);
+  void addStudent(Map<String, dynamic>? s) {
+    if (s == null) return;
+    final id = s['id'] as String?;
+    if (id == null) return;
+    if (seen.add(id)) result.add(s);
+  }
+
+  // ---- 1) 通常レッスン (calendar_events) ----
+  try {
+    final evSnap = await FirebaseFirestore.instance
+        .collection('calendar_events')
+        .where('startTime', isGreaterThanOrEqualTo: Timestamp.fromDate(dayStart))
+        .where('startTime', isLessThan: Timestamp.fromDate(dayEnd))
+        .get();
+    int evMatched = 0;
+    for (final doc in evSnap.docs) {
+      final data = doc.data();
+      final startTs = data['startTime'] as Timestamp?;
+      final endTs = data['endTime'] as Timestamp?;
+      if (startTs == null || endTs == null) continue;
+      final start = startTs.toDate();
+      final end = endTs.toDate();
+      if (now.isBefore(start) || !now.isBefore(end)) continue; // 進行中のみ
+      final staffNames = (data['staffNames'] as List?)?.cast<dynamic>() ?? [];
+      final mine = staffNames.any((s) => myNamesNorm.contains(norm(s.toString())));
+      if (!mine) continue;
+      evMatched++;
+      // studentIds 優先 → なければ studentNames で名前一致
+      final studentIds =
+          (data['studentIds'] as List?)?.cast<dynamic>() ?? [];
+      final studentNames =
+          (data['studentNames'] as List?)?.cast<dynamic>() ?? [];
+      // 欠席除外
+      final absentIds =
+          (data['absentStudentIds'] as List?)?.cast<dynamic>().map((e) => e.toString()).toSet() ?? <String>{};
+      if (studentIds.isNotEmpty) {
+        for (final raw in studentIds) {
+          final sid = raw.toString();
+          if (absentIds.contains(sid)) continue;
+          addStudent(byId[sid]);
+        }
+      } else {
+        for (final raw in studentNames) {
+          addStudent(byName[norm(raw.toString())]);
+        }
+      }
+    }
+    debugPrint(
+        '[QuickCapture] calendar_events 進行中=$evMatched / 取得=${evSnap.docs.length}');
+  } catch (e) {
+    debugPrint('[QuickCapture] calendar_events 取得エラー: $e');
+  }
+
+  // ---- 2) プラスレッスン (plus_lessons) ----
+  final slot = currentSlotIndex(now);
+  if (slot != null) {
+    try {
+      final pSnap = await FirebaseFirestore.instance
+          .collection('plus_lessons')
+          .where('date', isGreaterThanOrEqualTo: Timestamp.fromDate(dayStart))
+          .where('date', isLessThan: Timestamp.fromDate(dayEnd))
+          .where('slotIndex', isEqualTo: slot)
+          .get();
+      int pMatched = 0;
+      for (final doc in pSnap.docs) {
+        final data = doc.data();
+        final teachers = (data['teachers'] as List?)?.cast<dynamic>() ?? [];
+        final mine =
+            teachers.any((t) => myNamesNorm.contains(norm(t.toString())));
+        if (!mine) continue;
+        pMatched++;
+        final sn = data['studentName'] as String? ?? '';
+        if (sn.isEmpty) continue;
+        addStudent(byName[norm(sn)]);
+      }
+      debugPrint('[QuickCapture] plus_lessons slot=$slot 担当=$pMatched / 取得=${pSnap.docs.length}');
+    } catch (e) {
+      debugPrint('[QuickCapture] plus_lessons 取得エラー: $e');
     }
   }
-  // 並びは元のリスト順（かな順）
+
   result.sort((a, b) =>
       (a['kana'] as String? ?? '').compareTo(b['kana'] as String? ?? ''));
+  debugPrint(
+      '[QuickCapture] 該当生徒=${result.length} 件 (myNames=${myNamesNorm.toList()})');
   return result;
 }
 

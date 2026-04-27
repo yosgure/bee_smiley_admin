@@ -145,21 +145,11 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
   }
 
   Future<void> _loadCurrentLessonStudents() async {
-    final slot = currentSlotIndex();
-    if (slot == null) {
-      if (mounted) {
-        setState(() {
-          _currentSlotIndex = null;
-          _currentLessonStudents = [];
-        });
-      }
-      return;
-    }
     try {
       final list = await fetchCurrentLessonStudents(allStudents: _allStudents);
       if (mounted) {
         setState(() {
-          _currentSlotIndex = slot;
+          _currentSlotIndex = currentSlotIndex();
           _currentLessonStudents = list;
         });
       }
@@ -365,7 +355,9 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
 
   Widget _buildCurrentLessonSection() {
     final slot = _currentSlotIndex;
-    final label = slot != null ? slotLabel(slot) : '';
+    final label = slot != null
+        ? slotLabel(slot)
+        : DateFormat('HH:mm〜').format(DateTime.now());
     return Container(
       margin: const EdgeInsets.fromLTRB(8, 4, 8, 8),
       decoration: BoxDecoration(
