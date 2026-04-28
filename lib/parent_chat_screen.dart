@@ -1,4 +1,3 @@
-import 'dart:typed_data';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -7,7 +6,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:intl/intl.dart';
-import 'package:image_picker/image_picker.dart';
+import 'package:file_picker/file_picker.dart';
 import 'classroom_utils.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:http/http.dart' as http;
@@ -18,7 +17,6 @@ import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
 import 'pdf_preview_stub.dart' if (dart.library.js_interop) 'pdf_preview_web.dart';
 import 'package:flutter/cupertino.dart';
 import 'app_theme.dart';
-import 'skeleton_loading.dart';
 import 'chat_screen.dart' show VideoPlayerDialog;
 
 class ParentChatScreen extends StatefulWidget {
@@ -33,19 +31,11 @@ class ParentChatScreen extends StatefulWidget {
 class _ParentChatScreenState extends State<ParentChatScreen> {
   final currentUser = FirebaseAuth.instance.currentUser;
   String _myDisplayName = '';
-  
-  String? _roomId;
-  String _roomName = '先生';
-  bool _isLoading = true;
-  bool _noRoom = false;
-  bool _isGroup = false;
-  Map<String, dynamic> _memberNames = {};
 
   @override
   void initState() {
     super.initState();
     _setDisplayName();
-    _findOrCreateChatRoom();
   }
 
   void _setDisplayName() {
@@ -57,64 +47,8 @@ class _ParentChatScreenState extends State<ParentChatScreen> {
     }
   }
 
-  Future<void> _findOrCreateChatRoom() async {
-    if (currentUser == null) {
-      setState(() => _isLoading = false);
-      return;
-    }
-
-    try {
-      // 保護者専用のルームIDを使用
-      final familyRoomId = 'family_${currentUser!.uid}';
-      
-      // 既存のルームを確認
-      final roomDoc = await FirebaseFirestore.instance
-          .collection('chat_rooms')
-          .doc(familyRoomId)
-          .get();
-
-      if (roomDoc.exists) {
-        final room = roomDoc.data()!;
-        final names = Map<String, dynamic>.from(room['names'] ?? {});
-        final members = List<String>.from(room['members'] ?? []);
-        
-        // ルーム名を設定（自分以外のメンバー名）
-        String roomName = room['groupName'] ?? '';
-        if (roomName.isEmpty) {
-          final otherNames = names.entries
-              .where((e) => e.key != currentUser!.uid)
-              .map((e) => e.value)
-              .toList();
-          roomName = otherNames.isNotEmpty ? otherNames.join(', ') : '先生';
-        }
-        
-        setState(() {
-          _roomId = familyRoomId;
-          _roomName = roomName;
-          _isGroup = members.length > 2;
-          _memberNames = names;
-          _noRoom = false;
-          _isLoading = false;
-        });
-      } else {
-        setState(() {
-          _isLoading = false;
-          _noRoom = true;
-        });
-      }
-    } catch (e) {
-      debugPrint('Error finding chat room: $e');
-      setState(() {
-        _isLoading = false;
-        _noRoom = true;
-      });
-    }
-  }
-
   Future<void> _createChatRoom() async {
     if (currentUser == null || widget.familyData == null) return;
-
-    setState(() => _isLoading = true);
 
     try {
       // 子供の教室を取得
@@ -177,7 +111,6 @@ class _ParentChatScreenState extends State<ParentChatScreen> {
             const SnackBar(content: Text('先生が登録されていません')),
           );
         }
-        setState(() => _isLoading = false);
         return;
       }
 
@@ -206,18 +139,6 @@ class _ParentChatScreenState extends State<ParentChatScreen> {
         'createdAt': FieldValue.serverTimestamp(),
       });
 
-      // ルーム名を設定
-      String roomName = groupName ?? staffNames.values.firstOrNull ?? '先生';
-
-      setState(() {
-        _roomId = familyRoomId;
-        _roomName = roomName;
-        _isGroup = staffUids.length > 1;
-        _memberNames = names;
-        _noRoom = false;
-        _isLoading = false;
-      });
-
     } catch (e) {
       debugPrint('Error creating chat room: $e');
       if (mounted) {
@@ -225,74 +146,99 @@ class _ParentChatScreenState extends State<ParentChatScreen> {
           SnackBar(content: Text('チャットルームの作成に失敗しました: $e')),
         );
       }
-      setState(() => _isLoading = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) {
+    if (currentUser == null) {
       return Column(
         children: [
           _buildHeader('チャット'),
-          const Expanded(child: ChatListSkeleton()),
+          const Expanded(child: Center(child: Text('ログインが必要です'))),
         ],
       );
     }
 
-    if (_noRoom || _roomId == null) {
-      return Column(
-        children: [
-          _buildHeader('チャット'),
-          Expanded(
-            child: Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.chat_bubble_outline, size: 64, color: context.colors.borderMedium),
-                  SizedBox(height: 16),
-                  Text(
-                    'まだチャットがありません',
-                    style: TextStyle(color: context.colors.textSecondary, fontSize: 16),
-                  ),
-                  const SizedBox(height: 24),
-                  ElevatedButton.icon(
-                    onPressed: _createChatRoom,
-                    icon: const Icon(Icons.add_comment),
-                    label: const Text('先生とチャットを始める'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primary,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(24),
+    final familyRoomId = 'family_${currentUser!.uid}';
+
+    return StreamBuilder<DocumentSnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('chat_rooms')
+          .doc(familyRoomId)
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return Column(
+            children: [
+              _buildHeader('チャット'),
+              const Expanded(child: Center(child: CircularProgressIndicator())),
+            ],
+          );
+        }
+
+        final exists = snapshot.hasData && snapshot.data!.exists;
+
+        if (!exists) {
+          return Column(
+            children: [
+              _buildHeader('チャット'),
+              Expanded(
+                child: Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.chat_bubble_outline, size: 64, color: context.colors.borderMedium),
+                      const SizedBox(height: 16),
+                      Text(
+                        'まだチャットがありません',
+                        style: TextStyle(color: context.colors.textSecondary, fontSize: 16),
                       ),
-                    ),
+                      const SizedBox(height: 24),
+                      ElevatedButton.icon(
+                        onPressed: _createChatRoom,
+                        icon: const Icon(Icons.add_comment),
+                        label: const Text('先生とチャットを始める'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.primary,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(24),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
-                ],
+                ),
               ),
-            ),
-          ),
-        ],
-      );
-    }
+            ],
+          );
+        }
 
-    return GestureDetector(
-      onTap: () => FocusScope.of(context).unfocus(),
-      child: Column(
-        children: [
-          _buildHeader('チャット'),
-          Expanded(
-            child: _ChatMessageList(
-              roomId: _roomId!,
-              myUid: currentUser!.uid,
-              isGroup: _isGroup,
-              memberNames: _memberNames,
-            ),
+        final room = snapshot.data!.data() as Map<String, dynamic>;
+        final names = Map<String, dynamic>.from(room['names'] ?? {});
+        final members = List<String>.from(room['members'] ?? []);
+        final isGroup = members.length > 2;
+
+        return GestureDetector(
+          onTap: () => FocusScope.of(context).unfocus(),
+          child: Column(
+            children: [
+              _buildHeader('チャット'),
+              Expanded(
+                child: _ChatMessageList(
+                  roomId: familyRoomId,
+                  myUid: currentUser!.uid,
+                  isGroup: isGroup,
+                  memberNames: names,
+                ),
+              ),
+              _ChatInputArea(roomId: familyRoomId, myName: _myDisplayName),
+            ],
           ),
-          _ChatInputArea(roomId: _roomId!, myName: _myDisplayName),
-        ],
-      ),
+        );
+      },
     );
   }
 
@@ -361,7 +307,7 @@ class _ChatMessageListState extends State<_ChatMessageList> {
           }
           
           if (!snapshot.hasData) {
-            return const ChatListSkeleton();
+            return const Center(child: CircularProgressIndicator());
           }
 
           final messages = snapshot.data!.docs;
@@ -1074,15 +1020,18 @@ class _ChatMessageListState extends State<_ChatMessageList> {
           builder: (context, setDialogState) {
             return Stack(
               children: [
-                Center(
-                  child: InteractiveViewer(
-                    minScale: 0.5,
-                    maxScale: 4.0,
-                    child: CachedNetworkImage(
-                      imageUrl: url,
-                      fit: BoxFit.contain,
-                      placeholder: (c, u) => Center(child: CircularProgressIndicator(color: context.colors.cardBg)),
-                      errorWidget: (c, u, e) => Icon(Icons.broken_image, color: context.colors.cardBg, size: 48),
+                _SwipeDownToDismiss(
+                  onDismiss: () => Navigator.pop(dialogContext),
+                  child: Center(
+                    child: InteractiveViewer(
+                      minScale: 0.5,
+                      maxScale: 4.0,
+                      child: CachedNetworkImage(
+                        imageUrl: url,
+                        fit: BoxFit.contain,
+                        placeholder: (c, u) => Center(child: CircularProgressIndicator(color: context.colors.cardBg)),
+                        errorWidget: (c, u, e) => Icon(Icons.broken_image, color: context.colors.cardBg, size: 48),
+                      ),
                     ),
                   ),
                 ),
@@ -1324,65 +1273,54 @@ class _ChatInputAreaState extends State<_ChatInputArea> {
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 Padding(
-                  padding: const EdgeInsets.only(bottom: 6),
-                  child: GestureDetector(
-                    onTap: _isUploading ? null : _pickAndUploadImage,
-                    child: Icon(
-                      Icons.image,
-                      color: _isUploading ? context.colors.textHint : context.colors.textSecondary,
-                      size: 28,
+                  padding: const EdgeInsets.only(bottom: 4),
+                  child: IconButton(
+                    icon: Icon(
+                      Icons.attach_file,
+                      color: _isUploading ? context.colors.borderMedium : context.colors.textSecondary,
+                      size: 22,
                     ),
+                    constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                    padding: EdgeInsets.zero,
+                    tooltip: '写真・動画・ファイルを添付',
+                    onPressed: _isUploading ? null : _pickAndUploadAny,
                   ),
                 ),
-                SizedBox(width: 8),
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 6),
-                  child: GestureDetector(
-                    onTap: _isUploading ? null : _pickAndUploadVideo,
-                    child: Icon(
-                      Icons.videocam,
-                      color: _isUploading ? context.colors.textHint : context.colors.textSecondary,
-                      size: 28,
-                    ),
-                  ),
-                ),
-                SizedBox(width: 8),
+                const SizedBox(width: 4),
                 Expanded(
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: context.colors.borderLight,
-                      borderRadius: BorderRadius.circular(20),
-                    ),
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxHeight: 140),
                     child: TextField(
                       controller: _textController,
                       focusNode: _focusNode,
-                      maxLines: 5,
+                      maxLines: null,
                       minLines: 1,
-                      textInputAction: TextInputAction.newline,
-                      style: TextStyle(fontSize: 16),
+                      keyboardType: TextInputType.multiline,
+                      style: const TextStyle(fontSize: 15, height: 1.5, fontFamily: 'NotoSansJP', fontFamilyFallback: ['Hiragino Sans', 'Roboto', 'sans-serif']),
                       decoration: InputDecoration(
                         hintText: 'メッセージを入力',
-                        hintStyle: TextStyle(fontSize: 16, color: context.colors.textSecondary),
-                        border: InputBorder.none,
-                        contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                        filled: true,
+                        fillColor: context.colors.chipBg,
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(20), borderSide: BorderSide.none),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                         isDense: true,
                       ),
                     ),
                   ),
                 ),
-                SizedBox(width: 8),
+                const SizedBox(width: 4),
                 Padding(
                   padding: const EdgeInsets.only(bottom: 2),
                   child: GestureDetector(
                     onTap: _sendMessage,
                     child: Container(
-                      width: 40,
-                      height: 40,
+                      width: 36,
+                      height: 36,
                       decoration: const BoxDecoration(
                         color: AppColors.primary,
                         shape: BoxShape.circle,
                       ),
-                      child: Icon(Icons.send, color: context.colors.cardBg, size: 20),
+                      child: const Icon(Icons.send, color: Colors.white, size: 18),
                     ),
                   ),
                 ),
@@ -1392,6 +1330,70 @@ class _ChatInputAreaState extends State<_ChatInputArea> {
         ),
       ),
     );
+  }
+
+  Future<void> _pickAndUploadAny() async {
+    if (_isUploading) return;
+    _focusNode.unfocus();
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.any,
+      withData: true,
+      allowMultiple: true,
+    );
+    if (result == null || result.files.isEmpty) return;
+    const imageExts = {'jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'heic'};
+    const videoExts = {'mp4', 'mov', 'avi', 'webm', 'mkv', 'm4v'};
+    for (final file in result.files) {
+      final bytes = file.bytes;
+      if (bytes == null) continue;
+      if (!mounted) return;
+      setState(() => _isUploading = true);
+      try {
+        final name = file.name;
+        final ext = name.contains('.') ? name.split('.').last.toLowerCase() : '';
+        final fileName = '${DateTime.now().millisecondsSinceEpoch}_$name';
+        final ref = FirebaseStorage.instance
+            .ref()
+            .child('chat_uploads/${widget.roomId}/$fileName');
+        if (imageExts.contains(ext)) {
+          final contentType = ext == 'png'
+              ? 'image/png'
+              : ext == 'gif'
+                  ? 'image/gif'
+                  : ext == 'webp'
+                      ? 'image/webp'
+                      : 'image/jpeg';
+          await ref.putData(bytes, SettableMetadata(contentType: contentType));
+          final url = await ref.getDownloadURL();
+          await _sendMessage(type: 'image', url: url);
+        } else if (videoExts.contains(ext)) {
+          if (bytes.length > 50 * 1024 * 1024) {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('動画サイズが大きすぎます (50MBまで)')),
+              );
+            }
+            continue;
+          }
+          final contentType = ext == 'mov' ? 'video/quicktime' : 'video/mp4';
+          await ref.putData(bytes, SettableMetadata(contentType: contentType));
+          final url = await ref.getDownloadURL();
+          await _sendMessage(type: 'video', url: url, fileName: name);
+        } else {
+          await ref.putData(bytes);
+          final url = await ref.getDownloadURL();
+          await _sendMessage(type: 'file', url: url, fileName: name);
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('アップロード失敗: $e')),
+          );
+        }
+      } finally {
+        if (mounted) setState(() => _isUploading = false);
+      }
+    }
   }
 
   Future<void> _sendMessage({String type = 'text', String? url, String? fileName}) async {
@@ -1424,73 +1426,42 @@ class _ChatInputAreaState extends State<_ChatInputArea> {
     });
   }
 
-  Future<void> _pickAndUploadVideo() async {
-    _focusNode.unfocus();
-    final picker = ImagePicker();
-    final XFile? video = await picker.pickVideo(
-      source: ImageSource.gallery,
-      maxDuration: const Duration(minutes: 10),
-    );
-    if (video == null) return;
+}
 
-    setState(() => _isUploading = true);
-    try {
-      final Uint8List bytes = await video.readAsBytes();
-      if (bytes.length > 50 * 1024 * 1024) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('動画サイズが大きすぎます (50MBまで)')),
-          );
+/// 下スワイプで閉じるラッパー。
+class _SwipeDownToDismiss extends StatefulWidget {
+  final Widget child;
+  final VoidCallback onDismiss;
+  const _SwipeDownToDismiss({required this.child, required this.onDismiss});
+
+  @override
+  State<_SwipeDownToDismiss> createState() => _SwipeDownToDismissState();
+}
+
+class _SwipeDownToDismissState extends State<_SwipeDownToDismiss> {
+  double _dy = 0;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      behavior: HitTestBehavior.translucent,
+      onVerticalDragUpdate: (d) {
+        if (d.delta.dy > 0 || _dy > 0) {
+          setState(() => _dy = (_dy + d.delta.dy).clamp(0, 600));
         }
-        return;
-      }
-      final ext = video.name.split('.').last.toLowerCase();
-      final contentType = ext == 'mov' ? 'video/quicktime' : 'video/mp4';
-      final String fileName =
-          '${DateTime.now().millisecondsSinceEpoch}_${video.name}';
-      final ref = FirebaseStorage.instance
-          .ref()
-          .child('chat_uploads/${widget.roomId}/$fileName');
-      await ref.putData(bytes, SettableMetadata(contentType: contentType));
-      final url = await ref.getDownloadURL();
-      await _sendMessage(type: 'video', url: url, fileName: video.name);
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('動画アップロード失敗: $e')),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _isUploading = false);
-    }
-  }
-
-  Future<void> _pickAndUploadImage() async {
-    _focusNode.unfocus();
-
-    final picker = ImagePicker();
-    final XFile? image = await picker.pickImage(
-      source: ImageSource.gallery,
-      maxWidth: 1280,
-      maxHeight: 1280,
-      imageQuality: 80,
+      },
+      onVerticalDragEnd: (d) {
+        final v = d.primaryVelocity ?? 0;
+        if (_dy > 120 || v > 700) {
+          widget.onDismiss();
+        } else {
+          setState(() => _dy = 0);
+        }
+      },
+      child: Transform.translate(
+        offset: Offset(0, _dy),
+        child: widget.child,
+      ),
     );
-    if (image == null) return;
-
-    setState(() => _isUploading = true);
-    try {
-      final Uint8List fileBytes = await image.readAsBytes();
-      final String fileName = '${DateTime.now().millisecondsSinceEpoch}_${image.name}';
-      final ref = FirebaseStorage.instance.ref().child('chat_uploads/${widget.roomId}/$fileName');
-      await ref.putData(fileBytes, SettableMetadata(contentType: 'image/jpeg'));
-      final url = await ref.getDownloadURL();
-      await _sendMessage(type: 'image', url: url);
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('アップロード失敗: $e')));
-      }
-    } finally {
-      if (mounted) setState(() => _isUploading = false);
-    }
   }
 }
