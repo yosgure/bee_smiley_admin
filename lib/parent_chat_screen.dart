@@ -37,6 +37,23 @@ class _ParentChatScreenState extends State<ParentChatScreen> {
   void initState() {
     super.initState();
     _setDisplayName();
+    _ensureRoom();
+  }
+
+  Future<void> _ensureRoom() async {
+    if (currentUser == null || widget.familyData == null) return;
+    final familyRoomId = 'family_${currentUser!.uid}';
+    try {
+      final doc = await FirebaseFirestore.instance
+          .collection('chat_rooms')
+          .doc(familyRoomId)
+          .get();
+      if (!doc.exists) {
+        await _createChatRoom();
+      }
+    } catch (e) {
+      debugPrint('Error ensuring chat room: $e');
+    }
   }
 
   void _setDisplayName() {
@@ -169,57 +186,13 @@ class _ParentChatScreenState extends State<ParentChatScreen> {
           .doc(familyRoomId)
           .snapshots(),
       builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return Column(
-            children: [
-              _buildHeader('チャット'),
-              const Expanded(child: Center(child: CircularProgressIndicator())),
-            ],
-          );
+        Map<String, dynamic> names = {};
+        List<String> members = [];
+        if (snapshot.hasData && snapshot.data!.exists) {
+          final room = snapshot.data!.data() as Map<String, dynamic>;
+          names = Map<String, dynamic>.from(room['names'] ?? {});
+          members = List<String>.from(room['members'] ?? []);
         }
-
-        final exists = snapshot.hasData && snapshot.data!.exists;
-
-        if (!exists) {
-          return Column(
-            children: [
-              _buildHeader('チャット'),
-              Expanded(
-                child: Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.chat_bubble_outline, size: 64, color: context.colors.borderMedium),
-                      const SizedBox(height: 16),
-                      Text(
-                        'まだチャットがありません',
-                        style: TextStyle(color: context.colors.textSecondary, fontSize: 16),
-                      ),
-                      const SizedBox(height: 24),
-                      ElevatedButton.icon(
-                        onPressed: _createChatRoom,
-                        icon: const Icon(Icons.add_comment),
-                        label: const Text('先生とチャットを始める'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.primary,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(24),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          );
-        }
-
-        final room = snapshot.data!.data() as Map<String, dynamic>;
-        final names = Map<String, dynamic>.from(room['names'] ?? {});
-        final members = List<String>.from(room['members'] ?? []);
         final isGroup = members.length > 2;
 
         return GestureDetector(
@@ -235,7 +208,11 @@ class _ParentChatScreenState extends State<ParentChatScreen> {
                   memberNames: names,
                 ),
               ),
-              _ChatInputArea(roomId: familyRoomId, myName: _myDisplayName),
+              _ChatInputArea(
+                roomId: familyRoomId,
+                myName: _myDisplayName,
+                ensureRoom: _ensureRoom,
+              ),
             ],
           ),
         );
@@ -1236,8 +1213,9 @@ class _ChatMessageListState extends State<_ChatMessageList> {
 class _ChatInputArea extends StatefulWidget {
   final String roomId;
   final String myName;
+  final Future<void> Function()? ensureRoom;
 
-  const _ChatInputArea({required this.roomId, required this.myName});
+  const _ChatInputArea({required this.roomId, required this.myName, this.ensureRoom});
 
   @override
   State<_ChatInputArea> createState() => _ChatInputAreaState();
@@ -1272,19 +1250,16 @@ class _ChatInputAreaState extends State<_ChatInputArea> {
             Row(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 4),
-                  child: IconButton(
-                    icon: Icon(
-                      Icons.add_circle_outline,
-                      color: _isUploading ? context.colors.borderMedium : context.colors.textSecondary,
-                      size: 24,
-                    ),
-                    constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                    padding: EdgeInsets.zero,
-                    tooltip: '添付',
-                    onPressed: _isUploading ? null : _showAttachmentMenu,
+                IconButton(
+                  icon: Icon(
+                    Icons.add_circle_outline,
+                    color: _isUploading ? context.colors.borderMedium : context.colors.textSecondary,
+                    size: 24,
                   ),
+                  constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                  padding: EdgeInsets.zero,
+                  tooltip: '添付',
+                  onPressed: _isUploading ? null : _showAttachmentMenu,
                 ),
                 const SizedBox(width: 4),
                 Expanded(
@@ -1490,6 +1465,10 @@ class _ChatInputAreaState extends State<_ChatInputArea> {
     _focusNode.unfocus();
 
     if (type == 'text') _textController.clear();
+
+    if (widget.ensureRoom != null) {
+      await widget.ensureRoom!();
+    }
 
     final roomRef = FirebaseFirestore.instance.collection('chat_rooms').doc(widget.roomId);
     await roomRef.collection('messages').add({
