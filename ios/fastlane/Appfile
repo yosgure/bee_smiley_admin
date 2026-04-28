@@ -1,0 +1,5 @@
+app_identifier("com.beesmiley.admin")
+team_id("KLPND39648")
+
+# Apple ID（任意・APIキー使う場合は不要）
+# apple_id("yousuke.ueda@gmail.com")

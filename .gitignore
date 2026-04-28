@@ -45,3 +45,18 @@ app.*.map.json
 /android/app/release
 
 .claude/scheduled_tasks.lock
+
+# fastlane
+ios/fastlane/report.xml
+ios/fastlane/Preview.html
+ios/fastlane/screenshots
+ios/fastlane/test_output
+ios/fastlane/README.md
+android/fastlane/report.xml
+android/fastlane/Preview.html
+android/fastlane/screenshots
+android/fastlane/test_output
+android/fastlane/README.md
+android/fastlane/metadata
+**/*.p8
+**/playstore_service.json

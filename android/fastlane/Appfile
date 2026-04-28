@@ -1,0 +1,2 @@
+json_key_file(ENV["PLAY_STORE_JSON_KEY"] || File.expand_path("~/.config/beesmiley/playstore_service.json"))
+package_name("com.beesmiley.app")
