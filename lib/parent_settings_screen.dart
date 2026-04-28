@@ -1,10 +1,5 @@
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_storage/firebase_storage.dart';
-import 'package:image_picker/image_picker.dart';
-import 'package:image/image.dart' as img;
 import 'app_theme.dart';
 import 'main.dart' show themeNotifier, setThemeMode;
 import 'classroom_utils.dart';
@@ -30,7 +25,6 @@ class ParentSettingsScreen extends StatefulWidget {
 }
 
 class _ParentSettingsScreenState extends State<ParentSettingsScreen> {
-  bool _isUploading = false;
 
   // 現在選択中の子ども
   Map<String, dynamic>? get _currentChild {
@@ -46,36 +40,6 @@ class _ParentSettingsScreenState extends State<ParentSettingsScreen> {
     return '$lastName $firstName';
   }
 
-  // プロフィール写真用の圧縮（長辺300px、目標100KB）
-  Future<Uint8List> _compressProfileImage(Uint8List bytes) async {
-    final original = img.decodeImage(bytes);
-    if (original == null) return bytes;
-
-    const int targetSize = 100 * 1024; // 100KB
-    const int maxDimension = 300; // 長辺300px
-    
-    // リサイズ
-    img.Image resized;
-    if (original.width > original.height) {
-      resized = original.width > maxDimension 
-          ? img.copyResize(original, width: maxDimension)
-          : original;
-    } else {
-      resized = original.height > maxDimension 
-          ? img.copyResize(original, height: maxDimension)
-          : original;
-    }
-
-    // 品質を下げながら圧縮
-    for (int quality = 85; quality >= 40; quality -= 10) {
-      final compressed = img.encodeJpg(resized, quality: quality);
-      if (compressed.length <= targetSize) {
-        return Uint8List.fromList(compressed);
-      }
-    }
-
-    return Uint8List.fromList(img.encodeJpg(resized, quality: 40));
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -90,13 +54,6 @@ class _ParentSettingsScreenState extends State<ParentSettingsScreen> {
               _buildSectionTitle('お子さま情報'),
               const SizedBox(height: 8),
               _buildChildCard(),
-              
-              const SizedBox(height: 24),
-              
-              // 子どもの写真変更
-              _buildSectionTitle('写真の変更'),
-              const SizedBox(height: 8),
-              _buildPhotoSection(),
               
               const SizedBox(height: 24),
 
@@ -241,71 +198,6 @@ class _ParentSettingsScreenState extends State<ParentSettingsScreen> {
     );
   }
 
-  Widget _buildPhotoSection() {
-    return Card(
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: context.colors.borderLight),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          children: [
-            // 現在の写真
-            GestureDetector(
-              onTap: _isUploading ? null : _pickAndUploadPhoto,
-              child: Stack(
-                children: [
-                  CircleAvatar(
-                    radius: 50,
-                    backgroundColor: context.colors.borderLight,
-                    backgroundImage: _currentChild?['photoUrl'] != null 
-                        ? NetworkImage(_currentChild!['photoUrl']) 
-                        : null,
-                    child: _currentChild?['photoUrl'] == null
-                        ? Icon(Icons.person, size: 50, color: context.colors.textSecondary)
-                        : null,
-                  ),
-                  Positioned(
-                    right: 0,
-                    bottom: 0,
-                    child: Container(
-                      padding: const EdgeInsets.all(6),
-                      decoration: BoxDecoration(
-                        color: AppColors.primary,
-                        shape: BoxShape.circle,
-                        border: Border.all(color: Colors.white, width: 2),
-                      ),
-                      child: const Icon(Icons.camera_alt, size: 16, color: Colors.white),
-                    ),
-                  ),
-                  if (_isUploading)
-                    Positioned.fill(
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: context.colors.shadow,
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Center(
-                          child: CircularProgressIndicator(color: Colors.white),
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              'タップして写真を変更',
-              style: TextStyle(color: context.colors.textSecondary, fontSize: 13),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   Widget _buildThemeCard() {
     final currentMode = themeNotifier.value;
     return Card(
@@ -365,75 +257,6 @@ class _ParentSettingsScreenState extends State<ParentSettingsScreen> {
         ),
       ),
     );
-  }
-
-  Future<void> _pickAndUploadPhoto() async {
-    final picker = ImagePicker();
-    final picked = await picker.pickImage(source: ImageSource.gallery);
-    if (picked == null) return;
-
-    setState(() => _isUploading = true);
-
-    try {
-      final bytes = await picked.readAsBytes();
-      
-      // 画像を圧縮（長辺300px、目標100KB）
-      final compressed = await _compressProfileImage(bytes);
-      
-      final uid = widget.familyData?['uid'];
-      final firstName = _currentChild?['firstName'];
-      if (uid == null || firstName == null) throw Exception('データが不足しています');
-
-      // Firebase Storageにアップロード
-      final fileName = '${uid}_${firstName}_${DateTime.now().millisecondsSinceEpoch}.jpg';
-      final ref = FirebaseStorage.instance.ref().child('child_photos/$fileName');
-      await ref.putData(compressed, SettableMetadata(contentType: 'image/jpeg'));
-      final photoUrl = await ref.getDownloadURL();
-
-      // Firestoreを更新
-      final familyDoc = await FirebaseFirestore.instance
-          .collection('families')
-          .where('uid', isEqualTo: uid)
-          .limit(1)
-          .get();
-
-      if (familyDoc.docs.isNotEmpty) {
-        final docId = familyDoc.docs.first.id;
-        final children = List<Map<String, dynamic>>.from(
-          familyDoc.docs.first.data()['children'] ?? []
-        );
-
-        // 該当の子どもの写真URLを更新
-        for (int i = 0; i < children.length; i++) {
-          if (children[i]['firstName'] == firstName) {
-            children[i]['photoUrl'] = photoUrl;
-            break;
-          }
-        }
-
-        await FirebaseFirestore.instance
-            .collection('families')
-            .doc(docId)
-            .update({'children': children});
-
-        // 親画面に更新を通知
-        widget.onFamilyUpdated();
-
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('写真を更新しました'), backgroundColor: Colors.green),
-          );
-        }
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('アップロードに失敗しました: $e'), backgroundColor: Colors.red),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _isUploading = false);
-    }
   }
 
   void _showLogoutDialog() {
