@@ -311,7 +311,18 @@ Widget _buildHeader({bool showBack = false}) {
 
   /// 詳細画面
   Widget _buildDetailScreen() {
-    return Column(
+    return GestureDetector(
+      // 右方向（左→右）に大きくスワイプしたら一覧に戻る（iOS風スワイプバック）
+      onHorizontalDragEnd: (details) {
+        final v = details.primaryVelocity ?? 0;
+        if (v > 300) {
+          setState(() {
+            _selectedAssessmentId = null;
+            _selectedType = null;
+          });
+        }
+      },
+      child: Column(
       children: [
         _buildHeader(showBack: true),
         Expanded(
@@ -339,6 +350,7 @@ Widget _buildHeader({bool showBack = false}) {
           ),
         ),
       ],
+      ),
     );
   }
 

@@ -7,6 +7,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:intl/intl.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:image_picker/image_picker.dart';
 import 'classroom_utils.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:http/http.dart' as http;
@@ -1261,7 +1262,6 @@ class _ChatInputAreaState extends State<_ChatInputArea> {
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
       decoration: BoxDecoration(
         color: context.colors.cardBg,
-        border: Border(top: BorderSide(color: context.colors.borderLight)),
       ),
       child: SafeArea(
         top: false,
@@ -1276,14 +1276,14 @@ class _ChatInputAreaState extends State<_ChatInputArea> {
                   padding: const EdgeInsets.only(bottom: 4),
                   child: IconButton(
                     icon: Icon(
-                      Icons.attach_file,
+                      Icons.add_circle_outline,
                       color: _isUploading ? context.colors.borderMedium : context.colors.textSecondary,
-                      size: 22,
+                      size: 24,
                     ),
                     constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
                     padding: EdgeInsets.zero,
-                    tooltip: '写真・動画・ファイルを添付',
-                    onPressed: _isUploading ? null : _pickAndUploadAny,
+                    tooltip: '添付',
+                    onPressed: _isUploading ? null : _showAttachmentMenu,
                   ),
                 ),
                 const SizedBox(width: 4),
@@ -1330,6 +1330,93 @@ class _ChatInputAreaState extends State<_ChatInputArea> {
         ),
       ),
     );
+  }
+
+  void _showAttachmentMenu() {
+    _focusNode.unfocus();
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: context.colors.cardBg,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (sheetCtx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.photo_library, color: AppColors.primary),
+              title: const Text('写真・動画'),
+              onTap: () {
+                Navigator.pop(sheetCtx);
+                _pickAndUploadPhotos();
+              },
+            ),
+            ListTile(
+              leading: Icon(Icons.attach_file, color: context.colors.textSecondary),
+              title: const Text('ファイル'),
+              onTap: () {
+                Navigator.pop(sheetCtx);
+                _pickAndUploadAny();
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _pickAndUploadPhotos() async {
+    if (_isUploading) return;
+    final picker = ImagePicker();
+    final List<XFile> files = await picker.pickMultipleMedia();
+    if (files.isEmpty) return;
+    for (final file in files) {
+      if (!mounted) return;
+      setState(() => _isUploading = true);
+      try {
+        final Uint8List bytes = await file.readAsBytes();
+        final name = file.name;
+        final ext = name.contains('.') ? name.split('.').last.toLowerCase() : '';
+        final isVideo = file.mimeType?.startsWith('video/') == true ||
+            const ['mp4', 'mov', 'avi', 'webm', 'mkv', 'm4v'].contains(ext);
+        if (isVideo && bytes.length > 50 * 1024 * 1024) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('動画サイズが大きすぎます (50MBまで)')),
+            );
+          }
+          continue;
+        }
+        final fileName = '${DateTime.now().millisecondsSinceEpoch}_$name';
+        final ref = FirebaseStorage.instance.ref().child('chat_uploads/${widget.roomId}/$fileName');
+        if (isVideo) {
+          final contentType = ext == 'mov' ? 'video/quicktime' : 'video/mp4';
+          await ref.putData(bytes, SettableMetadata(contentType: contentType));
+          final url = await ref.getDownloadURL();
+          await _sendMessage(type: 'video', url: url, fileName: name);
+        } else {
+          final contentType = ext == 'png'
+              ? 'image/png'
+              : ext == 'gif'
+                  ? 'image/gif'
+                  : ext == 'webp'
+                      ? 'image/webp'
+                      : 'image/jpeg';
+          await ref.putData(bytes, SettableMetadata(contentType: contentType));
+          final url = await ref.getDownloadURL();
+          await _sendMessage(type: 'image', url: url);
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('アップロード失敗: $e')),
+          );
+        }
+      } finally {
+        if (mounted) setState(() => _isUploading = false);
+      }
+    }
   }
 
   Future<void> _pickAndUploadAny() async {
