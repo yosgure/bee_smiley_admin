@@ -28,6 +28,9 @@ dependencies:
   # Storage & Utils
   shared_preferences: ^2.5.3
 
+  # Emoji
+  emoji_picker_flutter: ^4.4.0
+
   # Firebase
   firebase_core: ^4.2.1
   firebase_auth: ^6.1.2

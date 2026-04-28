@@ -21,6 +21,8 @@ import 'package:video_player/video_player.dart';
 import 'app_theme.dart';
 import 'notification_service.dart';
 import 'classroom_utils.dart';
+import 'utils/recent_emojis.dart';
+import 'widgets/emoji_stamp_picker.dart';
 
 // ==========================================
 // 1. メイン画面 (ChatListScreen)
@@ -1594,6 +1596,7 @@ class _ChatDetailViewState extends State<ChatDetailView> {
         msg['replyTo'] is Map ? Map<String, dynamic>.from(msg['replyTo']) : null;
 
     Widget content;
+    final bool isEmojiOnly = type == 'text' && isEmojiOnlyMessage(text);
     final bool isImageOnly = (type == 'image' || type == 'video') && text.isEmpty;
     if (type == 'image') {
       content = Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -1709,6 +1712,16 @@ class _ChatDetailViewState extends State<ChatDetailView> {
           ],
         ),
       );
+    } else if (isEmojiOnly) {
+      content = Text(
+        text,
+        style: const TextStyle(
+          fontSize: 38,
+          height: 1.5,
+          fontFamily: 'NotoSansJP',
+          fontFamilyFallback: ['Hiragino Sans', 'Roboto', 'sans-serif'],
+        ),
+      );
     } else { content = SelectableText.rich(TextSpan(children: _buildTextSpansWithLinks(text, ctx: context))); }
 
     String readText = '';
@@ -1796,7 +1809,7 @@ class _ChatDetailViewState extends State<ChatDetailView> {
                         mobileTimeChevron(),
                       const SizedBox(width: 4),
                     ],
-                    Flexible(child: isImageOnly && replyTo == null ? content : Container(padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9), decoration: BoxDecoration(color: isMe ? context.colors.chatMyBubble : context.colors.chatOtherBubble, borderRadius: BorderRadius.circular(12)), child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [if (replyTo != null) _buildReplyQuote(replyTo, isMe), content]))),
+                    Flexible(child: (isImageOnly || isEmojiOnly) && replyTo == null ? content : Container(padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9), decoration: BoxDecoration(color: isMe ? context.colors.chatMyBubble : context.colors.chatOtherBubble, borderRadius: BorderRadius.circular(12)), child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [if (replyTo != null) _buildReplyQuote(replyTo, isMe), content]))),
                     if (!isMe) ...[
                       const SizedBox(width: 4),
                       if (isDesktop) ...[
@@ -1844,9 +1857,23 @@ class _ChatDetailViewState extends State<ChatDetailView> {
     );
   }
 
-  void _showPopupMenu(Offset position, String msgId, bool isMe, String type, String text) {
+  Future<void> _showPopupMenu(Offset position, String msgId, bool isMe, String type, String text) async {
     final RenderBox overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
-    const quickEmojis = ['👍', '❤️', '😄', '🎉', '🙏', 'bee'];
+    const fallback = ['👍', '❤️', '😄', '🎉', '🙏', 'bee'];
+    final recent = await RecentEmojis.load();
+    final List<String> quickEmojis;
+    if (recent.length >= 6) {
+      quickEmojis = recent.take(6).toList();
+    } else {
+      final seen = <String>{...recent};
+      final filled = <String>[...recent];
+      for (final e in fallback) {
+        if (filled.length >= 6) break;
+        if (seen.add(e)) filled.add(e);
+      }
+      quickEmojis = filled;
+    }
+    if (!mounted) return;
 
     // 項目の hover ハイライトを消すため、PopupMenuItem は enabled: false にしつつ、
     // 内部に hoverColor 透明の InkWell を配置してタップだけをハンドリングする
@@ -1910,6 +1937,7 @@ class _ChatDetailViewState extends State<ChatDetailView> {
                     mouseCursor: SystemMouseCursors.click,
                     onTap: () {
                       Navigator.of(ctx).pop();
+                      RecentEmojis.add(e);
                       _toggleReaction(msgId, e);
                     },
                     child: Container(
@@ -2017,46 +2045,64 @@ class _ChatDetailViewState extends State<ChatDetailView> {
 
   // クイックスタンプバー: よく使うスタンプをワンタップで送信
   Widget _buildQuickReactionBar(BuildContext sheetContext, String msgId) {
-    // bee ロゴの右に＋ボタンを配置（タップで他のスタンプを開ける）
-    const quickEmojis = ['👍', '❤️', '😄', '🎉', '🙏', 'bee'];
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-        children: [
-          for (final e in quickEmojis)
-            GestureDetector(
-              onTap: () {
-                Navigator.pop(sheetContext);
-                _toggleReaction(msgId, e);
-              },
-              behavior: HitTestBehavior.opaque,
-              child: Container(
-                width: 40,
-                height: 40,
-                alignment: Alignment.center,
-                child: _stampWidget(e, size: 28),
+    const fallback = ['👍', '❤️', '😄', '🎉', '🙏', 'bee'];
+    return FutureBuilder<List<String>>(
+      future: RecentEmojis.load(),
+      builder: (ctx, snapshot) {
+        final recent = snapshot.data ?? const [];
+        final List<String> emojis;
+        if (recent.length >= 6) {
+          emojis = recent.take(6).toList();
+        } else {
+          final seen = <String>{...recent};
+          final filled = <String>[...recent];
+          for (final e in fallback) {
+            if (filled.length >= 6) break;
+            if (seen.add(e)) filled.add(e);
+          }
+          emojis = filled;
+        }
+        return Container(
+          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              for (final e in emojis)
+                GestureDetector(
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    RecentEmojis.add(e);
+                    _toggleReaction(msgId, e);
+                  },
+                  behavior: HitTestBehavior.opaque,
+                  child: Container(
+                    width: 40,
+                    height: 40,
+                    alignment: Alignment.center,
+                    child: _stampWidget(e, size: 28),
+                  ),
+                ),
+              GestureDetector(
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  _showEmojiPicker(msgId);
+                },
+                behavior: HitTestBehavior.opaque,
+                child: Container(
+                  width: 40,
+                  height: 40,
+                  alignment: Alignment.center,
+                  child: Icon(
+                    Icons.add,
+                    size: 24,
+                    color: CupertinoColors.label.resolveFrom(sheetContext),
+                  ),
+                ),
               ),
-            ),
-          GestureDetector(
-            onTap: () {
-              Navigator.pop(sheetContext);
-              _showEmojiPicker(msgId);
-            },
-            behavior: HitTestBehavior.opaque,
-            child: Container(
-              width: 40,
-              height: 40,
-              alignment: Alignment.center,
-              child: Icon(
-                Icons.add,
-                size: 24,
-                color: CupertinoColors.label.resolveFrom(sheetContext),
-              ),
-            ),
+            ],
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 
@@ -2381,12 +2427,10 @@ class _ChatDetailViewState extends State<ChatDetailView> {
   }
 
   void _showEmojiPicker(String msgId) {
-    final emojis = ['👍', '❤️', '😄', '🎉', '🙏', 'bee', '😂', '😢', '✨', '🤔', '👀'];
-    showDialog(context: context, builder: (dialogContext) => AlertDialog(
-      title: const Text('スタンプを選択'),
-      content: Wrap(alignment: WrapAlignment.center, spacing: 8, runSpacing: 8, children: emojis.map((e) => GestureDetector(onTap: () { _toggleReaction(msgId, e); Navigator.of(dialogContext).pop(); }, child: Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: context.colors.chipBg, borderRadius: BorderRadius.circular(8)), child: _stampWidget(e, size: 28)))).toList()),
-      actions: [TextButton(onPressed: () => Navigator.of(dialogContext).pop(), child: const Text('キャンセル'))],
-    ));
+    showEmojiStampPicker(
+      context: context,
+      onSelected: (emoji) => _toggleReaction(msgId, emoji),
+    );
   }
 
   void _deleteMessage(String msgId) {

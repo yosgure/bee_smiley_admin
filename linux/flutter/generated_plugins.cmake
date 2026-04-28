@@ -4,6 +4,7 @@
 
 list(APPEND FLUTTER_PLUGIN_LIST
   desktop_drop
+  emoji_picker_flutter
   file_selector_linux
   syncfusion_pdfviewer_linux
   url_launcher_linux
