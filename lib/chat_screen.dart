@@ -1360,15 +1360,12 @@ class _ChatDetailViewState extends State<ChatDetailView> {
             Row(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-            Padding(
-              padding: const EdgeInsets.only(bottom: 4),
-              child: IconButton(
-                icon: Icon(Icons.add_circle_outline, color: _isUploading ? context.colors.borderMedium : context.colors.textSecondary, size: 24),
-                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                padding: EdgeInsets.zero,
-                tooltip: '添付',
-                onPressed: _isUploading ? null : _showAttachmentMenu,
-              ),
+            IconButton(
+              icon: Icon(Icons.add_circle_outline, color: _isUploading ? context.colors.borderMedium : context.colors.textSecondary, size: 24),
+              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+              padding: EdgeInsets.zero,
+              tooltip: '添付',
+              onPressed: _isUploading ? null : _showAttachmentMenu,
             ),
             const SizedBox(width: 4),
             Expanded(
