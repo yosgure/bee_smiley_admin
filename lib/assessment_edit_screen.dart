@@ -40,6 +40,10 @@ class _AssessmentEditScreenState extends State<AssessmentEditScreen> {
   DateTime _selectedDate = DateTime.now();
   bool _isSaving = false;
 
+  // 公開後も画面に留まれるよう、保存後に最新の docId と公開状態を保持する
+  String? _docIdRuntime;
+  bool? _initialIsPublishedRuntime;
+
   void _close() {
     if (widget.onClose != null) {
       AdminShell.hideOverlay(context);
@@ -406,14 +410,34 @@ class _AssessmentEditScreenState extends State<AssessmentEditScreen> {
         ];
       }
 
-      if (widget.docId != null) {
-        await FirebaseFirestore.instance.collection('assessments').doc(widget.docId).update(data);
+      String? newDocId;
+      final effectiveDocId = _docIdRuntime ?? widget.docId;
+      if (effectiveDocId != null) {
+        await FirebaseFirestore.instance.collection('assessments').doc(effectiveDocId).update(data);
       } else {
         data['createdAt'] = FieldValue.serverTimestamp();
-        await FirebaseFirestore.instance.collection('assessments').add(data);
+        final ref = await FirebaseFirestore.instance.collection('assessments').add(data);
+        newDocId = ref.id;
       }
 
-      if (mounted) _close();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(isPublished ? '公開しました' : '下書きを保存しました'),
+            backgroundColor: isPublished ? Colors.green : Colors.blueGrey,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+        // 新規作成時は docId を埋めて、次回保存が update になるようにする
+        if (newDocId != null) {
+          setState(() {
+            _docIdRuntime = newDocId;
+            _initialIsPublishedRuntime = isPublished;
+          });
+        } else {
+          setState(() => _initialIsPublishedRuntime = isPublished);
+        }
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('エラー: $e')));
@@ -439,8 +463,8 @@ class _AssessmentEditScreenState extends State<AssessmentEditScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // 既に公開済みかどうか
-    final isAlreadyPublished = widget.initialData?['isPublished'] == true;
+    // 既に公開済みかどうか（保存後の最新状態を優先）
+    final isAlreadyPublished = _initialIsPublishedRuntime ?? (widget.initialData?['isPublished'] == true);
     
     return Scaffold(
       backgroundColor: context.colors.cardBg,

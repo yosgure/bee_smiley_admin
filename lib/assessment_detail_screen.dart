@@ -324,17 +324,9 @@ class _AssessmentDetailScreenState extends State<AssessmentDetailScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               // 教具名
-              Row(
-                children: [
-                  const Icon(Icons.extension, color: AppColors.primary, size: 20),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      entry['tool'] ?? '教具未選択',
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
-                    ),
-                  ),
-                ],
+              Text(
+                entry['tool'] ?? '教具未選択',
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
               ),
               // ★追加: 発達課題（task）を薄いグレーで表示
               if (task.isNotEmpty) ...[
