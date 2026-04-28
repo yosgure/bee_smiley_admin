@@ -955,7 +955,29 @@ Map<String, dynamic>? _getCellMemo(DateTime date, int slotIndex) {
         final kanaB = (b['lastNameKana'] as String?) ?? '';
         return kanaA.compareTo(kanaB);
       });
-      
+
+      // ai_student_profiles から自動取得済みのHUGプロフィールURLを上書き反映
+      try {
+        final profilesSnap = await FirebaseFirestore.instance
+            .collection('ai_student_profiles')
+            .get();
+        final hugUrlByStudentId = <String, String>{};
+        for (final doc in profilesSnap.docs) {
+          final url = doc.data()['hugProfileUrl'] as String? ?? '';
+          if (url.isNotEmpty) hugUrlByStudentId[doc.id] = url;
+        }
+        for (final s in students) {
+          final sid = s['studentId'] as String?;
+          if (sid == null) continue;
+          final hugUrl = hugUrlByStudentId[sid];
+          if (hugUrl != null && hugUrl.isNotEmpty) {
+            s['profileUrl'] = hugUrl;
+          }
+        }
+      } catch (e) {
+        debugPrint('Error loading hugProfileUrl: $e');
+      }
+
       if (mounted) {
         setState(() {
           _allStudents = students;
