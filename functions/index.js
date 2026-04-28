@@ -3880,11 +3880,16 @@ async function syncHugDocsCore(options = {}) {
       }
     }
 
+    const hugProfileUrl = row.cId
+      ? `${HUG_BASE_URL}/profile_children.php?mode=profile&id=${row.cId}`
+      : '';
+
     await db.collection('ai_student_profiles').doc(resolved.studentId).set({
       studentId: resolved.studentId,
       studentName: resolved.studentName,
       familyUid: resolved.familyUid,
       hugCId: row.cId,
+      hugProfileUrl,
       hugDocs,
       latestPlanDate: row.latestPlanDate || 0,
       hugCareRecords: careRecords,
