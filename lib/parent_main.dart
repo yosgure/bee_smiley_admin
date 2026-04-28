@@ -261,6 +261,7 @@ class _ParentMainScreenState extends State<ParentMainScreen> {
     ];
 
     return Scaffold(
+      backgroundColor: context.colors.cardBg,
       body: SafeArea(
         child: screens[_selectedIndex],
       ),

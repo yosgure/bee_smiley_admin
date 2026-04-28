@@ -8,8 +8,8 @@ import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 import 'package:gal/gal.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:video_player/video_player.dart';
 import 'app_theme.dart';
-import 'skeleton_loading.dart';
 
 class ParentAssessmentScreen extends StatefulWidget {
   final String? childId;
@@ -124,19 +124,6 @@ Widget _buildHeader({bool showBack = false}) {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              // 顔写真
-              CircleAvatar(
-                radius: 18,
-                backgroundColor: AppColors.primary.withOpacity(0.1),
-                backgroundImage: widget.childPhotoUrl != null && widget.childPhotoUrl!.isNotEmpty
-                    ? NetworkImage(widget.childPhotoUrl!)
-                    : null,
-                child: widget.childPhotoUrl == null || widget.childPhotoUrl!.isEmpty
-                    ? const Icon(Icons.person, size: 20, color: AppColors.primary)
-                    : null,
-              ),
-              const SizedBox(width: 10),
-              
               // 子どもの名前
               if (showBack)
                 // 詳細画面: 週次アセスメント or 月次サマリ
@@ -241,7 +228,7 @@ Widget _buildHeader({bool showBack = false}) {
         }
 
         if (snapshot.connectionState == ConnectionState.waiting || !snapshot.hasData) {
-          return const AssessmentSkeleton();
+          return const Center(child: CircularProgressIndicator());
         }
 
         if (snapshot.data!.docs.isEmpty) {
@@ -289,17 +276,6 @@ Widget _buildHeader({bool showBack = false}) {
       dateStr = DateFormat('yyyy年 M月', 'ja').format(date);
     }
 
-    // サブタイトル
-    String subtitle = '';
-    if (type == 'weekly') {
-      final entries = List<Map<String, dynamic>>.from(data['entries'] ?? []);
-      subtitle = '${entries.length}件の活動';
-    } else {
-      final monthlyEntries = List<Map<String, dynamic>>.from(data['monthlyEntries'] ?? []);
-      final sensitivePeriods = List<String>.from(data['sensitivePeriods'] ?? []);
-      subtitle = '${monthlyEntries.length}項目の評価・${sensitivePeriods.length}つの敏感期';
-    }
-
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
       elevation: 0,
@@ -328,10 +304,6 @@ Widget _buildHeader({bool showBack = false}) {
           dateStr,
           style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
         ),
-        subtitle: Text(
-          subtitle,
-          style: TextStyle(color: context.colors.textSecondary, fontSize: 13),
-        ),
         trailing: Icon(Icons.chevron_right, color: context.colors.iconMuted),
       ),
     );
@@ -350,7 +322,7 @@ Widget _buildHeader({bool showBack = false}) {
                 .snapshots(),
             builder: (context, snapshot) {
               if (!snapshot.hasData) {
-                return const AssessmentSkeleton();
+                return const Center(child: CircularProgressIndicator());
               }
 
               final data = snapshot.data!.data() as Map<String, dynamic>?;
@@ -451,17 +423,9 @@ Widget _buildHeader({bool showBack = false}) {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // 教具名
-            Row(
-              children: [
-                const Icon(Icons.extension, color: AppColors.primary, size: 20),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    tool,
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                  ),
-                ),
-              ],
+            Text(
+              tool,
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
             ),
             const SizedBox(height: 12),
             // タスク
@@ -500,36 +464,52 @@ Widget _buildHeader({bool showBack = false}) {
             // 写真・動画
             if (mediaItems.isNotEmpty) ...[
               SizedBox(height: 12),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: mediaItems.map((m) {
-                  final url = m['url'] as String?;
-                  if (url == null || url.isEmpty) return const SizedBox.shrink();
-                  if (m['type'] == 'video') {
-                    return GestureDetector(
-                      onTap: () => _launchUrl(url),
-                      child: Container(
-                        width: 160, height: 120,
-                        decoration: BoxDecoration(color: Colors.black87, borderRadius: BorderRadius.circular(8)),
-                        alignment: Alignment.center,
-                        child: const Icon(Icons.play_circle_fill, color: Colors.white, size: 40),
-                      ),
-                    );
-                  }
-                  return GestureDetector(
-                    onTap: () => _showImagePreview(url),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
-                      child: CachedNetworkImage(
-                        imageUrl: url,
-                        width: 160, height: 120, fit: BoxFit.cover,
-                        placeholder: (c, u) => Container(width: 160, height: 120, color: context.colors.chipBg, child: const Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)))),
-                        errorWidget: (c, u, e) => Container(width: 160, height: 120, color: context.colors.borderLight, child: const Icon(Icons.broken_image)),
-                      ),
-                    ),
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  const spacing = 8.0;
+                  final tileWidth = (constraints.maxWidth - spacing) / 2;
+                  final tileHeight = tileWidth * 0.75;
+                  return Wrap(
+                    spacing: spacing,
+                    runSpacing: spacing,
+                    children: mediaItems.map((m) {
+                      final url = m['url'] as String?;
+                      if (url == null || url.isEmpty) return const SizedBox.shrink();
+                      if (m['type'] == 'video') {
+                        return GestureDetector(
+                          onTap: () => _showVideoPreview(url),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(8),
+                            child: Container(
+                              width: tileWidth, height: tileHeight,
+                              color: Colors.black87,
+                              alignment: Alignment.center,
+                              child: Stack(
+                                alignment: Alignment.center,
+                                children: const [
+                                  Icon(Icons.videocam, color: Colors.white24, size: 56),
+                                  Icon(Icons.play_circle_fill, color: Colors.white, size: 48),
+                                ],
+                              ),
+                            ),
+                          ),
+                        );
+                      }
+                      return GestureDetector(
+                        onTap: () => _showImagePreview(url),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(8),
+                          child: CachedNetworkImage(
+                            imageUrl: url,
+                            width: tileWidth, height: tileHeight, fit: BoxFit.cover,
+                            placeholder: (c, u) => Container(width: tileWidth, height: tileHeight, color: context.colors.chipBg, child: const Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)))),
+                            errorWidget: (c, u, e) => Container(width: tileWidth, height: tileHeight, color: context.colors.borderLight, child: const Icon(Icons.broken_image)),
+                          ),
+                        ),
+                      );
+                    }).toList(),
                   );
-                }).toList(),
+                },
               ),
             ],
           ],
@@ -658,13 +638,6 @@ Widget _buildHeader({bool showBack = false}) {
     );
   }
 
-  Future<void> _launchUrl(String url) async {
-    final uri = Uri.tryParse(url);
-    if (uri != null) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-    }
-  }
-
   void _showImagePreview(String url) {
     showDialog(
       context: context,
@@ -675,19 +648,22 @@ Widget _buildHeader({bool showBack = false}) {
           builder: (context, setDialogState) {
             return Stack(
               children: [
-                // 画像（ピンチズーム対応）
-                Center(
-                  child: InteractiveViewer(
-                    minScale: 0.5,
-                    maxScale: 4.0,
-                    child: CachedNetworkImage(
-                      imageUrl: url,
-                      fit: BoxFit.contain,
-                      placeholder: (c, u) => const Center(
-                        child: CircularProgressIndicator(color: Colors.white),
-                      ),
-                      errorWidget: (c, u, e) => const Icon(
-                        Icons.broken_image, color: Colors.white, size: 48,
+                // 画像（ピンチズーム + 下スワイプで閉じる）
+                _SwipeDownToDismiss(
+                  onDismiss: () => Navigator.pop(dialogContext),
+                  child: Center(
+                    child: InteractiveViewer(
+                      minScale: 0.5,
+                      maxScale: 4.0,
+                      child: CachedNetworkImage(
+                        imageUrl: url,
+                        fit: BoxFit.contain,
+                        placeholder: (c, u) => const Center(
+                          child: CircularProgressIndicator(color: Colors.white),
+                        ),
+                        errorWidget: (c, u, e) => const Icon(
+                          Icons.broken_image, color: Colors.white, size: 48,
+                        ),
                       ),
                     ),
                   ),
@@ -779,5 +755,251 @@ Widget _buildHeader({bool showBack = false}) {
         );
       }
     }
+  }
+
+  void _showVideoPreview(String url) {
+    showDialog(
+      context: context,
+      barrierColor: Colors.black,
+      builder: (_) => _AssessmentVideoDialog(url: url),
+    );
+  }
+}
+
+class _AssessmentVideoDialog extends StatefulWidget {
+  final String url;
+  const _AssessmentVideoDialog({required this.url});
+
+  @override
+  State<_AssessmentVideoDialog> createState() => _AssessmentVideoDialogState();
+}
+
+class _AssessmentVideoDialogState extends State<_AssessmentVideoDialog> {
+  VideoPlayerController? _controller;
+  bool _initialized = false;
+  bool _isSaving = false;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _init();
+  }
+
+  Future<void> _init() async {
+    try {
+      final c = VideoPlayerController.networkUrl(Uri.parse(widget.url));
+      await c.initialize();
+      if (!mounted) {
+        c.dispose();
+        return;
+      }
+      setState(() {
+        _controller = c;
+        _initialized = true;
+      });
+      c.play();
+    } catch (e) {
+      if (mounted) setState(() => _error = '$e');
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller?.dispose();
+    super.dispose();
+  }
+
+  String _fmt(Duration d) {
+    final m = d.inMinutes.toString().padLeft(2, '0');
+    final s = (d.inSeconds % 60).toString().padLeft(2, '0');
+    return '$m:$s';
+  }
+
+  Future<void> _save() async {
+    if (kIsWeb) {
+      await launchUrl(Uri.parse(widget.url), mode: LaunchMode.externalApplication);
+      return;
+    }
+    setState(() => _isSaving = true);
+    try {
+      final hasAccess = await Gal.hasAccess(toAlbum: true);
+      if (!hasAccess) {
+        final granted = await Gal.requestAccess(toAlbum: true);
+        if (!granted) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text("写真へのアクセスが許可されていません")),
+            );
+          }
+          return;
+        }
+      }
+      final response = await http.get(Uri.parse(widget.url));
+      if (response.statusCode == 200) {
+        final tempDir = await getTemporaryDirectory();
+        final fileName = "beesmiley_${DateTime.now().millisecondsSinceEpoch}.mp4";
+        final file = File("${tempDir.path}/$fileName");
+        await file.writeAsBytes(response.bodyBytes);
+        await Gal.putVideo(file.path, album: "Beesmiley");
+        await file.delete();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("動画を保存しました"), backgroundColor: Colors.green),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("保存に失敗しました: $e"), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: Colors.black,
+      insetPadding: const EdgeInsets.all(12),
+      child: Stack(
+        children: [
+          Center(
+            child: _error != null
+                ? Text('再生できません: $_error', style: const TextStyle(color: Colors.white))
+                : !_initialized || _controller == null
+                    ? const CircularProgressIndicator(color: Colors.white)
+                    : AspectRatio(
+                        aspectRatio: _controller!.value.aspectRatio,
+                        child: Stack(
+                          alignment: Alignment.bottomCenter,
+                          children: [
+                            GestureDetector(
+                              onTap: () {
+                                setState(() {
+                                  if (_controller!.value.isPlaying) {
+                                    _controller!.pause();
+                                  } else {
+                                    _controller!.play();
+                                  }
+                                });
+                              },
+                              child: VideoPlayer(_controller!),
+                            ),
+                            Container(
+                              color: Colors.black45,
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                              child: Row(
+                                children: [
+                                  IconButton(
+                                    onPressed: () {
+                                      setState(() {
+                                        if (_controller!.value.isPlaying) {
+                                          _controller!.pause();
+                                        } else {
+                                          _controller!.play();
+                                        }
+                                      });
+                                    },
+                                    icon: Icon(
+                                      _controller!.value.isPlaying ? Icons.pause : Icons.play_arrow,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                  Expanded(
+                                    child: ValueListenableBuilder<VideoPlayerValue>(
+                                      valueListenable: _controller!,
+                                      builder: (_, value, __) {
+                                        final total = value.duration;
+                                        final pos = value.position;
+                                        return Row(
+                                          children: [
+                                            Text(_fmt(pos), style: const TextStyle(color: Colors.white, fontSize: 12)),
+                                            Expanded(
+                                              child: Slider(
+                                                value: pos.inMilliseconds.toDouble().clamp(0, total.inMilliseconds.toDouble()),
+                                                max: total.inMilliseconds.toDouble().clamp(1, double.infinity),
+                                                onChanged: (v) {
+                                                  _controller!.seekTo(Duration(milliseconds: v.toInt()));
+                                                },
+                                                activeColor: Colors.white,
+                                                inactiveColor: Colors.white24,
+                                              ),
+                                            ),
+                                            Text(_fmt(total), style: const TextStyle(color: Colors.white, fontSize: 12)),
+                                          ],
+                                        );
+                                      },
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+          ),
+          Positioned(
+            top: 8, left: 8,
+            child: IconButton(
+              icon: const Icon(Icons.close, color: Colors.white, size: 28),
+              onPressed: () => Navigator.of(context).pop(),
+            ),
+          ),
+          Positioned(
+            top: 8, right: 8,
+            child: IconButton(
+              icon: _isSaving
+                  ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                  : const Icon(Icons.download, color: Colors.white, size: 28),
+              tooltip: '保存',
+              onPressed: _isSaving ? null : _save,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// 下スワイプで閉じるラッパー。子要素ごと垂直方向に追従させ、
+/// 一定距離以上スワイプ or 速度が出たら onDismiss を呼ぶ。
+class _SwipeDownToDismiss extends StatefulWidget {
+  final Widget child;
+  final VoidCallback onDismiss;
+  const _SwipeDownToDismiss({required this.child, required this.onDismiss});
+
+  @override
+  State<_SwipeDownToDismiss> createState() => _SwipeDownToDismissState();
+}
+
+class _SwipeDownToDismissState extends State<_SwipeDownToDismiss> {
+  double _dy = 0;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      behavior: HitTestBehavior.translucent,
+      onVerticalDragUpdate: (d) {
+        if (d.delta.dy > 0 || _dy > 0) {
+          setState(() => _dy = (_dy + d.delta.dy).clamp(0, 600));
+        }
+      },
+      onVerticalDragEnd: (d) {
+        final v = d.primaryVelocity ?? 0;
+        if (_dy > 120 || v > 700) {
+          widget.onDismiss();
+        } else {
+          setState(() => _dy = 0);
+        }
+      },
+      child: Transform.translate(
+        offset: Offset(0, _dy),
+        child: widget.child,
+      ),
+    );
   }
 }

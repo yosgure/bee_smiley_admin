@@ -4,7 +4,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'app_theme.dart';
-import 'skeleton_loading.dart';
 
 class ParentNotificationScreen extends StatefulWidget {
   const ParentNotificationScreen({super.key});
@@ -74,7 +73,7 @@ class _ParentNotificationScreenState extends State<ParentNotificationScreen> {
           return Center(child: Text('エラー: ${snapshot.error}'));
         }
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return const NotificationListSkeleton();
+          return const Center(child: CircularProgressIndicator());
         }
         if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
           return Center(
@@ -171,7 +170,7 @@ class _ParentNotificationScreenState extends State<ParentNotificationScreen> {
           .snapshots(),
       builder: (context, snapshot) {
         if (!snapshot.hasData) {
-          return const NotificationListSkeleton();
+          return const Center(child: CircularProgressIndicator());
         }
 
         final data = snapshot.data!.data() as Map<String, dynamic>?;
