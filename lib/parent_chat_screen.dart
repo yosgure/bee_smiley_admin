@@ -19,6 +19,8 @@ import 'pdf_preview_stub.dart' if (dart.library.js_interop) 'pdf_preview_web.dar
 import 'package:flutter/cupertino.dart';
 import 'app_theme.dart';
 import 'chat_screen.dart' show VideoPlayerDialog;
+import 'utils/recent_emojis.dart';
+import 'widgets/emoji_stamp_picker.dart';
 
 class ParentChatScreen extends StatefulWidget {
   final Map<String, dynamic>? familyData;
@@ -385,6 +387,7 @@ class _ChatMessageListState extends State<_ChatMessageList> {
     }
 
     Widget content;
+    final bool isEmojiOnly = type == 'text' && isEmojiOnlyMessage(text);
     final bool isImageOnly =
         (type == 'image' || type == 'video') && text.isEmpty;
 
@@ -534,7 +537,15 @@ class _ChatMessageListState extends State<_ChatMessageList> {
         ),
       );
     } else {
-      content = Text(text, style: TextStyle(fontSize: 15, height: 1.5, fontFamily: 'NotoSansJP', fontFamilyFallback: ['Hiragino Sans', 'Roboto', 'sans-serif']));
+      content = Text(
+        text,
+        style: TextStyle(
+          fontSize: isEmojiOnly ? 38 : 15,
+          height: 1.5,
+          fontFamily: 'NotoSansJP',
+          fontFamilyFallback: const ['Hiragino Sans', 'Roboto', 'sans-serif'],
+        ),
+      );
     }
 
     return GestureDetector(
@@ -567,7 +578,7 @@ class _ChatMessageListState extends State<_ChatMessageList> {
                     const SizedBox(width: 8),
                   ],
                   Flexible(
-                    child: isImageOnly && replyTo == null
+                    child: (isImageOnly || isEmojiOnly) && replyTo == null
                         ? content
                         : Container(
                             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
@@ -757,28 +768,47 @@ class _ChatMessageListState extends State<_ChatMessageList> {
   }
 
   Widget _buildQuickReactionBar(BuildContext sheetContext, String msgId) {
-    const quickEmojis = ['👍', '❤️', '😄', '🎉', '🙏', 'bee'];
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-        children: [
-          for (final e in quickEmojis)
-            GestureDetector(
-              onTap: () {
-                Navigator.pop(sheetContext);
-                _toggleStamp(msgId, e);
-              },
-              behavior: HitTestBehavior.opaque,
-              child: Container(
-                width: 40,
-                height: 40,
-                alignment: Alignment.center,
-                child: _stampWidget(e, size: 26),
-              ),
-            ),
-        ],
-      ),
+    const fallback = ['👍', '❤️', '😄', '🎉', '🙏', 'bee'];
+    return FutureBuilder<List<String>>(
+      future: RecentEmojis.load(),
+      builder: (context, snapshot) {
+        final recent = snapshot.data ?? const [];
+        final List<String> emojis;
+        if (recent.length >= 6) {
+          emojis = recent.take(6).toList();
+        } else {
+          final seen = <String>{...recent};
+          final filled = <String>[...recent];
+          for (final e in fallback) {
+            if (filled.length >= 6) break;
+            if (seen.add(e)) filled.add(e);
+          }
+          emojis = filled;
+        }
+        return Container(
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              for (final e in emojis)
+                GestureDetector(
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    RecentEmojis.add(e);
+                    _toggleStamp(msgId, e);
+                  },
+                  behavior: HitTestBehavior.opaque,
+                  child: Container(
+                    width: 40,
+                    height: 40,
+                    alignment: Alignment.center,
+                    child: _stampWidget(e, size: 26),
+                  ),
+                ),
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -814,38 +844,9 @@ class _ChatMessageListState extends State<_ChatMessageList> {
   }
 
   void _showEmojiPicker(String msgId) {
-    final emojis = ['👍', '❤️', '😄', '🎉', '🙏', 'bee', '😂', '😢', '✨', '🤔'];
-    showDialog(
+    showEmojiStampPicker(
       context: context,
-      barrierDismissible: true,
-      builder: (dialogContext) => AlertDialog(
-        title: Text('スタンプを選択'),
-        content: Wrap(
-          alignment: WrapAlignment.center,
-          spacing: 8,
-          runSpacing: 8,
-          children: emojis.map((e) => GestureDetector(
-            onTap: () {
-              _toggleStamp(msgId, e);
-              Navigator.of(dialogContext).pop();
-            },
-            child: Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: context.colors.chipBg,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: _stampWidget(e, size: 28),
-            ),
-          )).toList(),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text('キャンセル'),
-          ),
-        ],
-      ),
+      onSelected: (emoji) => _toggleStamp(msgId, emoji),
     );
   }
 
