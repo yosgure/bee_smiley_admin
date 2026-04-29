@@ -440,11 +440,22 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
                                   children: [
                                     if (hasAccount)
                                       TextButton.icon(
+                                        icon: const Icon(Icons.badge_outlined, color: Colors.teal),
+                                        label: const Text('ID変更', style: TextStyle(color: Colors.teal)),
+                                        onPressed: () => _changeLoginId(
+                                          familyDoc.id,
+                                          data['uid'],
+                                          data['loginId'] ?? '',
+                                          parentFullName,
+                                        ),
+                                      ),
+                                    if (hasAccount)
+                                      TextButton.icon(
                                         icon: Icon(Icons.lock_reset, color: AppColors.accent),
                                         label: Text('PW初期化', style: TextStyle(color: AppColors.accent)),
                                         onPressed: () => _resetPassword(
-                                          familyDoc.id, 
-                                          data['uid'], 
+                                          familyDoc.id,
+                                          data['uid'],
                                           parentFullName,
                                         ),
                                       ),
@@ -551,6 +562,93 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
         ],
       ),
     );
+  }
+
+  /// Cloud Functions経由でログインIDを変更
+  Future<void> _changeLoginId(String docId, String? targetUid, String currentLoginId, String name) async {
+    if (targetUid == null || targetUid.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('アカウントが作成されていません'), backgroundColor: Colors.red),
+      );
+      return;
+    }
+
+    final controller = TextEditingController(text: currentLoginId);
+
+    final newId = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('ログインID変更'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('$name さんのログインIDを変更します。', style: const TextStyle(fontSize: 13)),
+            const SizedBox(height: 4),
+            const Text(
+              '※ 変更後は新しいIDでログインしてもらってください（パスワードは変わりません）。',
+              style: TextStyle(fontSize: 11, color: Colors.red),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: controller,
+              autofocus: true,
+              decoration: const InputDecoration(
+                labelText: '新しいログインID',
+                border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.vpn_key),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('キャンセル')),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(dialogContext, controller.text.trim()),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.teal, foregroundColor: Colors.white),
+            child: const Text('変更'),
+          ),
+        ],
+      ),
+    );
+
+    if (newId == null || newId.isEmpty) return;
+    if (newId == currentLoginId) return;
+
+    try {
+      _showLoadingDialog('ログインIDを変更中...');
+
+      final callable = _functions.httpsCallable('updateParentLoginId');
+      await callable.call({
+        'targetUid': targetUid,
+        'familyDocId': docId,
+        'newLoginId': newId,
+      });
+
+      if (mounted) {
+        Navigator.pop(context); // ローディングを閉じる
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('$name さんのログインIDを「$newId」に変更しました'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } on FirebaseFunctionsException catch (e) {
+      if (mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('エラー: ${e.message}'), backgroundColor: Colors.red),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('エラー: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
   }
 
   /// Cloud Functions経由でパスワードを初期化

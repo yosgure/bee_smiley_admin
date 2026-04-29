@@ -1295,6 +1295,72 @@ exports.resetParentPassword = onCall({ region: 'asia-northeast1', secrets: [init
 });
 
 /**
+ * 保護者のログインIDを変更する（Auth email + Firestore loginId を同期更新）
+ */
+exports.updateParentLoginId = onCall({ region: 'asia-northeast1' }, async (request) => {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', '認証が必要です');
+  }
+
+  const callerUid = request.auth.uid;
+  const staffDoc = await db
+    .collection('staffs')
+    .where('uid', '==', callerUid)
+    .limit(1)
+    .get();
+
+  if (staffDoc.empty) {
+    throw new HttpsError('permission-denied', '管理者権限が必要です');
+  }
+
+  const { targetUid, familyDocId, newLoginId } = request.data;
+
+  if (!targetUid || !familyDocId) {
+    throw new HttpsError('invalid-argument', '対象ユーザーIDとファミリードキュメントIDが必要です');
+  }
+
+  const trimmedLoginId = (newLoginId || '').trim();
+  if (trimmedLoginId === '') {
+    throw new HttpsError('invalid-argument', '新しいログインIDを入力してください');
+  }
+
+  // 既存の loginId と重複しないかチェック
+  const existing = await db
+    .collection('families')
+    .where('loginId', '==', trimmedLoginId)
+    .limit(1)
+    .get();
+
+  if (!existing.empty && existing.docs[0].id !== familyDocId) {
+    throw new HttpsError('already-exists', 'このログインIDは既に使用されています');
+  }
+
+  const newEmail = trimmedLoginId + FIXED_DOMAIN;
+
+  try {
+    await auth.updateUser(targetUid, { email: newEmail });
+
+    await db.collection('families').doc(familyDocId).update({
+      loginId: trimmedLoginId,
+    });
+
+    return {
+      success: true,
+      message: 'ログインIDを変更しました',
+    };
+
+  } catch (error) {
+    console.error(JSON.stringify({ function: 'updateParentLoginId', targetUid, familyDocId, error: error.message }));
+
+    if (error.code === 'auth/email-already-exists') {
+      throw new HttpsError('already-exists', 'このログインIDは既に使用されています');
+    }
+
+    throw new HttpsError('internal', error.message);
+  }
+});
+
+/**
  * 保護者アカウントを削除する
  */
 exports.deleteParentAccount = onCall({ region: 'asia-northeast1' }, async (request) => {
