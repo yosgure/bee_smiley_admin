@@ -395,18 +395,15 @@ class _ChatListScreenState extends State<ChatListScreen> {
   }
 
   // ルームがフィルタ条件に合うか判定（false=非表示）
+  // 自分以外のメンバーに非staffが1人でも居れば「保護者との会話」、全員staffなら「スタッフ会話」
   bool _matchesFilter(DocumentSnapshot roomDoc) {
     if (_filter == 'all') return true;
     final data = roomDoc.data() as Map<String, dynamic>;
     final members = List<String>.from(data['members'] ?? []);
-    final isGroup = members.length > 2 ||
-        ((data['groupName'] ?? '').toString().isNotEmpty);
-    // グループはスタッフ扱い
-    if (isGroup) return _filter == 'staff';
-    final peerId = members.firstWhere((id) => id != currentUser?.uid, orElse: () => '');
-    if (peerId.isEmpty) return true;
-    final isStaff = _staffUids.contains(peerId);
-    return _filter == 'staff' ? isStaff : !isStaff;
+    final others = members.where((id) => id != currentUser?.uid).toList();
+    if (others.isEmpty) return true;
+    final hasParent = others.any((id) => !_staffUids.contains(id));
+    return _filter == 'staff' ? !hasParent : hasParent;
   }
 
   Widget _buildFilterToggle() {
