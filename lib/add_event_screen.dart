@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'app_theme.dart';
+import 'widgets/app_feedback.dart';
 import 'classroom_utils.dart';
 import 'time_list_picker.dart';
 
@@ -238,7 +239,7 @@ class _AddEventDialogState extends State<AddEventDialog> {
                 padding: EdgeInsets.fromLTRB(24, 20, 24, 12),
                 child: Text(
                   '定期的な予定を更新します',
-                  style: TextStyle(fontSize: 14, color: context.colors.textSecondary),
+                  style: TextStyle(fontSize: AppTextSize.bodyMd, color: context.colors.textSecondary),
                   textAlign: TextAlign.center,
                 ),
               ),
@@ -266,7 +267,7 @@ class _AddEventDialogState extends State<AddEventDialog> {
           label,
           textAlign: TextAlign.center,
           style: TextStyle(
-            fontSize: 16,
+            fontSize: AppTextSize.titleSm,
             color: AppColors.primary,
             fontWeight: isCancel ? FontWeight.w600 : FontWeight.w500,
           ),
@@ -380,9 +381,7 @@ class _AddEventDialogState extends State<AddEventDialog> {
     if (!_formKey.currentState!.validate()) {
       // それでもバリデーション失敗時はユーザーに通知
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('入力内容に問題があります。タイトル等を確認してください')),
-        );
+        AppFeedback.info(context, '入力内容に問題があります。タイトル等を確認してください');
       }
       return;
     }
@@ -415,7 +414,7 @@ class _AddEventDialogState extends State<AddEventDialog> {
       if (mounted) Navigator.pop(context, true);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('エラー: $e')));
+        AppFeedback.info(context, 'エラー: $e');
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -784,27 +783,13 @@ Future<void> _deleteRecurrenceGroup(String recurrenceGroupId) async {
 
   Future<bool> _confirmDiscard() async {
     if (!_hasUnsavedInput()) return true;
-    final result = await showDialog<bool>(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: context.colors.dialogBg,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        title: const Text('保存されていない変更を破棄しますか？', style: TextStyle(fontSize: 16)),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('キャンセル'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            style: TextButton.styleFrom(foregroundColor: AppColors.error),
-            child: const Text('破棄'),
-          ),
-        ],
-      ),
+    final result = await AppFeedback.confirm(
+      context,
+      title: '保存されていない変更を破棄しますか？',
+      confirmLabel: '破棄',
+      destructive: true,
     );
-    return result == true;
+    return result;
   }
 
   @override
@@ -851,7 +836,7 @@ Future<void> _deleteRecurrenceGroup(String recurrenceGroupId) async {
                       },
                       child: const Text(
                         'キャンセル',
-                        style: TextStyle(color: AppColors.primary, fontSize: 16),
+                        style: TextStyle(color: AppColors.primary, fontSize: AppTextSize.titleSm),
                       ),
                     ),
                     TextButton(
@@ -866,7 +851,7 @@ Future<void> _deleteRecurrenceGroup(String recurrenceGroupId) async {
                               '保存',
                               style: TextStyle(
                                 color: AppColors.primary,
-                                fontSize: 16,
+                                fontSize: AppTextSize.titleSm,
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
@@ -883,10 +868,10 @@ Future<void> _deleteRecurrenceGroup(String recurrenceGroupId) async {
                         padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
                         child: TextFormField(
                           controller: _subjectController,
-                          style: TextStyle(fontSize: 22, fontWeight: FontWeight.w500, color: context.colors.textPrimary),
+                          style: TextStyle(fontSize: AppTextSize.display, fontWeight: FontWeight.w500, color: context.colors.textPrimary),
                           decoration: InputDecoration(
                             hintText: 'タイトルを追加',
-                            hintStyle: TextStyle(color: context.colors.textHint, fontSize: 22, fontWeight: FontWeight.w400),
+                            hintStyle: TextStyle(color: context.colors.textHint, fontSize: AppTextSize.display, fontWeight: FontWeight.w400),
                             border: UnderlineInputBorder(borderSide: BorderSide(color: context.colors.borderLight)),
                             enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: context.colors.borderLight)),
                             focusedBorder: const UnderlineInputBorder(borderSide: BorderSide(color: AppColors.primary, width: 2)),
@@ -960,7 +945,7 @@ Future<void> _deleteRecurrenceGroup(String recurrenceGroupId) async {
               padding: const EdgeInsets.symmetric(vertical: 16),
               child: Text(
                 DateFormat('M月d日 (E)', 'ja').format(_taskDate),
-                style: TextStyle(fontSize: 16, color: context.colors.textPrimary),
+                style: TextStyle(fontSize: AppTextSize.titleSm, color: context.colors.textPrimary),
               ),
             ),
           ),
@@ -1011,12 +996,12 @@ Future<void> _deleteRecurrenceGroup(String recurrenceGroupId) async {
                           padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
                           child: Text(
                             DateFormat('M月d日 (E)', 'ja').format(_startDate),
-                            style: TextStyle(fontSize: 15, color: context.colors.textPrimary, fontWeight: FontWeight.w500),
+                            style: TextStyle(fontSize: AppTextSize.bodyLarge, color: context.colors.textPrimary, fontWeight: FontWeight.w500),
                           ),
                         ),
                       ),
                     ),
-                    Text('終日', style: TextStyle(fontSize: 13, color: context.colors.textSecondary)),
+                    Text('終日', style: TextStyle(fontSize: AppTextSize.body, color: context.colors.textSecondary)),
                     const SizedBox(width: 4),
                     Transform.scale(
                       scale: 0.85,
@@ -1049,7 +1034,7 @@ Future<void> _deleteRecurrenceGroup(String recurrenceGroupId) async {
                             padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
                             child: Text(
                               DateFormat('M/d(E)', 'ja').format(_endDate),
-                              style: TextStyle(fontSize: 14, color: context.colors.textPrimary),
+                              style: TextStyle(fontSize: AppTextSize.bodyMd, color: context.colors.textPrimary),
                             ),
                           ),
                         ),
@@ -1061,7 +1046,7 @@ Future<void> _deleteRecurrenceGroup(String recurrenceGroupId) async {
                         TextButton.icon(
                           onPressed: () => _pickDate(isStart: false),
                           icon: Icon(Icons.add, size: 14, color: context.colors.textSecondary),
-                          label: Text('別日', style: TextStyle(fontSize: 11, color: context.colors.textSecondary)),
+                          label: Text('別日', style: TextStyle(fontSize: AppTextSize.caption, color: context.colors.textSecondary)),
                           style: TextButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 6), minimumSize: Size.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap),
                         ),
                       ],
@@ -1082,7 +1067,7 @@ Future<void> _deleteRecurrenceGroup(String recurrenceGroupId) async {
                         child: Text(
                           _recurrenceType == 'なし' ? '繰り返しなし' : _recurrenceType,
                           style: TextStyle(
-                            fontSize: 14,
+                            fontSize: AppTextSize.bodyMd,
                             color: _recurrenceType == 'なし' ? context.colors.textSecondary : context.colors.textPrimary,
                             fontWeight: _recurrenceType == 'なし' ? FontWeight.normal : FontWeight.w500,
                           ),
@@ -1091,7 +1076,7 @@ Future<void> _deleteRecurrenceGroup(String recurrenceGroupId) async {
                       if (_recurrenceType == '第1・2・3週(月次)')
                         Text(
                           '(${_getWeekDayName(_startDate.weekday)})',
-                          style: TextStyle(fontSize: 12, color: context.colors.textSecondary),
+                          style: TextStyle(fontSize: AppTextSize.small, color: context.colors.textSecondary),
                         ),
                     ],
                   ),
@@ -1146,7 +1131,7 @@ Future<void> _deleteRecurrenceGroup(String recurrenceGroupId) async {
                           cat['label'],
                           style: TextStyle(
                             color: isSelected ? Colors.white : context.colors.textPrimary,
-                            fontSize: 13,
+                            fontSize: AppTextSize.body,
                             fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
                           ),
                         ),
@@ -1181,12 +1166,12 @@ Future<void> _deleteRecurrenceGroup(String recurrenceGroupId) async {
                   controller: _locationController,
                   decoration: InputDecoration(
                     hintText: '場所を入力',
-                    hintStyle: TextStyle(color: context.colors.textHint, fontSize: 14),
+                    hintStyle: TextStyle(color: context.colors.textHint, fontSize: AppTextSize.bodyMd),
                     border: InputBorder.none,
                     isDense: true,
                     contentPadding: const EdgeInsets.symmetric(vertical: 12),
                   ),
-                  style: TextStyle(fontSize: 15, color: context.colors.textPrimary),
+                  style: TextStyle(fontSize: AppTextSize.bodyLarge, color: context.colors.textPrimary),
                 )
               else
                 InkWell(
@@ -1200,7 +1185,7 @@ Future<void> _deleteRecurrenceGroup(String recurrenceGroupId) async {
                           child: Text(
                             _selectedClassroom ?? '教室を選択',
                             style: TextStyle(
-                              fontSize: 15,
+                              fontSize: AppTextSize.bodyLarge,
                               color: _selectedClassroom == null ? context.colors.textHint : context.colors.textPrimary,
                               fontWeight: _selectedClassroom == null ? FontWeight.normal : FontWeight.w500,
                             ),
@@ -1226,7 +1211,7 @@ Future<void> _deleteRecurrenceGroup(String recurrenceGroupId) async {
             chips: _selectedStaffIds.map((id) => GestureDetector(
               onTap: () => _showStaffActionSheet(id),
               child: Chip(
-                label: Text(_staffNamesMap[id] ?? '不明', style: const TextStyle(fontSize: 12)),
+                label: Text(_staffNamesMap[id] ?? '不明', style: const TextStyle(fontSize: AppTextSize.small)),
                 backgroundColor: context.colors.chipBg,
                 side: BorderSide.none,
                 visualDensity: VisualDensity.compact,
@@ -1258,7 +1243,7 @@ Future<void> _deleteRecurrenceGroup(String recurrenceGroupId) async {
                           label: Text(
                             name,
                             style: TextStyle(
-                              fontSize: 12,
+                              fontSize: AppTextSize.small,
                               decoration: isAbsent ? TextDecoration.lineThrough : null,
                             ),
                           ),
@@ -1269,7 +1254,7 @@ Future<void> _deleteRecurrenceGroup(String recurrenceGroupId) async {
                       );
                     }),
                     ..._trialStudentNames.map((trialName) => Chip(
-                          label: Text('$trialName（体）', style: const TextStyle(fontSize: 12)),
+                          label: Text('$trialName（体）', style: const TextStyle(fontSize: AppTextSize.small)),
                           backgroundColor: AppColors.accent.withOpacity(0.15),
                           side: BorderSide.none,
                           visualDensity: VisualDensity.compact,
@@ -1288,7 +1273,7 @@ Future<void> _deleteRecurrenceGroup(String recurrenceGroupId) async {
                           controller: _trialInputController,
                           decoration: InputDecoration(
                             hintText: '体験の生徒名を入力',
-                            hintStyle: TextStyle(color: context.colors.textHint, fontSize: 13),
+                            hintStyle: TextStyle(color: context.colors.textHint, fontSize: AppTextSize.body),
                             isDense: true,
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(8),
@@ -1300,7 +1285,7 @@ Future<void> _deleteRecurrenceGroup(String recurrenceGroupId) async {
                             ),
                             contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                           ),
-                          style: const TextStyle(fontSize: 13),
+                          style: const TextStyle(fontSize: AppTextSize.body),
                           onSubmitted: (_) => _addTrialStudent(),
                         ),
                       ),
@@ -1308,7 +1293,7 @@ Future<void> _deleteRecurrenceGroup(String recurrenceGroupId) async {
                       TextButton.icon(
                         onPressed: _addTrialStudent,
                         icon: const Icon(Icons.add, size: 14),
-                        label: const Text('体験を追加', style: TextStyle(fontSize: 12)),
+                        label: const Text('体験を追加', style: TextStyle(fontSize: AppTextSize.small)),
                         style: TextButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 8)),
                       ),
                     ],
@@ -1330,12 +1315,12 @@ Future<void> _deleteRecurrenceGroup(String recurrenceGroupId) async {
             minLines: 1,
             decoration: InputDecoration(
               hintText: 'メモを追加',
-              hintStyle: TextStyle(color: context.colors.textHint, fontSize: 14),
+              hintStyle: TextStyle(color: context.colors.textHint, fontSize: AppTextSize.bodyMd),
               border: InputBorder.none,
               isDense: true,
               contentPadding: const EdgeInsets.symmetric(vertical: 12),
             ),
-            style: TextStyle(fontSize: 14, color: context.colors.textPrimary),
+            style: TextStyle(fontSize: AppTextSize.bodyMd, color: context.colors.textPrimary),
           ),
         ),
         const SizedBox(height: 40),
@@ -1357,7 +1342,7 @@ Future<void> _deleteRecurrenceGroup(String recurrenceGroupId) async {
         ),
         child: Text(
           label,
-          style: TextStyle(fontSize: 15, color: context.colors.textPrimary, fontWeight: FontWeight.w500),
+          style: TextStyle(fontSize: AppTextSize.bodyLarge, color: context.colors.textPrimary, fontWeight: FontWeight.w500),
         ),
       ),
     );
@@ -1389,7 +1374,7 @@ Future<void> _deleteRecurrenceGroup(String recurrenceGroupId) async {
               child: Text(
                 options[i],
                 style: TextStyle(
-                  fontSize: 12,
+                  fontSize: AppTextSize.small,
                   color: selected ? context.colors.textPrimary : context.colors.textSecondary,
                   fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
                 ),
@@ -1413,7 +1398,7 @@ Future<void> _deleteRecurrenceGroup(String recurrenceGroupId) async {
                 child: Text(
                   hintText,
                   style: TextStyle(
-                    fontSize: 14,
+                    fontSize: AppTextSize.bodyMd,
                     color: disabled ? context.colors.borderMedium : context.colors.textSecondary,
                   ),
                 ),
@@ -1432,7 +1417,7 @@ Future<void> _deleteRecurrenceGroup(String recurrenceGroupId) async {
                     children: [
                       Icon(Icons.add, size: 14, color: disabled ? context.colors.borderMedium : AppColors.primary),
                       const SizedBox(width: 2),
-                      Text('追加', style: TextStyle(fontSize: 12, color: disabled ? context.colors.borderMedium : AppColors.primary)),
+                      Text('追加', style: TextStyle(fontSize: AppTextSize.small, color: disabled ? context.colors.borderMedium : AppColors.primary)),
                     ],
                   ),
                 ),
@@ -1468,7 +1453,7 @@ Future<void> _deleteRecurrenceGroup(String recurrenceGroupId) async {
           label,
           style: TextStyle(
             color: isSelected ? AppColors.primary : context.colors.textSecondary,
-            fontSize: 12,
+            fontSize: AppTextSize.small,
           ),
         ),
       ),
@@ -1590,7 +1575,7 @@ Future<void> _deleteRecurrenceGroup(String recurrenceGroupId) async {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text('教室を選択', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                      const Text('教室を選択', style: TextStyle(fontSize: AppTextSize.titleLg, fontWeight: FontWeight.bold)),
                       IconButton(
                         icon: const Icon(Icons.close),
                         onPressed: () => Navigator.pop(ctx),
@@ -1630,7 +1615,7 @@ Future<void> _deleteRecurrenceGroup(String recurrenceGroupId) async {
             children: [
               const Padding(
                 padding: EdgeInsets.all(16),
-                child: Text('教室を選択', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                child: Text('教室を選択', style: TextStyle(fontSize: AppTextSize.titleLg, fontWeight: FontWeight.bold)),
               ),
               ..._classroomList.map((room) => ListTile(
                 leading: _selectedClassroom == room 
@@ -1676,7 +1661,7 @@ Future<void> _deleteRecurrenceGroup(String recurrenceGroupId) async {
                 child: Text(
                   title,
                   style: TextStyle(
-                    fontSize: 16,
+                    fontSize: AppTextSize.titleSm,
                     fontWeight: FontWeight.w600,
                     color: context.colors.textPrimary,
                   ),
@@ -1697,7 +1682,7 @@ Future<void> _deleteRecurrenceGroup(String recurrenceGroupId) async {
                           Text(
                             a.label,
                             style: TextStyle(
-                              fontSize: 15,
+                              fontSize: AppTextSize.bodyLarge,
                               color: a.color ?? context.colors.textPrimary,
                               fontWeight: FontWeight.w500,
                             ),
@@ -1721,7 +1706,7 @@ Future<void> _deleteRecurrenceGroup(String recurrenceGroupId) async {
         _ActionItem(
           icon: Icons.delete_outline,
           label: '削除',
-          color: Colors.red,
+          color: AppColors.error,
           onTap: () => setState(() => _selectedStaffIds.remove(staffId)),
         ),
       ],
@@ -1782,7 +1767,7 @@ Future<void> _deleteRecurrenceGroup(String recurrenceGroupId) async {
         _ActionItem(
           icon: Icons.delete_outline,
           label: '削除',
-          color: Colors.red,
+          color: AppColors.error,
           onTap: () => setState(() {
             _selectedStudentIds.remove(studentId);
             _studentTransferDates.remove(studentId);
@@ -2117,7 +2102,7 @@ class _PersonSelectSheetState extends State<_PersonSelectSheet> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text(widget.title, style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                      Text(widget.title, style: TextStyle(fontSize: AppTextSize.titleLg, fontWeight: FontWeight.bold)),
                       IconButton(
                         icon: const Icon(Icons.close),
                         onPressed: () => Navigator.pop(context),
@@ -2125,7 +2110,7 @@ class _PersonSelectSheetState extends State<_PersonSelectSheet> {
                     ],
                   )
                 else
-                  Text(widget.title, style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  Text(widget.title, style: TextStyle(fontSize: AppTextSize.titleLg, fontWeight: FontWeight.bold)),
                 if (widget.type != 'staff') ...[
                   const SizedBox(height: 16),
                   TextField(
@@ -2170,7 +2155,7 @@ class _PersonSelectSheetState extends State<_PersonSelectSheet> {
                               child: Text(
                                 item['group'],
                                 style: TextStyle(
-                                  fontSize: 14,
+                                  fontSize: AppTextSize.bodyMd,
                                   fontWeight: FontWeight.bold,
                                   color: context.colors.textSecondary,
                                 ),
@@ -2184,7 +2169,7 @@ class _PersonSelectSheetState extends State<_PersonSelectSheet> {
                               title: Text(person['name']),
                               subtitle: isPC ? null : Text(
                                 person['kana'],
-                                style: TextStyle(fontSize: 12, color: context.colors.textTertiary),
+                                style: TextStyle(fontSize: AppTextSize.small, color: context.colors.textTertiary),
                               ),
                               onChanged: (val) => setState(() {
                                 if (val == true) {

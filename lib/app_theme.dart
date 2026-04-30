@@ -2,22 +2,175 @@ import 'package:flutter/material.dart';
 
 // ================================================
 // ブランドカラー（テーマ非依存の固定色）
+// 旧 Material Blue 基調。primaryDark / primaryLight / secondaryDark / onSecondary
+// などのトーン違いはトークン整備の一環で残す（既存コードは継続して primary を使う）。
 // ================================================
 class AppColors {
-  static const Color primary = Colors.blue;
+  // Blue（プライマリ）
+  static const Color primary = Color(0xFF1976D2); // blue 700
+  static const Color primaryDark = Color(0xFF0D47A1); // blue 900（hover/pressed）
+  static const Color primaryLight = Color(0xFF64B5F6); // blue 300（背景アクセント）
   static const Color onPrimary = Colors.white;
-  static const Color secondary = Colors.indigo;
+
+  // Indigo（セカンダリ）
+  static const Color secondary = Color(0xFF3F51B5); // indigo 500
+  static const Color secondaryDark = Color(0xFF283593); // indigo 800
+  static const Color onSecondary = Colors.white;
+
+  // 機能色
   static const MaterialColor accent = Colors.orange;
   static const Color warning = Color(0xFFFFA726);
-  static const Color error = Colors.red;
-  static const Color success = Colors.green;
+  static const Color error = Color(0xFFE53935);
+  static const Color success = Color(0xFF43A047);
+  static const Color info = Color(0xFF1E88E5);
 
-  // 後方互換（移行完了後に削除予定）
+  // トーン違い（旧 Colors.red.shade100 / .shade800 等の置換先）
+  // 100 系 = 淡い背景、400 系 = 罫線/アイコン、800 系 = 濃いテキスト/強調
+  static const Color errorBg = Color(0xFFFDEBE9); // 旧 red.shade50/100
+  static const Color errorBorder = Color(0xFFEF5350); // 旧 red.shade300/400
+  static const Color errorDark = Color(0xFFB71C1C); // 旧 red.shade800/900
+  static const Color successBg = Color(0xFFE8F5E9);
+  static const Color successBorder = Color(0xFF66BB6A);
+  static const Color successDark = Color(0xFF1B5E20);
+  static const Color warningBg = Color(0xFFFFF8E1);
+  static const Color warningBorder = Color(0xFFFFB300);
+  static const Color warningDark = Color(0xFFE65100);
+  static const Color infoBg = Color(0xFFE3F2FD);
+  static const Color infoBorder = Color(0xFF42A5F5);
+  static const Color infoDark = Color(0xFF0D47A1);
+  // AI / 紫アクセント（context.colors.aiAccent と統一）
+  static const Color aiAccent = Color(0xFF7C3AED);
+  static const Color aiAccentBg = Color(0xFFEDE7F6);
+
+  // 後方互換（旧 Colors.blue 互換が必要なレガシーコード用、移行完了後に削除予定）
+  static const Color legacyBlue = Color(0xFF1E88E5);
   static const Color background = Colors.white;
   static const Color surface = Colors.white;
   static const Color textMain = Colors.black87;
   static const Color textSub = Colors.grey;
   static const Color inputFill = Color(0xFFF3F4F6);
+}
+
+// ================================================
+// タイプスケール
+// fontSize: 数値直書きを禁止し、AppTextSize.* または Theme.of(context).textTheme 経由に統一する。
+// 主軸 5 段（caption/body/bodyLarge/title/display）に加え、既存実装での頻出値を補助スケール
+// として定義しておく。新規コードは可能なかぎり主軸 5 段を使用する。
+//
+//   主軸:
+//     caption    11
+//     body       13
+//     bodyLarge  15
+//     title      17
+//     display    22
+//   補助（既存互換用、新規利用は最小限に）:
+//     xxs  9 / xs 10 / small 12 / bodyMd 14 / titleSm 16 / titleLg 18 / xl 20 /
+//     headline 24 / hero 28 / heroLg 32 / heroXl 38
+// ================================================
+class AppTextSize {
+  // 主軸
+  static const double caption = 11;
+  static const double body = 13;
+  static const double bodyLarge = 15;
+  static const double title = 17;
+  static const double display = 22;
+
+  // 補助スケール（既存実装の互換維持）
+  static const double xxs = 9;
+  static const double xs = 10;
+  static const double small = 12;
+  static const double bodyMd = 14;
+  static const double titleSm = 16;
+  static const double titleLg = 18;
+  static const double xl = 20;
+  static const double headline = 24;
+  static const double hero = 28;
+  static const double heroLg = 32;
+  static const double heroLg2 = 36;
+  static const double heroXl = 38;
+  static const double emoji = 26;
+}
+
+class AppText {
+  static const TextStyle caption = TextStyle(
+    fontSize: AppTextSize.caption,
+    fontWeight: FontWeight.w400,
+    fontFamily: 'NotoSansJP',
+    height: 1.4,
+  );
+  static const TextStyle body = TextStyle(
+    fontSize: AppTextSize.body,
+    fontWeight: FontWeight.w400,
+    fontFamily: 'NotoSansJP',
+    height: 1.5,
+  );
+  static const TextStyle bodyLarge = TextStyle(
+    fontSize: AppTextSize.bodyLarge,
+    fontWeight: FontWeight.w400,
+    fontFamily: 'NotoSansJP',
+    height: 1.5,
+  );
+  static const TextStyle title = TextStyle(
+    fontSize: AppTextSize.title,
+    fontWeight: FontWeight.w600,
+    fontFamily: 'NotoSansJP',
+    height: 1.4,
+  );
+  static const TextStyle display = TextStyle(
+    fontSize: AppTextSize.display,
+    fontWeight: FontWeight.w700,
+    fontFamily: 'NotoSansJP',
+    height: 1.3,
+  );
+
+  static TextTheme buildTextTheme(Color textPrimary, Color textSecondary) {
+    return TextTheme(
+      labelSmall: caption.copyWith(color: textSecondary),
+      bodySmall: caption.copyWith(color: textSecondary),
+      bodyMedium: body.copyWith(color: textPrimary),
+      bodyLarge: bodyLarge.copyWith(color: textPrimary),
+      titleSmall: bodyLarge.copyWith(color: textPrimary, fontWeight: FontWeight.w600),
+      titleMedium: title.copyWith(color: textPrimary),
+      titleLarge: title.copyWith(color: textPrimary, fontSize: 19),
+      headlineSmall: display.copyWith(color: textPrimary, fontSize: 20),
+      headlineMedium: display.copyWith(color: textPrimary),
+      headlineLarge: display.copyWith(color: textPrimary, fontSize: 26),
+      displaySmall: display.copyWith(color: textPrimary, fontSize: 26),
+      displayMedium: display.copyWith(color: textPrimary, fontSize: 32),
+      displayLarge: display.copyWith(color: textPrimary, fontSize: 38),
+    );
+  }
+}
+
+// ================================================
+// スペーシングトークン（4 / 8 / 12 / 16 / 24 / 32）
+// EdgeInsets.all(数値) 直書きの代わりに使う。
+// ================================================
+class AppSpacing {
+  static const double xxs = 2;
+  static const double xs = 4;
+  static const double sm = 8;
+  static const double md = 12;
+  static const double lg = 16;
+  static const double xl = 24;
+  static const double xxl = 32;
+
+  // 頻出 EdgeInsets のプリセット
+  static const EdgeInsets paddingSm = EdgeInsets.all(sm);
+  static const EdgeInsets paddingMd = EdgeInsets.all(md);
+  static const EdgeInsets paddingLg = EdgeInsets.all(lg);
+  static const EdgeInsets pagePadding = EdgeInsets.all(lg);
+  static const EdgeInsets cardPadding = EdgeInsets.all(md);
+  static const EdgeInsets dialogPadding = EdgeInsets.fromLTRB(xl, xl, xl, lg);
+  static const EdgeInsets listItemPadding =
+      EdgeInsets.symmetric(horizontal: lg, vertical: md);
+
+  // ギャップ用 SizedBox
+  static const SizedBox gapXs = SizedBox(width: xs, height: xs);
+  static const SizedBox gapSm = SizedBox(width: sm, height: sm);
+  static const SizedBox gapMd = SizedBox(width: md, height: md);
+  static const SizedBox gapLg = SizedBox(width: lg, height: lg);
+  static const SizedBox gapXl = SizedBox(width: xl, height: xl);
 }
 
 /// レスポンシブ対応のブレークポイント定数
@@ -136,9 +289,10 @@ class AppColorScheme extends ThemeExtension<AppColorScheme> {
         aiAccentBg: const Color(0xFF7C3AED).withOpacity(0.08),
         aiGradientStart: const Color(0xFF7C3AED),
         aiGradientEnd: const Color(0xFFEC4899),
+        // ライト: 旧パステル青を維持
         chatMyBubble: const Color(0xFFD6EEFF),
         chatMyBubbleText: Colors.black87,
-        chatOtherBubble: Colors.grey.shade100,
+        chatOtherBubble: const Color(0xFFF1F3F4),
         chatOtherBubbleText: Colors.black87,
         navRailBg: Colors.white,
         shadow: Colors.black.withOpacity(0.05),
@@ -170,9 +324,11 @@ class AppColorScheme extends ThemeExtension<AppColorScheme> {
         aiAccentBg: const Color(0xFF7C3AED).withOpacity(0.15),
         aiGradientStart: const Color(0xFF9B6BFF),
         aiGradientEnd: const Color(0xFFF472B6),
-        chatMyBubble: const Color(0xFF1565C0),
-        chatMyBubbleText: Colors.white,
-        chatOtherBubble: const Color(0xFF383838),
+        // ダーク: AI相談タブと同じ落ち着いたトーンに合わせる。
+        // 旧 #1565C0 のベタ青は長文で目に痛いので、彩度を抑えた青系に。
+        chatMyBubble: const Color(0xFF1F3A55), // 落ち着いたダークブルー
+        chatMyBubbleText: const Color(0xFFE3F2FD),
+        chatOtherBubble: const Color(0xFF2C2C2E), // AI相談カード相当
         chatOtherBubbleText: const Color(0xFFE0E0E0),
         navRailBg: const Color(0xFF1A1A1A),
         shadow: Colors.black.withOpacity(0.3),
@@ -395,11 +551,14 @@ ThemeData getAppTheme() {
     useMaterial3: true,
     fontFamily: 'NotoSansJP',
     brightness: Brightness.light,
+    textTheme: AppText.buildTextTheme(c.textPrimary, c.textSecondary),
     colorScheme: ColorScheme.fromSeed(
       seedColor: AppColors.primary,
       brightness: Brightness.light,
       primary: AppColors.primary,
+      onPrimary: AppColors.onPrimary,
       secondary: AppColors.secondary,
+      onSecondary: AppColors.onSecondary,
       surface: c.scaffoldBg,
       error: AppColors.error,
     ),
@@ -487,6 +646,50 @@ ThemeData getAppTheme() {
 }
 
 // ================================================
+// 保護者向けテーマ
+// 業務 UI（管理）と比べ、本文サイズを 13 → 15 に底上げし、行間も広げる。
+// 保護者は業務スタッフよりタブレット端末で閲覧する想定が強く、密度を下げる。
+// ParentMainScreen 配下のサブツリーのみ適用するため Theme widget で覆う運用。
+// ================================================
+TextTheme _buildParentTextTheme(Color textPrimary, Color textSecondary) {
+  // ベース TextStyle を AppText から借用し、保護者向けに 1 段ずつアップサイズ。
+  TextStyle ts(double size, FontWeight weight) => TextStyle(
+        fontSize: size,
+        fontWeight: weight,
+        fontFamily: 'NotoSansJP',
+        height: 1.55,
+      );
+  return TextTheme(
+    labelSmall: ts(12, FontWeight.w400).copyWith(color: textSecondary),
+    bodySmall: ts(13, FontWeight.w400).copyWith(color: textSecondary),
+    bodyMedium: ts(15, FontWeight.w400).copyWith(color: textPrimary),
+    bodyLarge: ts(16, FontWeight.w400).copyWith(color: textPrimary),
+    titleSmall: ts(16, FontWeight.w600).copyWith(color: textPrimary),
+    titleMedium: ts(18, FontWeight.w600).copyWith(color: textPrimary),
+    titleLarge: ts(20, FontWeight.w600).copyWith(color: textPrimary),
+    headlineSmall: ts(22, FontWeight.w700).copyWith(color: textPrimary),
+    headlineMedium: ts(26, FontWeight.w700).copyWith(color: textPrimary),
+    headlineLarge: ts(30, FontWeight.w700).copyWith(color: textPrimary),
+  );
+}
+
+ThemeData getParentTheme() {
+  final base = getAppTheme();
+  final c = AppColorScheme.light();
+  return base.copyWith(
+    textTheme: _buildParentTextTheme(c.textPrimary, c.textSecondary),
+  );
+}
+
+ThemeData getParentDarkTheme() {
+  final base = getDarkTheme();
+  final c = AppColorScheme.dark();
+  return base.copyWith(
+    textTheme: _buildParentTextTheme(c.textPrimary, c.textSecondary),
+  );
+}
+
+// ================================================
 // ダークテーマ
 // ================================================
 ThemeData getDarkTheme() {
@@ -495,11 +698,14 @@ ThemeData getDarkTheme() {
     useMaterial3: true,
     fontFamily: 'NotoSansJP',
     brightness: Brightness.dark,
+    textTheme: AppText.buildTextTheme(c.textPrimary, c.textSecondary),
     colorScheme: ColorScheme.fromSeed(
       seedColor: AppColors.primary,
       brightness: Brightness.dark,
       primary: AppColors.primary,
+      onPrimary: AppColors.onPrimary,
       secondary: AppColors.secondary,
+      onSecondary: AppColors.onSecondary,
       surface: c.cardBg,
       error: AppColors.error,
     ),

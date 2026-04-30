@@ -74,10 +74,10 @@ centerTitle: true,
                   leading: Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      color: Colors.purple.shade100,
+                      color: AppColors.aiAccentBg,
                       shape: BoxShape.circle,
                     ),
-                    child: const Icon(Icons.hourglass_top, color: Colors.purple),
+                    child: const Icon(Icons.hourglass_top, color: AppColors.aiAccent),
                   ),
                   title: Text(
                     data['name'] ?? '名称未設定',
@@ -101,15 +101,15 @@ centerTitle: true,
                           
                           // よくある姿
                           _buildLabel('よくある姿（行動例）'),
-                          if (behaviors.isEmpty) const Text('登録なし', style: TextStyle(color: Colors.grey, fontSize: 12)),
+                          if (behaviors.isEmpty) const Text('登録なし', style: TextStyle(color: Colors.grey, fontSize: AppTextSize.small)),
                           ...behaviors.map((b) => Padding(
                             padding: const EdgeInsets.only(bottom: 4),
                             child: Row(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                const Icon(Icons.check, size: 16, color: Colors.purple),
+                                const Icon(Icons.check, size: 16, color: AppColors.aiAccent),
                                 const SizedBox(width: 8),
-                                Expanded(child: Text(b, style: const TextStyle(fontSize: 13))),
+                                Expanded(child: Text(b, style: const TextStyle(fontSize: AppTextSize.body))),
                               ],
                             ),
                           )).toList(),
@@ -119,25 +119,25 @@ centerTitle: true,
                           Container(
                             padding: const EdgeInsets.all(12),
                             decoration: BoxDecoration(
-                              color: Colors.purple.shade50,
+                              color: AppColors.aiAccentBg,
                               borderRadius: BorderRadius.circular(8),
-                              border: Border.all(color: Colors.purple.shade100),
+                              border: Border.all(color: AppColors.aiAccentBg),
                             ),
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Row(
                                   children: [
-                                    Icon(Icons.lightbulb, size: 16, color: Colors.purple.shade700),
+                                    Icon(Icons.lightbulb, size: 16, color: AppColors.aiAccent),
                                     const SizedBox(width: 4),
                                     Text(
                                       '親へのアドバイス',
-                                      style: TextStyle(fontWeight: FontWeight.bold, color: Colors.purple.shade700, fontSize: 12),
+                                      style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.aiAccent, fontSize: AppTextSize.small),
                                     ),
                                   ],
                                 ),
                                 const SizedBox(height: 4),
-                                Text(data['advice'] ?? '', style: const TextStyle(fontSize: 13, height: 1.4)),
+                                Text(data['advice'] ?? '', style: const TextStyle(fontSize: AppTextSize.body, height: 1.4)),
                               ],
                             ),
                           ),
@@ -148,15 +148,15 @@ centerTitle: true,
                             mainAxisAlignment: MainAxisAlignment.end,
                             children: [
                               TextButton.icon(
-                                icon: const Icon(Icons.delete, color: Colors.red),
-                                label: const Text('削除', style: TextStyle(color: Colors.red)),
+                                icon: const Icon(Icons.delete, color: AppColors.error),
+                                label: const Text('削除', style: TextStyle(color: AppColors.error)),
                                 onPressed: () => _deletePeriod(doc.id, data['name']),
                               ),
                               const SizedBox(width: 8),
                               ElevatedButton.icon(
                                 icon: const Icon(Icons.edit),
                                 label: const Text('編集'),
-                                style: ElevatedButton.styleFrom(backgroundColor: Colors.purple, foregroundColor: Colors.white),
+                                style: ElevatedButton.styleFrom(backgroundColor: AppColors.aiAccent, foregroundColor: Colors.white),
                                 onPressed: () => _showEditDialog(doc: doc),
                               ),
                             ],
@@ -173,7 +173,7 @@ centerTitle: true,
       ),
       floatingActionButton: FloatingActionButton(heroTag: null, 
         onPressed: () => _showEditDialog(),
-        backgroundColor: Colors.purple,
+        backgroundColor: AppColors.aiAccent,
         child: const Icon(Icons.add),
       ),
     );
@@ -184,7 +184,7 @@ centerTitle: true,
       padding: const EdgeInsets.only(bottom: 4),
       child: Text(
         text,
-        style: TextStyle(fontWeight: FontWeight.bold, color: context.colors.textSecondary, fontSize: 12),
+        style: TextStyle(fontWeight: FontWeight.bold, color: context.colors.textSecondary, fontSize: AppTextSize.small),
       ),
     );
   }
@@ -202,7 +202,7 @@ centerTitle: true,
               await _periodsRef.doc(docId).delete();
               if (context.mounted) Navigator.pop(context);
             },
-            child: const Text('削除', style: TextStyle(color: Colors.red)),
+            child: const Text('削除', style: TextStyle(color: AppColors.error)),
           ),
         ],
       ),
@@ -258,7 +258,7 @@ centerTitle: true,
                         const SizedBox(height: 12),
                         
                         // 年齢範囲
-                        const Text('出現時期 (目安)', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                        const Text('出現時期 (目安)', style: TextStyle(fontSize: AppTextSize.small, color: Colors.grey)),
                         const SizedBox(height: 4),
                         Row(
                           children: [
@@ -312,7 +312,7 @@ centerTitle: true,
                                 const SizedBox(width: 8),
                                 if (behaviorCtrls.length > 1)
                                   IconButton(
-                                    icon: const Icon(Icons.remove_circle_outline, color: Colors.red),
+                                    icon: const Icon(Icons.remove_circle_outline, color: AppColors.error),
                                     onPressed: () => setStateDialog(() => behaviorCtrls.removeAt(i)),
                                   ),
                               ],
@@ -354,7 +354,7 @@ centerTitle: true,
                     
                     if (context.mounted) Navigator.pop(context);
                   },
-                  style: ElevatedButton.styleFrom(backgroundColor: Colors.purple, foregroundColor: Colors.white),
+                  style: ElevatedButton.styleFrom(backgroundColor: AppColors.aiAccent, foregroundColor: Colors.white),
                   child: const Text('保存'),
                 ),
               ],

@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'assessment_edit_screen.dart';
 import 'app_theme.dart';
+import 'widgets/app_feedback.dart';
 import 'main.dart';
 
 class AssessmentDetailScreen extends StatefulWidget {
@@ -38,29 +39,14 @@ class _AssessmentDetailScreenState extends State<AssessmentDetailScreen> {
   Future<void> _confirmAndDelete() async {
     final type = _data['type'] as String? ?? 'weekly';
     final isWeekly = type == 'weekly';
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text(isWeekly ? 'この週次アセスメントを削除しますか？' : 'この月次サマリを削除しますか？'),
-        content: const Text('この操作は取り消せません。'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('キャンセル'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red,
-              foregroundColor: Colors.white,
-            ),
-            child: const Text('削除'),
-          ),
-        ],
-      ),
+    final confirmed = await AppFeedback.confirm(
+      context,
+      title: isWeekly ? 'この週次アセスメントを削除しますか？' : 'この月次サマリを削除しますか？',
+      message: 'この操作は取り消せません。',
+      confirmLabel: '削除',
+      destructive: true,
     );
-    if (confirmed != true) return;
+    if (!confirmed) return;
 
     setState(() => _isDeleting = true);
     // 親のMessengerを事前取得（_close後はcontextが使えない可能性があるため）
@@ -71,12 +57,12 @@ class _AssessmentDetailScreenState extends State<AssessmentDetailScreen> {
           .doc(widget.doc.id)
           .delete();
       messenger?.showSnackBar(
-        const SnackBar(content: Text('削除しました'), backgroundColor: Colors.green),
+        const SnackBar(content: Text('削除しました'), backgroundColor: AppColors.success),
       );
       if (mounted) _close();
     } catch (e) {
       messenger?.showSnackBar(
-        SnackBar(content: Text('削除に失敗: $e'), backgroundColor: Colors.red),
+        SnackBar(content: Text('削除に失敗: $e'), backgroundColor: AppColors.error),
       );
       if (mounted) setState(() => _isDeleting = false);
     }
@@ -133,15 +119,11 @@ class _AssessmentDetailScreenState extends State<AssessmentDetailScreen> {
       });
       
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('公開しました'), backgroundColor: Colors.green),
-        );
+        AppFeedback.success(context, '公開しました');
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('エラー: $e'), backgroundColor: Colors.red),
-        );
+        AppFeedback.error(context, 'エラー: $e');
       }
     } finally {
       if (mounted) setState(() => _isPublishing = false);
@@ -176,12 +158,12 @@ class _AssessmentDetailScreenState extends State<AssessmentDetailScreen> {
               child: ElevatedButton(
                 onPressed: _isPublishing ? null : _publish,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.green,
+                  backgroundColor: AppColors.success,
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                 ),
                 child: _isPublishing
                   ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                  : const Text('公開', style: TextStyle(fontSize: 13, color: Colors.white)),
+                  : const Text('公開', style: TextStyle(fontSize: AppTextSize.body, color: Colors.white)),
               ),
             ),
           // 編集・削除は三点メニューに統合
@@ -208,9 +190,9 @@ class _AssessmentDetailScreenState extends State<AssessmentDetailScreen> {
                 enabled: !_isDeleting,
                 child: Row(
                   children: [
-                    Icon(Icons.delete_outline, size: 18, color: Colors.red.shade600),
+                    Icon(Icons.delete_outline, size: 18, color: AppColors.error),
                     const SizedBox(width: 10),
-                    Text('削除', style: TextStyle(color: Colors.red.shade600)),
+                    Text('削除', style: TextStyle(color: AppColors.error)),
                   ],
                 ),
               ),
@@ -241,7 +223,7 @@ class _AssessmentDetailScreenState extends State<AssessmentDetailScreen> {
                         isWeekly 
                             ? DateFormat('yyyy/MM/dd (E)', 'ja').format(date)
                             : DateFormat('yyyy年 MM月').format(date),
-                        style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary, fontSize: 16),
+                        style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary, fontSize: AppTextSize.titleSm),
                       ),
                     ),
                     const SizedBox(width: 8),
@@ -249,19 +231,19 @@ class _AssessmentDetailScreenState extends State<AssessmentDetailScreen> {
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                       decoration: BoxDecoration(
-                        color: isPublished ? Colors.green.withValues(alpha: 0.1) : AppColors.accent.withValues(alpha: 0.1),
+                        color: isPublished ? AppColors.success.withValues(alpha: 0.1) : AppColors.accent.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(4),
                         border: Border.all(
-                          color: isPublished ? Colors.green : AppColors.accent,
+                          color: isPublished ? AppColors.success : AppColors.accent,
                           width: 0.5,
                         ),
                       ),
                       child: Text(
                         isPublished ? '公開中' : '下書き',
                         style: TextStyle(
-                          fontSize: 11,
+                          fontSize: AppTextSize.caption,
                           fontWeight: FontWeight.bold,
-                          color: isPublished ? Colors.green.shade700 : AppColors.accent.shade700,
+                          color: isPublished ? AppColors.success : AppColors.accent.shade700,
                         ),
                       ),
                     ),
@@ -269,7 +251,7 @@ class _AssessmentDetailScreenState extends State<AssessmentDetailScreen> {
                     Expanded(
                       child: Text(
                         studentName,
-                        style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                        style: const TextStyle(fontSize: AppTextSize.xl, fontWeight: FontWeight.bold),
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
@@ -326,7 +308,7 @@ class _AssessmentDetailScreenState extends State<AssessmentDetailScreen> {
               // 教具名
               Text(
                 entry['tool'] ?? '教具未選択',
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: AppTextSize.titleLg),
               ),
               // ★追加: 発達課題（task）を薄いグレーで表示
               if (task.isNotEmpty) ...[
@@ -335,7 +317,7 @@ class _AssessmentDetailScreenState extends State<AssessmentDetailScreen> {
                   padding: const EdgeInsets.only(left: 28),
                   child: Text(
                     task,
-                    style: TextStyle(fontSize: 13, color: context.colors.textTertiary),
+                    style: TextStyle(fontSize: AppTextSize.body, color: context.colors.textTertiary),
                   ),
                 ),
               ],
@@ -344,14 +326,14 @@ class _AssessmentDetailScreenState extends State<AssessmentDetailScreen> {
               // 評価と時間
               Row(
                 children: [
-                  Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), decoration: BoxDecoration(color: context.colors.chipBg, borderRadius: BorderRadius.circular(8)), child: Text('評価: ${entry['rating'] ?? '-'}', style: TextStyle(fontSize: 12))),
+                  Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), decoration: BoxDecoration(color: context.colors.chipBg, borderRadius: BorderRadius.circular(8)), child: Text('評価: ${entry['rating'] ?? '-'}', style: TextStyle(fontSize: AppTextSize.small))),
                 ],
               ),
               const SizedBox(height: 16),
 
               // コメント
               if ((entry['comment'] ?? '').isNotEmpty) ...[
-                Text('コメント', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: context.colors.textSecondary)),
+                Text('コメント', style: TextStyle(fontWeight: FontWeight.bold, fontSize: AppTextSize.small, color: context.colors.textSecondary)),
                 const SizedBox(height: 4),
                 Container(
                   width: double.infinity,
@@ -362,7 +344,7 @@ class _AssessmentDetailScreenState extends State<AssessmentDetailScreen> {
                   ),
                   child: Text(
                     entry['comment'],
-                    style: const TextStyle(height: 1.5, fontSize: 14),
+                    style: const TextStyle(height: 1.5, fontSize: AppTextSize.bodyMd),
                   ),
                 ),
                 const SizedBox(height: 16),
@@ -464,7 +446,7 @@ class _AssessmentDetailScreenState extends State<AssessmentDetailScreen> {
                             TextSpan(text: e['skill'] ?? '', style: TextStyle(color: context.colors.textSecondary)),
                           ],
                         ),
-                        style: const TextStyle(fontSize: 14, height: 1.4),
+                        style: const TextStyle(fontSize: AppTextSize.bodyMd, height: 1.4),
                       ),
                     ),
                   ],
@@ -480,7 +462,7 @@ class _AssessmentDetailScreenState extends State<AssessmentDetailScreen> {
           _buildSectionCard(
             title: '敏感期',
             icon: Icons.lightbulb_outline,
-            iconColor: Colors.green,
+            iconColor: AppColors.success,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -497,11 +479,11 @@ class _AssessmentDetailScreenState extends State<AssessmentDetailScreen> {
                           height: 6,
                           margin: const EdgeInsets.only(right: 10),
                           decoration: const BoxDecoration(
-                            color: Colors.green,
+                            color: AppColors.success,
                             shape: BoxShape.circle,
                           ),
                         ),
-                        Text(period, style: TextStyle(fontSize: 14, color: context.colors.textPrimary)),
+                        Text(period, style: TextStyle(fontSize: AppTextSize.bodyMd, color: context.colors.textPrimary)),
                       ],
                     ),
                   );
@@ -516,11 +498,11 @@ class _AssessmentDetailScreenState extends State<AssessmentDetailScreen> {
                         height: 6,
                         margin: const EdgeInsets.only(right: 10),
                         decoration: const BoxDecoration(
-                          color: Colors.green,
+                          color: AppColors.success,
                           shape: BoxShape.circle,
                         ),
                       ),
-                      Text(period, style: TextStyle(fontSize: 14, color: context.colors.textPrimary)),
+                      Text(period, style: TextStyle(fontSize: AppTextSize.bodyMd, color: context.colors.textPrimary)),
                     ],
                   ),
                 )),
@@ -531,7 +513,7 @@ class _AssessmentDetailScreenState extends State<AssessmentDetailScreen> {
                   const SizedBox(height: 12),
                   Text(
                     sensitivePeriodComment,
-                    style: TextStyle(height: 1.5, fontSize: 14, color: context.colors.textSecondary),
+                    style: TextStyle(height: 1.5, fontSize: AppTextSize.bodyMd, color: context.colors.textSecondary),
                   ),
                 ],
               ],
@@ -547,7 +529,7 @@ class _AssessmentDetailScreenState extends State<AssessmentDetailScreen> {
           iconColor: AppColors.primary,
           child: Text(
             summary.isEmpty ? 'なし' : summary,
-            style: TextStyle(height: 1.6, fontSize: 14, color: context.colors.textPrimary),
+            style: TextStyle(height: 1.6, fontSize: AppTextSize.bodyMd, color: context.colors.textPrimary),
           ),
         ),
 
@@ -610,7 +592,7 @@ class _AssessmentDetailScreenState extends State<AssessmentDetailScreen> {
                 title,
                 style: TextStyle(
                   fontWeight: FontWeight.bold,
-                  fontSize: 15,
+                  fontSize: AppTextSize.bodyLarge,
                   color: iconColor,
                 ),
               ),
@@ -635,7 +617,7 @@ class _AssessmentDetailScreenState extends State<AssessmentDetailScreen> {
         children: [
           Icon(icon, size: 14, color: context.colors.textSecondary),
           const SizedBox(width: 4),
-          Text(text, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+          Text(text, style: const TextStyle(fontSize: AppTextSize.small, fontWeight: FontWeight.bold)),
         ],
       ),
     );

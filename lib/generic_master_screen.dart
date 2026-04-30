@@ -74,7 +74,7 @@ class _GenericMasterScreenState extends State<GenericMasterScreen> {
               setState(() => _items.removeAt(index));
               Navigator.pop(context);
             },
-            child: const Text('削除', style: TextStyle(color: Colors.red)),
+            child: const Text('削除', style: TextStyle(color: AppColors.error)),
           ),
         ],
       ),

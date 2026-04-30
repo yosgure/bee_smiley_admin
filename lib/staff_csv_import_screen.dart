@@ -187,7 +187,7 @@ appBar: AppBar(
               child: const Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('【CSVファイルのルール】', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                  Text('【CSVファイルのルール】', style: TextStyle(fontWeight: FontWeight.bold, fontSize: AppTextSize.titleSm)),
                   SizedBox(height: 12),
                   Text('・文字コード: UTF-8'),
                   Text('・1行目: ヘッダー (無視されます)'),
@@ -233,7 +233,7 @@ appBar: AppBar(
             
             Expanded(
               child: SingleChildScrollView(
-                child: Text(_statusMessage, style: const TextStyle(fontSize: 16)),
+                child: Text(_statusMessage, style: const TextStyle(fontSize: AppTextSize.titleSm)),
               ),
             ),
           ],

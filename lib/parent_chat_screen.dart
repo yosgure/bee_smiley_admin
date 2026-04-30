@@ -18,6 +18,7 @@ import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
 import 'pdf_preview_stub.dart' if (dart.library.js_interop) 'pdf_preview_web.dart';
 import 'package:flutter/cupertino.dart';
 import 'app_theme.dart';
+import 'widgets/app_feedback.dart';
 import 'chat_screen.dart' show VideoPlayerDialog;
 import 'utils/recent_emojis.dart';
 import 'widgets/emoji_stamp_picker.dart';
@@ -127,9 +128,7 @@ class _ParentChatScreenState extends State<ParentChatScreen> {
 
       if (staffUids.isEmpty) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('先生が登録されていません')),
-          );
+          AppFeedback.info(context, '先生が登録されていません');
         }
         return;
       }
@@ -162,9 +161,7 @@ class _ParentChatScreenState extends State<ParentChatScreen> {
     } catch (e) {
       debugPrint('Error creating chat room: $e');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('チャットルームの作成に失敗しました: $e')),
-        );
+        AppFeedback.info(context, 'チャットルームの作成に失敗しました: $e');
       }
     }
   }
@@ -239,7 +236,7 @@ class _ParentChatScreenState extends State<ParentChatScreen> {
       child: Center(
         child: Text(
           title,
-          style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
+          style: TextStyle(fontSize: AppTextSize.title, fontWeight: FontWeight.w600),
         ),
       ),
     );
@@ -416,7 +413,7 @@ class _ChatMessageListState extends State<_ChatMessageList> {
           ),
           if (text.isNotEmpty) ...[
             const SizedBox(height: 8),
-            Text(text, style: TextStyle(fontSize: 15, height: 1.5, fontFamily: 'NotoSansJP', fontFamilyFallback: ['Hiragino Sans', 'Roboto', 'sans-serif'])),
+            Text(text, style: TextStyle(fontSize: AppTextSize.bodyLarge, height: 1.5, fontFamily: 'NotoSansJP', fontFamilyFallback: ['Hiragino Sans', 'Roboto', 'sans-serif'])),
           ],
         ],
       );
@@ -457,7 +454,7 @@ class _ChatMessageListState extends State<_ChatMessageList> {
           ),
           if (text.isNotEmpty) ...[
             const SizedBox(height: 8),
-            Text(text, style: TextStyle(fontSize: 15, height: 1.5, fontFamily: 'NotoSansJP', fontFamilyFallback: ['Hiragino Sans', 'Roboto', 'sans-serif'])),
+            Text(text, style: TextStyle(fontSize: AppTextSize.bodyLarge, height: 1.5, fontFamily: 'NotoSansJP', fontFamilyFallback: ['Hiragino Sans', 'Roboto', 'sans-serif'])),
           ],
         ],
       );
@@ -475,12 +472,12 @@ class _ChatMessageListState extends State<_ChatMessageList> {
       final fExt = fName.split('.').last.toLowerCase();
       IconData fIcon;
       Color fIconBg;
-      if (fExt == 'pdf') { fIcon = Icons.picture_as_pdf; fIconBg = Colors.red.shade400; }
-      else if (['doc', 'docx'].contains(fExt)) { fIcon = Icons.description; fIconBg = Colors.blue.shade600; }
-      else if (['xls', 'xlsx', 'csv'].contains(fExt)) { fIcon = Icons.table_chart; fIconBg = Colors.green.shade600; }
-      else if (['ppt', 'pptx'].contains(fExt)) { fIcon = Icons.slideshow; fIconBg = Colors.orange.shade600; }
-      else if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'].contains(fExt)) { fIcon = Icons.image; fIconBg = Colors.teal; }
-      else if (['zip', 'rar', '7z', 'tar', 'gz'].contains(fExt)) { fIcon = Icons.folder_zip; fIconBg = Colors.amber.shade700; }
+      if (fExt == 'pdf') { fIcon = Icons.picture_as_pdf; fIconBg = AppColors.errorBorder; }
+      else if (['doc', 'docx'].contains(fExt)) { fIcon = Icons.description; fIconBg = AppColors.info; }
+      else if (['xls', 'xlsx', 'csv'].contains(fExt)) { fIcon = Icons.table_chart; fIconBg = AppColors.success; }
+      else if (['ppt', 'pptx'].contains(fExt)) { fIcon = Icons.slideshow; fIconBg = AppColors.warning; }
+      else if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'].contains(fExt)) { fIcon = Icons.image; fIconBg = AppColors.secondary; }
+      else if (['zip', 'rar', '7z', 'tar', 'gz'].contains(fExt)) { fIcon = Icons.folder_zip; fIconBg = AppColors.primary; }
       else { fIcon = Icons.insert_drive_file; fIconBg = context.colors.textSecondary; }
 
       content = ConstrainedBox(
@@ -505,14 +502,14 @@ class _ChatMessageListState extends State<_ChatMessageList> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(fName, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500), overflow: TextOverflow.ellipsis, maxLines: 2),
+                        Text(fName, style: TextStyle(fontSize: AppTextSize.body, fontWeight: FontWeight.w500), overflow: TextOverflow.ellipsis, maxLines: 2),
                         if (expiryText.isNotEmpty) ...[
                           SizedBox(height: 2),
-                          Text(expiryText, style: TextStyle(fontSize: 11, color: context.colors.textSecondary)),
+                          Text(expiryText, style: TextStyle(fontSize: AppTextSize.caption, color: context.colors.textSecondary)),
                         ],
                         if (sizeText.isNotEmpty) ...[
                           SizedBox(height: 2),
-                          Text('サイズ: $sizeText', style: TextStyle(fontSize: 11, color: context.colors.textSecondary)),
+                          Text('サイズ: $sizeText', style: TextStyle(fontSize: AppTextSize.caption, color: context.colors.textSecondary)),
                         ],
                       ],
                     ),
@@ -520,7 +517,7 @@ class _ChatMessageListState extends State<_ChatMessageList> {
                 ],
               ),
             ),
-            if (text.isNotEmpty) ...[const SizedBox(height: 8), Text(text, style: TextStyle(fontSize: 15, height: 1.5, fontFamily: 'NotoSansJP', fontFamilyFallback: ['Hiragino Sans', 'Roboto', 'sans-serif']))],
+            if (text.isNotEmpty) ...[const SizedBox(height: 8), Text(text, style: TextStyle(fontSize: AppTextSize.bodyLarge, height: 1.5, fontFamily: 'NotoSansJP', fontFamilyFallback: ['Hiragino Sans', 'Roboto', 'sans-serif']))],
             SizedBox(height: 6),
             Divider(height: 1, color: context.colors.borderMedium),
             const SizedBox(height: 4),
@@ -534,7 +531,7 @@ class _ChatMessageListState extends State<_ChatMessageList> {
                   },
                   child: Padding(
                     padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
-                    child: Text('保存', style: TextStyle(fontSize: 13, color: Colors.blue.shade700, fontWeight: FontWeight.w500)),
+                    child: Text('保存', style: TextStyle(fontSize: AppTextSize.body, color: AppColors.info, fontWeight: FontWeight.w500)),
                   ),
                 ),
               ],
@@ -567,7 +564,7 @@ class _ChatMessageListState extends State<_ChatMessageList> {
               if (senderName.isNotEmpty)
                 Padding(
                   padding: const EdgeInsets.only(left: 8, bottom: 2),
-                  child: Text(senderName, style: TextStyle(fontSize: 11, color: context.colors.textSecondary)),
+                  child: Text(senderName, style: TextStyle(fontSize: AppTextSize.caption, color: context.colors.textSecondary)),
                 ),
               Row(
                 mainAxisSize: MainAxisSize.min,
@@ -577,8 +574,8 @@ class _ChatMessageListState extends State<_ChatMessageList> {
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
-                        if (isRead) Text('既読', style: TextStyle(fontSize: 10, color: context.colors.textSecondary)),
-                        Text(timeStr, style: TextStyle(fontSize: 10, color: context.colors.textSecondary)),
+                        if (isRead) Text('既読', style: TextStyle(fontSize: AppTextSize.xs, color: context.colors.textSecondary)),
+                        Text(timeStr, style: TextStyle(fontSize: AppTextSize.xs, color: context.colors.textSecondary)),
                       ],
                     ),
                     const SizedBox(width: 8),
@@ -604,7 +601,7 @@ class _ChatMessageListState extends State<_ChatMessageList> {
                   ),
                   if (!isMe) ...[
                     const SizedBox(width: 8),
-                    Text(timeStr, style: TextStyle(fontSize: 10, color: context.colors.textSecondary)),
+                    Text(timeStr, style: TextStyle(fontSize: AppTextSize.xs, color: context.colors.textSecondary)),
                   ],
                 ],
               ),
@@ -644,7 +641,7 @@ class _ChatMessageListState extends State<_ChatMessageList> {
           Text(
             senderName,
             style: TextStyle(
-              fontSize: 11,
+              fontSize: AppTextSize.caption,
               fontWeight: FontWeight.bold,
               color: accentColor,
             ),
@@ -654,7 +651,7 @@ class _ChatMessageListState extends State<_ChatMessageList> {
             preview,
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
-            style: TextStyle(fontSize: 12, color: context.colors.textSecondary),
+            style: TextStyle(fontSize: AppTextSize.small, color: context.colors.textSecondary),
           ),
         ],
       ),
@@ -698,7 +695,7 @@ class _ChatMessageListState extends State<_ChatMessageList> {
     return Tooltip(
       message: tooltipText,
       waitDuration: const Duration(milliseconds: 300),
-      textStyle: const TextStyle(color: Colors.white, fontSize: 12),
+      textStyle: const TextStyle(color: Colors.white, fontSize: AppTextSize.small),
       decoration: BoxDecoration(color: Colors.grey[800], borderRadius: BorderRadius.circular(8)),
       child: GestureDetector(
         onTap: () => _toggleStamp(msgId, emoji),
@@ -824,14 +821,14 @@ class _ChatMessageListState extends State<_ChatMessageList> {
       builder: (dialogContext) => AlertDialog(
         backgroundColor: context.colors.cardBg,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        title: const Text('部分コピー', style: TextStyle(fontSize: 16)),
+        title: const Text('部分コピー', style: TextStyle(fontSize: AppTextSize.titleSm)),
         content: SizedBox(
           width: 360,
           child: SingleChildScrollView(
             child: SelectableText(
               text,
               style: TextStyle(
-                fontSize: 15,
+                fontSize: AppTextSize.bodyLarge,
                 height: 1.5,
                 fontFamily: 'NotoSansJP',
                 fontFamilyFallback: ['Hiragino Sans', 'Roboto', 'sans-serif'],
@@ -917,7 +914,7 @@ class _ChatMessageListState extends State<_ChatMessageList> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('メッセージを編集', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: context.colors.textPrimary)),
+              Text('メッセージを編集', style: TextStyle(fontSize: AppTextSize.titleSm, fontWeight: FontWeight.bold, color: context.colors.textPrimary)),
               const SizedBox(height: 16),
               TextField(
                 controller: controller,
@@ -997,7 +994,7 @@ class _ChatMessageListState extends State<_ChatMessageList> {
               }
               Navigator.of(dialogContext).pop();
             },
-            child: const Text('削除', style: TextStyle(color: Colors.red)),
+            child: const Text('削除', style: TextStyle(color: AppColors.error)),
           ),
         ],
       ),
@@ -1117,7 +1114,7 @@ class _ChatMessageListState extends State<_ChatMessageList> {
                     Expanded(
                       child: Text(
                         fileName,
-                        style: const TextStyle(color: Colors.white, fontSize: 14),
+                        style: const TextStyle(color: Colors.white, fontSize: AppTextSize.bodyMd),
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
@@ -1202,22 +1199,12 @@ class _ChatMessageListState extends State<_ChatMessageList> {
 
       if (dialogContext.mounted) {
         Navigator.pop(dialogContext);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('写真を保存しました'),
-            backgroundColor: Colors.green,
-          ),
-        );
+        AppFeedback.success(context, '写真を保存しました');
       }
     } catch (e) {
       if (dialogContext.mounted) {
         Navigator.pop(dialogContext);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('保存失敗: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        AppFeedback.error(context, '保存失敗: $e');
       }
     }
   }
@@ -1287,7 +1274,7 @@ class _ChatInputAreaState extends State<_ChatInputArea> {
                       maxLines: null,
                       minLines: 1,
                       keyboardType: TextInputType.multiline,
-                      style: const TextStyle(fontSize: 15, height: 1.5, fontFamily: 'NotoSansJP', fontFamilyFallback: ['Hiragino Sans', 'Roboto', 'sans-serif']),
+                      style: const TextStyle(fontSize: AppTextSize.bodyLarge, height: 1.5, fontFamily: 'NotoSansJP', fontFamilyFallback: ['Hiragino Sans', 'Roboto', 'sans-serif']),
                       decoration: InputDecoration(
                         hintText: 'メッセージを入力',
                         filled: true,
@@ -1373,9 +1360,7 @@ class _ChatInputAreaState extends State<_ChatInputArea> {
             const ['mp4', 'mov', 'avi', 'webm', 'mkv', 'm4v'].contains(ext);
         if (isVideo && bytes.length > 50 * 1024 * 1024) {
           if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('動画サイズが大きすぎます (50MBまで)')),
-            );
+            AppFeedback.info(context, '動画サイズが大きすぎます (50MBまで)');
           }
           continue;
         }
@@ -1400,9 +1385,7 @@ class _ChatInputAreaState extends State<_ChatInputArea> {
         }
       } catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('アップロード失敗: $e')),
-          );
+          AppFeedback.info(context, 'アップロード失敗: $e');
         }
       } finally {
         if (mounted) setState(() => _isUploading = false);
@@ -1447,9 +1430,7 @@ class _ChatInputAreaState extends State<_ChatInputArea> {
         } else if (videoExts.contains(ext)) {
           if (bytes.length > 50 * 1024 * 1024) {
             if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('動画サイズが大きすぎます (50MBまで)')),
-              );
+              AppFeedback.info(context, '動画サイズが大きすぎます (50MBまで)');
             }
             continue;
           }
@@ -1464,9 +1445,7 @@ class _ChatInputAreaState extends State<_ChatInputArea> {
         }
       } catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('アップロード失敗: $e')),
-          );
+          AppFeedback.info(context, 'アップロード失敗: $e');
         }
       } finally {
         if (mounted) setState(() => _isUploading = false);

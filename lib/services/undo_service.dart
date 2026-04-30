@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import '../widgets/app_feedback.dart';
 
 /// 破壊的一括操作に「元に戻す」SnackBar を付けるための共通サービス。
 ///
@@ -35,9 +36,7 @@ class UndoService {
     } catch (e) {
       // スナップショット失敗時は操作自体を中止（安全側）
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('事前スナップショット失敗: $e')),
-        );
+        AppFeedback.info(context, '事前スナップショット失敗: $e');
       }
       rethrow;
     }
@@ -67,9 +66,7 @@ class UndoService {
               }
             } catch (e) {
               if (context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('復元に失敗しました: $e')),
-                );
+                AppFeedback.info(context, '復元に失敗しました: $e');
               }
             }
           },

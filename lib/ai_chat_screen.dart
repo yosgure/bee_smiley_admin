@@ -13,6 +13,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:intl/intl.dart';
 import 'ai_chat_history_screen.dart';
 import 'app_theme.dart';
+import 'widgets/app_feedback.dart';
 import 'student_profile_dialog.dart';
 
 class AiChatScreen extends StatefulWidget {
@@ -509,9 +510,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
         _pendingUserMessage = null;
         _isWaitingForAiResponse = false;
       });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('HUG目標の取得に失敗: $e')),
-      );
+      AppFeedback.info(context, 'HUG目標の取得に失敗: $e');
       return;
     }
 
@@ -590,9 +589,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
           _pendingUserMessage = null;
           _isWaitingForAiResponse = false;
         });
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('メッセージの送信に失敗しました: $e')),
-        );
+        AppFeedback.info(context, 'メッセージの送信に失敗しました: $e');
       }
     } finally {
       if (mounted) setState(() => _isSending = false);
@@ -731,9 +728,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
       debugPrint('Error initializing session: $e');
       if (mounted) {
         setState(() => _isLoading = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('セッションの作成に失敗しました: $e')),
-        );
+        AppFeedback.info(context, 'セッションの作成に失敗しました: $e');
       }
     }
   }
@@ -848,9 +843,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
           _isWaitingForAiResponse = false;
           _isUploading = false;
         });
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('メッセージの送信に失敗しました: $e')),
-        );
+        AppFeedback.info(context, 'メッセージの送信に失敗しました: $e');
       }
     } finally {
       if (mounted) {
@@ -956,7 +949,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
               child: Icon(Icons.description, color: context.colors.aiAccent, size: 20),
             ),
             const SizedBox(width: 12),
-            Text('HUGアセスメント情報', style: TextStyle(fontSize: 16, color: context.colors.textPrimary)),
+            Text('HUGアセスメント情報', style: TextStyle(fontSize: AppTextSize.titleSm, color: context.colors.textPrimary)),
           ],
         ),
         content: SizedBox(
@@ -967,7 +960,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
             children: [
               Text(
                 'HUGからコピーしたアセスメント情報を貼り付けてください',
-                style: TextStyle(fontSize: 12, color: context.colors.textSecondary),
+                style: TextStyle(fontSize: AppTextSize.small, color: context.colors.textSecondary),
               ),
               const SizedBox(height: 12),
               TextField(
@@ -1028,20 +1021,13 @@ class _AiChatScreenState extends State<AiChatScreen> {
         setState(() {
           _hugAssessment = assessment;
         });
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(assessment != null
+        AppFeedback.success(context, assessment != null
                 ? 'HUGアセスメント情報を保存しました'
-                : 'HUGアセスメント情報を削除しました'),
-            backgroundColor: Colors.green,
-          ),
-        );
+                : 'HUGアセスメント情報を削除しました');
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('保存に失敗しました: $e')),
-        );
+        AppFeedback.info(context, '保存に失敗しました: $e');
       }
     }
   }
@@ -1146,7 +1132,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
         context: context,
         builder: (ctx) => AlertDialog(
           title: const Text('HUGから目標取得失敗'),
-          content: Text('$e', style: const TextStyle(fontSize: 12)),
+          content: Text('$e', style: const TextStyle(fontSize: AppTextSize.small)),
           actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('OK'))],
         ),
       );
@@ -1219,13 +1205,13 @@ class _AiChatScreenState extends State<AiChatScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title, style: TextStyle(fontSize: 12, color: c.textSecondary, fontWeight: FontWeight.w600)),
+                Text(title, style: TextStyle(fontSize: AppTextSize.small, color: c.textSecondary, fontWeight: FontWeight.w600)),
                 const SizedBox(height: 6),
                 TextField(
                   controller: ctrl,
                   minLines: minLines,
                   maxLines: null,
-                  style: TextStyle(fontSize: 12, height: 1.6, color: c.textPrimary),
+                  style: TextStyle(fontSize: AppTextSize.small, height: 1.6, color: c.textPrimary),
                   decoration: const InputDecoration(
                     border: InputBorder.none,
                     isDense: true,
@@ -1261,15 +1247,15 @@ class _AiChatScreenState extends State<AiChatScreen> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text('モニタリング下書き保存（作成回数 $targetKaisuu）',
-                                style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600, color: c.textPrimary)),
+                                style: TextStyle(fontSize: AppTextSize.title, fontWeight: FontWeight.w600, color: c.textPrimary)),
                             const SizedBox(height: 2),
                             Text(
                               mismatch
                                   ? 'AI考察(${aiConsiderations.length})とHUG目標(${hugGoals.length})が不一致。内容を確認・編集してください'
                                   : 'HUG目標${hugGoals.length}件に対する考察を入力',
                               style: TextStyle(
-                                fontSize: 11,
-                                color: mismatch ? Colors.orange : c.textSecondary,
+                                fontSize: AppTextSize.caption,
+                                color: mismatch ? AppColors.warning : c.textSecondary,
                               ),
                             ),
                           ],
@@ -1363,9 +1349,9 @@ class _AiChatScreenState extends State<AiChatScreen> {
               children: [
                 SizedBox(width: 40, height: 40, child: CircularProgressIndicator(strokeWidth: 3, color: c.aiAccent)),
                 const SizedBox(height: 16),
-                Text('HUGへ送信中...', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: c.textPrimary)),
+                Text('HUGへ送信中...', style: TextStyle(fontSize: AppTextSize.bodyMd, fontWeight: FontWeight.w600, color: c.textPrimary)),
                 const SizedBox(height: 4),
-                Text('安全チェック〜保存まで30秒ほどかかります', style: TextStyle(fontSize: 11, color: c.textSecondary)),
+                Text('安全チェック〜保存まで30秒ほどかかります', style: TextStyle(fontSize: AppTextSize.caption, color: c.textSecondary)),
               ],
             ),
           ),
@@ -1391,7 +1377,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('モニタリング（作成回数${data['kaisuu']}）を下書き保存しました'),
-          backgroundColor: Colors.green,
+          backgroundColor: AppColors.success,
           duration: const Duration(seconds: 3),
         ),
       );
@@ -1402,7 +1388,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
         context: context,
         builder: (ctx) => AlertDialog(
           title: const Text('モニタリング保存に失敗しました'),
-          content: Text('$e', style: const TextStyle(fontSize: 12)),
+          content: Text('$e', style: const TextStyle(fontSize: AppTextSize.small)),
           actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('OK'))],
         ),
       );
@@ -1453,7 +1439,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
                   const SizedBox(width: 10),
                   SizedBox(
                     width: 64,
-                    child: Text(label, style: TextStyle(fontSize: 12, color: c.textSecondary)),
+                    child: Text(label, style: TextStyle(fontSize: AppTextSize.small, color: c.textSecondary)),
                   ),
                   Expanded(child: value),
                 ],
@@ -1489,10 +1475,10 @@ class _AiChatScreenState extends State<AiChatScreen> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text('HUGへ連携',
-                                    style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600, color: c.textPrimary)),
+                                    style: TextStyle(fontSize: AppTextSize.title, fontWeight: FontWeight.w600, color: c.textPrimary)),
                                 const SizedBox(height: 2),
                                 Text('AIが生成した内容をHUGの記録に下書きとして送信します',
-                                    style: TextStyle(fontSize: 11, color: c.textSecondary)),
+                                    style: TextStyle(fontSize: AppTextSize.caption, color: c.textSecondary)),
                               ],
                             ),
                           ),
@@ -1527,7 +1513,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
                                       value: selectedCategory,
                                       isExpanded: true,
                                       borderRadius: BorderRadius.circular(10),
-                                      style: TextStyle(fontSize: 13, color: c.textPrimary),
+                                      style: TextStyle(fontSize: AppTextSize.body, color: c.textPrimary),
                                       items: commandLabels.map((label) {
                                         return DropdownMenuItem(value: label, child: Text(label));
                                       }).toList(),
@@ -1538,10 +1524,10 @@ class _AiChatScreenState extends State<AiChatScreen> {
                                   )),
                                   Divider(height: 1, color: c.borderLight),
                                   metaRow(Icons.person_outline, '生徒名',
-                                    Text(widget.studentName, style: TextStyle(fontSize: 13, color: c.textPrimary, fontWeight: FontWeight.w500))),
+                                    Text(widget.studentName, style: TextStyle(fontSize: AppTextSize.body, color: c.textPrimary, fontWeight: FontWeight.w500))),
                                   Divider(height: 1, color: c.borderLight),
                                   metaRow(Icons.edit_outlined, '記録者',
-                                    Text(staffName, style: TextStyle(fontSize: 13, color: c.textPrimary, fontWeight: FontWeight.w500))),
+                                    Text(staffName, style: TextStyle(fontSize: AppTextSize.body, color: c.textPrimary, fontWeight: FontWeight.w500))),
                                   Divider(height: 1, color: c.borderLight),
                                   metaRow(Icons.calendar_today_outlined, '日付',
                                     InkWell(
@@ -1563,7 +1549,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
                                         child: Row(
                                           children: [
                                             Text(DateFormat('yyyy/MM/dd (E)', 'ja').format(selectedDate),
-                                              style: TextStyle(fontSize: 13, color: c.aiAccent, fontWeight: FontWeight.w500)),
+                                              style: TextStyle(fontSize: AppTextSize.body, color: c.aiAccent, fontWeight: FontWeight.w500)),
                                             const SizedBox(width: 4),
                                             Icon(Icons.arrow_drop_down, size: 18, color: c.aiAccent),
                                           ],
@@ -1580,12 +1566,12 @@ class _AiChatScreenState extends State<AiChatScreen> {
                               children: [
                                 Icon(Icons.description_outlined, size: 16, color: c.textTertiary),
                                 const SizedBox(width: 8),
-                                Text('内容', style: TextStyle(fontSize: 12, color: c.textSecondary)),
+                                Text('内容', style: TextStyle(fontSize: AppTextSize.small, color: c.textSecondary)),
                                 const Spacer(),
                                 StatefulBuilder(
                                   builder: (ctx, _) => Text(
                                     '${textController.text.length}文字',
-                                    style: TextStyle(fontSize: 11, color: c.textTertiary),
+                                    style: TextStyle(fontSize: AppTextSize.caption, color: c.textTertiary),
                                   ),
                                 ),
                               ],
@@ -1606,7 +1592,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
                                   border: InputBorder.none,
                                   contentPadding: EdgeInsets.all(14),
                                 ),
-                                style: TextStyle(fontSize: 13, height: 1.7, color: c.textPrimary),
+                                style: TextStyle(fontSize: AppTextSize.body, height: 1.7, color: c.textPrimary),
                                 onChanged: (_) => setDialogState(() {}),
                               ),
                             ),
@@ -1690,10 +1676,10 @@ class _AiChatScreenState extends State<AiChatScreen> {
                     child: CircularProgressIndicator(strokeWidth: 3, color: c.aiAccent),
                   ),
                   const SizedBox(height: 16),
-                  Text('HUGへ送信中...', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: c.textPrimary)),
+                  Text('HUGへ送信中...', style: TextStyle(fontSize: AppTextSize.bodyMd, fontWeight: FontWeight.w600, color: c.textPrimary)),
                   const SizedBox(height: 4),
                   Text('ログイン〜記録の保存まで数秒かかります',
-                      style: TextStyle(fontSize: 11, color: c.textSecondary)),
+                      style: TextStyle(fontSize: AppTextSize.caption, color: c.textSecondary)),
                 ],
               ),
             ),
@@ -1734,7 +1720,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text('${payload['category']}をHUGに送信しました'),
-              backgroundColor: Colors.green,
+              backgroundColor: AppColors.success,
               duration: const Duration(seconds: 2),
             ),
           );
@@ -1776,7 +1762,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text('hug送信に失敗しました: $error'),
-        backgroundColor: Colors.red,
+        backgroundColor: AppColors.error,
         duration: const Duration(seconds: 3),
       ),
     );
@@ -1815,7 +1801,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
             : null,
         title: Text(
           widget.studentName,
-          style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600, color: context.colors.textPrimary),
+          style: TextStyle(fontSize: AppTextSize.title, fontWeight: FontWeight.w600, color: context.colors.textPrimary),
         ),
         centerTitle: true,
         actions: [
@@ -1863,11 +1849,11 @@ class _AiChatScreenState extends State<AiChatScreen> {
 
   Widget _buildFailedHugBanner() {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final bg = isDark ? const Color(0xFF3A1F1F) : Colors.red.shade50;
-    final border = isDark ? const Color(0xFF7A3030) : Colors.red.shade200;
-    final fg = isDark ? const Color(0xFFFFAAAA) : Colors.red.shade700;
+    final bg = isDark ? const Color(0xFF3A1F1F) : AppColors.errorBg;
+    final border = isDark ? const Color(0xFF7A3030) : AppColors.errorBg;
+    final fg = isDark ? const Color(0xFFFFAAAA) : AppColors.error;
     final itemColor = isDark ? const Color(0xFFE6D8D8) : context.colors.textPrimary;
-    final retryColor = isDark ? const Color(0xFF7CB2FF) : Colors.blue;
+    final retryColor = isDark ? const Color(0xFF7CB2FF) : AppColors.info;
     final discardColor = isDark ? const Color(0xFF9CA0AA) : Colors.grey;
     return Container(
       margin: const EdgeInsets.fromLTRB(12, 8, 12, 0),
@@ -1886,7 +1872,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
               const SizedBox(width: 8),
               Text(
                 'HUG送信失敗 (${_failedHugSends.length}件)',
-                style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: fg),
+                style: TextStyle(fontSize: AppTextSize.body, fontWeight: FontWeight.bold, color: fg),
               ),
             ],
           ),
@@ -1900,7 +1886,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
                   Expanded(
                     child: Text(
                       '${item['category']} / ${item['studentName']}',
-                      style: TextStyle(fontSize: 12, color: itemColor),
+                      style: TextStyle(fontSize: AppTextSize.small, color: itemColor),
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
@@ -1911,7 +1897,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
                       padding: const EdgeInsets.symmetric(horizontal: 8),
                       foregroundColor: retryColor,
                     ),
-                    child: const Text('再送', style: TextStyle(fontSize: 12)),
+                    child: const Text('再送', style: TextStyle(fontSize: AppTextSize.small)),
                   ),
                   TextButton(
                     onPressed: () => _discardFailedHugSend(i),
@@ -1920,7 +1906,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
                       padding: const EdgeInsets.symmetric(horizontal: 8),
                       foregroundColor: discardColor,
                     ),
-                    child: const Text('破棄', style: TextStyle(fontSize: 12)),
+                    child: const Text('破棄', style: TextStyle(fontSize: AppTextSize.small)),
                   ),
                 ],
               ),
@@ -1973,7 +1959,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
                       : '${widget.studentName}さんについて\nお手伝いします',
                   textAlign: TextAlign.center,
                   style: const TextStyle(
-                    fontSize: 24,
+                    fontSize: AppTextSize.headline,
                     fontWeight: FontWeight.bold,
                     color: Colors.white,
                     height: 1.4,
@@ -1985,7 +1971,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
                 _commands.isNotEmpty
                     ? 'メッセージを入力するか、/ でコマンドを使ってみましょう'
                     : 'メッセージを入力して相談してみましょう',
-                style: TextStyle(fontSize: 14, color: context.colors.textTertiary),
+                style: TextStyle(fontSize: AppTextSize.bodyMd, color: context.colors.textTertiary),
               ),
               if (_commands.isNotEmpty) const SizedBox(height: 24),
               // コマンド一覧をカードで表示（登録がある場合のみ）
@@ -2019,7 +2005,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
                             const SizedBox(width: 14),
                             Expanded(
                               child: Text('/$label',
-                                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: context.colors.textPrimary)),
+                                style: TextStyle(fontSize: AppTextSize.bodyMd, fontWeight: FontWeight.w600, color: context.colors.textPrimary)),
                             ),
                             Icon(Icons.chevron_right_rounded,
                                 size: 20, color: context.colors.iconMuted),
@@ -2305,7 +2291,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
                           child: Text(
                             name,
                             style: TextStyle(
-                              fontSize: 12,
+                              fontSize: AppTextSize.small,
                               color: isPending ? context.colors.textTertiary : context.colors.textPrimary,
                             ),
                             maxLines: 1,
@@ -2343,7 +2329,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
               child: SelectableText(
                 content,
                 style: TextStyle(
-                  fontSize: 15,
+                  fontSize: AppTextSize.bodyLarge,
                   color: isSending
                       ? context.colors.chatMyBubbleText.withValues(alpha: 0.7)
                       : context.colors.chatMyBubbleText,
@@ -2392,7 +2378,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
                 SelectableText(
                   _cleanMonitoringDisplay(content),
                   style: TextStyle(
-                    fontSize: 15,
+                    fontSize: AppTextSize.bodyLarge,
                     color: context.colors.textPrimary,
                     height: 1.6,
                   ),
@@ -2479,7 +2465,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
                           child: Text(
                             '/$label',
                             style: const TextStyle(
-                              fontSize: 12,
+                              fontSize: AppTextSize.small,
                               fontWeight: FontWeight.w600,
                               color: Colors.white,
                             ),
@@ -2488,13 +2474,13 @@ class _AiChatScreenState extends State<AiChatScreen> {
                         const SizedBox(width: 10),
                         Text(
                           '自由記述',
-                          style: TextStyle(fontSize: 12, color: context.colors.textTertiary),
+                          style: TextStyle(fontSize: AppTextSize.small, color: context.colors.textTertiary),
                         ),
                         const Spacer(),
                         TextButton(
                           onPressed: _cancelFreeform,
                           child: Text('キャンセル',
-                              style: TextStyle(fontSize: 12, color: context.colors.textTertiary)),
+                              style: TextStyle(fontSize: AppTextSize.small, color: context.colors.textTertiary)),
                         ),
                       ],
                     ),
@@ -2505,7 +2491,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
                       padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
                       child: Text(
                         description,
-                        style: TextStyle(fontSize: 12, color: context.colors.textSecondary),
+                        style: TextStyle(fontSize: AppTextSize.small, color: context.colors.textSecondary),
                       ),
                     ),
                   // テキスト入力エリア
@@ -2516,10 +2502,10 @@ class _AiChatScreenState extends State<AiChatScreen> {
                       maxLines: 6,
                       minLines: 4,
                       keyboardType: TextInputType.multiline,
-                      style: TextStyle(fontSize: 14, color: context.colors.textPrimary),
+                      style: TextStyle(fontSize: AppTextSize.bodyMd, color: context.colors.textPrimary),
                       decoration: InputDecoration(
                         hintText: '今日の様子を自由に記入してください...',
-                        hintStyle: TextStyle(fontSize: 13, color: context.colors.textHint),
+                        hintStyle: TextStyle(fontSize: AppTextSize.body, color: context.colors.textHint),
                         filled: true,
                         fillColor: context.colors.cardBg,
                         contentPadding: const EdgeInsets.all(14),
@@ -2638,7 +2624,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
                     ? currentAnswer
                     : (type == 'datetime' ? '日時を選択...' : '日付を選択...'),
                 style: TextStyle(
-                  fontSize: 14,
+                  fontSize: AppTextSize.bodyMd,
                   color: hasValue ? context.colors.textPrimary : context.colors.textHint,
                   fontWeight: hasValue ? FontWeight.w500 : FontWeight.normal,
                 ),
@@ -2711,7 +2697,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
                           child: Text(
                             '/$label',
                             style: const TextStyle(
-                              fontSize: 12,
+                              fontSize: AppTextSize.small,
                               fontWeight: FontWeight.w600,
                               color: Colors.white,
                             ),
@@ -2720,13 +2706,13 @@ class _AiChatScreenState extends State<AiChatScreen> {
                         const SizedBox(width: 10),
                         Text(
                           '${_elicitationStep + 1} / ${questions.length}',
-                          style: TextStyle(fontSize: 12, color: context.colors.textTertiary),
+                          style: TextStyle(fontSize: AppTextSize.small, color: context.colors.textTertiary),
                         ),
                         const Spacer(),
                         TextButton(
                           onPressed: _cancelElicitation,
                           child: Text('キャンセル',
-                              style: TextStyle(fontSize: 12, color: context.colors.textTertiary)),
+                              style: TextStyle(fontSize: AppTextSize.small, color: context.colors.textTertiary)),
                         ),
                       ],
                     ),
@@ -2749,7 +2735,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
                     padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
                     child: Text(
                       questionText,
-                      style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: context.colors.textPrimary),
+                      style: TextStyle(fontSize: AppTextSize.bodyLarge, fontWeight: FontWeight.w600, color: context.colors.textPrimary),
                     ),
                   ),
                   // 回答エリア
@@ -2776,7 +2762,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
                           final staffList = snap.data!;
                           if (staffList.isEmpty) {
                             return Text('プラス所属スタッフが見つかりません',
-                              style: TextStyle(fontSize: 13, color: context.colors.textTertiary));
+                              style: TextStyle(fontSize: AppTextSize.body, color: context.colors.textTertiary));
                           }
                           return Wrap(
                             spacing: 6,
@@ -2797,7 +2783,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
                                   child: Text(
                                     opt,
                                     style: TextStyle(
-                                      fontSize: 13,
+                                      fontSize: AppTextSize.body,
                                       color: isSelected ? Colors.white : context.colors.textPrimary,
                                       fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
                                     ),
@@ -2835,7 +2821,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
                               child: Text(
                                 opt,
                                 style: TextStyle(
-                                  fontSize: 13,
+                                  fontSize: AppTextSize.body,
                                   color: isSelected ? Colors.white : context.colors.textPrimary,
                                   fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
                                 ),
@@ -2870,7 +2856,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
                               child: Text(
                                 opt,
                                 style: TextStyle(
-                                  fontSize: 13,
+                                  fontSize: AppTextSize.body,
                                   color: isSelected ? Colors.white : context.colors.textPrimary,
                                   fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
                                 ),
@@ -2897,10 +2883,10 @@ class _AiChatScreenState extends State<AiChatScreen> {
                         },
                         child: TextField(
                           controller: _elicitationTextController,
-                          style: TextStyle(fontSize: 14, color: context.colors.textPrimary),
+                          style: TextStyle(fontSize: AppTextSize.bodyMd, color: context.colors.textPrimary),
                           decoration: InputDecoration(
                             hintText: 'その他（自由入力）',
-                            hintStyle: TextStyle(fontSize: 13, color: context.colors.textHint),
+                            hintStyle: TextStyle(fontSize: AppTextSize.body, color: context.colors.textHint),
                             filled: true,
                             fillColor: context.colors.cardBg,
                             contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
@@ -2949,10 +2935,10 @@ class _AiChatScreenState extends State<AiChatScreen> {
                           maxLines: 3,
                           minLines: 1,
                           keyboardType: TextInputType.multiline,
-                          style: TextStyle(fontSize: 14, color: context.colors.textPrimary),
+                          style: TextStyle(fontSize: AppTextSize.bodyMd, color: context.colors.textPrimary),
                           decoration: InputDecoration(
                             hintText: currentQ['placeholder'] as String? ?? '回答を入力...',
-                            hintStyle: TextStyle(fontSize: 13, color: context.colors.textHint),
+                            hintStyle: TextStyle(fontSize: AppTextSize.body, color: context.colors.textHint),
                             filled: true,
                             fillColor: context.colors.cardBg,
                             contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
@@ -2986,7 +2972,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
                           TextButton.icon(
                             onPressed: _goBackElicitation,
                             icon: const Icon(Icons.arrow_back_rounded, size: 16),
-                            label: const Text('戻る', style: TextStyle(fontSize: 13)),
+                            label: const Text('戻る', style: TextStyle(fontSize: AppTextSize.body)),
                             style: TextButton.styleFrom(
                               foregroundColor: context.colors.textSecondary,
                             ),
@@ -2999,7 +2985,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
                               _elicitationTextController.clear();
                             },
                             child: Text('スキップ',
-                                style: TextStyle(fontSize: 13, color: context.colors.textTertiary)),
+                                style: TextStyle(fontSize: AppTextSize.body, color: context.colors.textTertiary)),
                           ),
                         const Spacer(),
                         // 次へ / 送信ボタン（上矢印）
@@ -3023,7 +3009,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
                                 ),
                                 child: Text('次へ',
                                     style: TextStyle(
-                                      fontSize: 13,
+                                      fontSize: AppTextSize.body,
                                       color: (currentAnswer.isNotEmpty || !isRequired)
                                           ? Colors.white
                                           : context.colors.textTertiary,
@@ -3097,7 +3083,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
                 child: Text(
                   'コマンド',
                   style: TextStyle(
-                    fontSize: 11,
+                    fontSize: AppTextSize.caption,
                     fontWeight: FontWeight.w600,
                     color: context.colors.textTertiary,
                     letterSpacing: 0.5,
@@ -3127,7 +3113,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
                           child: Text(
                             '/$label',
                             style: TextStyle(
-                              fontSize: 14,
+                              fontSize: AppTextSize.bodyMd,
                               fontWeight: FontWeight.w600,
                               color: context.colors.textPrimary,
                             ),
@@ -3214,7 +3200,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
                             ),
                             const SizedBox(width: 8),
                             Text('アップロード中...',
-                                style: TextStyle(fontSize: 11, color: context.colors.textTertiary)),
+                                style: TextStyle(fontSize: AppTextSize.caption, color: context.colors.textTertiary)),
                           ],
                         ),
                       ),
@@ -3230,7 +3216,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
                             const SizedBox(width: 8),
                             Text('ここにドロップして添付',
                                 style: TextStyle(
-                                  fontSize: 13,
+                                  fontSize: AppTextSize.body,
                                   color: context.colors.aiAccent.withOpacity(0.8),
                                   fontWeight: FontWeight.w500,
                                 )),
@@ -3262,7 +3248,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
                               minLines: 1,
                               keyboardType: TextInputType.multiline,
                               enabled: !_isSending,
-                              style: TextStyle(fontSize: 15, color: context.colors.textPrimary),
+                              style: TextStyle(fontSize: AppTextSize.bodyLarge, color: context.colors.textPrimary),
                               decoration: InputDecoration(
                                 hintText: 'メッセージを入力...',
                                 hintStyle: TextStyle(color: context.colors.textHint),
@@ -3429,14 +3415,14 @@ class _AiChatScreenState extends State<AiChatScreen> {
                   children: [
                     Text(
                       file.name,
-                      style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500),
+                      style: const TextStyle(fontSize: AppTextSize.caption, fontWeight: FontWeight.w500),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),
                     if (file.fileSize != null)
                       Text(
                         _formatFileSize(file.fileSize!),
-                        style: TextStyle(fontSize: 10, color: context.colors.textTertiary),
+                        style: TextStyle(fontSize: AppTextSize.xs, color: context.colors.textTertiary),
                       ),
                   ],
                 ),
@@ -3513,7 +3499,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
                       const SizedBox(width: 10),
                       Text(
                         '${widget.studentName} - 相談履歴',
-                        style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600, color: context.colors.textPrimary),
+                        style: TextStyle(fontSize: AppTextSize.title, fontWeight: FontWeight.w600, color: context.colors.textPrimary),
                       ),
                     ],
                   ),
@@ -3540,7 +3526,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
                         padding: const EdgeInsets.all(16),
                         child: SelectableText(
                           'エラーが発生しました:\n${snapshot.error}',
-                          style: const TextStyle(color: Colors.red, fontSize: 12),
+                          style: const TextStyle(color: AppColors.error, fontSize: AppTextSize.small),
                         ),
                       ),
                     );
@@ -3647,7 +3633,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
                                       dateStr,
                                       style: TextStyle(
                                         fontWeight: FontWeight.w600,
-                                        fontSize: 13,
+                                        fontSize: AppTextSize.body,
                                         color: isCurrentSession
                                             ? context.colors.aiAccent
                                             : context.colors.textPrimary,
@@ -3667,7 +3653,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
                                         child: const Text(
                                           '現在',
                                           style: TextStyle(
-                                            fontSize: 10,
+                                            fontSize: AppTextSize.xs,
                                             fontWeight: FontWeight.bold,
                                             color: Colors.white,
                                           ),
@@ -3678,7 +3664,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
                                     Text(
                                       '$messageCount件',
                                       style: TextStyle(
-                                        fontSize: 11,
+                                        fontSize: AppTextSize.caption,
                                         color: context.colors.textTertiary,
                                       ),
                                     ),
@@ -3704,7 +3690,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
                                             maxLines: 3,
                                             overflow: TextOverflow.ellipsis,
                                             style: TextStyle(
-                                              fontSize: 12,
+                                              fontSize: AppTextSize.small,
                                               color: context.colors.textSecondary,
                                               height: 1.4,
                                             ),
@@ -3720,7 +3706,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
                                     maxLines: 2,
                                     overflow: TextOverflow.ellipsis,
                                     style: TextStyle(
-                                      fontSize: 12,
+                                      fontSize: AppTextSize.small,
                                       color: context.colors.textSecondary,
                                     ),
                                   ),
@@ -3729,7 +3715,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
                                 Text(
                                   staffName,
                                   style: TextStyle(
-                                    fontSize: 11,
+                                    fontSize: AppTextSize.caption,
                                     color: context.colors.textHint,
                                   ),
                                 ),

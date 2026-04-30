@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import 'dart:async';
 import 'app_theme.dart';
+import 'widgets/app_feedback.dart';
 
 class AttendanceScreen extends StatefulWidget {
   final String classroom;
@@ -58,7 +59,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
             style: TextStyle(
               color: AppColors.primary,
               fontWeight: FontWeight.bold,
-              fontSize: 20,
+              fontSize: AppTextSize.xl,
             ),
           ),
         ),
@@ -70,7 +71,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
               child: Text(
                 DateFormat('HH:mm').format(_currentTime),
                 style: TextStyle(
-                  fontSize: 24,
+                  fontSize: AppTextSize.headline,
                   fontWeight: FontWeight.bold,
                   color: context.colors.textPrimary,
                 ),
@@ -153,7 +154,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                     Text(
                       '現在レッスンはありません',
                       style: TextStyle(
-                        fontSize: 24,
+                        fontSize: AppTextSize.headline,
                         color: context.colors.textSecondary,
                         fontWeight: FontWeight.w500,
                       ),
@@ -162,7 +163,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                     Text(
                       DateFormat('yyyy年M月d日 (E)', 'ja').format(now),
                       style: TextStyle(
-                        fontSize: 18,
+                        fontSize: AppTextSize.titleLg,
                         color: context.colors.textTertiary,
                       ),
                     ),
@@ -207,12 +208,12 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
             children: [
               Text(
                 lessonName,
-                style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                style: const TextStyle(fontSize: AppTextSize.xl, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 8),
               Text(
                 '${DateFormat('HH:mm').format(startTime)} - ${DateFormat('HH:mm').format(endTime)}',
-                style: TextStyle(fontSize: 16, color: context.colors.textSecondary),
+                style: TextStyle(fontSize: AppTextSize.titleSm, color: context.colors.textSecondary),
               ),
               const SizedBox(height: 16),
               Text(
@@ -247,7 +248,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                   child: Text(
                     lessonName,
                     style: const TextStyle(
-                      fontSize: 18,
+                      fontSize: AppTextSize.titleLg,
                       fontWeight: FontWeight.bold,
                       color: Colors.white,
                     ),
@@ -257,7 +258,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                 Text(
                   '${DateFormat('HH:mm').format(startTime)} - ${DateFormat('HH:mm').format(endTime)}',
                   style: TextStyle(
-                    fontSize: 16,
+                    fontSize: AppTextSize.titleSm,
                     color: context.colors.textSecondary,
                     fontWeight: FontWeight.w500,
                   ),
@@ -274,7 +275,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                     child: Text(
                       '未退室あり',
                       style: TextStyle(
-                        fontSize: 12,
+                        fontSize: AppTextSize.small,
                         color: AppColors.accent.shade800,
                         fontWeight: FontWeight.bold,
                       ),
@@ -432,8 +433,8 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
       statusIcon = Icons.logout;
       statusText = '退室 $exitedTime';
     } else if (isEntered) {
-      backgroundColor = Colors.green.shade100;
-      textColor = Colors.green.shade800;
+      backgroundColor = AppColors.successBg;
+      textColor = AppColors.successDark;
       statusIcon = Icons.check_circle;
       statusText = '入室 $enteredTime';
     } else {
@@ -461,7 +462,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
             borderRadius: BorderRadius.circular(10),
             border: Border.all(
               color: isEntered && !isExited 
-                  ? Colors.green.shade400 
+                  ? AppColors.successBorder 
                   : context.colors.borderMedium,
               width: isEntered && !isExited ? 2 : 1,
             ),
@@ -473,7 +474,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                 Text(
                   studentKana,
                   style: TextStyle(
-                    fontSize: 10,
+                    fontSize: AppTextSize.xs,
                     color: textColor.withOpacity(0.7),
                   ),
                   textAlign: TextAlign.center,
@@ -483,7 +484,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
               Text(
                 studentName,
                 style: TextStyle(
-                  fontSize: 15,
+                  fontSize: AppTextSize.bodyLarge,
                   fontWeight: FontWeight.bold,
                   color: textColor,
                 ),
@@ -501,7 +502,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                     Text(
                       statusText,
                       style: TextStyle(
-                        fontSize: 10,
+                        fontSize: AppTextSize.xs,
                         color: textColor,
                         fontWeight: FontWeight.w500,
                       ),
@@ -628,30 +629,14 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     required String message,
     required Future<void> Function() onConfirm,
   }) async {
-    final result = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text(title),
-        content: Text(message),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('キャンセル'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.primary,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-            ),
-            child: const Text('OK', style: TextStyle(color: Colors.white)),
-          ),
-        ],
-      ),
+    final result = await AppFeedback.confirm(
+      context,
+      title: title,
+      message: message,
+      confirmLabel: 'OK',
     );
-    
-    if (result == true) {
+
+    if (result) {
       await onConfirm();
     }
   }
@@ -716,10 +701,10 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
           children: [
             const Icon(Icons.check_circle, color: Colors.white),
             const SizedBox(width: 8),
-            Text(message, style: const TextStyle(fontSize: 16)),
+            Text(message, style: const TextStyle(fontSize: AppTextSize.titleSm)),
           ],
         ),
-        backgroundColor: Colors.green,
+        backgroundColor: AppColors.success,
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
         duration: const Duration(seconds: 2),
@@ -758,7 +743,7 @@ class AttendanceClassroomSelectScreen extends StatelessWidget {
             Text(
               '入退室管理',
               style: TextStyle(
-                fontSize: 28,
+                fontSize: AppTextSize.hero,
                 fontWeight: FontWeight.bold,
                 color: context.colors.textPrimary,
               ),
@@ -767,7 +752,7 @@ class AttendanceClassroomSelectScreen extends StatelessWidget {
             Text(
               '教室を選択してください',
               style: TextStyle(
-                fontSize: 16,
+                fontSize: AppTextSize.titleSm,
                 color: context.colors.textSecondary,
               ),
             ),
@@ -795,7 +780,7 @@ class AttendanceClassroomSelectScreen extends StatelessWidget {
                   child: Text(
                     classroom,
                     style: const TextStyle(
-                      fontSize: 18,
+                      fontSize: AppTextSize.titleLg,
                       fontWeight: FontWeight.bold,
                       color: Colors.white,
                     ),

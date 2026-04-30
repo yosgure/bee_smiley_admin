@@ -562,7 +562,7 @@ appBar: AppBar(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('インポートモード', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                  const Text('インポートモード', style: TextStyle(fontWeight: FontWeight.bold, fontSize: AppTextSize.titleSm)),
                   const SizedBox(height: 12),
                   Row(
                     children: [
@@ -572,7 +572,7 @@ appBar: AppBar(
                           Icons.person_add,
                           '新規（従来形式）',
                           'ID+PW列を含むCSV',
-                          Colors.blue,
+                          AppColors.info,
                         ),
                       ),
                       const SizedBox(width: 8),
@@ -592,7 +592,7 @@ appBar: AppBar(
                           Icons.sync,
                           '更新',
                           '既存データを\n上書き',
-                          Colors.green,
+                          AppColors.success,
                         ),
                       ),
                     ],
@@ -644,10 +644,10 @@ appBar: AppBar(
                     label: Text(_importMode == 2 ? '更新実行' : '新規登録実行'),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: _importMode == 0 
-                          ? Colors.blue 
+                          ? AppColors.info 
                           : _importMode == 1 
                               ? AppColors.accent 
-                              : Colors.green,
+                              : AppColors.success,
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
                     ),
@@ -710,7 +710,7 @@ appBar: AppBar(
             const SizedBox(height: 4),
             Text(
               subtitle,
-              style: TextStyle(fontSize: 11, color: context.colors.textSecondary),
+              style: TextStyle(fontSize: AppTextSize.caption, color: context.colors.textSecondary),
               textAlign: TextAlign.center,
             ),
           ],
@@ -723,13 +723,13 @@ appBar: AppBar(
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('【新規登録CSVフォーマット（従来形式）】', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.blue)),
+        const Text('【新規登録CSVフォーマット（従来形式）】', style: TextStyle(fontWeight: FontWeight.bold, fontSize: AppTextSize.bodyMd, color: AppColors.info)),
         const SizedBox(height: 8),
-        const Text('列の順序（14列目まで）:', style: TextStyle(fontSize: 12)),
+        const Text('列の順序（14列目まで）:', style: TextStyle(fontSize: AppTextSize.small)),
         Text('1.姓, 2.名, 3.姓かな, 4.名かな, 5.ID, 6.PW, 7.続柄, 8.電話, 9.Email, 10.郵便番号, 11.住所, 12.緊急名, 13.緊急続柄, 14.緊急電話', 
-          style: TextStyle(fontSize: 11, color: context.colors.textSecondary)),
+          style: TextStyle(fontSize: AppTextSize.caption, color: context.colors.textSecondary)),
         const SizedBox(height: 12),
-        const Text('児童情報（15列目以降、7項目×児童数）:', style: TextStyle(fontSize: 12)),
+        const Text('児童情報（15列目以降、7項目×児童数）:', style: TextStyle(fontSize: AppTextSize.small)),
         SingleChildScrollView(
           scrollDirection: Axis.horizontal,
           child: Row(
@@ -752,9 +752,9 @@ appBar: AppBar(
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('【新規登録（エクスポート形式）】', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppColors.accent)),
+        const Text('【新規登録（エクスポート形式）】', style: TextStyle(fontWeight: FontWeight.bold, fontSize: AppTextSize.bodyMd, color: AppColors.accent)),
         const SizedBox(height: 8),
-        const Text('エクスポート機能で出力したCSVをそのまま使用できます。', style: TextStyle(fontSize: 12)),
+        const Text('エクスポート機能で出力したCSVをそのまま使用できます。', style: TextStyle(fontSize: AppTextSize.small)),
         const SizedBox(height: 8),
         Container(
           padding: const EdgeInsets.all(8),
@@ -765,15 +765,15 @@ appBar: AppBar(
           child: const Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('✓ パスワードは初期パスワードに自動設定', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-              Text('✓ 同じIDの複数行は1家族として統合', style: TextStyle(fontSize: 11)),
-              Text('✓ 「アカウント状態」列は無視される', style: TextStyle(fontSize: 11)),
-              Text('✓ 全員「初期PW」状態で登録', style: TextStyle(fontSize: 11)),
+              Text('✓ パスワードは初期パスワードに自動設定', style: TextStyle(fontSize: AppTextSize.caption, fontWeight: FontWeight.bold)),
+              Text('✓ 同じIDの複数行は1家族として統合', style: TextStyle(fontSize: AppTextSize.caption)),
+              Text('✓ 「アカウント状態」列は無視される', style: TextStyle(fontSize: AppTextSize.caption)),
+              Text('✓ 全員「初期PW」状態で登録', style: TextStyle(fontSize: AppTextSize.caption)),
             ],
           ),
         ),
         const SizedBox(height: 12),
-        const Text('※ 既存のログインIDがある場合はエラーになります', style: TextStyle(fontSize: 11, color: Colors.red)),
+        const Text('※ 既存のログインIDがある場合はエラーになります', style: TextStyle(fontSize: AppTextSize.caption, color: AppColors.error)),
       ],
     );
   }
@@ -782,30 +782,30 @@ appBar: AppBar(
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('【更新用CSVフォーマット（エクスポート形式）】', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.green)),
+        const Text('【更新用CSVフォーマット（エクスポート形式）】', style: TextStyle(fontWeight: FontWeight.bold, fontSize: AppTextSize.bodyMd, color: AppColors.success)),
         const SizedBox(height: 8),
-        const Text('エクスポート機能で出力したCSVをそのまま使用できます。', style: TextStyle(fontSize: 12)),
+        const Text('エクスポート機能で出力したCSVをそのまま使用できます。', style: TextStyle(fontSize: AppTextSize.small)),
         const SizedBox(height: 8),
         Container(
           padding: const EdgeInsets.all(8),
           decoration: BoxDecoration(
-            color: Colors.green.shade50,
+            color: AppColors.successBg,
             borderRadius: BorderRadius.circular(4),
           ),
           child: const Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('✓ ログインIDで既存データを照合', style: TextStyle(fontSize: 11)),
-              Text('✓ 同じIDの複数行は1家族として統合', style: TextStyle(fontSize: 11)),
-              Text('✓ 存在しないIDはスキップ', style: TextStyle(fontSize: 11)),
-              Text('✓ アカウント状態列は無視（変更不可）', style: TextStyle(fontSize: 11)),
+              Text('✓ ログインIDで既存データを照合', style: TextStyle(fontSize: AppTextSize.caption)),
+              Text('✓ 同じIDの複数行は1家族として統合', style: TextStyle(fontSize: AppTextSize.caption)),
+              Text('✓ 存在しないIDはスキップ', style: TextStyle(fontSize: AppTextSize.caption)),
+              Text('✓ アカウント状態列は無視（変更不可）', style: TextStyle(fontSize: AppTextSize.caption)),
             ],
           ),
         ),
         const SizedBox(height: 12),
-        const Text('列順序:', style: TextStyle(fontSize: 12)),
+        const Text('列順序:', style: TextStyle(fontSize: AppTextSize.small)),
         Text('ログインID, 保護者姓, 保護者名, 姓カナ, 名カナ, 続柄, 電話, メール, 郵便番号, 住所, 緊急名, 緊急続柄, 緊急電話, アカウント状態, 児童名, 児童カナ, 性別, 生年月日, 教室, コース, アレルギー', 
-          style: TextStyle(fontSize: 10, color: context.colors.textSecondary)),
+          style: TextStyle(fontSize: AppTextSize.xs, color: context.colors.textSecondary)),
       ],
     );
   }
@@ -814,8 +814,8 @@ appBar: AppBar(
     return Container(
       margin: const EdgeInsets.only(right: 2),
       padding: const EdgeInsets.all(8),
-      color: Colors.blue.shade50,
-      child: Text(text, style: const TextStyle(fontSize: 10), textAlign: TextAlign.center),
+      color: AppColors.infoBg,
+      child: Text(text, style: const TextStyle(fontSize: AppTextSize.xs), textAlign: TextAlign.center),
     );
   }
 }

@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
 import 'app_theme.dart';
+import 'widgets/app_feedback.dart';
 import 'classroom_utils.dart';
 import 'main.dart';
 
@@ -31,7 +32,7 @@ class _HiyariScreenState extends State<HiyariScreen> {
     return Scaffold(
       backgroundColor: context.colors.scaffoldBg,
       appBar: AppBar(
-        title: const Text('事故・ヒヤリハット', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
+        title: const Text('事故・ヒヤリハット', style: TextStyle(fontSize: AppTextSize.title, fontWeight: FontWeight.w600)),
         backgroundColor: context.colors.cardBg,
         elevation: 0,
         foregroundColor: context.colors.textPrimary,
@@ -73,9 +74,9 @@ class _HiyariScreenState extends State<HiyariScreen> {
               children: [
                 Icon(Icons.assignment_outlined, size: 56, color: context.colors.textTertiary),
                 const SizedBox(height: 12),
-                Text('報告はまだありません', style: TextStyle(color: context.colors.textSecondary, fontSize: 14)),
+                Text('報告はまだありません', style: TextStyle(color: context.colors.textSecondary, fontSize: AppTextSize.bodyMd)),
                 const SizedBox(height: 4),
-                Text('右下の「新規報告」から記録できます', style: TextStyle(color: context.colors.textTertiary, fontSize: 12)),
+                Text('右下の「新規報告」から記録できます', style: TextStyle(color: context.colors.textTertiary, fontSize: AppTextSize.small)),
               ],
             ),
           );
@@ -142,7 +143,7 @@ class _HiyariListTile extends StatelessWidget {
                   const SizedBox(width: 8),
                   Text(
                     occurredAt != null ? DateFormat('M/d (E) HH:mm', 'ja').format(occurredAt) : '',
-                    style: TextStyle(fontSize: 12, color: context.colors.textSecondary, fontWeight: FontWeight.w600),
+                    style: TextStyle(fontSize: AppTextSize.small, color: context.colors.textSecondary, fontWeight: FontWeight.w600),
                   ),
                   const Spacer(),
                   _statusBadge(status),
@@ -153,7 +154,7 @@ class _HiyariListTile extends StatelessWidget {
                 Padding(
                   padding: const EdgeInsets.only(bottom: 6),
                   child: Text('対象: ${childNames.join('、')}',
-                      style: TextStyle(fontSize: 12, color: context.colors.textSecondary, fontWeight: FontWeight.w600)),
+                      style: TextStyle(fontSize: AppTextSize.small, color: context.colors.textSecondary, fontWeight: FontWeight.w600)),
                 ),
               Wrap(
                 spacing: 6,
@@ -167,10 +168,10 @@ class _HiyariListTile extends StatelessWidget {
               const SizedBox(height: 8),
               Text(
                 situation.length > 60 ? '${situation.substring(0, 60)}…' : situation,
-                style: TextStyle(fontSize: 13, color: context.colors.textPrimary, height: 1.4),
+                style: TextStyle(fontSize: AppTextSize.body, color: context.colors.textPrimary, height: 1.4),
               ),
               const SizedBox(height: 4),
-              Text('報告者: $reporterName', style: TextStyle(fontSize: 11, color: context.colors.textTertiary)),
+              Text('報告者: $reporterName', style: TextStyle(fontSize: AppTextSize.caption, color: context.colors.textTertiary)),
             ],
           ),
         ),
@@ -186,17 +187,17 @@ class _HiyariListTile extends StatelessWidget {
           color: context.colors.chipBg,
           borderRadius: BorderRadius.circular(6),
         ),
-        child: Text(label, style: TextStyle(fontSize: 11, color: context.colors.textSecondary)),
+        child: Text(label, style: TextStyle(fontSize: AppTextSize.caption, color: context.colors.textSecondary)),
       );
     });
   }
 
   Widget _severityBadge(String id) {
     final (label, color) = switch (id) {
-      'awareness' => ('気づき', Colors.green),
-      'minorAccident' => ('軽微事故', Colors.red),
-      'escalated' => ('重大', Colors.red),
-      _ => ('ヒヤリ', Colors.orange),
+      'awareness' => ('気づき', AppColors.success),
+      'minorAccident' => ('軽微事故', AppColors.error),
+      'escalated' => ('重大', AppColors.error),
+      _ => ('ヒヤリ', AppColors.warning),
     };
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
@@ -205,21 +206,21 @@ class _HiyariListTile extends StatelessWidget {
         borderRadius: BorderRadius.circular(6),
         border: Border.all(color: color, width: 0.5),
       ),
-      child: Text(label, style: TextStyle(fontSize: 11, color: color, fontWeight: FontWeight.bold)),
+      child: Text(label, style: TextStyle(fontSize: AppTextSize.caption, color: color, fontWeight: FontWeight.bold)),
     );
   }
 
   Widget _typeBadge(String type) {
     return Builder(builder: (context) {
       final label = type == 'environment' ? '環境' : '児童';
-      final color = type == 'environment' ? Colors.blueGrey : Colors.blue;
+      final color = type == 'environment' ? context.colors.textSecondary : AppColors.info;
       return Container(
         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
         decoration: BoxDecoration(
           color: color.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(4),
         ),
-        child: Text(label, style: TextStyle(fontSize: 10, color: color, fontWeight: FontWeight.w600)),
+        child: Text(label, style: TextStyle(fontSize: AppTextSize.xs, color: color, fontWeight: FontWeight.w600)),
       );
     });
   }
@@ -239,7 +240,7 @@ class _HiyariListTile extends StatelessWidget {
           color: context.colors.chipBg,
           borderRadius: BorderRadius.circular(4),
         ),
-        child: Text(label, style: TextStyle(fontSize: 10, color: context.colors.textSecondary)),
+        child: Text(label, style: TextStyle(fontSize: AppTextSize.xs, color: context.colors.textSecondary)),
       );
     });
   }
@@ -424,16 +425,12 @@ class _HiyariEditScreenState extends State<HiyariEditScreen> {
         await FirebaseFirestore.instance.collection('hiyari_reports').add(data);
       }
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(_isEdit ? '更新しました' : '報告しました'), backgroundColor: Colors.green),
-        );
+        AppFeedback.success(context, _isEdit ? '更新しました' : '報告しました');
         _close();
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('保存失敗: $e'), backgroundColor: Colors.red),
-        );
+        AppFeedback.error(context, '保存失敗: $e');
       }
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -442,27 +439,20 @@ class _HiyariEditScreenState extends State<HiyariEditScreen> {
 
   Future<void> _delete() async {
     if (!_isEdit) return;
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (c) => AlertDialog(
-        title: const Text('この報告を削除しますか？'),
-        content: const Text('この操作は取り消せません。'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('キャンセル')),
-          TextButton(
-            onPressed: () => Navigator.pop(c, true),
-            child: const Text('削除', style: TextStyle(color: Colors.red)),
-          ),
-        ],
-      ),
+    final ok = await AppFeedback.confirm(
+      context,
+      title: 'この報告を削除しますか？',
+      message: 'この操作は取り消せません。',
+      confirmLabel: '削除',
+      destructive: true,
     );
-    if (ok != true) return;
+    if (!ok) return;
     try {
       await widget.doc!.reference.delete();
       if (mounted) _close();
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('削除失敗: $e')));
+        AppFeedback.info(context, '削除失敗: $e');
       }
     }
   }
@@ -490,7 +480,7 @@ class _HiyariEditScreenState extends State<HiyariEditScreen> {
       backgroundColor: context.colors.scaffoldBg,
       appBar: AppBar(
         title: Text(_isEdit ? '報告を編集' : '事故ヒヤリハット報告書',
-            style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
+            style: const TextStyle(fontSize: AppTextSize.title, fontWeight: FontWeight.w600)),
         backgroundColor: context.colors.cardBg,
         elevation: 0,
         foregroundColor: context.colors.textPrimary,
@@ -501,7 +491,7 @@ class _HiyariEditScreenState extends State<HiyariEditScreen> {
         actions: [
           if (_isEdit)
             IconButton(
-              icon: Icon(Icons.delete_outline, color: Colors.red.shade400),
+              icon: Icon(Icons.delete_outline, color: AppColors.errorBorder),
               onPressed: _delete,
             ),
         ],
@@ -540,7 +530,7 @@ class _HiyariEditScreenState extends State<HiyariEditScreen> {
                     Text(
                       DateFormat('yyyy/M/d (E) HH:mm', 'ja').format(_occurredAt),
                       style: TextStyle(
-                        fontSize: 14,
+                        fontSize: AppTextSize.bodyMd,
                         fontWeight: FontWeight.w600,
                         color: context.colors.textPrimary,
                       ),
@@ -549,7 +539,7 @@ class _HiyariEditScreenState extends State<HiyariEditScreen> {
                     TextButton.icon(
                       onPressed: () => setState(() => _occurredAt = DateTime.now()),
                       icon: const Icon(Icons.bolt, size: 16),
-                      label: const Text('今に合わせる', style: TextStyle(fontSize: 12)),
+                      label: const Text('今に合わせる', style: TextStyle(fontSize: AppTextSize.small)),
                       style: TextButton.styleFrom(
                         padding: const EdgeInsets.symmetric(horizontal: 8),
                         minimumSize: Size.zero,
@@ -612,7 +602,7 @@ class _HiyariEditScreenState extends State<HiyariEditScreen> {
               onChanged: (_) => setState(() {}),
               decoration: InputDecoration(
                 hintText: _situationHint,
-                hintStyle: TextStyle(fontSize: 13, color: context.colors.textHint),
+                hintStyle: TextStyle(fontSize: AppTextSize.body, color: context.colors.textHint),
                 filled: true,
                 fillColor: context.colors.cardBg,
                 border: OutlineInputBorder(
@@ -658,7 +648,7 @@ class _HiyariEditScreenState extends State<HiyariEditScreen> {
               child: _saving
                   ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
                   : Text(_isEdit ? '更新' : '送 信',
-                      style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+                      style: const TextStyle(fontSize: AppTextSize.bodyLarge, fontWeight: FontWeight.bold)),
             ),
           ],
         ),
@@ -683,7 +673,7 @@ class _HiyariEditScreenState extends State<HiyariEditScreen> {
                 children: [
                   Icon(Icons.add_circle_outline, size: 18, color: context.colors.textSecondary),
                   const SizedBox(width: 8),
-                  Text('児童を選択', style: TextStyle(fontSize: 13, color: context.colors.textSecondary)),
+                  Text('児童を選択', style: TextStyle(fontSize: AppTextSize.body, color: context.colors.textSecondary)),
                 ],
               )
             : Wrap(
@@ -697,7 +687,7 @@ class _HiyariEditScreenState extends State<HiyariEditScreen> {
                             borderRadius: BorderRadius.circular(14),
                           ),
                           child: Text(c.fullName,
-                              style: const TextStyle(fontSize: 12, color: AppColors.primary, fontWeight: FontWeight.w600)),
+                              style: const TextStyle(fontSize: AppTextSize.small, color: AppColors.primary, fontWeight: FontWeight.w600)),
                         ))
                     .toList(),
               ),
@@ -708,7 +698,7 @@ class _HiyariEditScreenState extends State<HiyariEditScreen> {
   InputDecoration _adminDecoration(String label) {
     return InputDecoration(
       hintText: label,
-      hintStyle: TextStyle(fontSize: 13, color: context.colors.textHint),
+      hintStyle: TextStyle(fontSize: AppTextSize.body, color: context.colors.textHint),
       filled: true,
       fillColor: context.colors.cardBg,
       border: OutlineInputBorder(
@@ -726,7 +716,7 @@ class _HiyariEditScreenState extends State<HiyariEditScreen> {
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: Text(text,
-          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: context.colors.textPrimary)),
+          style: TextStyle(fontSize: AppTextSize.bodyMd, fontWeight: FontWeight.w700, color: context.colors.textPrimary)),
     );
   }
 
@@ -756,7 +746,7 @@ class _HiyariEditScreenState extends State<HiyariEditScreen> {
             child: Text(
               opt.label,
               style: TextStyle(
-                fontSize: 13,
+                fontSize: AppTextSize.body,
                 fontWeight: isSel ? FontWeight.bold : FontWeight.normal,
                 color: isSel ? AppColors.primary : context.colors.textPrimary,
               ),
@@ -819,10 +809,10 @@ class _ChildPickerDialogState extends State<_ChildPickerDialog> {
               child: Row(
                 children: [
                   Text('児童を選択',
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: context.colors.textPrimary)),
+                      style: TextStyle(fontSize: AppTextSize.titleSm, fontWeight: FontWeight.bold, color: context.colors.textPrimary)),
                   const Spacer(),
                   Text('${_selected.length}名',
-                      style: TextStyle(fontSize: 13, color: context.colors.textSecondary)),
+                      style: TextStyle(fontSize: AppTextSize.body, color: context.colors.textSecondary)),
                 ],
               ),
             ),
@@ -854,7 +844,7 @@ class _ChildPickerDialogState extends State<_ChildPickerDialog> {
                         _selected.remove(ch.id);
                       }
                     }),
-                    title: Text(ch.fullName, style: const TextStyle(fontSize: 14)),
+                    title: Text(ch.fullName, style: const TextStyle(fontSize: AppTextSize.bodyMd)),
                     dense: true,
                     controlAffinity: ListTileControlAffinity.leading,
                   );

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'notification_service.dart';
 import 'app_theme.dart';
+import 'widgets/app_feedback.dart';
 
 class NotificationSettingsScreen extends StatefulWidget {
   final VoidCallback? onBack;
@@ -56,12 +57,7 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
 
     if (mounted) {
       setState(() => _isSaving = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('通知設定を保存しました'),
-          backgroundColor: Colors.green,
-        ),
-      );
+      AppFeedback.success(context, '通知設定を保存しました');
     }
   }
 
@@ -81,7 +77,7 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
           child: Icon(icon, color: iconColor),
         ),
         title: Text(title),
-        subtitle: Text(subtitle, style: const TextStyle(fontSize: 12)),
+        subtitle: Text(subtitle, style: const TextStyle(fontSize: AppTextSize.small)),
         value: value,
         onChanged: onChanged,
       ),
@@ -116,7 +112,7 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
                 Text(
                   'プッシュ通知の受信設定',
                   style: TextStyle(
-                    fontSize: 16,
+                    fontSize: AppTextSize.titleSm,
                     fontWeight: FontWeight.bold,
                     color: context.colors.textSecondary,
                   ),
@@ -124,7 +120,7 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
                 const SizedBox(height: 16),
                 _buildSwitchTile(
                   icon: Icons.chat_bubble_outline,
-                  iconColor: Colors.blue,
+                  iconColor: AppColors.info,
                   title: 'チャット',
                   subtitle: '新しいメッセージを受信したとき',
                   value: _notifyChat,
@@ -140,7 +136,7 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
                 ),
                 _buildSwitchTile(
                   icon: Icons.event_outlined,
-                  iconColor: Colors.green,
+                  iconColor: AppColors.success,
                   title: 'イベント',
                   subtitle: '新しいイベントが公開されたとき',
                   value: _notifyEvent,
@@ -148,7 +144,7 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
                 ),
                 _buildSwitchTile(
                   icon: Icons.assessment_outlined,
-                  iconColor: Colors.purple,
+                  iconColor: AppColors.aiAccent,
                   title: 'アセスメント',
                   subtitle: 'アセスメントが公開されたとき',
                   value: _notifyAssessment,

@@ -41,7 +41,7 @@ class _ParentEventScreenState extends State<ParentEventScreen> {
       child: Center(
         child: Text(
           title,
-          style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
+          style: const TextStyle(fontSize: AppTextSize.title, fontWeight: FontWeight.w600),
         ),
       ),
     );
@@ -64,9 +64,9 @@ class _ParentEventScreenState extends State<ParentEventScreen> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Icon(Icons.error_outline, size: 48, color: Colors.red),
+                const Icon(Icons.error_outline, size: 48, color: AppColors.error),
                 const SizedBox(height: 16),
-                Text('エラー: ${snapshot.error}', style: const TextStyle(color: Colors.red)),
+                Text('エラー: ${snapshot.error}', style: const TextStyle(color: AppColors.error)),
               ],
             ),
           );
@@ -210,7 +210,7 @@ class _ParentEventScreenState extends State<ParentEventScreen> {
                   dateTimeStr,
                   style: TextStyle(
                     color: context.colors.textSecondary,
-                    fontSize: 13,
+                    fontSize: AppTextSize.body,
                   ),
                 ),
                 const SizedBox(height: 8),
@@ -219,7 +219,7 @@ class _ParentEventScreenState extends State<ParentEventScreen> {
                 Text(
                   title,
                   style: const TextStyle(
-                    fontSize: 17,
+                    fontSize: AppTextSize.title,
                     fontWeight: FontWeight.bold,
                   ),
                   maxLines: 2,
@@ -251,7 +251,7 @@ class _ParentEventScreenState extends State<ParentEventScreen> {
                     detail,
                     style: TextStyle(
                       color: context.colors.textSecondary,
-                      fontSize: 14,
+                      fontSize: AppTextSize.bodyMd,
                       height: 1.4,
                     ),
                     maxLines: 3,
@@ -298,7 +298,7 @@ class _ParentEventScreenState extends State<ParentEventScreen> {
             text,
             style: TextStyle(
               color: color ?? context.colors.textSecondary,
-              fontSize: 13,
+              fontSize: AppTextSize.body,
             ),
           ),
         ),

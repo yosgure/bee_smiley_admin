@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'app_theme.dart';
+import 'widgets/app_feedback.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:image_picker/image_picker.dart';
@@ -67,7 +68,7 @@ class _ToolMasterScreenState extends State<ToolMasterScreen> {
           Text(
             '$headerText行',
             style: TextStyle(
-              fontSize: 18,
+              fontSize: AppTextSize.titleLg,
               fontWeight: FontWeight.bold,
               color: context.colors.textPrimary,
             ),
@@ -86,9 +87,7 @@ class _ToolMasterScreenState extends State<ToolMasterScreen> {
       }
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('リンクを開けませんでした: $urlString')),
-        );
+        AppFeedback.info(context, 'リンクを開けませんでした: $urlString');
       }
     }
   }
@@ -267,8 +266,8 @@ class _ToolMasterScreenState extends State<ToolMasterScreen> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             if ((data['furigana'] as String? ?? '').isNotEmpty)
-                              Text(data['furigana'], style: TextStyle(fontSize: 10, color: context.colors.textSecondary)),
-                            Text(data['name'] ?? '名称未設定', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                              Text(data['furigana'], style: TextStyle(fontSize: AppTextSize.xs, color: context.colors.textSecondary)),
+                            Text(data['name'] ?? '名称未設定', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: AppTextSize.titleSm)),
                           ],
                         ),
                         subtitle: Padding(
@@ -280,7 +279,7 @@ class _ToolMasterScreenState extends State<ToolMasterScreen> {
                               Expanded(
                                 child: Text(
                                   data['task'] ?? '',
-                                  style: TextStyle(fontSize: 12, color: context.colors.textPrimary),
+                                  style: TextStyle(fontSize: AppTextSize.small, color: context.colors.textPrimary),
                                   overflow: TextOverflow.ellipsis,
                                 ),
                               ),
@@ -292,7 +291,7 @@ class _ToolMasterScreenState extends State<ToolMasterScreen> {
                           children: [
                             if (hasVideo)
                               IconButton(
-                                icon: const Icon(Icons.play_circle_fill, color: Colors.red),
+                                icon: const Icon(Icons.play_circle_fill, color: AppColors.error),
                                 tooltip: '説明動画を見る',
                                 onPressed: () => _launchURL(context, data['videoUrl']),
                               ),
@@ -301,7 +300,7 @@ class _ToolMasterScreenState extends State<ToolMasterScreen> {
                               onPressed: () => _showEditDialog(doc: doc),
                             ),
                             IconButton(
-                              icon: const Icon(Icons.delete, color: Colors.red),
+                              icon: const Icon(Icons.delete, color: AppColors.error),
                               onPressed: () => _deleteTool(doc.id, data['name']),
                             ),
                           ],
@@ -343,7 +342,7 @@ class _ToolMasterScreenState extends State<ToolMasterScreen> {
               await _toolsRef.doc(docId).delete();
               if (context.mounted) Navigator.pop(context);
             },
-            child: const Text('削除', style: TextStyle(color: Colors.red)),
+            child: const Text('削除', style: TextStyle(color: AppColors.error)),
           ),
         ],
       ),
@@ -418,7 +417,7 @@ class _ToolMasterScreenState extends State<ToolMasterScreen> {
                                           mainAxisAlignment: MainAxisAlignment.center,
                                           children: [
                                             Icon(Icons.add_a_photo, color: context.colors.textSecondary),
-                                            Text('写真', style: TextStyle(fontSize: 10, color: context.colors.textSecondary)),
+                                            Text('写真', style: TextStyle(fontSize: AppTextSize.xs, color: context.colors.textSecondary)),
                                           ],
                                         )),
                             ),

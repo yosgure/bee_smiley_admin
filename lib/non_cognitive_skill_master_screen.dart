@@ -93,8 +93,8 @@ centerTitle: true,
                       itemBuilder: (context, sIndex) {
                         return ListTile(
                           visualDensity: VisualDensity.compact,
-                          leading: const Icon(Icons.check_circle_outline, size: 16, color: Colors.green),
-                          title: Text(strengths[sIndex], style: const TextStyle(fontSize: 14)),
+                          leading: const Icon(Icons.check_circle_outline, size: 16, color: AppColors.success),
+                          title: Text(strengths[sIndex], style: const TextStyle(fontSize: AppTextSize.bodyMd)),
                         );
                       },
                     ),
@@ -104,8 +104,8 @@ centerTitle: true,
                         mainAxisAlignment: MainAxisAlignment.end,
                         children: [
                           TextButton.icon(
-                            icon: const Icon(Icons.delete, color: Colors.red),
-                            label: const Text('能力ごと削除', style: TextStyle(color: Colors.red)),
+                            icon: const Icon(Icons.delete, color: AppColors.error),
+                            label: const Text('能力ごと削除', style: TextStyle(color: AppColors.error)),
                             onPressed: () => _deleteSkill(doc.id, data['name']),
                           ),
                           const SizedBox(width: 8),
@@ -146,7 +146,7 @@ centerTitle: true,
               await _skillsRef.doc(docId).delete();
               if (context.mounted) Navigator.pop(context);
             },
-            child: const Text('削除', style: TextStyle(color: Colors.red)),
+            child: const Text('削除', style: TextStyle(color: AppColors.error)),
           ),
         ],
       ),
@@ -233,7 +233,7 @@ centerTitle: true,
                                 const SizedBox(width: 8),
                                 if (strengthCtrls.length > 1)
                                   IconButton(
-                                    icon: const Icon(Icons.remove_circle_outline, color: Colors.red),
+                                    icon: const Icon(Icons.remove_circle_outline, color: AppColors.error),
                                     onPressed: () {
                                       setStateDialog(() {
                                         strengthCtrls.removeAt(i);

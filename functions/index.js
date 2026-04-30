@@ -37,6 +37,9 @@ const CLAUDE_SUMMARY_MODEL = 'claude-haiku-4-5-20251001';
  */
 async function callClaude({ model, system, messages, maxTokens = 2048, maxRetries = 3 }) {
   const client = new Anthropic({ apiKey: anthropicApiKey.value() });
+  // system は string でも、プロンプトキャッシュ対応の content block 配列でも可。
+  // cacheable な部分は { type: 'text', text: '...', cache_control: { type: 'ephemeral' } } で渡すと
+  // 5 分 TTL でキャッシュされ、再ヒット時は cache_read_input_tokens として課金が ~1/10 になる。
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
       const response = await client.messages.create({
@@ -68,6 +71,7 @@ async function callClaude({ model, system, messages, maxTokens = 2048, maxRetrie
  */
 async function callClaudeStream({ model, system, messages, maxTokens = 4096, maxRetries = 3, onDelta }) {
   const client = new Anthropic({ apiKey: anthropicApiKey.value() });
+  // system は string / cache 対応 content block 配列 どちらも可（callClaude と同様）。
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
       const stream = await client.messages.stream({

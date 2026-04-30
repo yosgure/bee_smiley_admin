@@ -5,6 +5,7 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'app_theme.dart';
+import 'widgets/app_feedback.dart';
 import 'plus_dashboard_screen.dart';
 import 'classroom_utils.dart';
 import 'plus_shift_request_dialog.dart';
@@ -20,6 +21,11 @@ import 'meeting_minutes_screen.dart';
 import 'crm_lead_screen.dart';
 import 'absence_record_dialog.dart';
 import 'services/undo_service.dart';
+
+part 'plus/plus_schedule_widgets.dart';
+part 'plus/plus_schedule_stats_dialog.dart';
+part 'plus/plus_schedule_mobile_lesson_detail.dart';
+part 'plus/plus_schedule_dialogs_nav.dart';
 
 // 講師名・教室名クリック時に生徒編集ダイアログの発火を抑制するフラグ
 bool _quickEditTappedGlobal = false;
@@ -85,19 +91,19 @@ class _PlusScheduleContentState extends State<PlusScheduleContent> with Automati
 
   // コース（内容）の定義と色（カスタマイズ可能）
   static const Map<String, Color> _defaultCourseColors = {
-    '通常': Colors.blue,
-    'モンテッソーリ': Colors.lightBlue,
-    '感覚統合': Colors.teal,
-    '言語': Colors.purple,
-    '就学支援': Colors.indigo,
-    '放デイ': Colors.amber,
+    '通常': AppColors.info,
+    'モンテッソーリ': AppColors.info,
+    '感覚統合': AppColors.secondary,
+    '言語': AppColors.aiAccent,
+    '就学支援': AppColors.secondary,
+    '放デイ': AppColors.primary,
     '契約': AppColors.accent,
-    '体験': Colors.green,
-    '欠席': Colors.red, // 旧データ互換用
-    '欠席（加算あり）': Colors.red,
-    '欠席（加算なし）': Colors.red,
-    '欠席（HUG登録なし）': Colors.red,
-    '策定会議': Colors.deepPurple,
+    '体験': AppColors.success,
+    '欠席': AppColors.error, // 旧データ互換用
+    '欠席（加算あり）': AppColors.error,
+    '欠席（加算なし）': AppColors.error,
+    '欠席（HUG登録なし）': AppColors.error,
+    '策定会議': AppColors.aiAccent,
   };
 
   // カスタマイズ可能なコース色
@@ -121,11 +127,11 @@ class _PlusScheduleContentState extends State<PlusScheduleContent> with Automati
   
   // カラーパレット（選択可能な色）
   static const List<Color> _colorPalette = [
-    Colors.blue, Colors.lightBlue, Colors.cyan, Colors.teal,
-    Colors.green, Colors.lightGreen, Colors.lime, Colors.yellow,
-    Colors.amber, Colors.orange, Colors.deepOrange, Colors.red,
-    Colors.pink, Colors.purple, Colors.deepPurple, Colors.indigo,
-    Colors.brown, Colors.grey, Colors.blueGrey,
+    AppColors.info, AppColors.info, AppColors.info, AppColors.secondary,
+    AppColors.success, AppColors.success, AppColors.warning, AppColors.warning,
+    AppColors.primary, AppColors.warning, AppColors.warning, AppColors.error,
+    AppColors.aiAccent, AppColors.aiAccent, AppColors.aiAccent, AppColors.secondary,
+    AppColors.secondary, Color(0xFF9E9E9E), Color(0xFF607D8B),
   ];
 
   // ホバー中の生徒名（同じ生徒の他コマをハイライト）
@@ -579,7 +585,7 @@ Map<String, dynamic>? _getCellMemo(DateTime date, int slotIndex) {
           SnackBar(
             content: Text('タスクの追加に失敗しました: $e'),
             duration: const Duration(seconds: 3),
-            backgroundColor: Colors.red,
+            backgroundColor: AppColors.error,
           ),
         );
       }
@@ -612,555 +618,6 @@ Map<String, dynamic>? _getCellMemo(DateTime date, int slotIndex) {
   }
   
   // タスク編集ダイアログ
-  void _showEditTaskDialog(BuildContext parentContext, Map<String, dynamic> task, VoidCallback onUpdate) {
-    final titleController = TextEditingController(text: task['title'] ?? '');
-    DateTime? dueDate = task['dueDate'] != null 
-        ? (task['dueDate'] as Timestamp).toDate() 
-        : null;
-    
-    showDialog(
-      context: parentContext,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (dialogContext, setDialogState) {
-          return Dialog(
-            backgroundColor: context.colors.cardBg,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-            child: Container(
-              width: 420,
-              padding: const EdgeInsets.all(0),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  // ヘッダー
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-                    decoration: BoxDecoration(
-                      color: AppColors.primary.withValues(alpha: 0.08),
-                      borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(Icons.edit_note, color: AppColors.primary, size: 22),
-                        const SizedBox(width: 10),
-                        const Text('タスクを編集', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
-                        const Spacer(),
-                        IconButton(
-                          onPressed: () => Navigator.pop(dialogContext),
-                          icon: Icon(Icons.close, color: context.colors.textTertiary, size: 20),
-                          padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                        ),
-                      ],
-                    ),
-                  ),
-                  // コンテンツ
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // 生徒名
-                        if (task['studentName'] != null)
-                          Padding(
-                            padding: const EdgeInsets.only(bottom: 12),
-                            child: Row(
-                              children: [
-                                Icon(Icons.person_outline, size: 16, color: context.colors.textSecondary),
-                                const SizedBox(width: 6),
-                                Text(
-                                  task['studentName'] as String,
-                                  style: TextStyle(fontSize: 13, color: context.colors.textSecondary),
-                                ),
-                              ],
-                            ),
-                          ),
-                        // タスク内容
-                        Text('内容', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: context.colors.textSecondary)),
-                        const SizedBox(height: 6),
-                        TextField(
-                          controller: titleController,
-                          maxLines: null,
-                          minLines: 3,
-                          decoration: InputDecoration(
-                            hintText: 'タスクの内容を入力...',
-                            hintStyle: TextStyle(color: context.colors.textHint),
-                            filled: true,
-                            fillColor: context.colors.tagBg,
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(10),
-                              borderSide: BorderSide(color: context.colors.borderLight),
-                            ),
-                            enabledBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(10),
-                              borderSide: BorderSide(color: context.colors.borderLight),
-                            ),
-                            focusedBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(10),
-                              borderSide: BorderSide(color: AppColors.primary, width: 1.5),
-                            ),
-                            contentPadding: const EdgeInsets.all(14),
-                          ),
-                          style: const TextStyle(fontSize: 14, height: 1.5),
-                        ),
-                        const SizedBox(height: 20),
-                        // 期限日
-                        Text('期限日', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: context.colors.textSecondary)),
-                        const SizedBox(height: 6),
-                        InkWell(
-                          borderRadius: BorderRadius.circular(10),
-                          onTap: () async {
-                            final picked = await showDatePicker(
-                              context: dialogContext,
-                              initialDate: dueDate ?? DateTime.now(),
-                              firstDate: DateTime.now().subtract(const Duration(days: 365)),
-                              lastDate: DateTime.now().add(const Duration(days: 365)),
-                            );
-                            if (picked != null) {
-                              setDialogState(() => dueDate = picked);
-                            }
-                          },
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                            decoration: BoxDecoration(
-                              color: context.colors.tagBg,
-                              border: Border.all(color: context.colors.borderLight),
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: Row(
-                              children: [
-                                Icon(Icons.calendar_today, size: 18, color: dueDate != null ? AppColors.primary : context.colors.textSecondary),
-                                const SizedBox(width: 10),
-                                Text(
-                                  dueDate != null ? DateFormat('yyyy年M月d日').format(dueDate!) : '期限を設定...',
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    color: dueDate != null ? context.colors.textPrimary : context.colors.textHint,
-                                  ),
-                                ),
-                                const Spacer(),
-                                if (dueDate != null)
-                                  GestureDetector(
-                                    onTap: () => setDialogState(() => dueDate = null),
-                                    child: Icon(Icons.close, size: 18, color: context.colors.iconMuted),
-                                  ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  // アクション
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
-                    child: Row(
-                      children: [
-                        // 削除ボタン
-                        TextButton.icon(
-                          onPressed: () async {
-                            final confirm = await showDialog<bool>(
-                              context: dialogContext,
-                              builder: (ctx) => AlertDialog(
-                                backgroundColor: context.colors.cardBg,
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                                title: const Text('タスクを削除'),
-                                content: const Text('このタスクを削除しますか？'),
-                                actions: [
-                                  TextButton(
-                                    onPressed: () => Navigator.pop(ctx, false),
-                                    child: const Text('キャンセル'),
-                                  ),
-                                  TextButton(
-                                    onPressed: () => Navigator.pop(ctx, true),
-                                    child: const Text('削除', style: TextStyle(color: Colors.red)),
-                                  ),
-                                ],
-                              ),
-                            );
-                            if (confirm == true) {
-                              await _completeTask(task['id']);
-                              onUpdate();
-                              if (dialogContext.mounted) Navigator.pop(dialogContext);
-                            }
-                          },
-                          icon: const Icon(Icons.delete_outline, size: 18),
-                          label: const Text('削除'),
-                          style: TextButton.styleFrom(
-                            foregroundColor: Colors.red.shade400,
-                          ),
-                        ),
-                        const Spacer(),
-                        // 保存ボタン
-                        ElevatedButton(
-                          onPressed: () async {
-                            final newTitle = titleController.text.trim();
-                            if (newTitle.isEmpty) return;
-
-                            try {
-                              await FirebaseFirestore.instance
-                                  .collection('plus_tasks')
-                                  .doc(task['id'])
-                                  .update({
-                                'title': newTitle,
-                                'dueDate': dueDate != null ? Timestamp.fromDate(dueDate!) : null,
-                              });
-                              await _loadAllTasks();
-                              onUpdate();
-                              if (dialogContext.mounted) Navigator.pop(dialogContext);
-                            } catch (e) {
-                              debugPrint('Error updating task: $e');
-                            }
-                          },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.primary,
-                            foregroundColor: context.colors.textOnPrimary,
-                            padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 12),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                            elevation: 0,
-                          ),
-                          child: const Text('保存', style: TextStyle(fontWeight: FontWeight.w600)),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          );
-        },
-      ),
-    );
-  }
-  
-  // 生徒のタスクを取得
-  List<Map<String, dynamic>> _getTasksForStudent(String studentName) {
-    return _allTasks.where((t) => t['studentName'] == studentName).toList();
-  }
-  
-  // 生徒メモを先読み（非同期でバックグラウンド読み込み）
-  Future<void> _preloadStudentNotes(List<Map<String, dynamic>> lessons) async {
-    final studentNames = lessons
-        .map((l) => l['studentName'] as String?)
-        .where((name) => name != null && name.isNotEmpty)
-        .toSet();
-    
-    for (var name in studentNames) {
-      if (name != null && !_studentNotes.containsKey(name)) {
-        await _loadStudentNotes(name);
-      }
-    }
-    
-    // 読み込み完了後に再描画
-    if (mounted) {
-      setState(() {});
-    }
-  }
-  
-  // 生徒の全情報があるかチェック（ホバー表示用）
-  bool _hasStudentInfo(String studentName) {
-    final notes = _studentNotes[studentName];
-    final tasks = _getTasksForStudent(studentName);
-    
-    if (notes != null) {
-      if ((notes['therapyPlan'] ?? '').isNotEmpty) return true;
-      if ((notes['schoolVisit'] ?? '').isNotEmpty) return true;
-      if ((notes['schoolConsultation'] ?? '').isNotEmpty) return true;
-      if ((notes['moveRequest'] ?? '').isNotEmpty) return true;
-    }
-    if (tasks.isNotEmpty) return true;
-    
-    return false;
-  }
-
-  // 生徒名から生徒詳細画面に遷移
-  void _navigateToStudentDetail(String studentName) {
-    final student = _allStudents.firstWhere(
-      (s) => s['name'] == studentName,
-      orElse: () => <String, dynamic>{},
-    );
-    if (student.isEmpty) return;
-    final familyUid = student['familyUid'] as String? ?? '';
-    final firstName = student['firstName'] as String? ?? '';
-    if (familyUid.isEmpty || firstName.isEmpty) return;
-    final studentId = '${familyUid}_$firstName';
-    final isWide = MediaQuery.of(context).size.width >= 600;
-    if (isWide) {
-      AdminShell.showOverlay(
-        context,
-        StudentDetailScreen(
-          studentId: studentId,
-          studentName: studentName,
-          onClose: () => AdminShell.hideOverlay(context),
-        ),
-      );
-    } else {
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => StudentDetailScreen(
-            studentId: studentId,
-            studentName: studentName,
-          ),
-        ),
-      );
-    }
-  }
-
-  // familiesコレクションから全児童リストを取得（プラスのみ）
-  Future<void> _loadStudentsFromFirestore() async {
-    try {
-      final snapshot = await FirebaseFirestore.instance
-          .collection('families')
-          .get();
-
-      final students = <Map<String, dynamic>>[];
-      
-      for (var doc in snapshot.docs) {
-        final data = doc.data();
-        final familyUid = data['uid'] as String? ?? doc.id;
-        final lastName = data['lastName'] as String? ?? '';
-        final lastNameKana = data['lastNameKana'] as String? ?? '';
-        final children = List<Map<String, dynamic>>.from(data['children'] ?? []);
-
-        for (var child in children) {
-          final firstName = child['firstName'] as String? ?? '';
-          final classrooms = getChildClassrooms(child);
-          final classroom = classrooms.join(', ');
-
-          // プラスの教室のみ
-          if (firstName.isNotEmpty && classrooms.any((c) => c.contains('プラス'))) {
-            // studentIdを生成（childにstudentIdがあればそれを使用）
-            final studentId = child['studentId'] ?? '${familyUid}_$firstName';
-            students.add({
-            'name': '$lastName $firstName'.trim(),
-            'firstName': firstName,
-            'lastName': lastName,
-            'lastNameKana': lastNameKana,
-            'classroom': classroom,
-            'course': child['course'] ?? '',
-            'profileUrl': child['profileUrl'] ?? '',
-            'meetingUrls': child['meetingUrls'] ?? [],
-            'familyUid': familyUid,
-            'studentId': studentId,
-            'birthDate': child['birthDate'] ?? '',
-          });
-          }
-        }
-      }
-      
-      // ふりがな順でソート
-      students.sort((a, b) {
-        final kanaA = (a['lastNameKana'] as String?) ?? '';
-        final kanaB = (b['lastNameKana'] as String?) ?? '';
-        return kanaA.compareTo(kanaB);
-      });
-
-      // ai_student_profiles から自動取得済みのHUGプロフィールURLを上書き反映
-      try {
-        final profilesSnap = await FirebaseFirestore.instance
-            .collection('ai_student_profiles')
-            .get();
-        final hugUrlByStudentId = <String, String>{};
-        for (final doc in profilesSnap.docs) {
-          final url = doc.data()['hugProfileUrl'] as String? ?? '';
-          if (url.isNotEmpty) hugUrlByStudentId[doc.id] = url;
-        }
-        for (final s in students) {
-          final sid = s['studentId'] as String?;
-          if (sid == null) continue;
-          final hugUrl = hugUrlByStudentId[sid];
-          if (hugUrl != null && hugUrl.isNotEmpty) {
-            s['profileUrl'] = hugUrl;
-          }
-        }
-      } catch (e) {
-        debugPrint('Error loading hugProfileUrl: $e');
-      }
-
-      if (mounted) {
-        setState(() {
-          _allStudents = students;
-        });
-      }
-    } catch (e) {
-      debugPrint('Error loading students: $e');
-    }
-  }
-
-  // Firestoreから週のレッスンデータを読み込み
-  Future<void> _loadLessonsForWeek({bool showLoading = true}) async {
-  if (!mounted) return;
-  
-  if (showLoading) {
-    setState(() {
-      _isLoadingLessons = true;
-    });
-  }
-    
-    try {
-      // 週の開始日（月曜日）と終了日（土曜日）を日付のみで計算
-      final weekStartDate = DateTime(_weekStart.year, _weekStart.month, _weekStart.day);
-      final saturdayDate = weekStartDate.add(const Duration(days: 5));
-      final weekEndDate = DateTime(saturdayDate.year, saturdayDate.month, saturdayDate.day, 23, 59, 59);
-      
-      // 開始日以降のデータを取得（クライアント側で終了日フィルタリング）
-      final snapshot = await FirebaseFirestore.instance
-          .collection('plus_lessons')
-          .where('date', isGreaterThanOrEqualTo: Timestamp.fromDate(weekStartDate))
-          .orderBy('date')
-          .get();
-      
-      if (!mounted) return;
-      
-      final lessons = <Map<String, dynamic>>[];
-      
-      for (var doc in snapshot.docs) {
-        final data = doc.data();
-        // dateがnullまたは不正な場合はスキップ
-        final dateField = data['date'];
-        if (dateField == null || dateField is! Timestamp) continue;
-        
-        final date = dateField.toDate();
-        
-        // 週の終了日より後ならスキップ
-        if (date.isAfter(weekEndDate)) continue;
-        
-        // 日付のみで比較（時刻を無視）
-        final dateOnly = DateTime(date.year, date.month, date.day);
-        final weekStartOnly = DateTime(_weekStart.year, _weekStart.month, _weekStart.day);
-        final dayIndex = dateOnly.difference(weekStartOnly).inDays;
-        
-        // 週の範囲外はスキップ
-        if (dayIndex < 0 || dayIndex > 5) continue;
-        
-        lessons.add({
-          'id': doc.id,
-          'dayIndex': dayIndex,
-          'slotIndex': data['slotIndex'] ?? 0,
-          'studentName': data['studentName'] ?? '',
-          'teachers': List<String>.from(data['teachers'] ?? []),
-          'room': data['room'] ?? '',
-          'course': data['course'] ?? '通常',
-          'note': data['note'] ?? '',
-          'link': data['link'] ?? '',
-          'date': date,
-          'isCustomEvent': data['isCustomEvent'] ?? false,
-          'isEvent': data['isEvent'] ?? false,
-          'title': data['title'] ?? '',
-          'order': data['order'] ?? (data['createdAt'] as Timestamp?)?.millisecondsSinceEpoch ?? 0,
-        });
-      }
-      
-      if (mounted) {
-        // 同じセル内の順序を order（作成順）でソート
-        lessons.sort((a, b) {
-          final dayCompare = (a['dayIndex'] as int).compareTo(b['dayIndex'] as int);
-          if (dayCompare != 0) return dayCompare;
-          final slotCompare = (a['slotIndex'] as int).compareTo(b['slotIndex'] as int);
-          if (slotCompare != 0) return slotCompare;
-          return (a['order'] as int).compareTo(b['order'] as int);
-        });
-        
-        setState(() {
-          _lessons = lessons;
-          _isLoadingLessons = false;
-        });
-        
-        // 生徒メモを先読み（UIをブロックしない）
-        _preloadStudentNotes(lessons);
-        _loadCellMemosForWeek();
-      }
-    } catch (e) {
-      debugPrint('Error loading lessons: $e');
-      if (mounted) {
-        setState(() {
-          _isLoadingLessons = false;
-        });
-      }
-    }
-  }
-
-  // 月カレンダー用のレッスンを読み込み
-  Future<void> _loadLessonsForMonth() async {
-    if (!mounted) return;
-    
-    setState(() {
-      _isLoadingMonthLessons = true;
-    });
-    
-    try {
-      final monthStart = DateTime(_monthViewDate.year, _monthViewDate.month, 1);
-      final monthEnd = DateTime(_monthViewDate.year, _monthViewDate.month + 1, 0, 23, 59, 59);
-      
-      final snapshot = await FirebaseFirestore.instance
-          .collection('plus_lessons')
-          .where('date', isGreaterThanOrEqualTo: Timestamp.fromDate(monthStart))
-          .where('date', isLessThanOrEqualTo: Timestamp.fromDate(monthEnd))
-          .orderBy('date')
-          .get();
-      
-      if (!mounted) return;
-      
-      final lessons = <Map<String, dynamic>>[];
-      
-      for (var doc in snapshot.docs) {
-        final data = doc.data();
-        final dateField = data['date'];
-        if (dateField == null || dateField is! Timestamp) continue;
-        
-        final date = dateField.toDate();
-        
-        lessons.add({
-          'id': doc.id,
-          'date': date,
-          'slotIndex': data['slotIndex'] ?? 0,
-          'studentName': data['studentName'] ?? '',
-          'teachers': List<String>.from(data['teachers'] ?? []),
-          'room': data['room'] ?? '',
-          'course': data['course'] ?? '通常',
-          'note': data['note'] ?? '',
-          'isCustomEvent': data['isCustomEvent'] ?? false,
-          'isEvent': data['isEvent'] ?? false,
-          'title': data['title'] ?? '',
-          'order': data['order'] ?? 0,
-        });
-      }
-      
-      lessons.sort((a, b) {
-        final dateCompare = (a['date'] as DateTime).compareTo(b['date'] as DateTime);
-        if (dateCompare != 0) return dateCompare;
-        final slotCompare = (a['slotIndex'] as int).compareTo(b['slotIndex'] as int);
-        if (slotCompare != 0) return slotCompare;
-        return (a['order'] as int).compareTo(b['order'] as int);
-      });
-      
-      if (mounted) {
-        setState(() {
-          _monthLessons = lessons;
-          _isLoadingMonthLessons = false;
-        });
-      }
-    } catch (e) {
-      debugPrint('Error loading month lessons: $e');
-      if (mounted) {
-        setState(() {
-          _isLoadingMonthLessons = false;
-        });
-      }
-    }
-  }
-  
-  // 特定の日付のレッスンを取得
-  List<Map<String, dynamic>> _getLessonsForDate(DateTime date) {
-    final dateOnly = DateTime(date.year, date.month, date.day);
-    return _monthLessons.where((lesson) {
-      final lessonDate = lesson['date'] as DateTime;
-      return lessonDate.year == dateOnly.year &&
-             lessonDate.month == dateOnly.month &&
-             lessonDate.day == dateOnly.day;
-    }).toList();
-  }
   
   // 月移動
   void _previousMonth() {
@@ -1582,16 +1039,16 @@ void _goToPage(int page) {
   s['isPlus'] == true && s['showInSchedule'] != false
 ).toList();
     final staffColors = [
-      Colors.blue,
-      Colors.teal,
-      Colors.purple,
-      Colors.orange,
-      Colors.pink,
-      Colors.indigo,
-      Colors.green,
-      Colors.red,
-      Colors.cyan,
-      Colors.amber,
+      AppColors.info,
+      AppColors.secondary,
+      AppColors.aiAccent,
+      AppColors.warning,
+      AppColors.aiAccent,
+      AppColors.secondary,
+      AppColors.success,
+      AppColors.error,
+      AppColors.info,
+      AppColors.primary,
     ];
     
     return Material(
@@ -1615,7 +1072,7 @@ void _goToPage(int page) {
                   Text(
                     '講師フィルター',
                     style: TextStyle(
-                      fontSize: 16,
+                      fontSize: AppTextSize.titleSm,
                       fontWeight: FontWeight.bold,
                       color: context.colors.textPrimary,
                     ),
@@ -1698,7 +1155,7 @@ void _goToPage(int page) {
               child: Text(
                 label,
                 style: TextStyle(
-                  fontSize: 15,
+                  fontSize: AppTextSize.bodyLarge,
                   fontWeight: isSpecial ? FontWeight.w500 : FontWeight.normal,
                 ),
               ),
@@ -1750,7 +1207,7 @@ void _goToPage(int page) {
                             child: Text(
                               dateStr,
                               style: TextStyle(
-                                fontSize: 17,
+                                fontSize: AppTextSize.title,
                                 fontWeight: FontWeight.w600,
                                 color: context.colors.textPrimary,
                               ),
@@ -1771,7 +1228,7 @@ void _goToPage(int page) {
                       minimumSize: Size.zero,
                       tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     ),
-                    child: const Text('今日', style: TextStyle(fontSize: 13)),
+                    child: const Text('今日', style: TextStyle(fontSize: AppTextSize.body)),
                   ),
                   _buildMobilePlusMenuButton(),
                 ] else ...[
@@ -1782,7 +1239,7 @@ void _goToPage(int page) {
                   Text(
                     'ダッシュボード',
                     style: TextStyle(
-                      fontSize: 16,
+                      fontSize: AppTextSize.titleSm,
                       fontWeight: FontWeight.w500,
                       color: context.colors.textPrimary,
                     ),
@@ -1841,7 +1298,7 @@ void _goToPage(int page) {
               Text(
                 label,
                 style: TextStyle(
-                  fontSize: 13,
+                  fontSize: AppTextSize.body,
                   fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
                   color: isSelected ? AppColors.primary : context.colors.textSecondary,
                 ),
@@ -1927,7 +1384,7 @@ void _goToPage(int page) {
             Text(
               '日曜日は休みです',
               style: TextStyle(
-                fontSize: 18,
+                fontSize: AppTextSize.titleLg,
                 color: context.colors.textSecondary,
               ),
             ),
@@ -1947,7 +1404,7 @@ void _goToPage(int page) {
             Text(
               '休み',
               style: TextStyle(
-                fontSize: 18,
+                fontSize: AppTextSize.titleLg,
                 color: context.colors.textSecondary,
               ),
             ),
@@ -1967,7 +1424,7 @@ void _goToPage(int page) {
             Text(
               'データを読み込んでいます...',
               style: TextStyle(
-                fontSize: 16,
+                fontSize: AppTextSize.titleSm,
                 color: context.colors.textSecondary,
               ),
             ),
@@ -2036,7 +1493,7 @@ void _goToPage(int page) {
                 child: Text(
                   timeSlot,
                   style: const TextStyle(
-                    fontSize: 14,
+                    fontSize: AppTextSize.bodyMd,
                     fontWeight: FontWeight.w500,
                     color: AppColors.primary,
                   ),
@@ -2046,7 +1503,7 @@ void _goToPage(int page) {
               Text(
                 '${lessons.length}件',
                 style: TextStyle(
-                  fontSize: 12,
+                  fontSize: AppTextSize.small,
                   color: context.colors.textSecondary,
                 ),
               ),
@@ -2060,7 +1517,7 @@ void _goToPage(int page) {
             child: Text(
               '予定なし',
               style: TextStyle(
-                fontSize: 14,
+                fontSize: AppTextSize.bodyMd,
                 color: context.colors.textTertiary,
               ),
             ),
@@ -2080,7 +1537,7 @@ void _goToPage(int page) {
     final teachers = lesson['teachers'] as List<dynamic>? ?? [];
     final room = lesson['room'] as String? ?? '';
     final course = lesson['course'] as String? ?? '通常';
-    final courseColor = _courseColors[course] ?? Colors.blue;
+    final courseColor = _courseColors[course] ?? AppColors.info;
     
     return GestureDetector(
       onTap: () => _showMobileLessonDetail(lesson),
@@ -2120,9 +1577,9 @@ void _goToPage(int page) {
                   Text(
                     displayName,
                     style: TextStyle(
-                      fontSize: 15,
+                      fontSize: AppTextSize.bodyLarge,
                       fontWeight: FontWeight.w500,
-                      color: isEvent ? Colors.deepOrange : (course == '感覚統合' ? Colors.teal : context.colors.textPrimary),
+                      color: isEvent ? AppColors.warning : (course == '感覚統合' ? AppColors.secondary : context.colors.textPrimary),
                     ),
                   ),
                   const SizedBox(height: 4),
@@ -2134,7 +1591,7 @@ void _goToPage(int page) {
                         const SizedBox(width: 4),
                         Text(
                           teachers.map((t) => t.toString().split(' ').first).join(', '),
-                          style: TextStyle(fontSize: 12, color: context.colors.textSecondary),
+                          style: TextStyle(fontSize: AppTextSize.small, color: context.colors.textSecondary),
                         ),
                         const SizedBox(width: 12),
                       ],
@@ -2143,7 +1600,7 @@ void _goToPage(int page) {
                         const SizedBox(width: 4),
                         Text(
                           room,
-                          style: TextStyle(fontSize: 12, color: context.colors.textSecondary),
+                          style: TextStyle(fontSize: AppTextSize.small, color: context.colors.textSecondary),
                         ),
                       ],
                     ],
@@ -2159,651 +1616,6 @@ void _goToPage(int page) {
     );
   }
   
-  void _showMobileLessonDetail(Map<String, dynamic> lesson) {
-    if (_hoveredStudentName != null) {
-      setState(() => _hoveredStudentName = null);
-    }
-    final isEvent = lesson['isEvent'] == true;
-    final isCustomEvent = lesson['isCustomEvent'] == true;
-    final studentName = lesson['studentName'] as String? ?? '';
-    final eventTitle = lesson['title'] as String? ?? '';
-    final displayName = isEvent ? eventTitle : studentName;
-    final dayIndex = lesson['dayIndex'] as int;
-    final slotIndex = lesson['slotIndex'] as int;
-    final date = _weekStart.add(Duration(days: dayIndex));
-
-    // 編集用の状態変数
-    List<String> selectedTeachers = List<String>.from(lesson['teachers'] ?? []);
-    String selectedRoom = lesson['room'] ?? '';
-    String selectedCourse = lesson['course'] ?? '通常';
-
-    // カスタムイベント名編集用
-    final mobileTitleController = TextEditingController(text: studentName);
-    bool isMobileEditingTitle = false;
-
-    // 生徒メモ用コントローラー
-    final therapyController = TextEditingController();
-    final schoolVisitController = TextEditingController();
-    final consultationController = TextEditingController();
-    final moveRequestController = TextEditingController();
-
-    // タスク用
-    List<Map<String, dynamic>> studentTasks = [];
-    final newTaskController = TextEditingController();
-    DateTime? newTaskDueDate = date;
-
-    bool isLoading = true;
-    final scaffoldMessenger = ScaffoldMessenger.of(context);
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (sheetContext) {
-        return StatefulBuilder(
-          builder: (sheetContext, setSheetState) {
-            // 初回のみデータ読み込み
-            if (isLoading && !isCustomEvent && studentName.isNotEmpty) {
-              isLoading = false;
-              _loadStudentNotes(studentName).then((notes) {
-                if (sheetContext.mounted) {
-                  setSheetState(() {
-                    therapyController.text = notes['therapyPlan'] ?? '';
-                    schoolVisitController.text = notes['schoolVisit'] ?? '';
-                    consultationController.text = notes['schoolConsultation'] ?? '';
-                    moveRequestController.text = notes['moveRequest'] ?? '';
-                    studentTasks = _getTasksForStudent(studentName);
-                  });
-                }
-              });
-            }
-
-            final currentColor = _courseColors[selectedCourse] ?? Colors.blue;
-
-            return Container(
-              constraints: BoxConstraints(
-                maxHeight: MediaQuery.of(sheetContext).size.height * 0.85,
-              ),
-              decoration: BoxDecoration(
-                color: context.colors.cardBg,
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // ハンドル
-                  Container(
-                    margin: const EdgeInsets.only(top: 12),
-                    width: 40,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: context.colors.borderMedium,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                  // ヘッダー
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 12, 4, 0),
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 8,
-                          height: 40,
-                          decoration: BoxDecoration(
-                            color: currentColor,
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              if (isCustomEvent && isMobileEditingTitle)
-                                TextField(
-                                  controller: mobileTitleController,
-                                  autofocus: true,
-                                  style: const TextStyle(
-                                    fontSize: 20,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                  decoration: InputDecoration(
-                                    border: UnderlineInputBorder(
-                                      borderSide: BorderSide(color: context.colors.borderMedium),
-                                    ),
-                                    focusedBorder: const UnderlineInputBorder(
-                                      borderSide: BorderSide(color: AppColors.primary, width: 2),
-                                    ),
-                                    isDense: true,
-                                    contentPadding: EdgeInsets.zero,
-                                    hintText: 'イベント名を入力',
-                                    suffixIcon: IconButton(
-                                      icon: const Icon(Icons.check, size: 18),
-                                      color: AppColors.primary,
-                                      onPressed: () => setSheetState(() => isMobileEditingTitle = false),
-                                    ),
-                                  ),
-                                  onSubmitted: (_) => setSheetState(() => isMobileEditingTitle = false),
-                                )
-                              else if (isCustomEvent)
-                                GestureDetector(
-                                  onTap: () => setSheetState(() => isMobileEditingTitle = true),
-                                  child: Row(
-                                    children: [
-                                      Flexible(
-                                        child: Text(
-                                          mobileTitleController.text.isEmpty ? 'イベント名を入力' : mobileTitleController.text,
-                                          style: TextStyle(
-                                            fontSize: 20,
-                                            fontWeight: FontWeight.bold,
-                                            color: mobileTitleController.text.isEmpty ? context.colors.textSecondary : null,
-                                          ),
-                                        ),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      Icon(Icons.edit, size: 16, color: context.colors.textSecondary),
-                                    ],
-                                  ),
-                                )
-                              else
-                                Text(
-                                  studentName,
-                                  style: const TextStyle(
-                                    fontSize: 20,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              Text(
-                                '${DateFormat('M月d日 (E)', 'ja').format(date)}　${_timeSlots[slotIndex]}',
-                                style: TextStyle(fontSize: 13, color: context.colors.textSecondary),
-                              ),
-                            ],
-                          ),
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.delete_outline, size: 20),
-                          onPressed: () {
-                            Navigator.pop(sheetContext);
-                            _showDeleteConfirmDialog(lesson);
-                          },
-                          tooltip: '削除',
-                          color: context.colors.textSecondary,
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.close),
-                          onPressed: () => Navigator.pop(sheetContext),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Divider(height: 1, color: context.colors.borderLight),
-                  // 編集コンテンツ
-                  Flexible(
-                    child: SingleChildScrollView(
-                      padding: const EdgeInsets.all(16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          // 講師選択
-                          InkWell(
-                            onTap: () => _showMultiTeacherSelectionDialog(
-                              selectedTeachers,
-                              (newSelection) => setSheetState(() => selectedTeachers = newSelection),
-                            ),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                              decoration: BoxDecoration(
-                                border: Border.all(color: context.colors.borderMedium),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Row(
-                                children: [
-                                  Icon(Icons.person, size: 20, color: context.colors.textSecondary),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: Text(
-                                      selectedTeachers.isEmpty
-                                          ? '講師を選択'
-                                          : selectedTeachers.contains('全員')
-                                              ? '全員'
-                                              : selectedTeachers.join('、'),
-                                      style: TextStyle(
-                                        fontSize: 15,
-                                        color: selectedTeachers.isEmpty ? context.colors.textSecondary : context.colors.textPrimary,
-                                      ),
-                                    ),
-                                  ),
-                                  if (selectedTeachers.isNotEmpty)
-                                    GestureDetector(
-                                      onTap: () => setSheetState(() => selectedTeachers = []),
-                                      child: Padding(
-                                        padding: EdgeInsets.only(right: 4),
-                                        child: Icon(Icons.close, size: 18, color: context.colors.textSecondary),
-                                      ),
-                                    ),
-                                  Icon(Icons.arrow_drop_down, color: context.colors.textSecondary),
-                                ],
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          // 部屋選択
-                          InkWell(
-                            onTap: () => _showRoomSelectionDialog(
-                              selectedRoom,
-                              (newRoom) => setSheetState(() => selectedRoom = newRoom),
-                            ),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                              decoration: BoxDecoration(
-                                border: Border.all(color: context.colors.borderMedium),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Row(
-                                children: [
-                                  Icon(Icons.meeting_room, size: 20, color: context.colors.textSecondary),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: Text(
-                                      selectedRoom.isEmpty ? '部屋を選択' : selectedRoom,
-                                      style: TextStyle(
-                                        fontSize: 15,
-                                        color: selectedRoom.isEmpty ? context.colors.textSecondary : context.colors.textPrimary,
-                                      ),
-                                    ),
-                                  ),
-                                  if (selectedRoom.isNotEmpty)
-                                    GestureDetector(
-                                      onTap: () => setSheetState(() => selectedRoom = ''),
-                                      child: Padding(
-                                        padding: EdgeInsets.only(right: 4),
-                                        child: Icon(Icons.close, size: 18, color: context.colors.textSecondary),
-                                      ),
-                                    ),
-                                  Icon(Icons.arrow_drop_down, color: context.colors.textSecondary),
-                                ],
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          // コース選択
-                          InkWell(
-                            onTap: () => _showCourseSelectionDialog(
-                              selectedCourse,
-                              (newCourse) => setSheetState(() => selectedCourse = newCourse),
-                              studentName: studentName,
-                              absenceDate: date,
-                            ),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                              decoration: BoxDecoration(
-                                border: Border.all(color: context.colors.borderMedium),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Row(
-                                children: [
-                                  Container(
-                                    width: 12, height: 12,
-                                    decoration: BoxDecoration(
-                                      color: currentColor,
-                                      borderRadius: BorderRadius.circular(2),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Expanded(child: Text(selectedCourse, style: const TextStyle(fontSize: 15))),
-                                  Icon(Icons.arrow_drop_down, color: context.colors.textSecondary),
-                                ],
-                              ),
-                            ),
-                          ),
-
-                          // 生徒情報セクション
-                          if (!isCustomEvent && studentName.isNotEmpty) ...[
-                            const SizedBox(height: 24),
-                            Divider(height: 1, color: context.colors.borderLight),
-                            const SizedBox(height: 20),
-
-                            // タスクセクション
-                            Row(
-                              children: [
-                                const Icon(Icons.task_alt, size: 18, color: AppColors.accent),
-                                const SizedBox(width: 8),
-                                const Text('タスク', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                              ],
-                            ),
-                            const SizedBox(height: 12),
-                            if (studentTasks.isNotEmpty) ...[
-                              ...studentTasks.map((task) => GestureDetector(
-                                onTap: () => _showEditTaskDialog(
-                                  sheetContext,
-                                  task,
-                                  () => setSheetState(() {
-                                    studentTasks = _getTasksForStudent(studentName);
-                                  }),
-                                ),
-                                child: Container(
-                                  margin: const EdgeInsets.only(bottom: 8),
-                                  padding: const EdgeInsets.all(10),
-                                  decoration: _taskDecoration(),
-                                  child: Row(
-                                    children: [
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
-                                          children: [
-                                            Text(task['title'] ?? '', style: const TextStyle(fontSize: 13)),
-                                            if (task['dueDate'] != null)
-                                              Text(
-                                                '期限: ${DateFormat('M/d').format((task['dueDate'] as Timestamp).toDate())}',
-                                                style: TextStyle(fontSize: 11, color: context.colors.textSecondary),
-                                              ),
-                                          ],
-                                        ),
-                                      ),
-                                      IconButton(
-                                        onPressed: () async {
-                                          await _completeTask(task['id']);
-                                          setSheetState(() {
-                                            studentTasks = _getTasksForStudent(studentName);
-                                          });
-                                        },
-                                        icon: const Icon(Icons.check_circle_outline, size: 20),
-                                        color: Colors.green,
-                                        padding: EdgeInsets.zero,
-                                        constraints: const BoxConstraints(),
-                                        tooltip: '完了',
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              )),
-                            ],
-                            // 新規タスク入力
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: TextField(
-                                    controller: newTaskController,
-                                    decoration: InputDecoration(
-                                      hintText: '新しいタスク',
-                                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                                      isDense: true,
-                                    ),
-                                    style: const TextStyle(fontSize: 13),
-                                    onChanged: (_) => setSheetState(() {}),
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                InkWell(
-                                  onTap: () async {
-                                    final picked = await showDatePicker(
-                                      context: sheetContext,
-                                      initialDate: newTaskDueDate ?? DateTime.now(),
-                                      firstDate: DateTime.now().subtract(const Duration(days: 365)),
-                                      lastDate: DateTime.now().add(const Duration(days: 365)),
-                                    );
-                                    if (picked != null) {
-                                      setSheetState(() => newTaskDueDate = picked);
-                                    }
-                                  },
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                                    decoration: BoxDecoration(
-                                      border: Border.all(color: context.colors.borderMedium),
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Icon(Icons.calendar_today, size: 16, color: newTaskDueDate != null ? AppColors.primary : context.colors.textSecondary),
-                                        if (newTaskDueDate != null) ...[
-                                          const SizedBox(width: 4),
-                                          Text(
-                                            DateFormat('M/d').format(newTaskDueDate!),
-                                            style: const TextStyle(fontSize: 12),
-                                          ),
-                                          const SizedBox(width: 4),
-                                          GestureDetector(
-                                            onTap: () => setSheetState(() => newTaskDueDate = null),
-                                            child: Icon(Icons.close, size: 14, color: context.colors.textSecondary),
-                                          ),
-                                        ],
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 8),
-                            Align(
-                              alignment: Alignment.centerLeft,
-                              child: GestureDetector(
-                                onTap: () async {
-                                  final taskText = newTaskController.text.trim();
-                                  if (taskText.isEmpty) return;
-                                  final newTask = await _addTaskForStudent(
-                                    studentName,
-                                    taskText,
-                                    newTaskDueDate,
-                                  );
-                                  newTaskController.clear();
-                                  setSheetState(() {
-                                    newTaskDueDate = date;
-                                    if (newTask != null) {
-                                      studentTasks = [...studentTasks, newTask];
-                                    }
-                                  });
-                                },
-                                child: Container(
-                                  width: 24,
-                                  height: 24,
-                                  decoration: BoxDecoration(
-                                    color: newTaskController.text.trim().isEmpty
-                                        ? context.colors.borderMedium
-                                        : AppColors.primary,
-                                    shape: BoxShape.circle,
-                                  ),
-                                  child: const Icon(Icons.add, color: Colors.white, size: 16),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: 20),
-                            // 療育プラン
-                            Row(
-                              children: [
-                                const Icon(Icons.psychology, size: 18, color: AppColors.primary),
-                                const SizedBox(width: 8),
-                                const Text('療育プラン', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                              ],
-                            ),
-                            const SizedBox(height: 8),
-                            TextField(
-                              controller: therapyController,
-                              decoration: InputDecoration(
-                                hintText: '療育の目標や方針を記入',
-                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                                contentPadding: const EdgeInsets.all(12),
-                              ),
-                              maxLines: 3,
-                              minLines: 2,
-                              style: const TextStyle(fontSize: 13),
-                            ),
-                            const SizedBox(height: 16),
-                            // 園訪問
-                            Row(
-                              children: [
-                                Icon(Icons.school, size: 18, color: Colors.teal.shade600),
-                                const SizedBox(width: 8),
-                                const Text('園訪問', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                              ],
-                            ),
-                            const SizedBox(height: 8),
-                            TextField(
-                              controller: schoolVisitController,
-                              decoration: InputDecoration(
-                                hintText: '園訪問の記録や予定を記入',
-                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                                contentPadding: const EdgeInsets.all(12),
-                              ),
-                              maxLines: 3,
-                              minLines: 2,
-                              style: const TextStyle(fontSize: 13),
-                            ),
-                            const SizedBox(height: 16),
-                            // 就学相談
-                            Row(
-                              children: [
-                                Icon(Icons.celebration, size: 18, color: Colors.indigo.shade600),
-                                const SizedBox(width: 8),
-                                const Text('就学相談', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                              ],
-                            ),
-                            const SizedBox(height: 8),
-                            TextField(
-                              controller: consultationController,
-                              decoration: InputDecoration(
-                                hintText: '就学相談の記録や予定を記入',
-                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                                contentPadding: const EdgeInsets.all(12),
-                              ),
-                              maxLines: 3,
-                              minLines: 2,
-                              style: const TextStyle(fontSize: 13),
-                            ),
-                            const SizedBox(height: 16),
-                            // 移動希望
-                            Row(
-                              children: [
-                                Icon(Icons.swap_horiz, size: 18, color: Colors.purple.shade600),
-                                const SizedBox(width: 8),
-                                const Text('移動希望', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                              ],
-                            ),
-                            const SizedBox(height: 8),
-                            TextField(
-                              controller: moveRequestController,
-                              decoration: InputDecoration(
-                                hintText: '曜日や時間の変更希望を記入',
-                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                                contentPadding: const EdgeInsets.all(12),
-                              ),
-                              maxLines: 3,
-                              minLines: 2,
-                              style: const TextStyle(fontSize: 13),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-                  ),
-                  // 保存ボタン
-                  Container(
-                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-                    decoration: BoxDecoration(
-                      color: context.colors.cardBg,
-                      border: Border(top: BorderSide(color: context.colors.borderLight)),
-                    ),
-                    child: SafeArea(
-                      top: false,
-                      child: SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton(
-                          onPressed: () async {
-                            final lessonId = lesson['id'] as String?;
-                            if (lessonId == null) {
-                              Navigator.pop(sheetContext);
-                              return;
-                            }
-
-
-                            try {
-                              // タスクを追加（入力欄にテキストがある場合）
-                              final taskText = newTaskController.text.trim();
-                              if (taskText.isNotEmpty && studentName.isNotEmpty) {
-                                await _addTaskForStudent(
-                                  studentName,
-                                  taskText,
-                                  newTaskDueDate,
-                                );
-                              }
-
-                              // レッスン情報を保存
-                              final mobileUpdateData = <String, dynamic>{
-                                'teachers': selectedTeachers,
-                                'room': selectedRoom,
-                                'course': selectedCourse,
-                                'updatedAt': FieldValue.serverTimestamp(),
-                              };
-                              // カスタムイベントの場合はタイトルも更新
-                              if (isCustomEvent) {
-                                mobileUpdateData['studentName'] = mobileTitleController.text.trim();
-                              }
-                              await FirebaseFirestore.instance
-                                  .collection('plus_lessons')
-                                  .doc(lessonId)
-                                  .update(mobileUpdateData);
-
-                              // HUG連携（欠席系の場合）
-                              final pending = _pendingAbsenceData;
-                              if (pending != null && pending['studentName'] == studentName) {
-                                _sendAbsenceToHug(
-                                  studentName: studentName,
-                                  absenceDate: pending['absenceDate'] as DateTime,
-                                  category: pending['category'] as String,
-                                  content: pending['content'] as String,
-                                );
-                                _pendingAbsenceData = null;
-                              }
-
-                              // 生徒メモを保存
-                              if (!isCustomEvent && studentName.isNotEmpty) {
-                                await _saveStudentNotes(studentName, {
-                                  'therapyPlan': therapyController.text,
-                                  'schoolVisit': schoolVisitController.text,
-                                  'schoolConsultation': consultationController.text,
-                                  'moveRequest': moveRequestController.text,
-                                });
-                              }
-
-                              if (!sheetContext.mounted) return;
-                              Navigator.pop(sheetContext);
-                              await _loadLessonsForWeek(showLoading: false);
-
-                              if (mounted) {
-                                scaffoldMessenger.showSnackBar(
-                                  const SnackBar(content: Text('保存しました')),
-                                );
-                              }
-                            } catch (e) {
-                              debugPrint('Error updating lesson: $e');
-                              if (mounted) {
-                                scaffoldMessenger.showSnackBar(
-                                  SnackBar(content: Text('エラー: $e')),
-                                );
-                              }
-                            }
-                          },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.primary,
-                            foregroundColor: context.colors.textOnPrimary,
-                            padding: const EdgeInsets.symmetric(vertical: 14),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                          ),
-                          child: const Text('保存', style: TextStyle(fontSize: 16)),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            );
-          },
-        );
-      },
-    );
-  }
   
   Widget _buildMobileDetailRow(IconData icon, String label, String value) {
     return Row(
@@ -2818,13 +1630,13 @@ void _goToPage(int page) {
               Text(
                 label,
                 style: TextStyle(
-                  fontSize: 12,
+                  fontSize: AppTextSize.small,
                   color: context.colors.textTertiary,
                 ),
               ),
               Text(
                 value,
-                style: const TextStyle(fontSize: 14),
+                style: const TextStyle(fontSize: AppTextSize.bodyMd),
               ),
             ],
           ),
@@ -2890,7 +1702,7 @@ void _goToPage(int page) {
               Text(
                 '$year年 $month月',
                 style: const TextStyle(
-                  fontSize: 16,
+                  fontSize: AppTextSize.titleSm,
                   fontWeight: FontWeight.w500,
                 ),
               ),
@@ -2931,8 +1743,8 @@ void _goToPage(int page) {
                   child: Text(
                     day,
                     style: TextStyle(
-                      fontSize: 12,
-                      color: isSunday ? Colors.red : (isSaturday ? Colors.blue : context.colors.textSecondary),
+                      fontSize: AppTextSize.small,
+                      color: isSunday ? AppColors.error : (isSaturday ? AppColors.info : context.colors.textSecondary),
                     ),
                   ),
                 ),
@@ -2986,8 +1798,8 @@ void _goToPage(int page) {
                             child: Text(
                               '$dayNumber',
                               style: TextStyle(
-                                fontSize: 13,
-                                color: isToday ? Colors.white : (isSunday ? Colors.red : (isSaturday ? Colors.blue : context.colors.textPrimary)),
+                                fontSize: AppTextSize.body,
+                                color: isToday ? Colors.white : (isSunday ? AppColors.error : (isSaturday ? AppColors.info : context.colors.textPrimary)),
                                 fontWeight: isToday ? FontWeight.bold : FontWeight.normal,
                               ),
                             ),
@@ -3014,16 +1826,16 @@ final plusStaff = _staffList.where((s) =>
     
     // スタッフごとの色を設定
     final staffColors = [
-      Colors.blue,
-      Colors.teal,
-      Colors.purple,
-      Colors.orange,
-      Colors.pink,
-      Colors.indigo,
-      Colors.green,
-      Colors.red,
-      Colors.cyan,
-      Colors.amber,
+      AppColors.info,
+      AppColors.secondary,
+      AppColors.aiAccent,
+      AppColors.warning,
+      AppColors.aiAccent,
+      AppColors.secondary,
+      AppColors.success,
+      AppColors.error,
+      AppColors.info,
+      AppColors.primary,
     ];
     
     return ListView(
@@ -3092,7 +1904,7 @@ final plusStaff = _staffList.where((s) =>
               child: Text(
                 label,
                 style: TextStyle(
-                  fontSize: 14,
+                  fontSize: AppTextSize.bodyMd,
                   fontWeight: isSpecial ? FontWeight.w500 : FontWeight.normal,
                 ),
               ),
@@ -3147,7 +1959,7 @@ final plusStaff = _staffList.where((s) =>
               'スケジュール',
               style: TextStyle(
                 color: context.colors.textPrimary,
-                fontSize: 20,
+                fontSize: AppTextSize.xl,
                 fontWeight: FontWeight.w500,
               ),
             ),
@@ -3179,7 +1991,7 @@ final plusStaff = _staffList.where((s) =>
               _formatWeekRange(),
               style: TextStyle(
                 color: context.colors.textPrimary,
-                fontSize: 20,
+                fontSize: AppTextSize.xl,
                 fontWeight: FontWeight.w500,
               ),
             ),
@@ -3196,7 +2008,7 @@ final plusStaff = _staffList.where((s) =>
               'スケジュール',
               style: TextStyle(
                 color: context.colors.textPrimary,
-                fontSize: 20,
+                fontSize: AppTextSize.xl,
                 fontWeight: FontWeight.w500,
               ),
             ),
@@ -3228,7 +2040,7 @@ final plusStaff = _staffList.where((s) =>
               DateFormat('yyyy年 M月', 'ja').format(_monthViewDate),
               style: TextStyle(
                 color: context.colors.textPrimary,
-                fontSize: 20,
+                fontSize: AppTextSize.xl,
                 fontWeight: FontWeight.w500,
               ),
             ),
@@ -3240,7 +2052,7 @@ final plusStaff = _staffList.where((s) =>
               'ダッシュボード',
               style: TextStyle(
                 color: context.colors.textPrimary,
-                fontSize: 20,
+                fontSize: AppTextSize.xl,
                 fontWeight: FontWeight.w500,
               ),
             ),
@@ -3267,7 +2079,7 @@ final plusStaff = _staffList.where((s) =>
                     minimumSize: WidgetStateProperty.all(Size.zero),
                     tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                   ),
-                  child: const Text('集計', style: TextStyle(fontSize: 13)),
+                  child: const Text('集計', style: TextStyle(fontSize: AppTextSize.body)),
                 ),
               ),
             ),
@@ -3328,7 +2140,7 @@ final plusStaff = _staffList.where((s) =>
                     width: 8,
                     height: 8,
                     decoration: BoxDecoration(
-                      color: daysLeft < 0 ? Colors.red.shade700 : Colors.red.shade400,
+                      color: daysLeft < 0 ? AppColors.error : AppColors.errorBorder,
                       shape: BoxShape.circle,
                       border: Border.all(color: context.colors.scaffoldBg, width: 1.5),
                     ),
@@ -3374,7 +2186,7 @@ final plusStaff = _staffList.where((s) =>
                       width: 8,
                       height: 8,
                       decoration: BoxDecoration(
-                        color: daysLeft < 0 ? Colors.red.shade700 : Colors.red.shade400,
+                        color: daysLeft < 0 ? AppColors.error : AppColors.errorBorder,
                         shape: BoxShape.circle,
                         border: Border.all(color: context.colors.scaffoldBg, width: 1.5),
                       ),
@@ -3500,9 +2312,7 @@ final plusStaff = _staffList.where((s) =>
         break;
       case 'training':
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('法定研修のリンクは未設定です。')),
-          );
+          AppFeedback.info(context, '法定研修のリンクは未設定です。');
         }
         break;
     }
@@ -3526,12 +2336,12 @@ final plusStaff = _staffList.where((s) =>
               const SizedBox(width: 12),
               Expanded(
                 child: Text(label,
-                    style: TextStyle(fontSize: 13, color: c.textPrimary, fontWeight: FontWeight.w500)),
+                    style: TextStyle(fontSize: AppTextSize.body, color: c.textPrimary, fontWeight: FontWeight.w500)),
               ),
               if (trailing != null)
                 Text(trailing,
                     style: TextStyle(
-                        fontSize: 11, color: trailingColor ?? c.textTertiary, fontWeight: FontWeight.w500)),
+                        fontSize: AppTextSize.caption, color: trailingColor ?? c.textTertiary, fontWeight: FontWeight.w500)),
             ],
           ),
         ),
@@ -3564,7 +2374,7 @@ final plusStaff = _staffList.where((s) =>
               Icons.how_to_vote_outlined,
               'シフト希望',
               trailing: daysLeft < 0 ? '超過${-daysLeft}日' : 'あと$daysLeft日',
-              trailingColor: needsAttention ? Colors.red.shade400 : null,
+              trailingColor: needsAttention ? AppColors.errorBorder : null,
             ),
             menuItem('shift_decision', Icons.event_available_outlined, 'シフト決定'),
             Padding(
@@ -3631,9 +2441,9 @@ final plusStaff = _staffList.where((s) =>
           height: 28,
           padding: const EdgeInsets.symmetric(horizontal: 10),
           decoration: BoxDecoration(
-            color: context.isDark ? Colors.pink.shade900.withOpacity(0.3) : Colors.pink.shade50.withOpacity(0.5),
+            color: context.isDark ? AppColors.aiAccent.withOpacity(0.3) : AppColors.aiAccentBg.withOpacity(0.5),
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: context.isDark ? Colors.pink.shade800.withOpacity(0.3) : Colors.pink.shade50),
+            border: Border.all(color: context.isDark ? AppColors.aiAccent.withOpacity(0.3) : AppColors.aiAccentBg),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
@@ -3642,7 +2452,7 @@ final plusStaff = _staffList.where((s) =>
                 child: Text(
                   label,
                   style: TextStyle(
-                    fontSize: 12,
+                    fontSize: AppTextSize.small,
                     color: context.colors.textPrimary,
                     fontWeight: FontWeight.w500,
                   ),
@@ -3749,465 +2559,6 @@ final plusStaff = _staffList.where((s) =>
     );
   }
 
-  void _showStatsDialog() async {
-    // 対象スタッフ（フルネーム）と1日あたりの目標コマ数のデフォルト
-    final defaultTargets = <String, int>{
-      '安保 さゆり': 3,
-      '石川 真利': 2,
-      '栗林 志織': 3,
-      '松永 智栄': 3,
-    };
-
-    // _staffList から対象スタッフのidを引く（名前マッチング）
-    // staffIdベースで集計する（plus_shiftsのname表記揺れに依存しないため）
-    final targetStaff = <String, Map<String, dynamic>>{}; // staffId -> {name, slotTarget}
-    for (final entry in defaultTargets.entries) {
-      final fullName = entry.key;
-      // _staffListから一致するスタッフを検索（前後空白・全半角空白を許容）
-      final normalized = fullName.replaceAll(RegExp(r'[\s\u3000]'), '');
-      final staff = _staffList.firstWhere(
-        (s) {
-          final n = (s['name'] as String? ?? '').replaceAll(RegExp(r'[\s\u3000]'), '');
-          return n == normalized;
-        },
-        orElse: () => <String, dynamic>{},
-      );
-      if (staff.isEmpty) continue;
-      final staffId = staff['id'] as String;
-      final slotTarget = (staff['dailySlotTarget'] as int?) ?? entry.value;
-      targetStaff[staffId] = {
-        'name': fullName,
-        'furigana': staff['furigana'] ?? fullName,
-        'slotTarget': slotTarget,
-      };
-    }
-
-    // 集計期間: 2026年3月31日 〜 昨日（実績）/ 未来（予定込み）
-    final startDate = DateTime(2026, 3, 31);
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final endDate = today.subtract(const Duration(days: 1)); // 昨日
-
-    // 実績分（〜昨日）を取得
-    final lessonsSnap = await FirebaseFirestore.instance
-        .collection('plus_lessons')
-        .where('date', isGreaterThanOrEqualTo: Timestamp.fromDate(startDate))
-        .get();
-
-    // 日付ごとのコマ（teachers配列）を集計（欠席除外）
-    final lessonsByDate = <String, List<List<String>>>{};
-    final futureLessonsByDate = <String, List<List<String>>>{};
-    // スケジュール期限を特定（対象スタッフがアサインされている最後の日）
-    DateTime scheduleHorizon = today;
-    for (final doc in lessonsSnap.docs) {
-      final data = doc.data();
-      final course = data['course'] as String? ?? '';
-      if (course.startsWith('欠席')) continue;
-      final ts = data['date'] as Timestamp?;
-      if (ts == null) continue;
-      final dt = ts.toDate();
-      final dtDate = DateTime(dt.year, dt.month, dt.day);
-      final key = DateFormat('yyyy-MM-dd').format(dt);
-      final teachers = (data['teachers'] as List<dynamic>? ?? [])
-          .map((e) => e.toString().replaceAll(RegExp(r'[\s\u3000]'), ''))
-          .toList();
-      if (dtDate.isBefore(today)) {
-        // 実績（昨日まで）
-        lessonsByDate.putIfAbsent(key, () => []).add(teachers);
-      } else {
-        // 未来: 実際にアサインされたレッスンを記録
-        futureLessonsByDate.putIfAbsent(key, () => []).add(teachers);
-        // 対象スタッフがアサインされていればスケジュール期限を更新
-        for (final staffId in targetStaff.keys) {
-          final info = targetStaff[staffId]!;
-          final fullNameNormalized = (info['name'] as String).replaceAll(RegExp(r'[\s\u3000]'), '');
-          if (teachers.contains(fullNameNormalized) && dtDate.isAfter(scheduleHorizon)) {
-            scheduleHorizon = dtDate;
-          }
-        }
-      }
-    }
-
-    // 期間内のplus_shiftsを月単位で取得（未来分も含む）
-    final shiftsByMonth = <String, Map<String, dynamic>>{};
-    {
-      var cursor = DateTime(startDate.year, startDate.month, 1);
-      while (!cursor.isAfter(scheduleHorizon)) {
-        final mk = DateFormat('yyyy-MM').format(cursor);
-        try {
-          final doc = await FirebaseFirestore.instance
-              .collection('plus_shifts')
-              .doc(mk)
-              .get();
-          if (doc.exists) shiftsByMonth[mk] = doc.data()!;
-        } catch (_) {}
-        cursor = DateTime(cursor.year, cursor.month + 1, 1);
-      }
-    }
-
-    // シフトからスタッフの日別ステータスを取得するヘルパー
-    String _getShiftStatus(String staffId, DateTime date) {
-      final monthKey = DateFormat('yyyy-MM').format(date);
-      final dayKey = date.day.toString();
-      final monthDoc = shiftsByMonth[monthKey];
-      final days = monthDoc?['days'] as Map<String, dynamic>?;
-      final daySlots = (days?[dayKey] as List<dynamic>?) ?? [];
-      for (final slot in daySlots) {
-        if (slot is Map) {
-          final m = Map<String, dynamic>.from(slot);
-          if (m['staffId'] == staffId) {
-            final rawStatus = m['shiftStatus'] as String?;
-            if (rawStatus != null) return rawStatus;
-            if (m['isWorking'] == false) return 'off';
-            return 'full';
-          }
-        }
-      }
-      return 'full';
-    }
-
-    bool _isHoliday(DateTime date) {
-      final monthKey = DateFormat('yyyy-MM').format(date);
-      final dayKey = date.day.toString();
-      final monthDoc = shiftsByMonth[monthKey];
-      final holidays = ((monthDoc?['holidays'] as List<dynamic>?) ?? [])
-          .map((e) => e.toString())
-          .toSet();
-      return holidays.contains(dayKey);
-    }
-
-    bool _isWorkingDay(DateTime date) {
-      if (date.weekday == DateTime.sunday || date.weekday == DateTime.monday) return false;
-      if (_isHoliday(date)) return false;
-      return true;
-    }
-
-    // スタッフ(staffId)ごとの実施/目標を集計（〜昨日）
-    final actualCounts = <String, int>{for (final id in targetStaff.keys) id: 0};
-    final targetCounts = <String, int>{for (final id in targetStaff.keys) id: 0};
-
-    var d = startDate;
-    while (!d.isAfter(endDate)) {
-      if (!_isWorkingDay(d)) {
-        d = d.add(const Duration(days: 1));
-        continue;
-      }
-
-      final dateKey = DateFormat('yyyy-MM-dd').format(d);
-      final dayLessons = lessonsByDate[dateKey] ?? const <List<String>>[];
-
-      for (final staffId in targetStaff.keys) {
-        final info = targetStaff[staffId]!;
-        final fullNameNormalized = (info['name'] as String).replaceAll(RegExp(r'[\s\u3000]'), '');
-        final slotTarget = info['slotTarget'] as int;
-        final status = _getShiftStatus(staffId, d);
-
-        if (status != 'off') {
-          final dayTarget = status == 'half' ? (slotTarget - 1) : slotTarget;
-          if (dayTarget > 0) {
-            targetCounts[staffId] = targetCounts[staffId]! + dayTarget;
-          }
-          int actual = 0;
-          for (final teachers in dayLessons) {
-            if (teachers.contains(fullNameNormalized)) actual++;
-          }
-          actualCounts[staffId] = actualCounts[staffId]! + actual;
-        }
-      }
-
-      d = d.add(const Duration(days: 1));
-    }
-
-    // 予定（未来）: 実際にアサインされているレッスン数をカウント
-    final futureLessonsByStaff = <String, int>{for (final id in targetStaff.keys) id: 0};
-    // 未来の目標（slotTarget × 出勤日数）も別途計算
-    final futureTargetByStaff = <String, int>{for (final id in targetStaff.keys) id: 0};
-    {
-      var fd = today;
-      while (!fd.isAfter(scheduleHorizon)) {
-        if (!_isWorkingDay(fd)) {
-          fd = fd.add(const Duration(days: 1));
-          continue;
-        }
-        final dateKey = DateFormat('yyyy-MM-dd').format(fd);
-        final dayLessons = futureLessonsByDate[dateKey] ?? const <List<String>>[];
-        for (final staffId in targetStaff.keys) {
-          final info = targetStaff[staffId]!;
-          final fullNameNormalized = (info['name'] as String).replaceAll(RegExp(r'[\s\u3000]'), '');
-          final slotTarget = info['slotTarget'] as int;
-          final status = _getShiftStatus(staffId, fd);
-          if (status != 'off') {
-            final dayTarget = status == 'half' ? (slotTarget - 1) : slotTarget;
-            if (dayTarget > 0) {
-              futureTargetByStaff[staffId] = futureTargetByStaff[staffId]! + dayTarget;
-            }
-            // 実際にアサインされているコマ数をカウント
-            int futureActual = 0;
-            for (final teachers in dayLessons) {
-              if (teachers.contains(fullNameNormalized)) futureActual++;
-            }
-            futureLessonsByStaff[staffId] = futureLessonsByStaff[staffId]! + futureActual;
-          }
-        }
-        fd = fd.add(const Duration(days: 1));
-      }
-    }
-
-    if (!mounted) return;
-
-    bool showWithFuture = false; // false=不足(現在), true=不足(予定込)
-    showDialog(
-      context: context,
-      builder: (ctx) {
-        return StatefulBuilder(
-          builder: (ctx, setDialogState) {
-            // 対象スタッフ（staffIdベース）をふりがな順でソート
-            final sortedStaffIds = targetStaff.keys.toList()
-              ..sort((a, b) {
-                final fa = (targetStaff[a]!['furigana'] as String?) ?? '';
-                final fb = (targetStaff[b]!['furigana'] as String?) ?? '';
-                return fa.compareTo(fb);
-              });
-
-            // 相対不足を計算: 最小不足者を基準(0)にする
-            final rawShortages = <String, int>{};
-            final rawShortagesWithFuture = <String, int>{};
-            for (final staffId in sortedStaffIds) {
-              final actual = actualCounts[staffId] ?? 0;
-              final target = targetCounts[staffId] ?? 0;
-              final futureSlots = futureLessonsByStaff[staffId] ?? 0;
-              rawShortages[staffId] = target - actual;
-              final futureTarget = futureTargetByStaff[staffId] ?? 0;
-              // 予定込み: (目標+未来目標) - (実績+実際の予定コマ数)
-              rawShortagesWithFuture[staffId] = (target + futureTarget) - (actual + futureSlots);
-            }
-            final minShortage = rawShortages.values.isEmpty ? 0 : rawShortages.values.reduce((a, b) => a < b ? a : b);
-            final minShortageWithFuture = rawShortagesWithFuture.values.isEmpty ? 0 : rawShortagesWithFuture.values.reduce((a, b) => a < b ? a : b);
-
-            return AlertDialog(
-              title: Row(
-                children: [
-                  Icon(Icons.bar_chart, color: AppColors.primary),
-                  const SizedBox(width: 8),
-                  const Text('コマ数集計', style: TextStyle(fontWeight: FontWeight.bold)),
-                ],
-              ),
-              content: SizedBox(
-                width: 540,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      '3/31〜累計  一番入っている人を基準(0)とした相対不足',
-                      style: TextStyle(fontSize: 12, color: context.colors.textSecondary),
-                    ),
-                    const SizedBox(height: 12),
-                    // トグル: 不足(現在) / 不足(予定込)
-                    Container(
-                      decoration: BoxDecoration(
-                        color: context.colors.chipBg,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      padding: const EdgeInsets.all(3),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: GestureDetector(
-                              onTap: () => setDialogState(() => showWithFuture = false),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(vertical: 6),
-                                decoration: BoxDecoration(
-                                  color: !showWithFuture ? AppColors.primary : Colors.transparent,
-                                  borderRadius: BorderRadius.circular(6),
-                                ),
-                                child: Text(
-                                  '現在',
-                                  textAlign: TextAlign.center,
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.bold,
-                                    color: !showWithFuture ? Colors.white : context.colors.textSecondary,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                          Expanded(
-                            child: GestureDetector(
-                              onTap: () => setDialogState(() => showWithFuture = true),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(vertical: 6),
-                                decoration: BoxDecoration(
-                                  color: showWithFuture ? AppColors.primary : Colors.transparent,
-                                  borderRadius: BorderRadius.circular(6),
-                                ),
-                                child: Text(
-                                  '予定',
-                                  textAlign: TextAlign.center,
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.bold,
-                                    color: showWithFuture ? Colors.white : context.colors.textSecondary,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    // ヘッダー
-                    Container(
-                      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
-                      decoration: BoxDecoration(
-                        color: context.colors.chipBg,
-                        borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
-                      ),
-                      child: Row(
-                        children: [
-                          const Expanded(flex: 3, child: Text('スタッフ', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13))),
-                          Expanded(flex: 2, child: Text(showWithFuture ? '実績+予定' : '実績', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13), textAlign: TextAlign.center)),
-                          const Expanded(flex: 2, child: Text('目標', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13), textAlign: TextAlign.center)),
-                          const Expanded(flex: 2, child: Text('差分', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13), textAlign: TextAlign.center)),
-                          const Expanded(flex: 2, child: Text('相対', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13), textAlign: TextAlign.center)),
-                        ],
-                      ),
-                    ),
-                    const Divider(height: 1),
-                    // データ行
-                    ...sortedStaffIds.map((staffId) {
-                      final info = targetStaff[staffId]!;
-                      final name = info['name'] as String;
-                      final lastName = name.split(' ').first;
-                      final slotTarget = info['slotTarget'] as int;
-                      final actual = actualCounts[staffId] ?? 0;
-                      final target = targetCounts[staffId] ?? 0;
-                      final futureSlots = futureLessonsByStaff[staffId] ?? 0;
-                      final futureTarget = futureTargetByStaff[staffId] ?? 0;
-                      // 予定込み: 実績+実際の予定 vs 目標+未来目標
-                      final displayActual = showWithFuture ? actual + futureSlots : actual;
-                      final displayTarget = showWithFuture ? target + futureTarget : target;
-                      final rawDiff = displayTarget - displayActual;
-                      final shortage = rawShortages[staffId]! - minShortage;
-                      final shortageWithFuture = rawShortagesWithFuture[staffId]! - minShortageWithFuture;
-                      final displayShortage = showWithFuture ? shortageWithFuture : shortage;
-
-                      return Container(
-                        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
-                        decoration: BoxDecoration(
-                          border: Border(bottom: BorderSide(color: context.colors.borderLight)),
-                        ),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              flex: 3,
-                              child: Row(
-                                children: [
-                                  Text(lastName, style: const TextStyle(fontSize: 14)),
-                                  const SizedBox(width: 4),
-                                  GestureDetector(
-                                    onTap: () {
-                                      showDialog(
-                                        context: ctx,
-                                        builder: (editCtx) {
-                                          int editTarget = slotTarget;
-                                          return StatefulBuilder(
-                                            builder: (editCtx, setEditState) => AlertDialog(
-                                              title: Text('$lastName の1日あたり目標コマ数'),
-                                              content: DropdownButton<int>(
-                                                value: editTarget,
-                                                items: [1, 2, 3, 4, 5, 6].map((d) => DropdownMenuItem(value: d, child: Text('$dコマ/日'))).toList(),
-                                                onChanged: (v) {
-                                                  if (v != null) setEditState(() => editTarget = v);
-                                                },
-                                              ),
-                                              actions: [
-                                                TextButton(onPressed: () => Navigator.pop(editCtx), child: const Text('キャンセル')),
-                                                ElevatedButton(
-                                                  onPressed: () async {
-                                                    await FirebaseFirestore.instance.collection('staffs').doc(staffId).update({'dailySlotTarget': editTarget});
-                                                    info['slotTarget'] = editTarget;
-                                                    final idx = _staffList.indexWhere((s) => s['id'] == staffId);
-                                                    if (idx != -1) _staffList[idx]['dailySlotTarget'] = editTarget;
-                                                    Navigator.pop(editCtx);
-                                                    setDialogState(() {});
-                                                  },
-                                                  style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, foregroundColor: context.colors.textOnPrimary),
-                                                  child: const Text('保存'),
-                                                ),
-                                              ],
-                                            ),
-                                          );
-                                        },
-                                      );
-                                    },
-                                    child: Text(
-                                      '(${slotTarget}/日)',
-                                      style: TextStyle(fontSize: 11, color: context.colors.textTertiary),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            Expanded(
-                              flex: 2,
-                              child: Text(
-                                '$displayActual',
-                                style: const TextStyle(fontSize: 14),
-                                textAlign: TextAlign.center,
-                              ),
-                            ),
-                            Expanded(
-                              flex: 2,
-                              child: Text(
-                                '$displayTarget',
-                                style: const TextStyle(fontSize: 14),
-                                textAlign: TextAlign.center,
-                              ),
-                            ),
-                            Expanded(
-                              flex: 2,
-                              child: Text(
-                                rawDiff <= 0 ? '0' : '$rawDiff',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  color: rawDiff <= 0 ? context.colors.textTertiary : context.colors.textSecondary,
-                                ),
-                                textAlign: TextAlign.center,
-                              ),
-                            ),
-                            Expanded(
-                              flex: 2,
-                              child: Text(
-                                displayShortage <= 0 ? '0' : '$displayShortage',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.bold,
-                                  color: displayShortage <= 0
-                                      ? context.colors.textTertiary
-                                      : showWithFuture ? Colors.orange.shade700 : Colors.red,
-                                ),
-                                textAlign: TextAlign.center,
-                              ),
-                            ),
-                          ],
-                        ),
-                      );
-                    }),
-                  ],
-                ),
-              ),
-              actions: [
-                TextButton(onPressed: () => Navigator.pop(ctx), child: Text('閉じる')),
-              ],
-            );
-          },
-        );
-      },
-    );
-  }
 
   Widget _buildDayHeader(double cellWidth, double timeColumnWidth, double headerHeight) {
     final days = ['月', '火', '水', '木', '金', '土'];
@@ -4241,8 +2592,8 @@ final plusStaff = _staffList.where((s) =>
                   Text(
                     days[index],
                     style: TextStyle(
-                      color: isSaturday ? Colors.blue : context.colors.textSecondary,
-                      fontSize: 11,
+                      color: isSaturday ? AppColors.info : context.colors.textSecondary,
+                      fontSize: AppTextSize.caption,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
@@ -4265,8 +2616,8 @@ final plusStaff = _staffList.where((s) =>
                             child: Text(
                               '${date.day}',
                               style: TextStyle(
-                                color: isToday ? Colors.white : (isSaturday ? Colors.blue : context.colors.textPrimary),
-                                fontSize: 22,
+                                color: isToday ? Colors.white : (isSaturday ? AppColors.info : context.colors.textPrimary),
+                                fontSize: AppTextSize.display,
                                 fontWeight: FontWeight.w400,
                               ),
                             ),
@@ -4357,7 +2708,7 @@ final plusStaff = _staffList.where((s) =>
                 const SizedBox(width: 8),
                 Text(
                   '${DateFormat('M月d日 (E)', 'ja').format(date)} のタスク',
-                  style: const TextStyle(fontSize: 18),
+                  style: const TextStyle(fontSize: AppTextSize.titleLg),
                 ),
               ],
             ),
@@ -4399,13 +2750,13 @@ final plusStaff = _staffList.where((s) =>
                                         studentName,
                                         style: const TextStyle(
                                           fontWeight: FontWeight.bold,
-                                          fontSize: 14,
+                                          fontSize: AppTextSize.bodyMd,
                                         ),
                                       ),
                                     Text(
                                       task['title'] ?? '',
                                       style: TextStyle(
-                                        fontSize: 14,
+                                        fontSize: AppTextSize.bodyMd,
                                         color: studentName != null ? context.colors.textSecondary : context.colors.textPrimary,
                                       ),
                                     ),
@@ -4422,7 +2773,7 @@ final plusStaff = _staffList.where((s) =>
                                   );
                                 },
                                 icon: const Icon(Icons.check_circle_outline),
-                                color: Colors.green,
+                                color: AppColors.success,
                                 tooltip: '完了',
                               ),
                             ],
@@ -4452,7 +2803,7 @@ final plusStaff = _staffList.where((s) =>
                           Text(
                             'タスクを追加',
                             style: TextStyle(
-                              fontSize: 14,
+                              fontSize: AppTextSize.bodyMd,
                               color: AppColors.primary,
                               fontWeight: FontWeight.w500,
                             ),
@@ -4499,7 +2850,7 @@ final plusStaff = _staffList.where((s) =>
               children: [
                 const Icon(Icons.task_alt, color: AppColors.accent),
                 const SizedBox(width: 8),
-                const Text('タスクを追加', style: TextStyle(fontSize: 18)),
+                const Text('タスクを追加', style: TextStyle(fontSize: AppTextSize.titleLg)),
               ],
             ),
             content: SizedBox(
@@ -4589,7 +2940,7 @@ final plusStaff = _staffList.where((s) =>
                                     ? '生徒を選択'
                                     : selectedStudent!['name'] as String,
                                 style: TextStyle(
-                                  fontSize: 15,
+                                  fontSize: AppTextSize.bodyLarge,
                                   color: selectedStudent == null
                                       ? context.colors.textSecondary
                                       : context.colors.textPrimary,
@@ -4661,7 +3012,7 @@ final plusStaff = _staffList.where((s) =>
                             child: Text(
                               DateFormat('M月d日 (E)', 'ja').format(selectedDueDate),
                               style: TextStyle(
-                                fontSize: 15,
+                                fontSize: AppTextSize.bodyLarge,
                                 color: context.colors.textPrimary,
                               ),
                             ),
@@ -4711,9 +3062,7 @@ final plusStaff = _staffList.where((s) =>
                           Navigator.pop(dialogContext);
                         }
                         if (mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('タスクを追加しました')),
-                          );
+                          AppFeedback.info(context, 'タスクを追加しました');
                         }
                       }
                     : null,
@@ -4748,7 +3097,7 @@ final plusStaff = _staffList.where((s) =>
               _timeSlots[index],
               style: TextStyle(
                 color: context.colors.textSecondary,
-                fontSize: 11,
+                fontSize: AppTextSize.caption,
               ),
             ),
           );
@@ -4932,13 +3281,13 @@ Widget _buildCellMemoIcon(DateTime date, int slotIndex, Map<String, dynamic> mem
                 children: [
                   Text(
                     memo['title'] ?? '',
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: context.colors.textPrimary),
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: AppTextSize.body, color: context.colors.textPrimary),
                   ),
                   if ((memo['comment'] ?? '').toString().isNotEmpty) ...[
                     const SizedBox(height: 4),
                     Text(
                       memo['comment'] ?? '',
-                      style: TextStyle(fontSize: 12, color: context.colors.textSecondary),
+                      style: TextStyle(fontSize: AppTextSize.small, color: context.colors.textSecondary),
                     ),
                   ],
                 ],
@@ -4986,25 +3335,20 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
         children: [
           Icon(Icons.info_outline, color: context.colors.textSecondary, size: 22),
           const SizedBox(width: 8),
-          const Text('コマメモを編集', style: TextStyle(fontSize: 18)),
+          const Text('コマメモを編集', style: TextStyle(fontSize: AppTextSize.titleLg)),
           const Spacer(),
           IconButton(
-            icon: const Icon(Icons.delete_outline, color: Colors.red, size: 20),
+            icon: const Icon(Icons.delete_outline, color: AppColors.error, size: 20),
             tooltip: '削除',
             onPressed: () async {
-              final confirm = await showDialog<bool>(
-                context: dialogContext,
-                builder: (ctx) => AlertDialog(
-                  backgroundColor: context.colors.cardBg,
-                  title: const Text('メモを削除'),
-                  content: const Text('このメモを削除しますか？'),
-                  actions: [
-                    TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('キャンセル')),
-                    TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('削除', style: TextStyle(color: Colors.red))),
-                  ],
-                ),
+              final confirm = await AppFeedback.confirm(
+                dialogContext,
+                title: 'メモを削除',
+                message: 'このメモを削除しますか？',
+                confirmLabel: '削除',
+                destructive: true,
               );
-              if (confirm == true) {
+              if (confirm) {
                 if (dialogContext.mounted) Navigator.pop(dialogContext);
                 if (!mounted) return;
                 final dateStr = DateFormat('yyyy-MM-dd').format(date);
@@ -5044,7 +3388,7 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
           children: [
             Text(
               '${DateFormat('M月d日 (E)', 'ja').format(date)} ${_timeSlots[slotIndex]}',
-              style: TextStyle(fontSize: 14, color: context.colors.textSecondary),
+              style: TextStyle(fontSize: AppTextSize.bodyMd, color: context.colors.textSecondary),
             ),
             const SizedBox(height: 16),
             TextField(
@@ -5189,16 +3533,14 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
       // エラー時はデータを再読み込み
       await _loadLessonsForWeek();
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('移動に失敗しました: $e')),
-        );
+        AppFeedback.info(context, '移動に失敗しました: $e');
       }
     }
   }
 
   Widget _buildLessonItem(Map<String, dynamic> lesson, {BuildContext? cellContext}) {
     final course = lesson['course'] as String? ?? '通常';
-    final color = _courseColors[course] ?? Colors.blue;
+    final color = _courseColors[course] ?? AppColors.info;
     final teachers = lesson['teachers'] as List<dynamic>? ?? [];
     final note = lesson['note'] as String? ?? '';
     final hasNote = note.isNotEmpty;
@@ -5236,7 +3578,7 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
           clipBehavior: Clip.hardEdge,
           padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
           decoration: BoxDecoration(
-            color: isHighlighted ? (context.isDark ? Colors.yellow.shade900.withOpacity(0.4) : Colors.yellow.shade100) : Colors.transparent,
+            color: isHighlighted ? (context.isDark ? AppColors.warning.withOpacity(0.4) : AppColors.warningBg) : Colors.transparent,
             borderRadius: BorderRadius.circular(4),
           ),
           child: Row(
@@ -5252,7 +3594,7 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
                         studentName,
                         style: TextStyle(
                           color: textColor,
-                          fontSize: 14,
+                          fontSize: AppTextSize.bodyMd,
                           fontWeight: FontWeight.w500,
                         ),
                         overflow: TextOverflow.ellipsis,
@@ -5263,7 +3605,7 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
                         courseInitial,
                         style: TextStyle(
                           color: textColor,
-                          fontSize: 12,
+                          fontSize: AppTextSize.small,
                         ),
                       ),
                   ],
@@ -5297,7 +3639,7 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
                       teacherLastNames.join('・'),
                       style: TextStyle(
                         color: context.colors.textPrimary,
-                        fontSize: 13,
+                        fontSize: AppTextSize.body,
                       ),
                     ),
                   ),
@@ -5331,7 +3673,7 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
                       lesson['room'],
                       style: TextStyle(
                         color: context.colors.textSecondary,
-                        fontSize: 13,
+                        fontSize: AppTextSize.body,
                       ),
                     ),
                   ),
@@ -5368,7 +3710,7 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
           lesson['studentName'],
           style: TextStyle(
             color: textColor,
-            fontSize: 14,
+            fontSize: AppTextSize.bodyMd,
             fontWeight: FontWeight.w500,
           ),
         ),
@@ -5524,7 +3866,7 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
 // クリック可能なレッスン内容を構築（生徒名のみ詳細ダイアログ）
   Widget _buildClickableLessonContent(Map<String, dynamic> lesson, GlobalKey key, {BuildContext? cellContext}) {
     final course = lesson['course'] as String? ?? '通常';
-    final color = _courseColors[course] ?? Colors.blue;
+    final color = _courseColors[course] ?? AppColors.info;
     final teachers = lesson['teachers'] as List<dynamic>? ?? [];
     final note = lesson['note'] as String? ?? '';
     final hasNote = note.isNotEmpty;
@@ -5558,7 +3900,7 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
           clipBehavior: Clip.hardEdge,
           padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
           decoration: BoxDecoration(
-            color: isHighlighted ? (context.isDark ? Colors.yellow.shade900.withOpacity(0.4) : Colors.yellow.shade100) : Colors.transparent,
+            color: isHighlighted ? (context.isDark ? AppColors.warning.withOpacity(0.4) : AppColors.warningBg) : Colors.transparent,
             borderRadius: BorderRadius.circular(4),
           ),
           child: Row(
@@ -5573,7 +3915,7 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
                         clickableStudentName,
                         style: TextStyle(
                           color: textColor,
-                          fontSize: 14,
+                          fontSize: AppTextSize.bodyMd,
                           fontWeight: FontWeight.w500,
                         ),
                         overflow: TextOverflow.ellipsis,
@@ -5584,7 +3926,7 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
                         courseInitial,
                         style: TextStyle(
                           color: textColor,
-                          fontSize: 12,
+                          fontSize: AppTextSize.small,
                         ),
                       ),
                   ],
@@ -5619,7 +3961,7 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
                       teacherLastNames.join('・'),
                       style: TextStyle(
                         color: context.colors.textPrimary,
-                        fontSize: 13,
+                        fontSize: AppTextSize.body,
                       ),
                     ),
                   ),
@@ -5654,7 +3996,7 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
                       lesson['room'],
                       style: TextStyle(
                         color: context.colors.textSecondary,
-                        fontSize: 13,
+                        fontSize: AppTextSize.body,
                       ),
                     ),
                   ),
@@ -5692,9 +4034,9 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
     if (therapyPlan.isNotEmpty) {
       widgets.add(const Text(
         '【療育プラン】',
-        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+        style: TextStyle(fontWeight: FontWeight.bold, fontSize: AppTextSize.small),
       ));
-      widgets.add(Text(therapyPlan, style: const TextStyle(fontSize: 12)));
+      widgets.add(Text(therapyPlan, style: const TextStyle(fontSize: AppTextSize.small)));
       widgets.add(const SizedBox(height: 8));
     }
     
@@ -5702,9 +4044,9 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
     if (schoolVisit.isNotEmpty) {
       widgets.add(const Text(
         '【園訪問】',
-        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+        style: TextStyle(fontWeight: FontWeight.bold, fontSize: AppTextSize.small),
       ));
-      widgets.add(Text(schoolVisit, style: const TextStyle(fontSize: 12)));
+      widgets.add(Text(schoolVisit, style: const TextStyle(fontSize: AppTextSize.small)));
       widgets.add(const SizedBox(height: 8));
     }
     
@@ -5712,9 +4054,9 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
     if (schoolConsultation.isNotEmpty) {
       widgets.add(const Text(
         '【就学相談】',
-        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+        style: TextStyle(fontWeight: FontWeight.bold, fontSize: AppTextSize.small),
       ));
-      widgets.add(Text(schoolConsultation, style: const TextStyle(fontSize: 12)));
+      widgets.add(Text(schoolConsultation, style: const TextStyle(fontSize: AppTextSize.small)));
       widgets.add(const SizedBox(height: 8));
     }
     
@@ -5722,9 +4064,9 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
     if (moveRequest.isNotEmpty) {
       widgets.add(const Text(
         '【移動希望】',
-        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+        style: TextStyle(fontWeight: FontWeight.bold, fontSize: AppTextSize.small),
       ));
-      widgets.add(Text(moveRequest, style: const TextStyle(fontSize: 12)));
+      widgets.add(Text(moveRequest, style: const TextStyle(fontSize: AppTextSize.small)));
       widgets.add(const SizedBox(height: 8));
     }
     
@@ -5732,7 +4074,7 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
     if (tasks.isNotEmpty) {
       widgets.add(const Text(
         '【タスク】',
-        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+        style: TextStyle(fontWeight: FontWeight.bold, fontSize: AppTextSize.small),
       ));
       for (var task in tasks) {
         final dueDate = task['dueDate'] as Timestamp?;
@@ -5741,7 +4083,7 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
             : '';
         widgets.add(Text(
           '• ${task['title']} $dueDateStr',
-          style: const TextStyle(fontSize: 12),
+          style: const TextStyle(fontSize: AppTextSize.small),
         ));
       }
       widgets.add(const SizedBox(height: 8));
@@ -5751,9 +4093,9 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
     if (note.isNotEmpty) {
       widgets.add(const Text(
         '【メモ】',
-        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+        style: TextStyle(fontWeight: FontWeight.bold, fontSize: AppTextSize.small),
       ));
-      widgets.add(Text(note, style: const TextStyle(fontSize: 12)));
+      widgets.add(Text(note, style: const TextStyle(fontSize: AppTextSize.small)));
     }
     
     // 最後の余白を削除
@@ -5942,10 +4284,10 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
       return null;
     }
 
-    const body = TextStyle(color: Colors.white, fontSize: 12, height: 1.5);
-    const sectionLabel = TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 0.5);
-    final halfLabel = TextStyle(color: Colors.orange.shade300, fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 0.5);
-    final absentLabel = TextStyle(color: Colors.red.shade300, fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 0.5);
+    const body = TextStyle(color: Colors.white, fontSize: AppTextSize.small, height: 1.5);
+    const sectionLabel = TextStyle(color: Colors.white70, fontSize: AppTextSize.caption, fontWeight: FontWeight.w700, letterSpacing: 0.5);
+    final halfLabel = TextStyle(color: AppColors.warningBorder, fontSize: AppTextSize.caption, fontWeight: FontWeight.w700, letterSpacing: 0.5);
+    final absentLabel = TextStyle(color: AppColors.errorBorder, fontSize: AppTextSize.caption, fontWeight: FontWeight.w700, letterSpacing: 0.5);
 
     final children = <InlineSpan>[];
 
@@ -5993,7 +4335,7 @@ Widget _buildStatusSegment({
 }) {
   final items = <({String value, String label, Color color})>[
     (value: 'full', label: '出勤', color: AppColors.primary),
-    (value: 'half', label: '半休', color: Colors.orange.shade700),
+    (value: 'half', label: '半休', color: AppColors.warning),
     (value: 'off', label: '休', color: context.colors.textTertiary),
   ];
   return Container(
@@ -6020,7 +4362,7 @@ Widget _buildStatusSegment({
               child: Text(
                 item.label,
                 style: TextStyle(
-                  fontSize: 11,
+                  fontSize: AppTextSize.caption,
                   fontWeight: FontWeight.bold,
                   color: selected
                       ? Colors.white
@@ -6135,7 +4477,7 @@ for (var staff in _staffList.where((s) => s['showInSchedule'] != false)) {
                 const SizedBox(width: 8),
                 Text(
                   DateFormat('M月d日 (E)', 'ja').format(date),
-                  style: const TextStyle(fontSize: 18),
+                  style: const TextStyle(fontSize: AppTextSize.titleLg),
                 ),
                 if (isMonday || isHolidayLocal) ...[
                   const SizedBox(width: 8),
@@ -6147,7 +4489,7 @@ for (var staff in _staffList.where((s) => s['showInSchedule'] != false)) {
                     ),
                     child: const Text(
                       '休み',
-                      style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                      style: TextStyle(color: Colors.white, fontSize: AppTextSize.small, fontWeight: FontWeight.bold),
                     ),
                   ),
                 ],
@@ -6173,14 +4515,14 @@ for (var staff in _staffList.where((s) => s['showInSchedule'] != false)) {
                     ),
                     child: Row(
                       children: [
-                        SizedBox(width: 80, child: Text('スタッフ', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: context.colors.textSecondary))),
-                        SizedBox(width: 70, child: Text('開始', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: context.colors.textSecondary), textAlign: TextAlign.center)),
+                        SizedBox(width: 80, child: Text('スタッフ', style: TextStyle(fontWeight: FontWeight.bold, fontSize: AppTextSize.body, color: context.colors.textSecondary))),
+                        SizedBox(width: 70, child: Text('開始', style: TextStyle(fontWeight: FontWeight.bold, fontSize: AppTextSize.body, color: context.colors.textSecondary), textAlign: TextAlign.center)),
                         const SizedBox(width: 8),
-                        SizedBox(width: 70, child: Text('終了', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: context.colors.textSecondary), textAlign: TextAlign.center)),
+                        SizedBox(width: 70, child: Text('終了', style: TextStyle(fontWeight: FontWeight.bold, fontSize: AppTextSize.body, color: context.colors.textSecondary), textAlign: TextAlign.center)),
                         const SizedBox(width: 8),
-                        Expanded(child: Text('備考', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: context.colors.textSecondary))),
+                        Expanded(child: Text('備考', style: TextStyle(fontWeight: FontWeight.bold, fontSize: AppTextSize.body, color: context.colors.textSecondary))),
                         const SizedBox(width: 8),
-                        SizedBox(width: 140, child: Text('勤怠', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: context.colors.textSecondary), textAlign: TextAlign.center)),
+                        SizedBox(width: 140, child: Text('勤怠', style: TextStyle(fontWeight: FontWeight.bold, fontSize: AppTextSize.body, color: context.colors.textSecondary), textAlign: TextAlign.center)),
                       ],
                     ),
                   ),
@@ -6208,7 +4550,7 @@ for (var staff in _staffList.where((s) => s['showInSchedule'] != false)) {
                                 child: Text(
                                   (data['name'] as String).split(' ').first,
                                   style: TextStyle(
-                                    fontSize: 14,
+                                    fontSize: AppTextSize.bodyMd,
                                     fontWeight: FontWeight.w500,
                                     color: isWorking ? context.colors.textPrimary : context.colors.textTertiary,
                                   ),
@@ -6230,16 +4572,16 @@ for (var staff in _staffList.where((s) => s['showInSchedule'] != false)) {
                                           filled: true,
                                           fillColor: context.colors.cardBg,
                                         ),
-                                        style: const TextStyle(fontSize: 14),
+                                        style: const TextStyle(fontSize: AppTextSize.bodyMd),
                                         textAlign: TextAlign.center,
                                       )
                                     : Center(
                                         child: Text(
                                           status == 'half' ? '半休' : '休み',
                                           style: TextStyle(
-                                            fontSize: 14,
+                                            fontSize: AppTextSize.bodyMd,
                                             color: status == 'half'
-                                                ? Colors.orange.shade700
+                                                ? AppColors.warning
                                                 : context.colors.textTertiary,
                                             fontWeight: status == 'half'
                                                 ? FontWeight.bold
@@ -6264,7 +4606,7 @@ for (var staff in _staffList.where((s) => s['showInSchedule'] != false)) {
                                           filled: true,
                                           fillColor: context.colors.cardBg,
                                         ),
-                                        style: const TextStyle(fontSize: 14),
+                                        style: const TextStyle(fontSize: AppTextSize.bodyMd),
                                         textAlign: TextAlign.center,
                                       )
                                     : const SizedBox.shrink(),
@@ -6284,7 +4626,7 @@ for (var staff in _staffList.where((s) => s['showInSchedule'] != false)) {
                                           filled: true,
                                           fillColor: context.colors.cardBg,
                                         ),
-                                        style: const TextStyle(fontSize: 14),
+                                        style: const TextStyle(fontSize: AppTextSize.bodyMd),
                                       )
                                     : const SizedBox.shrink(),
                               ),
@@ -6321,7 +4663,7 @@ for (var staff in _staffList.where((s) => s['showInSchedule'] != false)) {
                         children: [
                           Icon(Icons.event_busy, size: 18, color: context.colors.textSecondary),
                           const SizedBox(width: 8),
-                          Text('この日を休みにする', style: TextStyle(fontSize: 13, color: context.colors.textSecondary)),
+                          Text('この日を休みにする', style: TextStyle(fontSize: AppTextSize.body, color: context.colors.textSecondary)),
                           const Spacer(),
                           Transform.scale(
                             scale: 0.8,
@@ -6337,8 +4679,8 @@ for (var staff in _staffList.where((s) => s['showInSchedule'] != false)) {
                                   }
                                 });
                               },
-                              activeColor: Colors.red.shade400,
-                              activeTrackColor: Colors.red.shade200,
+                              activeColor: AppColors.errorBorder,
+                              activeTrackColor: AppColors.errorBg,
                             ),
                           ),
                         ],
@@ -6445,16 +4787,12 @@ for (var staff in _staffList.where((s) => s['showInSchedule'] != false)) {
       });
       
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('シフトを保存しました')),
-        );
+        AppFeedback.info(context, 'シフトを保存しました');
       }
     } catch (e) {
       debugPrint('Error saving shifts: $e');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('保存に失敗しました')),
-        );
+        AppFeedback.info(context, '保存に失敗しました');
       }
     }
   }
@@ -6479,7 +4817,7 @@ for (var staff in _staffList.where((s) => s['showInSchedule'] != false)) {
               children: [
                 Icon(Icons.settings, color: AppColors.primary),
                 SizedBox(width: 8),
-                Text('スケジュール管理', style: TextStyle(fontSize: 18)),
+                Text('スケジュール管理', style: TextStyle(fontSize: AppTextSize.titleLg)),
               ],
             ),
             content: SizedBox(
@@ -6492,7 +4830,7 @@ for (var staff in _staffList.where((s) => s['showInSchedule'] != false)) {
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
-                      color: Colors.blue.shade50,
+                      color: AppColors.infoBg,
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Column(
@@ -6504,14 +4842,14 @@ for (var staff in _staffList.where((s) => s['showInSchedule'] != false)) {
                             SizedBox(width: 8),
                             Text(
                               '週単位コピー',
-                              style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                              style: TextStyle(fontSize: AppTextSize.bodyLarge, fontWeight: FontWeight.bold),
                             ),
                           ],
                         ),
                         const SizedBox(height: 12),
                         Text(
                           '現在の週: $weekLabel',
-                          style: const TextStyle(fontSize: 14),
+                          style: const TextStyle(fontSize: AppTextSize.bodyMd),
                         ),
                         const SizedBox(height: 12),
                         SizedBox(
@@ -6533,7 +4871,7 @@ for (var staff in _staffList.where((s) => s['showInSchedule'] != false)) {
                         const SizedBox(height: 8),
                         Text(
                           '※先週のシフトとレッスンを今週にコピーします',
-                          style: TextStyle(fontSize: 12, color: context.colors.textSecondary),
+                          style: TextStyle(fontSize: AppTextSize.small, color: context.colors.textSecondary),
                         ),
                       ],
                     ),
@@ -6555,14 +4893,14 @@ for (var staff in _staffList.where((s) => s['showInSchedule'] != false)) {
                             SizedBox(width: 8),
                             Text(
                               '月単位コピー',
-                              style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                              style: TextStyle(fontSize: AppTextSize.bodyLarge, fontWeight: FontWeight.bold),
                             ),
                           ],
                         ),
                         const SizedBox(height: 12),
                         Text(
                           '現在の月: ${DateFormat('yyyy年M月', 'ja').format(_weekStart)}',
-                          style: const TextStyle(fontSize: 14),
+                          style: const TextStyle(fontSize: AppTextSize.bodyMd),
                         ),
                         const SizedBox(height: 12),
                         SizedBox(
@@ -6582,7 +4920,7 @@ for (var staff in _staffList.where((s) => s['showInSchedule'] != false)) {
                         const SizedBox(height: 8),
                         Text(
                           '※前月のシフトデータを今月にコピーします',
-                          style: TextStyle(fontSize: 11, color: context.colors.textSecondary),
+                          style: TextStyle(fontSize: AppTextSize.caption, color: context.colors.textSecondary),
                         ),
                       ],
                     ),
@@ -6592,7 +4930,7 @@ for (var staff in _staffList.where((s) => s['showInSchedule'] != false)) {
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
-                      color: Colors.green.shade50,
+                      color: AppColors.successBg,
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Column(
@@ -6600,18 +4938,18 @@ for (var staff in _staffList.where((s) => s['showInSchedule'] != false)) {
                       children: [
                         Row(
                           children: [
-                            Icon(Icons.how_to_vote, size: 18, color: Colors.green.shade700),
+                            Icon(Icons.how_to_vote, size: 18, color: AppColors.success),
                             const SizedBox(width: 8),
                             const Text(
                               'シフト希望の取り込み',
-                              style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                              style: TextStyle(fontSize: AppTextSize.bodyLarge, fontWeight: FontWeight.bold),
                             ),
                           ],
                         ),
                         const SizedBox(height: 12),
                         Text(
                           '対象月: ${DateFormat('yyyy年M月', 'ja').format(_weekStart)}',
-                          style: const TextStyle(fontSize: 14),
+                          style: const TextStyle(fontSize: AppTextSize.bodyMd),
                         ),
                         const SizedBox(height: 6),
                         FutureBuilder<DocumentSnapshot>(
@@ -6622,7 +4960,7 @@ for (var staff in _staffList.where((s) => s['showInSchedule'] != false)) {
                           builder: (context, snapshot) {
                             if (snapshot.connectionState == ConnectionState.waiting) {
                               return Text('提出状況を確認中...',
-                                  style: TextStyle(fontSize: 12, color: context.colors.textSecondary));
+                                  style: TextStyle(fontSize: AppTextSize.small, color: context.colors.textSecondary));
                             }
                             int count = 0;
                             if (snapshot.hasData && snapshot.data!.exists) {
@@ -6635,8 +4973,8 @@ for (var staff in _staffList.where((s) => s['showInSchedule'] != false)) {
                             return Text(
                               '$count人が提出済み',
                               style: TextStyle(
-                                  fontSize: 12,
-                                  color: count > 0 ? Colors.green.shade800 : context.colors.textSecondary,
+                                  fontSize: AppTextSize.small,
+                                  color: count > 0 ? AppColors.successDark : context.colors.textSecondary,
                                   fontWeight: count > 0 ? FontWeight.bold : FontWeight.normal),
                             );
                           },
@@ -6659,7 +4997,7 @@ for (var staff in _staffList.where((s) => s['showInSchedule'] != false)) {
                             icon: const Icon(Icons.edit_calendar, size: 18),
                             label: const Text('シフトを決定する'),
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.green.shade700,
+                              backgroundColor: AppColors.success,
                               foregroundColor: context.colors.textOnPrimary,
                               padding: const EdgeInsets.symmetric(vertical: 10),
                             ),
@@ -6668,7 +5006,7 @@ for (var staff in _staffList.where((s) => s['showInSchedule'] != false)) {
                         const SizedBox(height: 8),
                         Text(
                           '※希望をカレンダー上で確認しながら決定し、そのまま実シフトに反映できます',
-                          style: TextStyle(fontSize: 11, color: context.colors.textSecondary),
+                          style: TextStyle(fontSize: AppTextSize.caption, color: context.colors.textSecondary),
                         ),
                       ],
                     ),
@@ -6850,9 +5188,7 @@ for (var staff in _staffList.where((s) => s['showInSchedule'] != false)) {
     } catch (e) {
       debugPrint('Error copying from previous week: $e');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('エラー: $e')),
-        );
+        AppFeedback.info(context, 'エラー: $e');
       }
     }
   }
@@ -7105,9 +5441,7 @@ for (var staff in _staffList.where((s) => s['showInSchedule'] != false)) {
     } catch (e) {
       debugPrint('Error pasting: $e');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('エラー: $e')),
-        );
+        AppFeedback.info(context, 'エラー: $e');
       }
     }
   }
@@ -7121,9 +5455,7 @@ for (var staff in _staffList.where((s) => s['showInSchedule'] != false)) {
           .get();
       if (!fromCheck.exists) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('前月のシフトデータがありません')),
-          );
+          AppFeedback.info(context, '前月のシフトデータがありません');
         }
         return;
       }
@@ -7199,9 +5531,7 @@ for (var staff in _staffList.where((s) => s['showInSchedule'] != false)) {
     } catch (e) {
       debugPrint('Error copying shifts: $e');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('シフトのコピーに失敗しました')),
-        );
+        AppFeedback.info(context, 'シフトのコピーに失敗しました');
       }
     }
   }
@@ -7264,7 +5594,7 @@ final memoCommentController = TextEditingController();
       barrierColor: Colors.black26,
       builder: (dialogContext) => StatefulBuilder(
         builder: (dialogContext, setDialogState) {
-          final currentColor = _courseColors[selectedCourse] ?? Colors.blue;
+          final currentColor = _courseColors[selectedCourse] ?? AppColors.info;
           final date = _weekStart.add(Duration(days: dayIndex));
           final studentName = selectedStudent?['name'] as String? ?? '';
 
@@ -7319,7 +5649,7 @@ final memoCommentController = TextEditingController();
                         Text(
                           '${['月', '火', '水', '木', '金', '土'][dayIndex]}曜日 ${_timeSlots[slotIndex]} に追加',
                           style: const TextStyle(
-                            fontSize: 18,
+                            fontSize: AppTextSize.titleLg,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
@@ -7335,7 +5665,7 @@ final memoCommentController = TextEditingController();
                     padding: const EdgeInsets.symmetric(horizontal: 20),
                     child: Text(
                       DateFormat('M月d日 (E)', 'ja').format(date),
-                      style: TextStyle(fontSize: 14, color: context.colors.textSecondary),
+                      style: TextStyle(fontSize: AppTextSize.bodyMd, color: context.colors.textSecondary),
                     ),
                   ),
                   const SizedBox(height: 16),
@@ -7370,7 +5700,7 @@ final memoCommentController = TextEditingController();
                 color: inputMode == 'student' ? AppColors.primary : context.colors.textSecondary),
               const SizedBox(width: 4),
               Text('生徒', style: TextStyle(
-                fontSize: 12,
+                fontSize: AppTextSize.small,
                 fontWeight: inputMode == 'student' ? FontWeight.bold : FontWeight.normal,
                 color: inputMode == 'student' ? AppColors.primary : context.colors.textSecondary,
               )),
@@ -7399,7 +5729,7 @@ final memoCommentController = TextEditingController();
                 color: inputMode == 'custom' ? AppColors.primary : context.colors.textSecondary),
               const SizedBox(width: 4),
               Text('イベント', style: TextStyle(
-                fontSize: 12,
+                fontSize: AppTextSize.small,
                 fontWeight: inputMode == 'custom' ? FontWeight.bold : FontWeight.normal,
                 color: inputMode == 'custom' ? AppColors.primary : context.colors.textSecondary,
               )),
@@ -7431,7 +5761,7 @@ final memoCommentController = TextEditingController();
 ),
               const SizedBox(width: 4),
               Text('メモ', style: TextStyle(
-                fontSize: 12,
+                fontSize: AppTextSize.small,
                 fontWeight: inputMode == 'memo' ? FontWeight.bold : FontWeight.normal,
                 color: inputMode == 'memo' ? AppColors.primary : context.colors.textSecondary,
               )),
@@ -7477,7 +5807,7 @@ final memoCommentController = TextEditingController();
                                             ? '生徒を選択'
                                             : selectedStudent!['name'] as String,
                                         style: TextStyle(
-                                          fontSize: 15,
+                                          fontSize: AppTextSize.bodyLarge,
                                           color: selectedStudent == null ? context.colors.textSecondary : context.colors.textPrimary,
                                         ),
                                       ),
@@ -7569,7 +5899,7 @@ if (inputMode != 'memo') ...[
                                               ? '全員'
                                               : selectedTeachers.join('、'),
                                       style: TextStyle(
-                                        fontSize: 15,
+                                        fontSize: AppTextSize.bodyLarge,
                                         color: selectedTeachers.isEmpty ? context.colors.textSecondary : context.colors.textPrimary,
                                       ),
                                     ),
@@ -7608,7 +5938,7 @@ if (inputMode != 'memo') ...[
                                     child: Text(
                                       selectedRoom.isEmpty ? '部屋を選択' : selectedRoom,
                                       style: TextStyle(
-                                        fontSize: 15,
+                                        fontSize: AppTextSize.bodyLarge,
                                         color: selectedRoom.isEmpty ? context.colors.textSecondary : context.colors.textPrimary,
                                       ),
                                     ),
@@ -7651,7 +5981,7 @@ if (inputMode != 'memo') ...[
                                     ),
                                   ),
                                   const SizedBox(width: 8),
-                                  Expanded(child: Text(selectedCourse, style: const TextStyle(fontSize: 15))),
+                                  Expanded(child: Text(selectedCourse, style: const TextStyle(fontSize: AppTextSize.bodyLarge))),
                                   Icon(Icons.arrow_drop_down, color: context.colors.textSecondary),
                                 ],
                               ),
@@ -7670,7 +6000,7 @@ if (inputMode != 'memo') ...[
                               children: [
                                 const Icon(Icons.task_alt, size: 18, color: AppColors.accent),
                                 const SizedBox(width: 8),
-                                const Text('タスク', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                                const Text('タスク', style: TextStyle(fontWeight: FontWeight.bold, fontSize: AppTextSize.bodyMd)),
                               ],
                             ),
                             const SizedBox(height: 12),
@@ -7694,11 +6024,11 @@ if (inputMode != 'memo') ...[
                                         child: Column(
                                           crossAxisAlignment: CrossAxisAlignment.start,
                                           children: [
-                                            Text(task['title'] ?? '', style: const TextStyle(fontSize: 13)),
+                                            Text(task['title'] ?? '', style: const TextStyle(fontSize: AppTextSize.body)),
                                             if (task['dueDate'] != null)
                                               Text(
                                                 '期限: ${DateFormat('M/d').format((task['dueDate'] as Timestamp).toDate())}',
-                                                style: TextStyle(fontSize: 11, color: context.colors.textSecondary),
+                                                style: TextStyle(fontSize: AppTextSize.caption, color: context.colors.textSecondary),
                                               ),
                                           ],
                                         ),
@@ -7711,7 +6041,7 @@ if (inputMode != 'memo') ...[
                                           });
                                         },
                                         icon: const Icon(Icons.check_circle_outline, size: 20),
-                                        color: Colors.green,
+                                        color: AppColors.success,
                                         padding: EdgeInsets.zero,
                                         constraints: const BoxConstraints(),
                                         tooltip: '完了',
@@ -7733,7 +6063,7 @@ if (inputMode != 'memo') ...[
                                       contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                                       isDense: true,
                                     ),
-                                    style: const TextStyle(fontSize: 13),
+                                    style: const TextStyle(fontSize: AppTextSize.body),
                                     onChanged: (_) => setDialogState(() {}),
                                   ),
                                 ),
@@ -7765,7 +6095,7 @@ InkWell(
           const SizedBox(width: 4),
           Text(
             DateFormat('M/d').format(newTaskDueDate!),
-            style: const TextStyle(fontSize: 12),
+            style: const TextStyle(fontSize: AppTextSize.small),
           ),
           const SizedBox(width: 4),
           GestureDetector(
@@ -7820,7 +6150,7 @@ InkWell(
                               children: [
                                 const Icon(Icons.psychology, size: 18, color: AppColors.primary),
                                 const SizedBox(width: 8),
-                                const Text('療育プラン', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                                const Text('療育プラン', style: TextStyle(fontWeight: FontWeight.bold, fontSize: AppTextSize.bodyMd)),
                               ],
                             ),
                             const SizedBox(height: 8),
@@ -7833,16 +6163,16 @@ InkWell(
                               ),
                               maxLines: 3,
                               minLines: 2,
-                              style: const TextStyle(fontSize: 13),
+                              style: const TextStyle(fontSize: AppTextSize.body),
                             ),
                             
                             const SizedBox(height: 16),
                             // 園訪問
                             Row(
                               children: [
-                                Icon(Icons.school, size: 18, color: Colors.teal.shade600),
+                                Icon(Icons.school, size: 18, color: AppColors.secondary),
                                 const SizedBox(width: 8),
-                                const Text('園訪問', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                                const Text('園訪問', style: TextStyle(fontWeight: FontWeight.bold, fontSize: AppTextSize.bodyMd)),
                               ],
                             ),
                             const SizedBox(height: 8),
@@ -7855,16 +6185,16 @@ InkWell(
                               ),
                               maxLines: 3,
                               minLines: 2,
-                              style: const TextStyle(fontSize: 13),
+                              style: const TextStyle(fontSize: AppTextSize.body),
                             ),
                             
                             const SizedBox(height: 16),
                             // 就学相談
                             Row(
                               children: [
-                                Icon(Icons.celebration, size: 18, color: Colors.indigo.shade600),
+                                Icon(Icons.celebration, size: 18, color: AppColors.secondary),
                                 const SizedBox(width: 8),
-                                const Text('就学相談', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                                const Text('就学相談', style: TextStyle(fontWeight: FontWeight.bold, fontSize: AppTextSize.bodyMd)),
                               ],
                             ),
                             const SizedBox(height: 8),
@@ -7877,16 +6207,16 @@ InkWell(
                               ),
                               maxLines: 3,
                               minLines: 2,
-                              style: const TextStyle(fontSize: 13),
+                              style: const TextStyle(fontSize: AppTextSize.body),
                             ),
                             
                             const SizedBox(height: 16),
                             // 移動希望
                             Row(
                               children: [
-                                Icon(Icons.swap_horiz, size: 18, color: Colors.purple.shade600),
+                                Icon(Icons.swap_horiz, size: 18, color: AppColors.aiAccent),
                                 const SizedBox(width: 8),
-                                const Text('移動希望', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                                const Text('移動希望', style: TextStyle(fontWeight: FontWeight.bold, fontSize: AppTextSize.bodyMd)),
                               ],
                             ),
                             const SizedBox(height: 8),
@@ -7899,7 +6229,7 @@ InkWell(
                               ),
                               maxLines: 3,
                               minLines: 2,
-                              style: const TextStyle(fontSize: 13),
+                              style: const TextStyle(fontSize: AppTextSize.body),
                             ),
                           ],
                           const SizedBox(height: 16),
@@ -8006,7 +6336,7 @@ await _loadLessonsForWeek(showLoading: false);
       : title.isEmpty
           ? (inputMode == 'student' ? '生徒を選択してください' : 'タイトルを入力してください')
           : '$titleを追加',
-  style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+  style: const TextStyle(fontSize: AppTextSize.bodyLarge, fontWeight: FontWeight.bold),
 ),
                       ),
                    ),
@@ -8065,7 +6395,7 @@ await _loadLessonsForWeek(showLoading: false);
           return AlertDialog(
             backgroundColor: context.colors.cardBg,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            title: const Text('生徒を選択', style: TextStyle(fontSize: 18)),
+            title: const Text('生徒を選択', style: TextStyle(fontSize: AppTextSize.titleLg)),
             content: SizedBox(
               width: 350,
               height: 400,
@@ -8104,7 +6434,7 @@ await _loadLessonsForWeek(showLoading: false);
                                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                                     color: context.colors.chipBg,
                                     child: Text(group, style: TextStyle(
-                                      fontSize: 13, fontWeight: FontWeight.bold, color: context.colors.textSecondary,
+                                      fontSize: AppTextSize.body, fontWeight: FontWeight.bold, color: context.colors.textSecondary,
                                     )),
                                   ),
                                   ...studentsInGroup.map((student) {
@@ -8153,7 +6483,7 @@ await _loadLessonsForWeek(showLoading: false);
           return AlertDialog(
             backgroundColor: context.colors.cardBg,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            title: const Text('講師を選択', style: TextStyle(fontSize: 18)),
+            title: const Text('講師を選択', style: TextStyle(fontSize: AppTextSize.titleLg)),
             content: SizedBox(
               width: 300,
               child: SingleChildScrollView(
@@ -8238,7 +6568,7 @@ await _loadLessonsForWeek(showLoading: false);
         return AlertDialog(
           backgroundColor: context.colors.cardBg,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          title: const Text('部屋を選択', style: TextStyle(fontSize: 18)),
+          title: const Text('部屋を選択', style: TextStyle(fontSize: AppTextSize.titleLg)),
           content: SizedBox(
             width: 300,
             child: SingleChildScrollView(
@@ -8371,7 +6701,7 @@ await _loadLessonsForWeek(showLoading: false);
             });
           }
           
-          final currentColor = _courseColors[selectedCourse] ?? Colors.blue;
+          final currentColor = _courseColors[selectedCourse] ?? AppColors.info;
           
           // セル位置が指定されている場合はPositionedで配置
           Widget dialogContent = Material(
@@ -8430,7 +6760,7 @@ await _loadLessonsForWeek(showLoading: false);
                                   controller: titleController,
                                   autofocus: true,
                                   style: TextStyle(
-                                    fontSize: 22,
+                                    fontSize: AppTextSize.display,
                                     fontWeight: FontWeight.w400,
                                     color: context.colors.textPrimary,
                                   ),
@@ -8462,7 +6792,7 @@ await _loadLessonsForWeek(showLoading: false);
                                           child: Text(
                                             titleController.text.isEmpty ? 'イベント名を入力' : titleController.text,
                                             style: TextStyle(
-                                              fontSize: 22,
+                                              fontSize: AppTextSize.display,
                                               fontWeight: FontWeight.w400,
                                               color: titleController.text.isEmpty ? context.colors.textSecondary : context.colors.textPrimary,
                                             ),
@@ -8493,11 +6823,11 @@ await _loadLessonsForWeek(showLoading: false);
                               child: Text(
                                 studentName,
                                 style: const TextStyle(
-                                  fontSize: 22,
+                                  fontSize: AppTextSize.display,
                                   fontWeight: FontWeight.w400,
-                                  color: Colors.blue,
+                                  color: AppColors.info,
                                   decoration: TextDecoration.underline,
-                                  decorationColor: Colors.blue,
+                                  decorationColor: AppColors.info,
                                 ),
                               ),
                             ),
@@ -8521,7 +6851,7 @@ await _loadLessonsForWeek(showLoading: false);
                                   studentName: studentName,
                                 ),
                                 style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.teal,
+                                  backgroundColor: AppColors.secondary,
                                   foregroundColor: context.colors.textOnPrimary,
                                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -8563,7 +6893,7 @@ await _loadLessonsForWeek(showLoading: false);
                               },
                               child: const Text('AIに相談'),
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.purple.shade600,
+                                backgroundColor: AppColors.aiAccent,
                                 foregroundColor: context.colors.textOnPrimary,
                                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -8579,7 +6909,7 @@ await _loadLessonsForWeek(showLoading: false);
                     padding: const EdgeInsets.symmetric(horizontal: 20),
                     child: Text(
                       '${DateFormat('M月d日 (E)', 'ja').format(date)}　${_timeSlots[slotIndex]}',
-                      style: TextStyle(fontSize: 14, color: context.colors.textSecondary),
+                      style: TextStyle(fontSize: AppTextSize.bodyMd, color: context.colors.textSecondary),
                     ),
                   ),
                   const SizedBox(height: 16),
@@ -8616,7 +6946,7 @@ await _loadLessonsForWeek(showLoading: false);
                                               ? '全員'
                                               : selectedTeachers.join('、'),
                                       style: TextStyle(
-                                        fontSize: 15,
+                                        fontSize: AppTextSize.bodyLarge,
                                         color: selectedTeachers.isEmpty ? context.colors.textSecondary : context.colors.textPrimary,
                                       ),
                                     ),
@@ -8655,7 +6985,7 @@ await _loadLessonsForWeek(showLoading: false);
                                     child: Text(
                                       selectedRoom.isEmpty ? '部屋を選択' : selectedRoom,
                                       style: TextStyle(
-                                        fontSize: 15,
+                                        fontSize: AppTextSize.bodyLarge,
                                         color: selectedRoom.isEmpty ? context.colors.textSecondary : context.colors.textPrimary,
                                       ),
                                     ),
@@ -8698,7 +7028,7 @@ await _loadLessonsForWeek(showLoading: false);
                                     ),
                                   ),
                                   const SizedBox(width: 8),
-                                  Expanded(child: Text(selectedCourse, style: const TextStyle(fontSize: 15))),
+                                  Expanded(child: Text(selectedCourse, style: const TextStyle(fontSize: AppTextSize.bodyLarge))),
                                   Icon(Icons.arrow_drop_down, color: context.colors.textSecondary),
                                 ],
                               ),
@@ -8716,7 +7046,7 @@ await _loadLessonsForWeek(showLoading: false);
                               children: [
                                 const Icon(Icons.task_alt, size: 18, color: AppColors.accent),
                                 const SizedBox(width: 8),
-                                const Text('タスク', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                                const Text('タスク', style: TextStyle(fontWeight: FontWeight.bold, fontSize: AppTextSize.bodyMd)),
                               ],
                             ),
                             const SizedBox(height: 12),
@@ -8740,11 +7070,11 @@ await _loadLessonsForWeek(showLoading: false);
                                         child: Column(
                                           crossAxisAlignment: CrossAxisAlignment.start,
                                           children: [
-                                            Text(task['title'] ?? '', style: const TextStyle(fontSize: 13)),
+                                            Text(task['title'] ?? '', style: const TextStyle(fontSize: AppTextSize.body)),
                                             if (task['dueDate'] != null)
                                               Text(
                                                 '期限: ${DateFormat('M/d').format((task['dueDate'] as Timestamp).toDate())}',
-                                                style: TextStyle(fontSize: 11, color: context.colors.textSecondary),
+                                                style: TextStyle(fontSize: AppTextSize.caption, color: context.colors.textSecondary),
                                               ),
                                           ],
                                         ),
@@ -8757,7 +7087,7 @@ await _loadLessonsForWeek(showLoading: false);
                                           });
                                         },
                                         icon: const Icon(Icons.check_circle_outline, size: 20),
-                                        color: Colors.green,
+                                        color: AppColors.success,
                                         padding: EdgeInsets.zero,
                                         constraints: const BoxConstraints(),
                                         tooltip: '完了',
@@ -8779,7 +7109,7 @@ await _loadLessonsForWeek(showLoading: false);
                                       contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                                       isDense: true,
                                     ),
-                                    style: const TextStyle(fontSize: 13),
+                                    style: const TextStyle(fontSize: AppTextSize.body),
                                     onChanged: (_) => setDialogState(() {}),
                                   ),
                                 ),
@@ -8811,7 +7141,7 @@ InkWell(
           const SizedBox(width: 4),
           Text(
             DateFormat('M/d').format(newTaskDueDate!),
-            style: const TextStyle(fontSize: 12),
+            style: const TextStyle(fontSize: AppTextSize.small),
           ),
           const SizedBox(width: 4),
           GestureDetector(
@@ -8866,7 +7196,7 @@ InkWell(
                               children: [
                                 const Icon(Icons.psychology, size: 18, color: AppColors.primary),
                                 const SizedBox(width: 8),
-                                const Text('療育プラン', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                                const Text('療育プラン', style: TextStyle(fontWeight: FontWeight.bold, fontSize: AppTextSize.bodyMd)),
                               ],
                             ),
                             const SizedBox(height: 8),
@@ -8879,16 +7209,16 @@ InkWell(
                               ),
                               maxLines: 3,
                               minLines: 2,
-                              style: const TextStyle(fontSize: 13),
+                              style: const TextStyle(fontSize: AppTextSize.body),
                             ),
                             
                             const SizedBox(height: 16),
                             // 園訪問
                             Row(
                               children: [
-                                Icon(Icons.school, size: 18, color: Colors.teal.shade600),
+                                Icon(Icons.school, size: 18, color: AppColors.secondary),
                                 const SizedBox(width: 8),
-                                const Text('園訪問', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                                const Text('園訪問', style: TextStyle(fontWeight: FontWeight.bold, fontSize: AppTextSize.bodyMd)),
                               ],
                             ),
                             const SizedBox(height: 8),
@@ -8901,16 +7231,16 @@ InkWell(
                               ),
                               maxLines: 3,
                               minLines: 2,
-                              style: const TextStyle(fontSize: 13),
+                              style: const TextStyle(fontSize: AppTextSize.body),
                             ),
                             
                             const SizedBox(height: 16),
                             // 就学相談
                             Row(
                               children: [
-                                Icon(Icons.celebration, size: 18, color: Colors.indigo.shade600),
+                                Icon(Icons.celebration, size: 18, color: AppColors.secondary),
                                 const SizedBox(width: 8),
-                                const Text('就学相談', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                                const Text('就学相談', style: TextStyle(fontWeight: FontWeight.bold, fontSize: AppTextSize.bodyMd)),
                               ],
                             ),
                             const SizedBox(height: 8),
@@ -8923,16 +7253,16 @@ InkWell(
                               ),
                               maxLines: 3,
                               minLines: 2,
-                              style: const TextStyle(fontSize: 13),
+                              style: const TextStyle(fontSize: AppTextSize.body),
                             ),
                             
                             const SizedBox(height: 16),
                             // 移動希望
                             Row(
                               children: [
-                                Icon(Icons.swap_horiz, size: 18, color: Colors.purple.shade600),
+                                Icon(Icons.swap_horiz, size: 18, color: AppColors.aiAccent),
                                 const SizedBox(width: 8),
-                                const Text('移動希望', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                                const Text('移動希望', style: TextStyle(fontWeight: FontWeight.bold, fontSize: AppTextSize.bodyMd)),
                               ],
                             ),
                             const SizedBox(height: 8),
@@ -8945,7 +7275,7 @@ InkWell(
                               ),
                               maxLines: 3,
                               minLines: 2,
-                              style: const TextStyle(fontSize: 13),
+                              style: const TextStyle(fontSize: AppTextSize.body),
                             ),
                           ],
                         ],
@@ -9100,7 +7430,7 @@ await _loadLessonsForWeek(showLoading: false);
           return AlertDialog(
             backgroundColor: context.colors.cardBg,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            title: const Text('内容を選択', style: TextStyle(fontSize: 18)),
+            title: const Text('内容を選択', style: TextStyle(fontSize: AppTextSize.titleLg)),
             content: SizedBox(
               width: 380,
               child: Column(
@@ -9152,7 +7482,7 @@ await _loadLessonsForWeek(showLoading: false);
                   ),
                   // 通常コース
                   ...mainCourses.map((course) {
-                    final color = _courseColors[course] ?? Colors.blue;
+                    final color = _courseColors[course] ?? AppColors.info;
                     return ListTile(
                       leading: GestureDetector(
                         onTap: () {
@@ -9220,12 +7550,12 @@ await _loadLessonsForWeek(showLoading: false);
           padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
           decoration: BoxDecoration(
             color: isCurrent
-                ? Colors.red.withValues(alpha: 0.10)
+                ? AppColors.error.withValues(alpha: 0.10)
                 : context.colors.cardBg,
             borderRadius: BorderRadius.circular(10),
             border: Border.all(
               color: isCurrent
-                  ? Colors.red.shade400
+                  ? AppColors.errorBorder
                   : context.colors.borderMedium,
               width: isCurrent ? 1.4 : 0.6,
             ),
@@ -9242,7 +7572,7 @@ await _loadLessonsForWeek(showLoading: false);
                     width: 32,
                     height: 32,
                     decoration: BoxDecoration(
-                      color: Colors.red.shade400,
+                      color: AppColors.errorBorder,
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: const Icon(Icons.event_busy,
@@ -9269,7 +7599,7 @@ await _loadLessonsForWeek(showLoading: false);
                 title,
                 textAlign: TextAlign.center,
                 style: TextStyle(
-                  fontSize: 12,
+                  fontSize: AppTextSize.small,
                   fontWeight: FontWeight.w700,
                   color: context.colors.textPrimary,
                 ),
@@ -9341,65 +7671,26 @@ await _loadLessonsForWeek(showLoading: false);
 
   Future<bool> _confirmHugSkipAbsence(String studentName, DateTime date) async {
     final df = DateFormat('yyyy/MM/dd (E)', 'ja');
-    final result = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: context.colors.cardBg,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        title: const Text('欠席（HUG登録なし）として登録', style: TextStyle(fontSize: 16)),
-        content: Text(
+    return AppFeedback.confirm(
+      context,
+      title: '欠席（HUG登録なし）として登録',
+      message:
           '$studentName さんを ${df.format(date)} の欠席として登録します。\n\n'
           '※ HUGには登録されません。HUG側は別途手動で対応してください。',
-          style: const TextStyle(fontSize: 13),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: Text('キャンセル', style: TextStyle(color: context.colors.textSecondary)),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red.shade400,
-              foregroundColor: Colors.white,
-            ),
-            child: const Text('登録'),
-          ),
-        ],
-      ),
+      confirmLabel: '登録',
+      destructive: true,
     );
-    return result == true;
   }
 
   Future<bool> _confirmNoAddAbsence(String studentName, DateTime date) async {
     final df = DateFormat('yyyy/MM/dd (E)', 'ja');
-    final result = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: context.colors.cardBg,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        title: const Text('欠席（加算なし）として登録', style: TextStyle(fontSize: 16)),
-        content: Text(
-          '$studentName さんを ${df.format(date)} の欠席（欠席時対応加算を取らない）としてHUGに登録します。\nよろしいですか？',
-          style: const TextStyle(fontSize: 13),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: Text('キャンセル', style: TextStyle(color: context.colors.textSecondary)),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red.shade400,
-              foregroundColor: Colors.white,
-            ),
-            child: const Text('保存'),
-          ),
-        ],
-      ),
+    return AppFeedback.confirm(
+      context,
+      title: '欠席（加算なし）として登録',
+      message: '$studentName さんを ${df.format(date)} の欠席（欠席時対応加算を取らない）としてHUGに登録します。\nよろしいですか？',
+      confirmLabel: '保存',
+      destructive: true,
     );
-    return result == true;
   }
 
   /// saved_ai_contents にドキュメントを作成→syncToHug Cloud Function を呼ぶ
@@ -9457,7 +7748,7 @@ await _loadLessonsForWeek(showLoading: false);
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text('$studentName さんの$categoryをHUGに送信しました'),
-              backgroundColor: Colors.green,
+              backgroundColor: AppColors.success,
               duration: const Duration(seconds: 2),
             ),
           );
@@ -9495,7 +7786,7 @@ await _loadLessonsForWeek(showLoading: false);
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text('HUG送信に失敗しました: $error'),
-        backgroundColor: Colors.red,
+        backgroundColor: AppColors.error,
         duration: const Duration(seconds: 3),
       ),
     );
@@ -9524,17 +7815,17 @@ await _loadLessonsForWeek(showLoading: false);
     final c = context.colors;
     return Container(
       width: double.infinity,
-      color: Colors.red.withValues(alpha: 0.10),
+      color: AppColors.error.withValues(alpha: 0.10),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Icon(Icons.warning_amber_rounded, size: 16, color: Colors.red.shade400),
+              Icon(Icons.warning_amber_rounded, size: 16, color: AppColors.errorBorder),
               const SizedBox(width: 8),
               Text('HUG送信失敗 (${_failedAbsenceSends.length}件)',
-                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.red.shade400)),
+                  style: TextStyle(fontSize: AppTextSize.small, fontWeight: FontWeight.w600, color: AppColors.errorBorder)),
             ],
           ),
           ..._failedAbsenceSends.asMap().entries.map((entry) {
@@ -9549,7 +7840,7 @@ await _loadLessonsForWeek(showLoading: false);
                   Expanded(
                     child: Text(
                       '$category / $student',
-                      style: TextStyle(fontSize: 11, color: c.textSecondary),
+                      style: TextStyle(fontSize: AppTextSize.caption, color: c.textSecondary),
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
@@ -9560,7 +7851,7 @@ await _loadLessonsForWeek(showLoading: false);
                       minimumSize: Size.zero,
                       tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     ),
-                    child: const Text('再送', style: TextStyle(fontSize: 11)),
+                    child: const Text('再送', style: TextStyle(fontSize: AppTextSize.caption)),
                   ),
                   TextButton(
                     onPressed: () => _discardFailedAbsence(i),
@@ -9570,7 +7861,7 @@ await _loadLessonsForWeek(showLoading: false);
                       tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                       foregroundColor: c.textTertiary,
                     ),
-                    child: const Text('破棄', style: TextStyle(fontSize: 11)),
+                    child: const Text('破棄', style: TextStyle(fontSize: AppTextSize.caption)),
                   ),
                 ],
               ),
@@ -9588,7 +7879,7 @@ void _showColorPickerDialog(String course, Color currentColor, Function(Color) o
     builder: (dialogContext) => AlertDialog(
       backgroundColor: context.colors.cardBg,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      title: Text('$courseの色を選択', style: const TextStyle(fontSize: 16)),
+      title: Text('$courseの色を選択', style: const TextStyle(fontSize: AppTextSize.titleSm)),
       content: SizedBox(
         width: 300,
         child: Wrap(
@@ -9686,7 +7977,7 @@ void _showColorPickerDialog(String course, Color currentColor, Function(Color) o
                     children: [
                       const Icon(Icons.person, color: AppColors.primary, size: 20),
                       const SizedBox(width: 8),
-                      const Text('講師を変更', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                      const Text('講師を変更', style: TextStyle(fontSize: AppTextSize.titleSm, fontWeight: FontWeight.bold)),
                       const Spacer(),
                       IconButton(
                         icon: const Icon(Icons.close, size: 20),
@@ -9702,7 +7993,7 @@ void _showColorPickerDialog(String course, Color currentColor, Function(Color) o
                     final name = staff['name'] as String;
                     final isSelected = selectedTeachers.contains(name);
                     return CheckboxListTile(
-                      title: Text(name, style: const TextStyle(fontSize: 14)),
+                      title: Text(name, style: const TextStyle(fontSize: AppTextSize.bodyMd)),
                       value: isSelected,
                       dense: true,
                       visualDensity: VisualDensity.compact,
@@ -9723,7 +8014,7 @@ void _showColorPickerDialog(String course, Color currentColor, Function(Color) o
                   const Divider(height: 16),
                   // 「全員」オプション
                   CheckboxListTile(
-                    title: const Text('全員', style: TextStyle(fontSize: 14)),
+                    title: const Text('全員', style: TextStyle(fontSize: AppTextSize.bodyMd)),
                     value: isAllSelected,
                     dense: true,
                     visualDensity: VisualDensity.compact,
@@ -9863,7 +8154,7 @@ void _showColorPickerDialog(String course, Color currentColor, Function(Color) o
                   children: [
                     const Icon(Icons.meeting_room, color: AppColors.primary, size: 20),
                     const SizedBox(width: 8),
-                    const Text('部屋を変更', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                    const Text('部屋を変更', style: TextStyle(fontSize: AppTextSize.titleSm, fontWeight: FontWeight.bold)),
                     const Spacer(),
                     IconButton(
                       icon: const Icon(Icons.close, size: 20),
@@ -9880,7 +8171,7 @@ void _showColorPickerDialog(String course, Color currentColor, Function(Color) o
                     title: Text(room, style: TextStyle(
                       fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
                       color: isSelected ? AppColors.primary : null,
-                      fontSize: 14,
+                      fontSize: AppTextSize.bodyMd,
                     )),
                     leading: Icon(
                       isSelected ? Icons.check_circle : Icons.circle_outlined,
@@ -10099,8 +8390,8 @@ void _showColorPickerDialog(String course, Color currentColor, Function(Color) o
                       days[index],
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
-                        fontSize: 13,
-                        color: isSaturday ? Colors.blue : context.colors.textPrimary,
+                        fontSize: AppTextSize.body,
+                        color: isSaturday ? AppColors.info : context.colors.textPrimary,
                       ),
                     ),
                   ),
@@ -10227,7 +8518,7 @@ void _showColorPickerDialog(String course, Color currentColor, Function(Color) o
                       Text(
                         DateFormat('M月d日 (E)', 'ja').format(date),
                         style: const TextStyle(
-                          fontSize: 16,
+                          fontSize: AppTextSize.titleSm,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
@@ -10246,7 +8537,7 @@ void _showColorPickerDialog(String course, Color currentColor, Function(Color) o
                             Text(
                               slotLabel,
                               style: TextStyle(
-                                fontSize: 11,
+                                fontSize: AppTextSize.caption,
                                 fontWeight: FontWeight.bold,
                                 color: context.colors.textSecondary,
                               ),
@@ -10254,7 +8545,7 @@ void _showColorPickerDialog(String course, Color currentColor, Function(Color) o
                             const SizedBox(height: 4),
                             ...slotLessons.map((lesson) {
                               final course = lesson['course'] as String? ?? '通常';
-                              final color = _courseColors[course] ?? Colors.blue;
+                              final color = _courseColors[course] ?? AppColors.info;
                               final teachers = lesson['teachers'] as List<dynamic>? ?? [];
                               final room = lesson['room'] as String? ?? '';
                               final teacherNames = teachers.isNotEmpty
@@ -10281,7 +8572,7 @@ void _showColorPickerDialog(String course, Color currentColor, Function(Color) o
                                       child: Text(
                                         lesson['studentName'] ?? '',
                                         style: const TextStyle(
-                                          fontSize: 13,
+                                          fontSize: AppTextSize.body,
                                           fontWeight: FontWeight.w500,
                                         ),
                                         overflow: TextOverflow.ellipsis,
@@ -10292,7 +8583,7 @@ void _showColorPickerDialog(String course, Color currentColor, Function(Color) o
                                       Text(
                                         teacherNames,
                                         style: TextStyle(
-                                          fontSize: 11,
+                                          fontSize: AppTextSize.caption,
                                           color: context.colors.textSecondary,
                                         ),
                                       ),
@@ -10302,7 +8593,7 @@ void _showColorPickerDialog(String course, Color currentColor, Function(Color) o
                                       Text(
                                         room,
                                         style: TextStyle(
-                                          fontSize: 11,
+                                          fontSize: AppTextSize.caption,
                                           color: context.colors.textTertiary,
                                         ),
                                       ),
@@ -10384,11 +8675,11 @@ void _showColorPickerDialog(String course, Color currentColor, Function(Color) o
                     child: Text(
                       '$dayNumber',
                       style: TextStyle(
-                        fontSize: 13,
+                        fontSize: AppTextSize.body,
                         fontWeight: isToday ? FontWeight.bold : FontWeight.normal,
                         color: isToday 
                             ? Colors.white 
-                            : (isSaturday ? Colors.blue : context.colors.textPrimary),
+                            : (isSaturday ? AppColors.info : context.colors.textPrimary),
                       ),
                     ),
                   ),
@@ -10416,7 +8707,7 @@ void _showColorPickerDialog(String course, Color currentColor, Function(Color) o
                                   child: Text(
                                     timeLabels[slotIndex],
                                     style: TextStyle(
-                                      fontSize: 12,
+                                      fontSize: AppTextSize.small,
                                       color: context.colors.textTertiary,
                                     ),
                                   ),
@@ -10430,7 +8721,7 @@ Expanded(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: slotLessons.map((lesson) {
               final course = lesson['course'] as String? ?? '通常';
-              final color = _courseColors[course] ?? Colors.blue;
+              final color = _courseColors[course] ?? AppColors.info;
               final studentName = lesson['studentName'] as String? ?? '';
               final nameParts = studentName.split(' ');
               final firstName = nameParts.length > 1 ? nameParts[1] : studentName;
@@ -10464,13 +8755,13 @@ Expanded(
                           children: [
                             TextSpan(
                               text: firstName,
-                              style: const TextStyle(fontSize: 11),
+                              style: const TextStyle(fontSize: AppTextSize.caption),
                             ),
                             if (teacherInitials.isNotEmpty)
                               TextSpan(
                                 text: ' $teacherInitials',
                                 style: TextStyle(
-                                  fontSize: 11,
+                                  fontSize: AppTextSize.caption,
                                   color: context.colors.textTertiary,
                                 ),
                               ),
@@ -10515,139 +8806,6 @@ class PlusScheduleScreen extends StatelessWidget {
       backgroundColor: context.colors.cardBg,
       body: PlusScheduleContent(
         onBack: () => Navigator.pop(context),
-      ),
-    );
-  }
-}
-
-
-/// 右上三角マーク用のカスタムペインター
-class _NoteTrianglePainter extends CustomPainter {
-  final Color color;
-  
-  _NoteTrianglePainter({required this.color});
-  
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = color
-      ..style = PaintingStyle.fill;
-    
-    final path = Path()
-      ..moveTo(0, 0)
-      ..lineTo(size.width, 0)
-      ..lineTo(size.width, size.height)
-      ..close();
-    
-    canvas.drawPath(path, paint);
-  }
-  
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
-}
-
-
-/// ホバー時に背景色をハイライトするコンテナ
-class _HoverContainer extends StatefulWidget {
-  final Widget child;
-  final VoidCallback? onEnter;
-  final VoidCallback? onExit;
-  final VoidCallback? onTap;
-
-  const _HoverContainer({
-    super.key,
-    required this.child,
-    this.onEnter,
-    this.onExit,
-    this.onTap,
-  });
-
-  @override
-  State<_HoverContainer> createState() => _HoverContainerState();
-}
-
-class _HoverContainerState extends State<_HoverContainer> {
-  @override
-  Widget build(BuildContext context) {
-    return MouseRegion(
-      onEnter: (_) => widget.onEnter?.call(),
-      onExit: (_) => widget.onExit?.call(),
-      child: Listener(
-        behavior: HitTestBehavior.opaque,
-        onPointerDown: (_) {
-          // フラグを設定して、セルレベルのGestureDetectorの追加ダイアログを抑制
-          final state = context.findAncestorStateOfType<_PlusScheduleContentState>();
-          if (state != null) {
-            state._lessonItemTapped = true;
-          }
-        },
-        onPointerUp: (_) {
-          // 講師名・教室名がタップされた場合は生徒編集ダイアログを開かない
-          if (_quickEditTappedGlobal) {
-            _quickEditTappedGlobal = false;
-            return;
-          }
-          widget.onTap?.call();
-        },
-        child: widget.child,
-      ),
-    );
-  }
-}
-
-class _TaskBadge extends StatefulWidget {
-  final int taskCount;
-  final bool isToday;
-
-  const _TaskBadge({
-    required this.taskCount,
-    required this.isToday,
-  });
-
-  @override
-  State<_TaskBadge> createState() => _TaskBadgeState();
-}
-
-class _TaskBadgeState extends State<_TaskBadge> {
-  bool _isHovered = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final baseColor = widget.isToday ? AppColors.primary : const Color(0xFF78909C);
-    final bgColor = _isHovered
-        ? baseColor.withOpacity(0.2)
-        : baseColor.withOpacity(0.12);
-
-    return MouseRegion(
-      cursor: SystemMouseCursors.click,
-      onEnter: (_) => setState(() => _isHovered = true),
-      onExit: (_) => setState(() => _isHovered = false),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-        decoration: BoxDecoration(
-          color: bgColor,
-          borderRadius: BorderRadius.circular(7),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.check_circle_outline,
-              size: 12,
-              color: baseColor,
-            ),
-            const SizedBox(width: 2),
-            Text(
-              '${widget.taskCount}',
-              style: TextStyle(
-                color: baseColor,
-                fontSize: 11,
-                fontWeight: FontWeight.w700,
-                height: 1,
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }

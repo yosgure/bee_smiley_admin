@@ -219,6 +219,18 @@ class _ParentMainScreenState extends State<ParentMainScreen> {
 
   @override
   Widget build(BuildContext context) {
+    return Theme(
+      // 保護者向けテーマを ParentMainScreen 配下のサブツリーだけに適用する。
+      // 本文 13→15、見出しも 1 段アップサイズで密度を下げ、タブレット閲覧でも
+      // 読みやすくする。文体は子画面側で「督促」等の業務用語を保護者向けに置換する運用。
+      data: Theme.of(context).brightness == Brightness.dark
+          ? getParentDarkTheme()
+          : getParentTheme(),
+      child: _buildScaffold(context),
+    );
+  }
+
+  Widget _buildScaffold(BuildContext context) {
     if (_isLoading) {
       return Scaffold(
         backgroundColor: context.colors.scaffoldBg,

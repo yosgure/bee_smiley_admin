@@ -86,7 +86,7 @@ class _ParentSettingsScreenState extends State<ParentSettingsScreen> {
       child: Center(
         child: Text(
           title,
-          style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
+          style: const TextStyle(fontSize: AppTextSize.title, fontWeight: FontWeight.w600),
         ),
       ),
     );
@@ -96,7 +96,7 @@ class _ParentSettingsScreenState extends State<ParentSettingsScreen> {
     return Text(
       title,
       style: TextStyle(
-        fontSize: 13,
+        fontSize: AppTextSize.body,
         fontWeight: FontWeight.bold,
         color: context.colors.textSecondary,
       ),
@@ -179,7 +179,7 @@ class _ParentSettingsScreenState extends State<ParentSettingsScreen> {
                       children: [
                         Text(
                           _currentChildName,
-                          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                          style: const TextStyle(fontSize: AppTextSize.titleLg, fontWeight: FontWeight.bold),
                         ),
                         const SizedBox(height: 4),
                         Text(
@@ -212,12 +212,12 @@ class _ParentSettingsScreenState extends State<ParentSettingsScreen> {
           children: [
             Icon(
               context.isDark ? Icons.dark_mode : Icons.light_mode,
-              color: Colors.deepPurple,
+              color: AppColors.aiAccent,
               size: 22,
             ),
             const SizedBox(width: 12),
             Expanded(
-              child: Text('テーマ', style: const TextStyle(fontSize: 15)),
+              child: Text('テーマ', style: const TextStyle(fontSize: AppTextSize.bodyLarge)),
             ),
             SegmentedButton<ThemeMode>(
               segments: const [
@@ -246,11 +246,11 @@ class _ParentSettingsScreenState extends State<ParentSettingsScreen> {
       width: double.infinity,
       child: OutlinedButton.icon(
         onPressed: _showLogoutDialog,
-        icon: const Icon(Icons.logout, color: Colors.red),
-        label: const Text('ログアウト', style: TextStyle(color: Colors.red)),
+        icon: const Icon(Icons.logout, color: AppColors.error),
+        label: const Text('ログアウト', style: TextStyle(color: AppColors.error)),
         style: OutlinedButton.styleFrom(
           padding: const EdgeInsets.symmetric(vertical: 14),
-          side: const BorderSide(color: Colors.red),
+          side: const BorderSide(color: AppColors.error),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
           ),
@@ -276,7 +276,7 @@ class _ParentSettingsScreenState extends State<ParentSettingsScreen> {
               await FirebaseAuth.instance.signOut();
               // AuthCheckWrapperが自動でログイン画面に戻すので、何もしなくてOK
             },
-            child: const Text('ログアウト', style: TextStyle(color: Colors.red)),
+            child: const Text('ログアウト', style: TextStyle(color: AppColors.error)),
           ),
         ],
       ),

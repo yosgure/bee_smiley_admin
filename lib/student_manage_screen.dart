@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'app_theme.dart';
+import 'widgets/app_feedback.dart';
 import 'classroom_utils.dart';
 
 class StudentManageScreen extends StatefulWidget {
@@ -111,7 +112,7 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
             width: 4,
             height: 18,
             decoration: BoxDecoration(
-              color: Colors.blue,
+              color: AppColors.info,
               borderRadius: BorderRadius.circular(2),
             ),
           ),
@@ -119,7 +120,7 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
           Text(
             '$headerText行',
             style: TextStyle(
-              fontSize: 18,
+              fontSize: AppTextSize.titleLg,
               fontWeight: FontWeight.bold,
               color: context.colors.textPrimary,
             ),
@@ -184,7 +185,7 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
                       ),
                       focusedBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(8),
-                        borderSide: const BorderSide(color: Colors.blue),
+                        borderSide: const BorderSide(color: AppColors.info),
                       ),
                       filled: true,
                       fillColor: context.colors.tagBg,
@@ -369,8 +370,8 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
                           }
                         },
                         leading: CircleAvatar(
-                          backgroundColor: Colors.blue.shade100,
-                          child: const Icon(Icons.family_restroom, color: Colors.blue),
+                          backgroundColor: AppColors.infoBg,
+                          child: const Icon(Icons.family_restroom, color: AppColors.info),
                         ),
                         title: Row(
                           children: [
@@ -384,14 +385,14 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
                               Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                 decoration: BoxDecoration(
-                                  color: isInitialPassword ? AppColors.accent.shade100 : Colors.green.shade100,
+                                  color: isInitialPassword ? AppColors.accent.shade100 : AppColors.successBg,
                                   borderRadius: BorderRadius.circular(4),
                                 ),
                                 child: Text(
                                   isInitialPassword ? '初期PW' : 'アクティブ',
                                   style: TextStyle(
-                                    fontSize: 10,
-                                    color: isInitialPassword ? AppColors.accent.shade800 : Colors.green.shade800,
+                                    fontSize: AppTextSize.xs,
+                                    color: isInitialPassword ? AppColors.accent.shade800 : AppColors.successDark,
                                   ),
                                 ),
                               )
@@ -404,7 +405,7 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
                                 ),
                                 child: Text(
                                   '未登録',
-                                  style: TextStyle(fontSize: 10, color: context.colors.textSecondary),
+                                  style: TextStyle(fontSize: AppTextSize.xs, color: context.colors.textSecondary),
                                 ),
                               ),
                           ],
@@ -440,8 +441,8 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
                                   children: [
                                     if (hasAccount)
                                       TextButton.icon(
-                                        icon: const Icon(Icons.badge_outlined, color: Colors.teal),
-                                        label: const Text('ID変更', style: TextStyle(color: Colors.teal)),
+                                        icon: const Icon(Icons.badge_outlined, color: AppColors.secondary),
+                                        label: const Text('ID変更', style: TextStyle(color: AppColors.secondary)),
                                         onPressed: () => _changeLoginId(
                                           familyDoc.id,
                                           data['uid'],
@@ -460,8 +461,8 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
                                         ),
                                       ),
                                     TextButton.icon(
-                                      icon: const Icon(Icons.delete, color: Colors.red),
-                                      label: const Text('削除', style: TextStyle(color: Colors.red)),
+                                      icon: const Icon(Icons.delete, color: AppColors.error),
+                                      label: const Text('削除', style: TextStyle(color: AppColors.error)),
                                       onPressed: () => _deleteFamily(
                                         familyDoc.id, 
                                         data['uid'], 
@@ -473,7 +474,7 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
                                       icon: const Icon(Icons.edit),
                                       label: const Text('編集'),
                                       style: ElevatedButton.styleFrom(
-                                          backgroundColor: Colors.blue, foregroundColor: Colors.white),
+                                          backgroundColor: AppColors.info, foregroundColor: Colors.white),
                                       onPressed: () => _showEditDialog(familyDoc: familyDoc),
                                     ),
                                   ],
@@ -506,7 +507,7 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
           padding: const EdgeInsets.all(8.0),
           child: Image.asset(
             'assets/logo_beesmileymark.png',
-            errorBuilder: (context, error, stackTrace) => const Icon(Icons.person_add, color: Colors.blue),
+            errorBuilder: (context, error, stackTrace) => const Icon(Icons.person_add, color: AppColors.info),
           ),
         ),
       ),
@@ -520,8 +521,8 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SizedBox(width: 90, child: Text(label, style: TextStyle(color: context.colors.textSecondary, fontSize: 12))),
-          Expanded(child: Text(value, style: TextStyle(fontSize: 13))),
+          SizedBox(width: 90, child: Text(label, style: TextStyle(color: context.colors.textSecondary, fontSize: AppTextSize.small))),
+          Expanded(child: Text(value, style: TextStyle(fontSize: AppTextSize.body))),
         ],
       ),
     );
@@ -550,15 +551,15 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
         children: [
           Text(
             '$displayName  ${child['gender']}',
-            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+            style: TextStyle(fontWeight: FontWeight.bold, fontSize: AppTextSize.bodyMd),
           ),
           const SizedBox(height: 4),
-          Text('誕生日: ${child['birthDate']}', style: TextStyle(fontSize: 12)),
-          Text('所属: $classInfo', style: TextStyle(fontSize: 12)),
+          Text('誕生日: ${child['birthDate']}', style: TextStyle(fontSize: AppTextSize.small)),
+          Text('所属: $classInfo', style: TextStyle(fontSize: AppTextSize.small)),
           if ((child['allergy'] ?? '').isNotEmpty)
-            Text('特記事項: ${child['allergy']}', style: TextStyle(fontSize: 12, color: Colors.red)),
+            Text('特記事項: ${child['allergy']}', style: TextStyle(fontSize: AppTextSize.small, color: AppColors.error)),
           if ((child['profileUrl'] ?? '').isNotEmpty)
-            Text('URL: ${child['profileUrl']}', style: TextStyle(fontSize: 12, color: Colors.blue)),
+            Text('URL: ${child['profileUrl']}', style: TextStyle(fontSize: AppTextSize.small, color: AppColors.info)),
         ],
       ),
     );
@@ -567,9 +568,7 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
   /// Cloud Functions経由でログインIDを変更
   Future<void> _changeLoginId(String docId, String? targetUid, String currentLoginId, String name) async {
     if (targetUid == null || targetUid.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('アカウントが作成されていません'), backgroundColor: Colors.red),
-      );
+      AppFeedback.error(context, 'アカウントが作成されていません');
       return;
     }
 
@@ -583,11 +582,11 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('$name さんのログインIDを変更します。', style: const TextStyle(fontSize: 13)),
+            Text('$name さんのログインIDを変更します。', style: const TextStyle(fontSize: AppTextSize.body)),
             const SizedBox(height: 4),
             const Text(
               '※ 変更後は新しいIDでログインしてもらってください（パスワードは変わりません）。',
-              style: TextStyle(fontSize: 11, color: Colors.red),
+              style: TextStyle(fontSize: AppTextSize.caption, color: AppColors.error),
             ),
             const SizedBox(height: 16),
             TextField(
@@ -605,7 +604,7 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
           TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('キャンセル')),
           ElevatedButton(
             onPressed: () => Navigator.pop(dialogContext, controller.text.trim()),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.teal, foregroundColor: Colors.white),
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.secondary, foregroundColor: Colors.white),
             child: const Text('変更'),
           ),
         ],
@@ -627,26 +626,17 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
 
       if (mounted) {
         Navigator.pop(context); // ローディングを閉じる
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('$name さんのログインIDを「$newId」に変更しました'),
-            backgroundColor: Colors.green,
-          ),
-        );
+        AppFeedback.success(context, '$name さんのログインIDを「$newId」に変更しました');
       }
     } on FirebaseFunctionsException catch (e) {
       if (mounted) {
         Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('エラー: ${e.message}'), backgroundColor: Colors.red),
-        );
+        AppFeedback.error(context, 'エラー: ${e.message}');
       }
     } catch (e) {
       if (mounted) {
         Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('エラー: $e'), backgroundColor: Colors.red),
-        );
+        AppFeedback.error(context, 'エラー: $e');
       }
     }
   }
@@ -654,29 +644,18 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
   /// Cloud Functions経由でパスワードを初期化
   Future<void> _resetPassword(String docId, String? targetUid, String name) async {
     if (targetUid == null || targetUid.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('アカウントが作成されていません'), backgroundColor: Colors.red),
-      );
+      AppFeedback.error(context, 'アカウントが作成されていません');
       return;
     }
 
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('パスワード初期化'),
-        content: Text('$name さんのパスワードを初期パスワードに戻しますか？\n\n次回ログイン時にパスワード変更が求められます。'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('キャンセル')),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.accent, foregroundColor: Colors.white),
-            child: const Text('初期化'),
-          ),
-        ],
-      ),
+    final confirmed = await AppFeedback.confirm(
+      context,
+      title: 'パスワード初期化',
+      message: '$name さんのパスワードを初期パスワードに戻しますか？\n\n次回ログイン時にパスワード変更が求められます。',
+      confirmLabel: '初期化',
     );
 
-    if (confirmed != true) return;
+    if (!confirmed) return;
 
     try {
       _showLoadingDialog('パスワードを初期化中...');
@@ -689,39 +668,19 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
 
       if (mounted) {
         Navigator.pop(context); // ローディングを閉じる
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('$name さんのパスワードを初期化しました'),
-            backgroundColor: Colors.green,
-          ),
-        );
+        AppFeedback.success(context, '$name さんのパスワードを初期化しました');
       }
     } catch (e) {
       if (mounted) {
         Navigator.pop(context); // ローディングを閉じる
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('エラー: $e'), backgroundColor: Colors.red),
-        );
+        AppFeedback.error(context, 'エラー: $e');
       }
     }
   }
 
   /// Cloud Functions経由でアカウントを削除
   Future<void> _deleteFamily(String docId, String? targetUid, String name) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('削除確認'),
-        content: Text('$name さんの情報を削除しますか？\n\n※ログインアカウントも削除されます。'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('キャンセル')),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('削除', style: TextStyle(color: Colors.red)),
-          ),
-        ],
-      ),
-    );
+    final confirmed = await AppFeedback.confirm(context, title: '削除確認', message: '$name さんの情報を削除しますか？\n\n※ログインアカウントも削除されます。', confirmLabel: '削除', cancelLabel: 'キャンセル', destructive: true);
 
     if (confirmed != true) return;
 
@@ -736,16 +695,12 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
 
       if (mounted) {
         Navigator.pop(context); // ローディングを閉じる
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('削除しました'), backgroundColor: Colors.green),
-        );
+        AppFeedback.success(context, '削除しました');
       }
     } catch (e) {
       if (mounted) {
         Navigator.pop(context); // ローディングを閉じる
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('エラー: $e'), backgroundColor: Colors.red),
-        );
+        AppFeedback.error(context, 'エラー: $e');
       }
     }
   }
@@ -832,12 +787,12 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
                             ),
                             child: const Row(
                               children: [
-                                Icon(Icons.info_outline, color: Colors.blue, size: 20),
+                                Icon(Icons.info_outline, color: AppColors.info, size: 20),
                                 SizedBox(width: 8),
                                 Expanded(
                                   child: Text(
                                     '初回ログイン時にパスワード変更が必要です。\n初期パスワードは管理者にお問い合わせください。',
-                                    style: TextStyle(fontSize: 12, color: Colors.blue),
+                                    style: TextStyle(fontSize: AppTextSize.small, color: AppColors.info),
                                   ),
                                 ),
                               ],
@@ -943,7 +898,7 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
                                     Text('児童 ${i + 1}', style: TextStyle(fontWeight: FontWeight.bold, color: context.colors.textSecondary)),
                                     if (children.length > 1)
                                       IconButton(
-                                        icon: const Icon(Icons.close, color: Colors.red, size: 20),
+                                        icon: const Icon(Icons.close, color: AppColors.error, size: 20),
                                         onPressed: () {
                                           setStateDialog(() {
                                             children.removeAt(i);
@@ -1029,7 +984,7 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
                                       ...(_classroomList).map((c) {
                                         final selected = getChildClassrooms(child).contains(c);
                                         return FilterChip(
-                                          label: Text(c, style: TextStyle(fontSize: 11)),
+                                          label: Text(c, style: TextStyle(fontSize: AppTextSize.caption)),
                                           selected: selected,
                                           selectedColor: AppColors.primary.withValues(alpha: 0.2),
                                           checkmarkColor: AppColors.primary,
@@ -1056,7 +1011,7 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
                                   value: _allCourses.contains(child['course']) ? child['course'] : _allCourses[0],
                                   isExpanded: true,
                                   decoration: InputDecoration(labelText: 'コース', isDense: true, border: OutlineInputBorder()),
-                                  items: _allCourses.map((c) => DropdownMenuItem(value: c, child: Text(c, style: TextStyle(fontSize: 12)))).toList(),
+                                  items: _allCourses.map((c) => DropdownMenuItem(value: c, child: Text(c, style: TextStyle(fontSize: AppTextSize.small)))).toList(),
                                   onChanged: (val) => setStateDialog(() => child['course'] = val),
                                 ),
                                 const SizedBox(height: 8),
@@ -1079,7 +1034,7 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
                                 // 策定会議URL（プラス湘南藤沢の生徒のみ）
                                 if (getChildClassrooms(child).any((c) => c.contains('プラス'))) ...[
                                   const SizedBox(height: 16),
-                                  const Text('策定会議URL', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+                                  const Text('策定会議URL', style: TextStyle(fontSize: AppTextSize.bodyMd, fontWeight: FontWeight.bold)),
                                   const SizedBox(height: 8),
                                   ...List.generate(5, (urlIndex) {
                                     const labels = ['アセスメント', '個別支援計画書(原案)', '議事録', '個別支援計画書', 'モニタリング'];
@@ -1093,7 +1048,7 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
                                         children: [
                                           SizedBox(
                                             width: 160,
-                                            child: Text(labels[urlIndex], style: TextStyle(fontSize: 13)),
+                                            child: Text(labels[urlIndex], style: TextStyle(fontSize: AppTextSize.body)),
                                           ),
                                           const SizedBox(width: 8),
                                           Expanded(
@@ -1142,9 +1097,7 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
                     final loginId = loginIdCtrl.text.trim();
                     
                     if (loginId.isEmpty) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('ログインIDを入力してください'), backgroundColor: Colors.red),
-                      );
+                      AppFeedback.error(context, 'ログインIDを入力してください');
                       return;
                     }
 
@@ -1196,30 +1149,21 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
 
                       if (context.mounted) {
                         Navigator.pop(context);
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text(isEditing ? '更新しました' : '登録しました'),
-                            backgroundColor: Colors.green,
-                          ),
-                        );
+                        AppFeedback.success(context, isEditing ? '更新しました' : '登録しました');
                       }
                     } on FirebaseFunctionsException catch (e) {
                       setStateDialog(() => isLoading = false);
                       if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('エラー: ${e.message}'), backgroundColor: Colors.red),
-                        );
+                        AppFeedback.error(context, 'エラー: ${e.message}');
                       }
                     } catch (e) {
                       setStateDialog(() => isLoading = false);
                       if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('エラー: $e'), backgroundColor: Colors.red),
-                        );
+                        AppFeedback.error(context, 'エラー: $e');
                       }
                     }
                   },
-                  style: ElevatedButton.styleFrom(backgroundColor: Colors.blue, foregroundColor: Colors.white),
+                  style: ElevatedButton.styleFrom(backgroundColor: AppColors.info, foregroundColor: Colors.white),
                   child: isLoading 
                       ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                       : const Text('保存'),
@@ -1237,8 +1181,8 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
       padding: const EdgeInsets.only(bottom: 8),
       child: Row(
         children: [
-          Container(width: 4, height: 16, color: Colors.blue, margin: const EdgeInsets.only(right: 8)),
-          Text(title, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+          Container(width: 4, height: 16, color: AppColors.info, margin: const EdgeInsets.only(right: 8)),
+          Text(title, style: TextStyle(fontWeight: FontWeight.bold, fontSize: AppTextSize.bodyMd)),
         ],
       ),
     );

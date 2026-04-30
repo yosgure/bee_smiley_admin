@@ -54,7 +54,7 @@ class _ParentNotificationScreenState extends State<ParentNotificationScreen> {
           Center(
             child: Text(
               title,
-              style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
+              style: const TextStyle(fontSize: AppTextSize.title, fontWeight: FontWeight.w600),
             ),
           ),
         ],
@@ -134,7 +134,7 @@ class _ParentNotificationScreenState extends State<ParentNotificationScreen> {
                   Expanded(
                     child: Text(
                       title,
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: AppTextSize.titleSm),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -146,14 +146,14 @@ class _ParentNotificationScreenState extends State<ParentNotificationScreen> {
               const SizedBox(height: 8),
               Text(
                 body,
-                style: TextStyle(color: context.colors.textPrimary, fontSize: 14),
+                style: TextStyle(color: context.colors.textPrimary, fontSize: AppTextSize.bodyMd),
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
               ),
               const SizedBox(height: 8),
               Text(
                 dateStr,
-                style: TextStyle(color: context.colors.textSecondary, fontSize: 12),
+                style: TextStyle(color: context.colors.textSecondary, fontSize: AppTextSize.small),
               ),
             ],
           ),
@@ -201,13 +201,13 @@ class _ParentNotificationScreenState extends State<ParentNotificationScreen> {
                     // タイトル
                     Text(
                       title,
-                      style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                      style: const TextStyle(fontSize: AppTextSize.xl, fontWeight: FontWeight.bold),
                     ),
                     const SizedBox(height: 8),
                     // 日時
                     Text(
                       dateStr,
-                      style: TextStyle(color: context.colors.textSecondary, fontSize: 13),
+                      style: TextStyle(color: context.colors.textSecondary, fontSize: AppTextSize.body),
                     ),
                     const SizedBox(height: 16),
                     const Divider(),
@@ -215,7 +215,7 @@ class _ParentNotificationScreenState extends State<ParentNotificationScreen> {
                     // 本文
                     Text(
                       body,
-                      style: const TextStyle(fontSize: 15, height: 1.6),
+                      style: const TextStyle(fontSize: AppTextSize.bodyLarge, height: 1.6),
                     ),
                     // 添付ファイル
                     if (attachmentUrl != null && attachmentUrl.isNotEmpty) ...[
@@ -224,7 +224,7 @@ class _ParentNotificationScreenState extends State<ParentNotificationScreen> {
                       const SizedBox(height: 16),
                       const Text(
                         '添付ファイル',
-                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: AppTextSize.bodyMd),
                       ),
                       const SizedBox(height: 8),
                       InkWell(

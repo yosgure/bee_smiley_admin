@@ -13,8 +13,8 @@ class ClassroomMasterScreen extends StatefulWidget {
 class _ClassroomMasterScreenState extends State<ClassroomMasterScreen> {
   // カラーパレット
   final List<Color> _colors = [
-    Colors.blue, Colors.red, Colors.orange, Colors.green, Colors.purple,
-    Colors.pink, Colors.brown, Colors.teal, Colors.indigo, Colors.grey,
+    AppColors.info, AppColors.error, AppColors.warning, AppColors.success, AppColors.aiAccent,
+    AppColors.aiAccent, AppColors.secondary, AppColors.secondary, AppColors.secondary, Colors.grey,
   ];
 
   // カテゴリー選択肢
@@ -81,7 +81,7 @@ centerTitle: true,
               final data = doc.data() as Map<String, dynamic>;
               
               // データベースの数値から色を復元。なければデフォルト青。
-              final colorValue = data['color'] as int? ?? Colors.blue.value;
+              final colorValue = data['color'] as int? ?? AppColors.info.value;
               final roomColor = Color(colorValue);
 
               return Card(
@@ -103,7 +103,7 @@ centerTitle: true,
                   ),
                   subtitle: Text(
                     '${data['category']} / ☎ ${data['phone']}',
-                    style: const TextStyle(fontSize: 12, color: Colors.grey),
+                    style: const TextStyle(fontSize: AppTextSize.small, color: Colors.grey),
                   ),
                   children: [
                     Padding(
@@ -120,8 +120,8 @@ centerTitle: true,
                             mainAxisAlignment: MainAxisAlignment.end,
                             children: [
                               TextButton.icon(
-                                icon: const Icon(Icons.delete, color: Colors.red),
-                                label: const Text('削除', style: TextStyle(color: Colors.red)),
+                                icon: const Icon(Icons.delete, color: AppColors.error),
+                                label: const Text('削除', style: TextStyle(color: AppColors.error)),
                                 onPressed: () => _deleteClassroom(doc.id, data['name']),
                               ),
                               const SizedBox(width: 8),
@@ -129,7 +129,7 @@ centerTitle: true,
                                 icon: const Icon(Icons.edit),
                                 label: const Text('編集'),
                                 style: ElevatedButton.styleFrom(
-                                    backgroundColor: Colors.brown,
+                                    backgroundColor: AppColors.secondary,
                                     foregroundColor: Colors.white),
                                 onPressed: () => _showEditDialog(doc: doc),
                               ),
@@ -147,7 +147,7 @@ centerTitle: true,
       ),
       floatingActionButton: FloatingActionButton(heroTag: null, 
         onPressed: () => _showEditDialog(), // 新規作成
-        backgroundColor: Colors.brown,
+        backgroundColor: AppColors.secondary,
         child: const Icon(Icons.add),
       ),
     );
@@ -159,8 +159,8 @@ centerTitle: true,
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SizedBox(width: 80, child: Text(label, style: const TextStyle(color: Colors.grey, fontSize: 13))),
-          Expanded(child: Text(value, style: const TextStyle(fontSize: 14))),
+          SizedBox(width: 80, child: Text(label, style: const TextStyle(color: Colors.grey, fontSize: AppTextSize.body))),
+          Expanded(child: Text(value, style: const TextStyle(fontSize: AppTextSize.bodyMd))),
         ],
       ),
     );
@@ -181,7 +181,7 @@ centerTitle: true,
               await _classroomsRef.doc(docId).delete();
               if (context.mounted) Navigator.pop(context);
             },
-            child: const Text('削除', style: TextStyle(color: Colors.red)),
+            child: const Text('削除', style: TextStyle(color: AppColors.error)),
           ),
         ],
       ),
@@ -201,7 +201,7 @@ centerTitle: true,
     String selectedCategory = data['category'] ?? _categories[0];
     
     // 色データの復元（int -> Color）
-    Color selectedColor = Colors.blue;
+    Color selectedColor = AppColors.info;
     if (data['color'] != null) {
       selectedColor = Color(data['color']);
     }
@@ -248,7 +248,7 @@ centerTitle: true,
                         
                         const SizedBox(height: 24),
                         
-                        const Text('テーマカラー', style: TextStyle(fontSize: 12, color: Colors.grey, fontWeight: FontWeight.bold)),
+                        const Text('テーマカラー', style: TextStyle(fontSize: AppTextSize.small, color: Colors.grey, fontWeight: FontWeight.bold)),
                         const SizedBox(height: 8),
                         Wrap(
                           spacing: 12,
@@ -309,7 +309,7 @@ centerTitle: true,
                     
                     if (context.mounted) Navigator.pop(context);
                   },
-                  style: ElevatedButton.styleFrom(backgroundColor: Colors.brown, foregroundColor: Colors.white),
+                  style: ElevatedButton.styleFrom(backgroundColor: AppColors.secondary, foregroundColor: Colors.white),
                   child: const Text('保存'),
                 ),
               ],

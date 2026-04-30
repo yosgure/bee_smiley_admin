@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 
 import '../app_theme.dart';
+import '../widgets/app_feedback.dart';
 import '../crm_lead_screen.dart' show CrmOptions, CrmLeadEditScreen;
 import 'crm_home_utils.dart';
 import 'crm_lead_model.dart';
@@ -137,7 +138,7 @@ class _Body extends StatelessWidget {
                     style: OutlinedButton.styleFrom(
                       foregroundColor: c.textSecondary,
                       side: BorderSide(color: c.borderMedium),
-                      textStyle: const TextStyle(fontSize: 12),
+                      textStyle: const TextStyle(fontSize: AppTextSize.small),
                     ),
                   ),
                 ),
@@ -183,7 +184,7 @@ class _Header extends StatelessWidget {
                             ? '（名前未登録）'
                             : lead.childFullName,
                         style: TextStyle(
-                            fontSize: 17,
+                            fontSize: AppTextSize.title,
                             fontWeight: FontWeight.w700,
                             color: c.textPrimary),
                         overflow: TextOverflow.ellipsis,
@@ -198,7 +199,7 @@ class _Header extends StatelessWidget {
                   '${CrmOptions.labelOf(CrmOptions.sources, lead.source)}'
                   ' ・ 担当 ${lead.assigneeName ?? "未設定"}',
                   style:
-                      TextStyle(fontSize: 11, color: c.textTertiary),
+                      TextStyle(fontSize: AppTextSize.caption, color: c.textTertiary),
                 ),
               ],
             ),
@@ -224,7 +225,7 @@ class _Header extends StatelessWidget {
       ),
       child: Text(CrmOptions.stageLabel(stage),
           style: TextStyle(
-              fontSize: 10, fontWeight: FontWeight.bold, color: color)),
+              fontSize: AppTextSize.xs, fontWeight: FontWeight.bold, color: color)),
     );
   }
 }
@@ -252,7 +253,7 @@ class _UrgentContextStrip extends StatelessWidget {
         children: [
           Icon(Icons.fiber_manual_record,
               size: 10,
-              color: reasons.isEmpty ? Colors.green.shade400 : Colors.orange.shade400),
+              color: reasons.isEmpty ? AppColors.successBorder : AppColors.warningBorder),
           const SizedBox(width: 8),
           Expanded(
             child: Wrap(
@@ -263,12 +264,12 @@ class _UrgentContextStrip extends StatelessWidget {
                 if (reasons.isEmpty)
                   Text('督促はありません',
                       style: TextStyle(
-                          fontSize: 12, color: c.textSecondary))
+                          fontSize: AppTextSize.small, color: c.textSecondary))
                 else
                   ...reasons.map((r) => _reasonChip(context, r)),
                 Text('最終接触 ${crmRelativeTime(last)}',
                     style: TextStyle(
-                        fontSize: 11, color: c.textTertiary)),
+                        fontSize: AppTextSize.caption, color: c.textTertiary)),
               ],
             ),
           ),
@@ -287,7 +288,7 @@ class _UrgentContextStrip extends StatelessWidget {
       ),
       child: Text(crmUrgentReasonLabel(r),
           style: const TextStyle(
-              fontSize: 10,
+              fontSize: AppTextSize.xs,
               fontWeight: FontWeight.w700,
               color: Color(0xFF5D4037))),
     );
@@ -339,7 +340,7 @@ class _NextActionBlock extends StatelessWidget {
               const SizedBox(width: 6),
               Text('次の一手',
                   style: TextStyle(
-                      fontSize: 13,
+                      fontSize: AppTextSize.body,
                       fontWeight: FontWeight.w700,
                       color: hasNext ? amberText : c.textPrimary)),
               if (hasNext && isOverdue) ...[
@@ -363,7 +364,7 @@ class _NextActionBlock extends StatelessWidget {
               Text(
                 DateFormat('M/d (E) HH:mm', 'ja').format(at),
                 style: TextStyle(
-                    fontSize: 15,
+                    fontSize: AppTextSize.bodyLarge,
                     fontWeight: FontWeight.w700,
                     color: amberText),
               ),
@@ -374,14 +375,14 @@ class _NextActionBlock extends StatelessWidget {
                 if (note.isNotEmpty) note,
               ].where((s) => s.isNotEmpty).join(' / '),
               style: TextStyle(
-                  fontSize: 13,
+                  fontSize: AppTextSize.body,
                   color: amberText.withValues(alpha: 0.85)),
             ),
           ] else ...[
             Text(
               '次の一手がまだ決まっていません。\n決めると、ホームの「今日整えたいリード」に自然に並びます。',
               style: TextStyle(
-                  fontSize: 12, color: c.textTertiary, height: 1.5),
+                  fontSize: AppTextSize.small, color: c.textTertiary, height: 1.5),
             ),
           ],
           const SizedBox(height: 12),
@@ -442,7 +443,7 @@ class _NextActionBlock extends StatelessWidget {
       ),
       child: Text(label,
           style: TextStyle(
-              fontSize: 10,
+              fontSize: AppTextSize.xs,
               fontWeight: FontWeight.w700,
               color: isDark ? color : color.withValues(alpha: 0.9))),
     );
@@ -466,7 +467,7 @@ class _NextActionBlock extends StatelessWidget {
               foregroundColor: Colors.white,
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               textStyle: const TextStyle(
-                  fontSize: 12, fontWeight: FontWeight.w700),
+                  fontSize: AppTextSize.small, fontWeight: FontWeight.w700),
             ),
           )
         : OutlinedButton.icon(
@@ -478,7 +479,7 @@ class _NextActionBlock extends StatelessWidget {
               side: BorderSide(color: c.borderMedium),
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
               textStyle: const TextStyle(
-                  fontSize: 12, fontWeight: FontWeight.w600),
+                  fontSize: AppTextSize.small, fontWeight: FontWeight.w600),
             ),
           );
   }
@@ -637,11 +638,11 @@ class _RecordFormState extends State<_RecordForm> {
               padding: const EdgeInsets.all(14),
               child: Row(
                 children: [
-                  const Text('✏️', style: TextStyle(fontSize: 16)),
+                  const Text('✏️', style: TextStyle(fontSize: AppTextSize.titleSm)),
                   const SizedBox(width: 6),
                   Text('対応を記録する',
                       style: TextStyle(
-                          fontSize: 13,
+                          fontSize: AppTextSize.body,
                           fontWeight: FontWeight.w700,
                           color: c.textPrimary)),
                   const Spacer(),
@@ -704,9 +705,9 @@ class _RecordFormState extends State<_RecordForm> {
                       contentPadding: const EdgeInsets.all(10),
                       isDense: true,
                       hintStyle: TextStyle(
-                          color: c.textTertiary, fontSize: 12),
+                          color: c.textTertiary, fontSize: AppTextSize.small),
                     ),
-                    style: const TextStyle(fontSize: 13),
+                    style: const TextStyle(fontSize: AppTextSize.body),
                   ),
                   const SizedBox(height: 14),
                   _label(context, '次の一手'),
@@ -735,12 +736,12 @@ class _RecordFormState extends State<_RecordForm> {
                         Text(
                           DateFormat('M/d (E) HH:mm', 'ja').format(_nextAt!),
                           style: TextStyle(
-                              fontSize: 12, color: c.textSecondary),
+                              fontSize: AppTextSize.small, color: c.textSecondary),
                         ),
                         TextButton(
                           onPressed: _pickNextDate,
                           child: const Text('日時変更',
-                              style: TextStyle(fontSize: 11)),
+                              style: TextStyle(fontSize: AppTextSize.caption)),
                         ),
                       ],
                     ),
@@ -782,7 +783,7 @@ class _RecordFormState extends State<_RecordForm> {
       padding: const EdgeInsets.only(bottom: 6, top: 4),
       child: Text(text,
           style: TextStyle(
-              fontSize: 11,
+              fontSize: AppTextSize.caption,
               fontWeight: FontWeight.w600,
               color: context.colors.textSecondary)),
     );
@@ -799,7 +800,7 @@ class _RecordFormState extends State<_RecordForm> {
       children: items.map((it) {
         final selected = it.id == value;
         return ChoiceChip(
-          label: Text(it.label, style: const TextStyle(fontSize: 11)),
+          label: Text(it.label, style: const TextStyle(fontSize: AppTextSize.caption)),
           selected: selected,
           onSelected: (_) => onChanged(it.id),
           visualDensity: VisualDensity.compact,
@@ -877,9 +878,7 @@ class _RecordFormState extends State<_RecordForm> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _saving = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('保存エラー: $e')),
-      );
+      AppFeedback.info(context, '保存エラー: $e');
     }
   }
 }
@@ -907,13 +906,13 @@ class _PresetPicker extends StatelessWidget {
       children: [
         for (final p in presets)
           ChoiceChip(
-            label: Text(p.label, style: const TextStyle(fontSize: 11)),
+            label: Text(p.label, style: const TextStyle(fontSize: AppTextSize.caption)),
             selected: selectedId == p.id,
             onSelected: (_) => onSelected(p),
             visualDensity: VisualDensity.compact,
           ),
         ChoiceChip(
-          label: const Text('カスタム入力', style: TextStyle(fontSize: 11)),
+          label: const Text('カスタム入力', style: TextStyle(fontSize: AppTextSize.caption)),
           selected: selectedId == 'custom',
           onSelected: (_) => onCustom(),
           visualDensity: VisualDensity.compact,
@@ -938,17 +937,17 @@ class _HistorySection extends StatelessWidget {
       children: [
         Row(
           children: [
-            const Text('📋', style: TextStyle(fontSize: 16)),
+            const Text('📋', style: TextStyle(fontSize: AppTextSize.titleSm)),
             const SizedBox(width: 6),
             Text('対応履歴',
                 style: TextStyle(
-                    fontSize: 13,
+                    fontSize: AppTextSize.body,
                     fontWeight: FontWeight.w700,
                     color: c.textPrimary)),
             const SizedBox(width: 8),
             Text('${activities.length}件',
                 style:
-                    TextStyle(fontSize: 11, color: c.textTertiary)),
+                    TextStyle(fontSize: AppTextSize.caption, color: c.textTertiary)),
           ],
         ),
         const SizedBox(height: 8),
@@ -957,7 +956,7 @@ class _HistorySection extends StatelessWidget {
             padding: const EdgeInsets.symmetric(vertical: 16),
             alignment: Alignment.center,
             child: Text('まだ履歴がありません',
-                style: TextStyle(fontSize: 12, color: c.textTertiary)),
+                style: TextStyle(fontSize: AppTextSize.small, color: c.textTertiary)),
           )
         else
           ...activities.take(20).map((a) => _tile(context, a)),
@@ -996,7 +995,7 @@ class _HistorySection extends StatelessWidget {
                     borderRadius: BorderRadius.circular(4)),
                 child: Text(typeLabel,
                     style: TextStyle(
-                        fontSize: 10,
+                        fontSize: AppTextSize.xs,
                         fontWeight: FontWeight.w700,
                         color: c.textSecondary)),
               ),
@@ -1010,21 +1009,21 @@ class _HistorySection extends StatelessWidget {
                       borderRadius: BorderRadius.circular(4)),
                   child: Text(outcomeLabel,
                       style: TextStyle(
-                          fontSize: 10,
+                          fontSize: AppTextSize.xs,
                           fontWeight: FontWeight.w700,
                           color: context.alerts.info.text)),
                 ),
               if (feeling != null) ...[
                 const SizedBox(width: 6),
                 Text(feeling.emoji,
-                    style: const TextStyle(fontSize: 14)),
+                    style: const TextStyle(fontSize: AppTextSize.bodyMd)),
               ],
               const Spacer(),
               if (a.at != null)
                 Text(
                   DateFormat('M/d HH:mm', 'ja').format(a.at!),
                   style: TextStyle(
-                      fontSize: 10, color: c.textTertiary),
+                      fontSize: AppTextSize.xs, color: c.textTertiary),
                 ),
             ],
           ),
@@ -1032,12 +1031,12 @@ class _HistorySection extends StatelessWidget {
             const SizedBox(height: 6),
             Text(a.body,
                 style: TextStyle(
-                    fontSize: 12, color: c.textPrimary, height: 1.4)),
+                    fontSize: AppTextSize.small, color: c.textPrimary, height: 1.4)),
           ],
           if (a.authorName != null && a.authorName!.isNotEmpty) ...[
             const SizedBox(height: 4),
             Text(a.authorName!,
-                style: TextStyle(fontSize: 10, color: c.textTertiary)),
+                style: TextStyle(fontSize: AppTextSize.xs, color: c.textTertiary)),
           ],
         ],
       ),
@@ -1065,7 +1064,7 @@ class _ChildInfoSection extends StatelessWidget {
               DateFormat('yyyy/M/d', 'ja').format(lead.childBirthDate!)),
       ],
       fallback: Text('児童の詳細情報が未入力です',
-          style: TextStyle(fontSize: 12, color: c.textTertiary)),
+          style: TextStyle(fontSize: AppTextSize.small, color: c.textTertiary)),
     );
   }
 }
@@ -1090,7 +1089,7 @@ class _ParentInfoSection extends StatelessWidget {
           ('連絡手段', CrmOptions.labelOf(CrmOptions.channels, ch)),
       ],
       fallback: Text('連絡先が未入力です',
-          style: TextStyle(fontSize: 12, color: c.textTertiary)),
+          style: TextStyle(fontSize: AppTextSize.small, color: c.textTertiary)),
     );
   }
 }
@@ -1122,11 +1121,11 @@ class _InfoBox extends StatelessWidget {
         children: [
           Row(
             children: [
-              Text(icon, style: const TextStyle(fontSize: 14)),
+              Text(icon, style: const TextStyle(fontSize: AppTextSize.bodyMd)),
               const SizedBox(width: 6),
               Text(title,
                   style: TextStyle(
-                      fontSize: 12,
+                      fontSize: AppTextSize.small,
                       fontWeight: FontWeight.w700,
                       color: c.textPrimary)),
             ],
@@ -1144,12 +1143,12 @@ class _InfoBox extends StatelessWidget {
                         width: 72,
                         child: Text(r.$1,
                             style: TextStyle(
-                                fontSize: 11, color: c.textTertiary)),
+                                fontSize: AppTextSize.caption, color: c.textTertiary)),
                       ),
                       Expanded(
                         child: Text(r.$2,
                             style: TextStyle(
-                                fontSize: 12, color: c.textPrimary)),
+                                fontSize: AppTextSize.small, color: c.textPrimary)),
                       ),
                     ],
                   ),

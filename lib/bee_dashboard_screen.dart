@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import 'app_theme.dart';
+import 'widgets/app_feedback.dart';
 import 'classroom_utils.dart';
 import 'services/undo_service.dart';
 
@@ -99,7 +100,7 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
         return {
           'id': doc.id,
           'name': data['name'] ?? '',
-          'color': data['color'] ?? Colors.blue.value,
+          'color': data['color'] ?? AppColors.info.value,
         };
       }).where((c) => (c['name'] as String).isNotEmpty).toList();
 
@@ -385,9 +386,7 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
     } catch (e) {
       debugPrint('Error saving schedule: $e');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('保存に失敗しました')),
-        );
+        AppFeedback.info(context, '保存に失敗しました');
       }
     }
   }
@@ -600,7 +599,7 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
                 child: Text(
                   name,
                   style: TextStyle(
-                    fontSize: 13,
+                    fontSize: AppTextSize.body,
                     fontWeight:
                         isSelected ? FontWeight.bold : FontWeight.normal,
                     color: isSelected ? AppColors.primary : context.colors.textSecondary,
@@ -656,7 +655,7 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
                               Text('コースを追加してください',
                                   style: TextStyle(
                                       color: context.colors.textSecondary,
-                                      fontSize: 14)),
+                                      fontSize: AppTextSize.bodyMd)),
                               const SizedBox(height: 8),
                               TextButton.icon(
                                 onPressed: _showCourseConfigDialog,
@@ -706,8 +705,8 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
                   day,
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
-                    fontSize: 15,
-                    color: isSaturday ? Colors.lightBlue.shade100 : context.colors.cardBg,
+                    fontSize: AppTextSize.bodyLarge,
+                    color: isSaturday ? AppColors.infoBg : context.colors.cardBg,
                   ),
                 ),
               ),
@@ -756,7 +755,7 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
                       Text(
                         courseName,
                         style: TextStyle(
-                          fontSize: 14,
+                          fontSize: AppTextSize.bodyMd,
                           fontWeight: FontWeight.bold,
                           color: context.colors.textPrimary,
                         ),
@@ -767,7 +766,7 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
                       Text(
                         '$startTime〜$endTime',
                         style: TextStyle(
-                          fontSize: 12,
+                          fontSize: AppTextSize.small,
                           color: context.colors.textTertiary,
                         ),
                         textAlign: TextAlign.center,
@@ -848,9 +847,9 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
                                               children: displayName.split('').map((char) => Text(
                                                 char,
                                                 style: TextStyle(
-                                                  fontSize: 12,
+                                                  fontSize: AppTextSize.small,
                                                   fontWeight: FontWeight.bold,
-                                                  color: Colors.blue.shade700,
+                                                  color: AppColors.info,
                                                   height: 1.15,
                                                 ),
                                               )).toList(),
@@ -881,7 +880,7 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
                                                 Text(
                                                   name,
                                                   style: TextStyle(
-                                                    fontSize: 13,
+                                                    fontSize: AppTextSize.body,
                                                     fontWeight: FontWeight.w500,
                                                     color: context.colors.textPrimary,
                                                     height: 1.3,
@@ -892,8 +891,8 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
                                                   Text(
                                                     note,
                                                     style: TextStyle(
-                                                      fontSize: 10,
-                                                      color: Colors.orange.shade600,
+                                                      fontSize: AppTextSize.xs,
+                                                      color: AppColors.warning,
                                                       height: 1.2,
                                                     ),
                                                     overflow: TextOverflow.ellipsis,
@@ -916,9 +915,9 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
                                         child: Text(
                                           '残席$remainingSeats',
                                           style: TextStyle(
-                                            fontSize: 12,
+                                            fontSize: AppTextSize.small,
                                             color: remainingSeats <= 0
-                                                ? Colors.red.shade600
+                                                ? AppColors.error
                                                 : context.colors.textTertiary,
                                             fontWeight: remainingSeats <= 0
                                                 ? FontWeight.bold
@@ -966,7 +965,7 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
                 child: Text(
                   name,
                   style: TextStyle(
-                    fontSize: 13,
+                    fontSize: AppTextSize.body,
                     fontWeight: FontWeight.w500,
                     color: context.colors.textPrimary,
                     height: 1.3,
@@ -980,8 +979,8 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
                   child: Text(
                     '($note)',
                     style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.orange.shade600,
+                      fontSize: AppTextSize.small,
+                      color: AppColors.warning,
                     ),
                   ),
                 ),
@@ -1003,7 +1002,7 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
           SizedBox(
             width: courseColumnWidth,
             child: const Center(
-              child: Text('計', style: TextStyle(fontSize: 12)),
+              child: Text('計', style: TextStyle(fontSize: AppTextSize.small)),
             ),
           ),
           ...List.generate(_weekDays.length, (index) {
@@ -1017,7 +1016,7 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
             }
             return Expanded(
               child: Center(
-                child: Text('$count', style: TextStyle(fontSize: 13)),
+                child: Text('$count', style: TextStyle(fontSize: AppTextSize.body)),
               ),
             );
           }),
@@ -1066,14 +1065,14 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
                       Expanded(
                         child: Text(
                           '$day曜日 $courseName',
-                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                          style: TextStyle(fontSize: AppTextSize.titleSm, fontWeight: FontWeight.bold),
                         ),
                       ),
                       // レッスンなしトグル
                       Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Text('レッスンなし', style: TextStyle(fontSize: 11, color: context.colors.textSecondary)),
+                          Text('レッスンなし', style: TextStyle(fontSize: AppTextSize.caption, color: context.colors.textSecondary)),
                           const SizedBox(width: 4),
                           SizedBox(
                             height: 24,
@@ -1103,7 +1102,7 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
                     const SizedBox(height: 4),
                     Text(
                       '残席 $remainingSeats / 定員 $currentCapacity',
-                      style: TextStyle(fontSize: 12, color: remainingSeats <= 0 ? Colors.red : context.colors.textSecondary),
+                      style: TextStyle(fontSize: AppTextSize.small, color: remainingSeats <= 0 ? AppColors.error : context.colors.textSecondary),
                     ),
                   ],
                 ],
@@ -1128,9 +1127,9 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
                     // ── 講師セクション ──
                     Row(
                       children: [
-                        Icon(Icons.school, size: 16, color: Colors.blue.shade700),
+                        Icon(Icons.school, size: 16, color: AppColors.info),
                         const SizedBox(width: 6),
-                        Text('講師', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.blue.shade700)),
+                        Text('講師', style: TextStyle(fontSize: AppTextSize.body, fontWeight: FontWeight.bold, color: AppColors.info)),
                         const Spacer(),
                         TextButton.icon(
                           onPressed: () {
@@ -1149,9 +1148,9 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
                             });
                           },
                           icon: const Icon(Icons.add, size: 16),
-                          label: const Text('追加', style: TextStyle(fontSize: 12)),
+                          label: const Text('追加', style: TextStyle(fontSize: AppTextSize.small)),
                           style: TextButton.styleFrom(
-                            foregroundColor: Colors.blue.shade700,
+                            foregroundColor: AppColors.info,
                             padding: const EdgeInsets.symmetric(horizontal: 8),
                           ),
                         ),
@@ -1160,7 +1159,7 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
                     if (latestTeachers.isEmpty)
                       Padding(
                         padding: const EdgeInsets.only(left: 22, bottom: 8),
-                        child: Text('未設定', style: TextStyle(fontSize: 12, color: context.colors.iconMuted)),
+                        child: Text('未設定', style: TextStyle(fontSize: AppTextSize.small, color: context.colors.iconMuted)),
                       )
                     else
                       ...latestTeachers.map((t) => _buildCellEditPersonTile(
@@ -1172,9 +1171,9 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
                     // ── 生徒セクション ──
                     Row(
                       children: [
-                        Icon(Icons.person, size: 16, color: Colors.orange.shade700),
+                        Icon(Icons.person, size: 16, color: AppColors.warning),
                         const SizedBox(width: 6),
-                        Text('生徒', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.orange.shade700)),
+                        Text('生徒', style: TextStyle(fontSize: AppTextSize.body, fontWeight: FontWeight.bold, color: AppColors.warning)),
                         const Spacer(),
                         TextButton.icon(
                           onPressed: () {
@@ -1195,9 +1194,9 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
                             });
                           },
                           icon: const Icon(Icons.add, size: 16),
-                          label: const Text('追加', style: TextStyle(fontSize: 12)),
+                          label: const Text('追加', style: TextStyle(fontSize: AppTextSize.small)),
                           style: TextButton.styleFrom(
-                            foregroundColor: Colors.orange.shade700,
+                            foregroundColor: AppColors.warning,
                             padding: const EdgeInsets.symmetric(horizontal: 8),
                           ),
                         ),
@@ -1206,7 +1205,7 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
                     if (latestStudents.isEmpty)
                       Padding(
                         padding: const EdgeInsets.only(left: 22, bottom: 8),
-                        child: Text('未登録', style: TextStyle(fontSize: 12, color: context.colors.iconMuted)),
+                        child: Text('未登録', style: TextStyle(fontSize: AppTextSize.small, color: context.colors.iconMuted)),
                       )
                     else
                       ...latestStudents.map((s) => _buildCellEditPersonTile(
@@ -1220,7 +1219,7 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
                       children: [
                         Icon(Icons.event_seat, size: 16, color: context.colors.textSecondary),
                         const SizedBox(width: 6),
-                        Text('定員数', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: context.colors.textSecondary)),
+                        Text('定員数', style: TextStyle(fontSize: AppTextSize.body, fontWeight: FontWeight.bold, color: context.colors.textSecondary)),
                         const Spacer(),
                         SizedBox(
                           width: 80,
@@ -1234,7 +1233,7 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
                               border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
                               suffixText: '人',
                             ),
-                            style: TextStyle(fontSize: 14),
+                            style: TextStyle(fontSize: AppTextSize.bodyMd),
                           ),
                         ),
                       ],
@@ -1300,9 +1299,9 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(name, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
+                Text(name, style: TextStyle(fontSize: AppTextSize.body, fontWeight: FontWeight.w500)),
                 if (note.isNotEmpty)
-                  Text(note, style: TextStyle(fontSize: 11, color: Colors.orange.shade600)),
+                  Text(note, style: TextStyle(fontSize: AppTextSize.caption, color: AppColors.warning)),
               ],
             ),
           ),
@@ -1319,7 +1318,7 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
                 builder: (ctx) => AlertDialog(
                   backgroundColor: context.colors.cardBg,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  title: Text('$name のメモ', style: TextStyle(fontSize: 14)),
+                  title: Text('$name のメモ', style: TextStyle(fontSize: AppTextSize.bodyMd)),
                   content: TextField(
                     controller: noteCtrl,
                     decoration: InputDecoration(
@@ -1351,7 +1350,7 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
           ),
           // 削除
           IconButton(
-            icon: Icon(Icons.close, size: 16, color: Colors.red.shade300),
+            icon: Icon(Icons.close, size: 16, color: AppColors.errorBorder),
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
             tooltip: '削除',
@@ -1446,7 +1445,7 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
             shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12)),
             title: Text('$day曜日 $courseName に追加',
-                style: TextStyle(fontSize: 16)),
+                style: TextStyle(fontSize: AppTextSize.titleSm)),
             content: SizedBox(
               width: 400,
               child: Column(
@@ -1558,7 +1557,7 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
                                       : '講師を選択')
                                   : selectedPerson!['name'] as String,
                               style: TextStyle(
-                                fontSize: 14,
+                                fontSize: AppTextSize.bodyMd,
                                 color: selectedPerson != null
                                     ? context.colors.textPrimary
                                     : context.colors.textSecondary,
@@ -1643,7 +1642,7 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
       builder: (dialogContext) => AlertDialog(
         backgroundColor: context.colors.cardBg,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        title: Text(name, style: TextStyle(fontSize: 16)),
+        title: Text(name, style: TextStyle(fontSize: AppTextSize.titleSm)),
         content: SizedBox(
           width: 400,
           child: TextField(
@@ -1705,7 +1704,7 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
       builder: (dialogContext) => AlertDialog(
         backgroundColor: context.colors.cardBg,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        title: const Text('削除確認', style: TextStyle(fontSize: 16)),
+        title: const Text('削除確認', style: TextStyle(fontSize: AppTextSize.titleSm)),
         content: Text('$nameを$day曜日の$courseNameから削除しますか？'),
         actions: [
           TextButton(
@@ -1759,7 +1758,7 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
             backgroundColor: context.colors.cardBg,
             shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12)),
-            title: const Text('生徒を選択', style: TextStyle(fontSize: 18)),
+            title: const Text('生徒を選択', style: TextStyle(fontSize: AppTextSize.titleLg)),
             content: SizedBox(
               width: 350,
               height: 400,
@@ -1805,7 +1804,7 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
                                     child: Text(
                                       group,
                                       style: TextStyle(
-                                        fontSize: 13,
+                                        fontSize: AppTextSize.body,
                                         fontWeight: FontWeight.bold,
                                         color: context.colors.textSecondary,
                                       ),
@@ -1863,7 +1862,7 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
             backgroundColor: context.colors.cardBg,
             shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12)),
-            title: const Text('講師を選択', style: TextStyle(fontSize: 18)),
+            title: const Text('講師を選択', style: TextStyle(fontSize: AppTextSize.titleLg)),
             content: SizedBox(
               width: 350,
               height: 400,
@@ -1938,7 +1937,7 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
                 const Icon(Icons.settings, size: 20),
                 const SizedBox(width: 8),
                 Text('$_selectedClassroom コース設定',
-                    style: TextStyle(fontSize: 16)),
+                    style: TextStyle(fontSize: AppTextSize.titleSm)),
               ],
             ),
             content: SizedBox(
@@ -1979,11 +1978,11 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
                                 title: Text(
                                     course['courseName'] as String,
                                     style: const TextStyle(
-                                        fontSize: 14)),
+                                        fontSize: AppTextSize.bodyMd)),
                                 subtitle: Text(
                                     '${course['startTime']}〜${course['endTime']}',
                                     style: const TextStyle(
-                                        fontSize: 12)),
+                                        fontSize: AppTextSize.small)),
                                 trailing: Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
@@ -2053,7 +2052,7 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
         backgroundColor: context.colors.cardBg,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         title:
-            const Text('コースを追加', style: TextStyle(fontSize: 16)),
+            const Text('コースを追加', style: TextStyle(fontSize: AppTextSize.titleSm)),
         content: SizedBox(
           width: 400,
           child: Column(
@@ -2178,7 +2177,7 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
         backgroundColor: context.colors.cardBg,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         title:
-            const Text('コースを編集', style: TextStyle(fontSize: 16)),
+            const Text('コースを編集', style: TextStyle(fontSize: AppTextSize.titleSm)),
         content: SizedBox(
           width: 400,
           child: Column(
@@ -2288,7 +2287,7 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
       builder: (dialogContext) => AlertDialog(
         backgroundColor: context.colors.cardBg,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        title: const Text('コースを削除', style: TextStyle(fontSize: 16)),
+        title: const Text('コースを削除', style: TextStyle(fontSize: AppTextSize.titleSm)),
         content: Text('$courseNameを削除しますか？\n配置データも削除されます。'),
         actions: [
           TextButton(
@@ -2395,7 +2394,7 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
                 Text(
                   'タスク',
                   style: TextStyle(
-                    fontSize: 14,
+                    fontSize: AppTextSize.bodyMd,
                     fontWeight: FontWeight.bold,
                     color: context.colors.textPrimary,
                   ),
@@ -2404,7 +2403,7 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
                 Text(
                   '${_tasks.length}件',
                   style: TextStyle(
-                      fontSize: 12, color: context.colors.textSecondary),
+                      fontSize: AppTextSize.small, color: context.colors.textSecondary),
                 ),
               ],
             ),
@@ -2415,7 +2414,7 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
                 ? Center(
                     child: Text('タスクはありません',
                         style: TextStyle(
-                            color: context.colors.textSecondary, fontSize: 13)),
+                            color: context.colors.textSecondary, fontSize: AppTextSize.body)),
                   )
                 : ListView.builder(
                     itemCount: _tasks.length,
@@ -2440,7 +2439,7 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
                   Text(
                     'タスクを追加',
                     style: TextStyle(
-                      fontSize: 13,
+                      fontSize: AppTextSize.body,
                       color: AppColors.primary,
                       fontWeight: FontWeight.w500,
                     ),
@@ -2483,7 +2482,7 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
                 child: Text(
                   title,
                   style: TextStyle(
-                      fontSize: 13, color: context.colors.textPrimary),
+                      fontSize: AppTextSize.body, color: context.colors.textPrimary),
                   overflow: TextOverflow.ellipsis,
                 ),
               )
@@ -2493,7 +2492,7 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
                 child: Text(
                   studentName,
                   style: TextStyle(
-                      fontSize: 13, color: context.colors.textPrimary),
+                      fontSize: AppTextSize.body, color: context.colors.textPrimary),
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
@@ -2502,7 +2501,7 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
                 child: Text(
                   title,
                   style: TextStyle(
-                      fontSize: 13, color: context.colors.textPrimary),
+                      fontSize: AppTextSize.body, color: context.colors.textPrimary),
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
@@ -2514,16 +2513,16 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
                     horizontal: 6, vertical: 2),
                 decoration: BoxDecoration(
                   color: isOverdue
-                      ? Colors.red.shade50
+                      ? AppColors.errorBg
                       : AppColors.accent.shade50,
                   borderRadius: BorderRadius.circular(4),
                 ),
                 child: Text(
                   _formatDueDate(dueDate.toDate()),
                   style: TextStyle(
-                    fontSize: 11,
+                    fontSize: AppTextSize.caption,
                     color: isOverdue
-                        ? Colors.red.shade700
+                        ? AppColors.error
                         : AppColors.accent.shade700,
                     fontWeight: FontWeight.w500,
                   ),
@@ -2532,7 +2531,7 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
             IconButton(
               onPressed: () => _updateTask(id, completed: true),
               icon: const Icon(Icons.check_circle_outline),
-              color: Colors.green,
+              color: AppColors.success,
               tooltip: '完了',
               iconSize: 24,
               padding: EdgeInsets.zero,
@@ -2581,7 +2580,7 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
             shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12)),
             title: const Text('タスクを追加',
-                style: TextStyle(fontSize: 18)),
+                style: TextStyle(fontSize: AppTextSize.titleLg)),
             content: SizedBox(
               width: 400,
               child: Column(
@@ -2677,7 +2676,7 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
                                     : selectedStudent!['name']
                                         as String,
                                 style: TextStyle(
-                                  fontSize: 15,
+                                  fontSize: AppTextSize.bodyLarge,
                                   color: selectedStudent == null
                                       ? context.colors.textSecondary
                                       : context.colors.textPrimary,
@@ -2741,7 +2740,7 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
                                   ? '${selectedDueDate!.month}/${selectedDueDate!.day}'
                                   : '期限を設定',
                               style: TextStyle(
-                                fontSize: 15,
+                                fontSize: AppTextSize.bodyLarge,
                                 color: selectedDueDate != null
                                     ? context.colors.textPrimary
                                     : context.colors.textSecondary,
@@ -2836,7 +2835,7 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
                 borderRadius: BorderRadius.circular(12)),
             title: Text(
               isCustom ? 'タスクを編集' : '$studentName のタスクを編集',
-              style: TextStyle(fontSize: 18),
+              style: TextStyle(fontSize: AppTextSize.titleLg),
             ),
             content: SizedBox(
               width: 400,
@@ -2889,7 +2888,7 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
                                   ? '${selectedDueDate!.month}/${selectedDueDate!.day}'
                                   : '期限を設定',
                               style: TextStyle(
-                                fontSize: 15,
+                                fontSize: AppTextSize.bodyLarge,
                                 color: selectedDueDate != null
                                     ? context.colors.textPrimary
                                     : context.colors.textSecondary,
@@ -3037,7 +3036,7 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
               Text(
                 label,
                 style: TextStyle(
-                  fontSize: 12,
+                  fontSize: AppTextSize.small,
                   fontWeight: isSelected
                       ? FontWeight.w600
                       : FontWeight.normal,
@@ -3084,7 +3083,7 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
                       Icon(Icons.add_circle_outline, size: 48, color: context.colors.borderMedium),
                       const SizedBox(height: 12),
                       Text('コースを追加してください',
-                          style: TextStyle(color: context.colors.textSecondary, fontSize: 14)),
+                          style: TextStyle(color: context.colors.textSecondary, fontSize: AppTextSize.bodyMd)),
                       const SizedBox(height: 8),
                       TextButton.icon(
                         onPressed: _showCourseConfigDialog,
@@ -3156,7 +3155,7 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
                       Text(
                         courseName,
                         style: TextStyle(
-                          fontSize: 11,
+                          fontSize: AppTextSize.caption,
                           fontWeight: FontWeight.bold,
                           color: context.colors.textPrimary,
                         ),
@@ -3167,7 +3166,7 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
                       Text(
                         '$startTime〜$endTime',
                         style: TextStyle(
-                          fontSize: 9,
+                          fontSize: AppTextSize.xxs,
                           color: context.colors.textTertiary,
                         ),
                         textAlign: TextAlign.center,
@@ -3187,7 +3186,7 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
             border: Border(right: BorderSide(color: context.colors.borderMedium)),
           ),
           child: const Center(
-            child: Text('計', style: TextStyle(fontSize: 12)),
+            child: Text('計', style: TextStyle(fontSize: AppTextSize.small)),
           ),
         ),
       ],
@@ -3211,8 +3210,8 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
                     day,
                     style: TextStyle(
                       fontWeight: FontWeight.bold,
-                      fontSize: 15,
-                      color: isSaturday ? Colors.lightBlue.shade100 : context.colors.cardBg,
+                      fontSize: AppTextSize.bodyLarge,
+                      color: isSaturday ? AppColors.infoBg : context.colors.cardBg,
                     ),
                   ),
                 ),
@@ -3303,9 +3302,9 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
                                                   children: displayName.split('').map((char) => Text(
                                                         char,
                                                         style: TextStyle(
-                                                          fontSize: 12,
+                                                          fontSize: AppTextSize.small,
                                                           fontWeight: FontWeight.bold,
-                                                          color: Colors.blue.shade700,
+                                                          color: AppColors.info,
                                                           height: 1.15,
                                                         ),
                                                       )).toList(),
@@ -3336,7 +3335,7 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
                                                     Text(
                                                       displayName,
                                                       style: TextStyle(
-                                                        fontSize: 13,
+                                                        fontSize: AppTextSize.body,
                                                         fontWeight: FontWeight.w500,
                                                         color: context.colors.textPrimary,
                                                         height: 1.3,
@@ -3347,8 +3346,8 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
                                                       Text(
                                                         note,
                                                         style: TextStyle(
-                                                          fontSize: 10,
-                                                          color: Colors.orange.shade600,
+                                                          fontSize: AppTextSize.xs,
+                                                          color: AppColors.warning,
                                                           height: 1.2,
                                                         ),
                                                         overflow: TextOverflow.ellipsis,
@@ -3370,9 +3369,9 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
                                             child: Text(
                                               '残席$remainingSeats',
                                               style: TextStyle(
-                                                fontSize: 12,
+                                                fontSize: AppTextSize.small,
                                                 color: remainingSeats <= 0
-                                                    ? Colors.red.shade600
+                                                    ? AppColors.error
                                                     : context.colors.textTertiary,
                                                 fontWeight: remainingSeats <= 0
                                                     ? FontWeight.bold
@@ -3411,7 +3410,7 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
               }
               return Expanded(
                 child: Center(
-                  child: Text('$count', style: const TextStyle(fontSize: 13)),
+                  child: Text('$count', style: const TextStyle(fontSize: AppTextSize.body)),
                 ),
               );
             }),

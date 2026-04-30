@@ -4,6 +4,7 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'app_theme.dart';
+import 'widgets/app_feedback.dart';
 
 /// ai_student_profiles/{studentId} の HUG情報と AIプロファイルを表示するダイアログ。
 /// AI相談画面とプラスのスケジュール画面（プロファイルボタン）から共通で利用される。
@@ -60,15 +61,11 @@ class _StudentProfileDialogState extends State<_StudentProfileDialog> {
       final data = (result.data as Map?) ?? {};
       final synced = data['synced'] ?? 0;
       final unmapped = data['skippedUnmapped'] ?? 0;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(synced == 1 ? 'HUG情報を更新しました' : '同期: $synced件 / 未マッピング: $unmapped件')),
-      );
+      AppFeedback.info(context, synced == 1 ? 'HUG情報を更新しました' : '同期: $synced件 / 未マッピング: $unmapped件');
     } catch (e) {
       if (!mounted) return;
       Navigator.of(context, rootNavigator: true).pop();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('HUG同期に失敗: $e')),
-      );
+      AppFeedback.info(context, 'HUG同期に失敗: $e');
     }
   }
 
@@ -98,7 +95,7 @@ class _StudentProfileDialogState extends State<_StudentProfileDialog> {
                   Expanded(
                     child: Text(
                       widget.studentName,
-                      style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600, color: c.textPrimary),
+                      style: TextStyle(fontSize: AppTextSize.title, fontWeight: FontWeight.w600, color: c.textPrimary),
                     ),
                   ),
                   IconButton(
@@ -149,28 +146,28 @@ class _StudentProfileDialogState extends State<_StudentProfileDialog> {
                             Icon(Icons.sync, size: 14, color: c.textSecondary),
                             const SizedBox(width: 6),
                             Text('HUG最終同期: $lastSyncedText',
-                                style: TextStyle(fontSize: 12, color: c.textSecondary)),
+                                style: TextStyle(fontSize: AppTextSize.small, color: c.textSecondary)),
                             const Spacer(),
                             TextButton.icon(
                               icon: const Icon(Icons.refresh, size: 16),
-                              label: const Text('今すぐ同期', style: TextStyle(fontSize: 12)),
+                              label: const Text('今すぐ同期', style: TextStyle(fontSize: AppTextSize.small)),
                               onPressed: _sync,
                             ),
                           ],
                         ),
                         const SizedBox(height: 12),
                         Text('HUG情報（自動取得）',
-                            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: c.textPrimary)),
+                            style: TextStyle(fontSize: AppTextSize.body, fontWeight: FontWeight.w600, color: c.textPrimary)),
                         const SizedBox(height: 8),
                         ..._docLabels.entries.map((e) => _buildDocCard(e.key, e.value, hugDocs, latestPlanDate)),
                         _buildCareRecordsSection(careRecords, careRange),
                         const SizedBox(height: 20),
                         Text('AIが蓄積した知見',
-                            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: c.textPrimary)),
+                            style: TextStyle(fontSize: AppTextSize.body, fontWeight: FontWeight.w600, color: c.textPrimary)),
                         const SizedBox(height: 8),
                         if (aiProfile.isEmpty)
                           Text('まだ蓄積されたプロファイルはありません。AI相談を重ねると自動的に学習します。',
-                              style: TextStyle(fontSize: 12, color: c.textSecondary))
+                              style: TextStyle(fontSize: AppTextSize.small, color: c.textSecondary))
                         else
                           ..._buildAiProfileSections(aiProfile),
                       ],
@@ -202,7 +199,7 @@ class _StudentProfileDialogState extends State<_StudentProfileDialog> {
     switch (status) {
       case 'ok':
         statusIcon = Icons.check_circle;
-        statusColor = isOutdated ? Colors.blue : Colors.green;
+        statusColor = isOutdated ? AppColors.info : AppColors.success;
         statusText = planDate > 0 ? '作成日: ${_formatPlanDate(planDate)}' : '取得済';
         break;
       case 'not-created':
@@ -212,7 +209,7 @@ class _StudentProfileDialogState extends State<_StudentProfileDialog> {
         break;
       case 'error':
         statusIcon = Icons.error_outline;
-        statusColor = Colors.red;
+        statusColor = AppColors.error;
         statusText = 'エラー';
         break;
       default:
@@ -245,11 +242,11 @@ class _StudentProfileDialogState extends State<_StudentProfileDialog> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(label, style: TextStyle(fontSize: 13, color: c.textPrimary, fontWeight: FontWeight.w500)),
+                        Text(label, style: TextStyle(fontSize: AppTextSize.body, color: c.textPrimary, fontWeight: FontWeight.w500)),
                         const SizedBox(height: 2),
                         Text(
                           statusText,
-                          style: TextStyle(fontSize: 11, color: c.textSecondary),
+                          style: TextStyle(fontSize: AppTextSize.caption, color: c.textSecondary),
                         ),
                       ],
                     ),
@@ -307,7 +304,7 @@ class _StudentProfileDialogState extends State<_StudentProfileDialog> {
         return bulletSplit.map((p) => Padding(
           padding: const EdgeInsets.only(left: 2, bottom: 3),
           child: Text('・${p.trim()}',
-              style: TextStyle(fontSize: 13, color: c.textPrimary, height: 1.7)),
+              style: TextStyle(fontSize: AppTextSize.body, color: c.textPrimary, height: 1.7)),
         )).toList();
       }
       // " / " で複数値を連結している場合も箇条書きにする（ただし日付などのスラッシュは除外する目安で3つ以上）
@@ -316,11 +313,11 @@ class _StudentProfileDialogState extends State<_StudentProfileDialog> {
         return slashParts.map((p) => Padding(
           padding: const EdgeInsets.only(left: 2, bottom: 3),
           child: Text('・$p',
-              style: TextStyle(fontSize: 13, color: c.textPrimary, height: 1.7)),
+              style: TextStyle(fontSize: AppTextSize.body, color: c.textPrimary, height: 1.7)),
         )).toList();
       }
       return [
-        SelectableText(v, style: TextStyle(fontSize: 13, color: c.textPrimary, height: 1.7)),
+        SelectableText(v, style: TextStyle(fontSize: AppTextSize.body, color: c.textPrimary, height: 1.7)),
       ];
     }
 
@@ -332,7 +329,7 @@ class _StudentProfileDialogState extends State<_StudentProfileDialog> {
           child: Text(
             line.substring(3).trim(),
             style: TextStyle(
-              fontSize: 15,
+              fontSize: AppTextSize.bodyLarge,
               fontWeight: FontWeight.w700,
               color: c.textPrimary,
               height: 1.4,
@@ -350,7 +347,7 @@ class _StudentProfileDialogState extends State<_StudentProfileDialog> {
             padding: const EdgeInsets.only(bottom: 10),
             child: Text(label,
                 style: TextStyle(
-                    fontSize: 12,
+                    fontSize: AppTextSize.small,
                     color: c.textSecondary,
                     fontWeight: FontWeight.w600,
                     letterSpacing: 0.3)),
@@ -364,7 +361,7 @@ class _StudentProfileDialogState extends State<_StudentProfileDialog> {
                 Text(
                   label,
                   style: TextStyle(
-                    fontSize: 11,
+                    fontSize: AppTextSize.caption,
                     color: c.textSecondary,
                     fontWeight: FontWeight.w600,
                     letterSpacing: 0.3,
@@ -381,7 +378,7 @@ class _StudentProfileDialogState extends State<_StudentProfileDialog> {
           padding: const EdgeInsets.only(bottom: 6),
           child: SelectableText(
             line,
-            style: TextStyle(fontSize: 13, color: c.textPrimary, height: 1.7),
+            style: TextStyle(fontSize: AppTextSize.body, color: c.textPrimary, height: 1.7),
           ),
         ));
       }
@@ -421,7 +418,7 @@ class _StudentProfileDialogState extends State<_StudentProfileDialog> {
               Icon(
                 hasRecords ? Icons.check_circle : Icons.remove_circle_outline,
                 size: 16,
-                color: hasRecords ? Colors.green : c.textTertiary,
+                color: hasRecords ? AppColors.success : c.textTertiary,
               ),
               const SizedBox(width: 10),
               Expanded(
@@ -430,12 +427,12 @@ class _StudentProfileDialogState extends State<_StudentProfileDialog> {
                   children: [
                     Text('ケア記録',
                         style: TextStyle(
-                            fontSize: 13,
+                            fontSize: AppTextSize.body,
                             color: c.textPrimary,
                             fontWeight: FontWeight.w500)),
                     const SizedBox(height: 2),
                     Text(statusText,
-                        style: TextStyle(fontSize: 11, color: c.textSecondary)),
+                        style: TextStyle(fontSize: AppTextSize.caption, color: c.textSecondary)),
                   ],
                 ),
               ),
@@ -482,7 +479,7 @@ class _StudentProfileDialogState extends State<_StudentProfileDialog> {
                         children: [
                           Text('ケア記録',
                               style: TextStyle(
-                                  fontSize: 16,
+                                  fontSize: AppTextSize.titleSm,
                                   fontWeight: FontWeight.w600,
                                   color: c.textPrimary)),
                           if (rangeText.isNotEmpty)
@@ -490,7 +487,7 @@ class _StudentProfileDialogState extends State<_StudentProfileDialog> {
                               padding: const EdgeInsets.only(top: 2),
                               child: Text('${records.length}件 $rangeText',
                                   style: TextStyle(
-                                      fontSize: 11, color: c.textSecondary)),
+                                      fontSize: AppTextSize.caption, color: c.textSecondary)),
                             ),
                         ],
                       ),
@@ -551,9 +548,9 @@ class _StudentProfileDialogState extends State<_StudentProfileDialog> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(entry.value, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: c.textPrimary)),
+            Text(entry.value, style: TextStyle(fontSize: AppTextSize.small, fontWeight: FontWeight.w600, color: c.textPrimary)),
             const SizedBox(height: 4),
-            Text(content, style: TextStyle(fontSize: 12, color: c.textSecondary, height: 1.6)),
+            Text(content, style: TextStyle(fontSize: AppTextSize.small, color: c.textSecondary, height: 1.6)),
           ],
         ),
       ));
@@ -645,7 +642,7 @@ class _CareRecordTileState extends State<_CareRecordTile> {
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
               child: Row(
                 children: [
-                  Icon(Icons.check_circle, size: 16, color: Colors.green),
+                  Icon(Icons.check_circle, size: 16, color: AppColors.success),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Column(
@@ -653,14 +650,14 @@ class _CareRecordTileState extends State<_CareRecordTile> {
                       children: [
                         Text(date,
                             style: TextStyle(
-                                fontSize: 13,
+                                fontSize: AppTextSize.body,
                                 fontWeight: FontWeight.w500,
                                 color: c.textPrimary)),
                         if (subtitle.isNotEmpty) ...[
                           const SizedBox(height: 2),
                           Text(subtitle,
                               style: TextStyle(
-                                  fontSize: 11, color: c.textSecondary)),
+                                  fontSize: AppTextSize.caption, color: c.textSecondary)),
                         ],
                       ],
                     ),
@@ -716,14 +713,14 @@ class _CareRecordTileState extends State<_CareRecordTile> {
                                 child: CircularProgressIndicator(strokeWidth: 2))))
                     : _lazyError != null
                         ? Text('取得失敗: $_lazyError',
-                            style: TextStyle(fontSize: 11, color: Colors.red.shade300))
+                            style: TextStyle(fontSize: AppTextSize.caption, color: AppColors.errorBorder))
                         : body.isEmpty
                             ? Text('本文はありません。',
                                 style: TextStyle(
-                                    fontSize: 12, color: c.textSecondary))
+                                    fontSize: AppTextSize.small, color: c.textSecondary))
                             : SelectableText(body,
                                 style: TextStyle(
-                                    fontSize: 12,
+                                    fontSize: AppTextSize.small,
                                     height: 1.6,
                                     color: c.textPrimary)),
               ),

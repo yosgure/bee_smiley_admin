@@ -10,6 +10,7 @@ import 'package:share_plus/share_plus.dart';
 // Web用の条件付きインポート
 import 'csv_export_web.dart' if (dart.library.io) 'csv_export_stub.dart' as web_helper;
 import 'app_theme.dart';
+import 'widgets/app_feedback.dart';
 import 'classroom_utils.dart';
 
 // ==========================================
@@ -124,19 +125,12 @@ class _StaffCsvExportScreenState extends State<StaffCsvExportScreen> {
       await CsvExporter.downloadCsv(context, csvContent, fileName);
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('${snap.docs.length}件のスタッフデータをエクスポートしました'),
-            backgroundColor: Colors.green,
-          ),
-        );
+        AppFeedback.success(context, '${snap.docs.length}件のスタッフデータをエクスポートしました');
         Navigator.pop(context);
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('エラー: $e'), backgroundColor: Colors.red),
-        );
+        AppFeedback.error(context, 'エラー: $e');
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -185,11 +179,11 @@ appBar: AppBar(
                   ),
                   child: Column(
                     children: [
-                      Icon(Icons.badge, size: 64, color: Colors.blue.shade300),
+                      Icon(Icons.badge, size: 64, color: AppColors.infoBorder),
                       const SizedBox(height: 16),
                       const Text(
                         'スタッフデータをエクスポート',
-                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                        style: TextStyle(fontSize: AppTextSize.titleLg, fontWeight: FontWeight.bold),
                       ),
                       const SizedBox(height: 8),
                       Text(
@@ -201,7 +195,7 @@ appBar: AppBar(
                       Text(
                         '出力項目: ログインID、名前、フリガナ、\nメールアドレス、役職、担当教室、権限、登録日',
                         textAlign: TextAlign.center,
-                        style: TextStyle(fontSize: 12, color: context.colors.textSecondary),
+                        style: TextStyle(fontSize: AppTextSize.small, color: context.colors.textSecondary),
                       ),
                       const SizedBox(height: 24),
                       SizedBox(
@@ -217,7 +211,7 @@ appBar: AppBar(
                               : const Icon(Icons.download),
                           label: Text(_isLoading ? 'エクスポート中...' : 'CSVをダウンロード'),
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.blue,
+                            backgroundColor: AppColors.info,
                             foregroundColor: Colors.white,
                             padding: const EdgeInsets.symmetric(vertical: 16),
                           ),
@@ -396,19 +390,12 @@ class _FamilyCsvExportScreenState extends State<FamilyCsvExportScreen> {
       await CsvExporter.downloadCsv(context, csvContent, fileName);
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('$_familyCount世帯・$_childCount名の児童データをエクスポートしました'),
-            backgroundColor: Colors.green,
-          ),
-        );
+        AppFeedback.success(context, '$_familyCount世帯・$_childCount名の児童データをエクスポートしました');
         Navigator.pop(context);
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('エラー: $e'), backgroundColor: Colors.red),
-        );
+        AppFeedback.error(context, 'エラー: $e');
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -457,11 +444,11 @@ appBar: AppBar(
                   ),
                   child: Column(
                     children: [
-                      Icon(Icons.family_restroom, size: 64, color: Colors.blue.shade300),
+                      Icon(Icons.family_restroom, size: 64, color: AppColors.infoBorder),
                       const SizedBox(height: 16),
                       const Text(
                         '保護者・児童データをエクスポート',
-                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                        style: TextStyle(fontSize: AppTextSize.titleLg, fontWeight: FontWeight.bold),
                       ),
                       const SizedBox(height: 8),
                       Text(
@@ -473,7 +460,7 @@ appBar: AppBar(
                       Text(
                         '出力項目: ログインID、保護者情報、続柄、連絡先、\n住所、緊急連絡先、アカウント状態、\n児童名、カナ、性別、生年月日、教室、コース、特記事項',
                         textAlign: TextAlign.center,
-                        style: TextStyle(fontSize: 12, color: context.colors.textSecondary),
+                        style: TextStyle(fontSize: AppTextSize.small, color: context.colors.textSecondary),
                       ),
                       const SizedBox(height: 24),
                       SizedBox(
@@ -489,7 +476,7 @@ appBar: AppBar(
                               : const Icon(Icons.download),
                           label: Text(_isLoading ? 'エクスポート中...' : 'CSVをダウンロード'),
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.blue,
+                            backgroundColor: AppColors.info,
                             foregroundColor: Colors.white,
                             padding: const EdgeInsets.symmetric(vertical: 16),
                           ),
@@ -571,19 +558,12 @@ class _ToolCsvExportScreenState extends State<ToolCsvExportScreen> {
       await CsvExporter.downloadCsv(context, csvContent, fileName);
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('${snap.docs.length}件の教具データをエクスポートしました'),
-            backgroundColor: Colors.green,
-          ),
-        );
+        AppFeedback.success(context, '${snap.docs.length}件の教具データをエクスポートしました');
         Navigator.pop(context);
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('エラー: $e'), backgroundColor: Colors.red),
-        );
+        AppFeedback.error(context, 'エラー: $e');
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -636,7 +616,7 @@ appBar: AppBar(
                       const SizedBox(height: 16),
                       const Text(
                         '教具マスタをエクスポート',
-                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                        style: TextStyle(fontSize: AppTextSize.titleLg, fontWeight: FontWeight.bold),
                       ),
                       const SizedBox(height: 8),
                       Text(
@@ -648,7 +628,7 @@ appBar: AppBar(
                       Text(
                         '出力項目: 教具名、カテゴリ、説明、対象年齢',
                         textAlign: TextAlign.center,
-                        style: TextStyle(fontSize: 12, color: context.colors.textSecondary),
+                        style: TextStyle(fontSize: AppTextSize.small, color: context.colors.textSecondary),
                       ),
                       const SizedBox(height: 24),
                       SizedBox(

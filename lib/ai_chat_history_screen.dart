@@ -30,7 +30,7 @@ class AiChatHistoryScreen extends StatelessWidget {
               child: Icon(Icons.history_rounded, color: context.colors.aiAccent, size: 16),
             ),
             const SizedBox(width: 10),
-            Text('$studentName - 相談履歴', style: TextStyle(fontSize: 16, color: context.colors.textPrimary)),
+            Text('$studentName - 相談履歴', style: TextStyle(fontSize: AppTextSize.titleSm, color: context.colors.textPrimary)),
           ],
         ),
         centerTitle: true,
@@ -59,7 +59,7 @@ class AiChatHistoryScreen extends StatelessWidget {
                 padding: const EdgeInsets.all(16),
                 child: SelectableText(
                   'エラーが発生しました。\nFirestoreのインデックスが必要です:\n\n${snapshot.error}',
-                  style: const TextStyle(color: Colors.red, fontSize: 12),
+                  style: const TextStyle(color: AppColors.error, fontSize: AppTextSize.small),
                 ),
               ),
             );
@@ -82,7 +82,7 @@ class AiChatHistoryScreen extends StatelessWidget {
                   const SizedBox(height: 16),
                   Text(
                     'まだ相談履歴がありません',
-                    style: TextStyle(color: context.colors.textTertiary, fontSize: 16),
+                    style: TextStyle(color: context.colors.textTertiary, fontSize: AppTextSize.titleSm),
                   ),
                 ],
               ),
@@ -152,12 +152,12 @@ class AiChatHistoryScreen extends StatelessWidget {
                   const SizedBox(width: 10),
                   Text(
                     dateStr,
-                    style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: context.colors.textPrimary),
+                    style: TextStyle(fontWeight: FontWeight.w600, fontSize: AppTextSize.bodyMd, color: context.colors.textPrimary),
                   ),
                   const Spacer(),
                   Text(
                     '$messageCount件',
-                    style: TextStyle(fontSize: 11, color: context.colors.textTertiary),
+                    style: TextStyle(fontSize: AppTextSize.caption, color: context.colors.textTertiary),
                   ),
                   const SizedBox(width: 4),
                   Icon(Icons.chevron_right_rounded, color: context.colors.iconMuted, size: 20),
@@ -172,7 +172,7 @@ class AiChatHistoryScreen extends StatelessWidget {
                 ),
                 child: Text(
                   staffName,
-                  style: TextStyle(fontSize: 11, color: context.colors.textSecondary),
+                  style: TextStyle(fontSize: AppTextSize.caption, color: context.colors.textSecondary),
                 ),
               ),
               if (summary != null && summary.isNotEmpty) ...[
@@ -195,7 +195,7 @@ class AiChatHistoryScreen extends StatelessWidget {
                           maxLines: 3,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
-                            fontSize: 12,
+                            fontSize: AppTextSize.small,
                             color: context.colors.textSecondary,
                             height: 1.4,
                           ),
@@ -210,7 +210,7 @@ class AiChatHistoryScreen extends StatelessWidget {
                   lastMessage,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: TextStyle(fontSize: 13, color: context.colors.textSecondary),
+                  style: TextStyle(fontSize: AppTextSize.body, color: context.colors.textSecondary),
                 ),
               ],
             ],
@@ -262,7 +262,7 @@ class AiChatSessionDetailScreen extends StatelessWidget {
     return Scaffold(
       backgroundColor: context.colors.scaffoldBg,
       appBar: AppBar(
-        title: Text('$studentName - $dateStr', style: TextStyle(fontSize: 15, color: context.colors.textPrimary)),
+        title: Text('$studentName - $dateStr', style: TextStyle(fontSize: AppTextSize.bodyLarge, color: context.colors.textPrimary)),
         centerTitle: true,
         backgroundColor: context.colors.scaffoldBg,
         elevation: 0,
@@ -346,7 +346,7 @@ class AiChatSessionDetailScreen extends StatelessWidget {
               ),
               child: SelectableText(
                 content,
-                style: TextStyle(fontSize: 15, color: context.colors.chatMyBubbleText, height: 1.5),
+                style: TextStyle(fontSize: AppTextSize.bodyLarge, color: context.colors.chatMyBubbleText, height: 1.5),
               ),
             ),
             if (timeStr.isNotEmpty)
@@ -354,7 +354,7 @@ class AiChatSessionDetailScreen extends StatelessWidget {
                 padding: const EdgeInsets.only(top: 4, right: 4),
                 child: Text(
                   timeStr,
-                  style: TextStyle(fontSize: 11, color: context.colors.textHint),
+                  style: TextStyle(fontSize: AppTextSize.caption, color: context.colors.textHint),
                 ),
               ),
           ],
@@ -386,7 +386,7 @@ class AiChatSessionDetailScreen extends StatelessWidget {
                 SelectableText(
                   content,
                   style: TextStyle(
-                    fontSize: 15,
+                    fontSize: AppTextSize.bodyLarge,
                     color: context.colors.textPrimary,
                     height: 1.6,
                   ),
@@ -396,7 +396,7 @@ class AiChatSessionDetailScreen extends StatelessWidget {
                     padding: const EdgeInsets.only(top: 6),
                     child: Text(
                       timeStr,
-                      style: TextStyle(fontSize: 11, color: context.colors.textHint),
+                      style: TextStyle(fontSize: AppTextSize.caption, color: context.colors.textHint),
                     ),
                   ),
               ],

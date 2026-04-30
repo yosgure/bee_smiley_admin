@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'app_theme.dart';
+import 'widgets/app_feedback.dart';
 
 class AiCommandManageScreen extends StatefulWidget {
   final VoidCallback? onBack;
@@ -56,22 +57,14 @@ class _AiCommandManageScreenState extends State<AiCommandManageScreen> {
   }
 
   Future<void> _deleteCommand(Map<String, dynamic> cmd) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('コマンドを削除'),
-        content: Text('「/${cmd['label']}」を削除しますか？'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('キャンセル')),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('削除', style: TextStyle(color: Colors.red)),
-          ),
-        ],
-      ),
+    final confirmed = await AppFeedback.confirm(
+      context,
+      title: 'コマンドを削除',
+      message: '「/${cmd['label']}」を削除しますか？',
+      confirmLabel: '削除',
+      destructive: true,
     );
-    if (confirmed != true) return;
+    if (!confirmed) return;
 
     try {
       await FirebaseFirestore.instance
@@ -81,7 +74,7 @@ class _AiCommandManageScreenState extends State<AiCommandManageScreen> {
       _loadCommands();
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('削除に失敗: $e')));
+        AppFeedback.info(context, '削除に失敗: $e');
       }
     }
   }
@@ -91,7 +84,7 @@ class _AiCommandManageScreenState extends State<AiCommandManageScreen> {
     return Scaffold(
       backgroundColor: context.colors.scaffoldBg,
       appBar: AppBar(
-        title: const Text('AI相談コマンド設定', style: TextStyle(fontSize: 16)),
+        title: const Text('AI相談コマンド設定', style: TextStyle(fontSize: AppTextSize.titleSm)),
         centerTitle: true,
         backgroundColor: context.colors.cardBg,
         elevation: 0,
@@ -125,10 +118,10 @@ class _AiCommandManageScreenState extends State<AiCommandManageScreen> {
                     children: [
                       Icon(Icons.tag_rounded, size: 64, color: context.colors.borderMedium),
                       SizedBox(height: 16),
-                      Text('コマンドがありません', style: TextStyle(color: context.colors.textTertiary, fontSize: 16)),
+                      Text('コマンドがありません', style: TextStyle(color: context.colors.textTertiary, fontSize: AppTextSize.titleSm)),
                       SizedBox(height: 8),
                       Text('右下の + ボタンから追加してください',
-                          style: TextStyle(color: context.colors.textHint, fontSize: 13)),
+                          style: TextStyle(color: context.colors.textHint, fontSize: AppTextSize.body)),
                     ],
                   ),
                 )
@@ -172,7 +165,7 @@ class _AiCommandManageScreenState extends State<AiCommandManageScreen> {
                                               child: Text(
                                                 '/${cmd['label'] ?? ''}',
                                                 style: TextStyle(
-                                                  fontSize: 14,
+                                                  fontSize: AppTextSize.bodyMd,
                                                   fontWeight: FontWeight.w600,
                                                   color: context.colors.aiAccent,
                                                 ),
@@ -181,7 +174,7 @@ class _AiCommandManageScreenState extends State<AiCommandManageScreen> {
                                             SizedBox(width: 8),
                                             Text(
                                               cmd['freeform'] == true ? '自由記述' : '${questions.length}問',
-                                              style: TextStyle(fontSize: 12, color: context.colors.textTertiary),
+                                              style: TextStyle(fontSize: AppTextSize.small, color: context.colors.textTertiary),
                                             ),
                                           ],
                                         ),
@@ -189,7 +182,7 @@ class _AiCommandManageScreenState extends State<AiCommandManageScreen> {
                                     ),
                                   ),
                                   IconButton(
-                                    icon: Icon(Icons.delete_outline, size: 20, color: Colors.red.shade300),
+                                    icon: Icon(Icons.delete_outline, size: 20, color: AppColors.errorBorder),
                                     onPressed: () => _deleteCommand(cmd),
                                   ),
                                 ],
@@ -281,9 +274,7 @@ class _CommandEditDialogState extends State<_CommandEditDialog> {
   Future<void> _save() async {
     final label = _labelController.text.trim();
     if (label.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('コマンド名を入力してください')),
-      );
+      AppFeedback.info(context, 'コマンド名を入力してください');
       return;
     }
 
@@ -313,7 +304,7 @@ class _CommandEditDialogState extends State<_CommandEditDialog> {
       if (mounted) Navigator.pop(context);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('保存に失敗: $e')));
+        AppFeedback.info(context, '保存に失敗: $e');
       }
     } finally {
       if (mounted) setState(() => _isSaving = false);
@@ -347,7 +338,7 @@ class _CommandEditDialogState extends State<_CommandEditDialog> {
                   Expanded(
                     child: Text(
                       _isNew ? 'コマンドを追加' : 'コマンドを編集',
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+                      style: TextStyle(fontSize: AppTextSize.titleSm, fontWeight: FontWeight.w500),
                       textAlign: TextAlign.center,
                     ),
                   ),
@@ -406,14 +397,14 @@ class _CommandEditDialogState extends State<_CommandEditDialog> {
                           Text(
                             '自由記述モード',
                             style: TextStyle(
-                              fontSize: 13,
+                              fontSize: AppTextSize.body,
                               fontWeight: FontWeight.w600,
                               color: _freeform ? context.colors.aiAccent : context.colors.textSecondary,
                             ),
                           ),
                           Text(
                             'ONにすると、質問形式ではなく自由記述で入力し、AIが整形する',
-                            style: TextStyle(fontSize: 11, color: context.colors.textTertiary),
+                            style: TextStyle(fontSize: AppTextSize.caption, color: context.colors.textTertiary),
                           ),
                         ],
                       ),
@@ -437,7 +428,7 @@ class _CommandEditDialogState extends State<_CommandEditDialog> {
                   TextButton.icon(
                     onPressed: _addQuestion,
                     icon: const Icon(Icons.add_rounded, size: 18),
-                    label: Text('質問を追加', style: TextStyle(fontSize: 13)),
+                    label: Text('質問を追加', style: TextStyle(fontSize: AppTextSize.body)),
                     style: TextButton.styleFrom(foregroundColor: context.colors.aiAccent),
                   ),
                 ],
@@ -456,10 +447,10 @@ class _CommandEditDialogState extends State<_CommandEditDialog> {
                       Icon(Icons.quiz_outlined, size: 32, color: context.colors.textHint),
                       SizedBox(height: 8),
                       Text('質問がありません',
-                          style: TextStyle(color: context.colors.textTertiary, fontSize: 14)),
+                          style: TextStyle(color: context.colors.textTertiary, fontSize: AppTextSize.bodyMd)),
                       SizedBox(height: 4),
                       Text('「質問を追加」から追加してください',
-                          style: TextStyle(color: context.colors.textHint, fontSize: 12)),
+                          style: TextStyle(color: context.colors.textHint, fontSize: AppTextSize.small)),
                     ],
                   ),
                 )
@@ -524,7 +515,7 @@ class _CommandEditDialogState extends State<_CommandEditDialog> {
                                     child: Text(
                                       '${index + 1}',
                                       style: TextStyle(
-                                        fontSize: 13,
+                                        fontSize: AppTextSize.body,
                                         fontWeight: FontWeight.bold,
                                         color: context.colors.aiAccent,
                                       ),
@@ -538,7 +529,7 @@ class _CommandEditDialogState extends State<_CommandEditDialog> {
                                     children: [
                                       Text(
                                         q['question'] as String? ?? '(未入力)',
-                                        style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+                                        style: TextStyle(fontSize: AppTextSize.bodyMd, fontWeight: FontWeight.w500),
                                         maxLines: 1,
                                         overflow: TextOverflow.ellipsis,
                                       ),
@@ -552,12 +543,12 @@ class _CommandEditDialogState extends State<_CommandEditDialog> {
                                               borderRadius: BorderRadius.circular(4),
                                             ),
                                             child: Text(typeLabel,
-                                                style: TextStyle(fontSize: 10, color: context.colors.textSecondary)),
+                                                style: TextStyle(fontSize: AppTextSize.xs, color: context.colors.textSecondary)),
                                           ),
                                           if (options.isNotEmpty) ...[
                                             SizedBox(width: 6),
                                             Text('${options.length}択',
-                                                style: TextStyle(fontSize: 10, color: context.colors.textTertiary)),
+                                                style: TextStyle(fontSize: AppTextSize.xs, color: context.colors.textTertiary)),
                                           ],
                                         ],
                                       ),
@@ -565,7 +556,7 @@ class _CommandEditDialogState extends State<_CommandEditDialog> {
                                   ),
                                 ),
                                 IconButton(
-                                  icon: Icon(Icons.delete_outline, size: 18, color: Colors.red.shade300),
+                                  icon: Icon(Icons.delete_outline, size: 18, color: AppColors.errorBorder),
                                   onPressed: () => _removeQuestion(index),
                                 ),
                               ],
@@ -589,7 +580,7 @@ class _CommandEditDialogState extends State<_CommandEditDialog> {
   Widget _buildSectionTitle(String title) {
     return Text(
       title,
-      style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: context.colors.textPrimary),
+      style: TextStyle(fontSize: AppTextSize.bodyLarge, fontWeight: FontWeight.w700, color: context.colors.textPrimary),
     );
   }
 
@@ -599,7 +590,7 @@ class _CommandEditDialogState extends State<_CommandEditDialog> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(label,
-            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: context.colors.textSecondary)),
+            style: TextStyle(fontSize: AppTextSize.small, fontWeight: FontWeight.w600, color: context.colors.textSecondary)),
         SizedBox(height: 6),
         TextField(
           controller: controller,
@@ -607,7 +598,7 @@ class _CommandEditDialogState extends State<_CommandEditDialog> {
           minLines: 1,
           decoration: InputDecoration(
             hintText: hint,
-            hintStyle: TextStyle(fontSize: 13, color: context.colors.textHint),
+            hintStyle: TextStyle(fontSize: AppTextSize.body, color: context.colors.textHint),
             filled: true,
             fillColor: context.colors.tagBg,
             border: OutlineInputBorder(
@@ -620,7 +611,7 @@ class _CommandEditDialogState extends State<_CommandEditDialog> {
             ),
             contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           ),
-          style: TextStyle(fontSize: 14),
+          style: TextStyle(fontSize: AppTextSize.bodyMd),
         ),
       ],
     );
@@ -710,7 +701,7 @@ class _QuestionEditDialogState extends State<_QuestionEditDialog> {
                   const Expanded(
                     child: Text(
                       '質問を編集',
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+                      style: TextStyle(fontSize: AppTextSize.titleSm, fontWeight: FontWeight.w500),
                       textAlign: TextAlign.center,
                     ),
                   ),
@@ -729,13 +720,13 @@ class _QuestionEditDialogState extends State<_QuestionEditDialog> {
                 children: [
               // 質問テキスト
               Text('質問テキスト',
-                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: context.colors.textSecondary)),
+                  style: TextStyle(fontSize: AppTextSize.small, fontWeight: FontWeight.w600, color: context.colors.textSecondary)),
               SizedBox(height: 6),
               TextField(
                 controller: _questionController,
                 decoration: InputDecoration(
                   hintText: '例: 今日の様子は？',
-                  hintStyle: TextStyle(fontSize: 13, color: context.colors.textHint),
+                  hintStyle: TextStyle(fontSize: AppTextSize.body, color: context.colors.textHint),
                   filled: true,
                   fillColor: context.colors.tagBg,
                   border: OutlineInputBorder(
@@ -752,7 +743,7 @@ class _QuestionEditDialogState extends State<_QuestionEditDialog> {
 
               // 回答タイプ
               Text('回答タイプ',
-                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: context.colors.textSecondary)),
+                  style: TextStyle(fontSize: AppTextSize.small, fontWeight: FontWeight.w600, color: context.colors.textSecondary)),
               const SizedBox(height: 8),
               Wrap(
                 spacing: 8,
@@ -771,7 +762,7 @@ class _QuestionEditDialogState extends State<_QuestionEditDialog> {
               // 選択肢（select or select_or_text の場合）
               if (_type == 'select' || _type == 'select_or_text') ...[
                 Text('選択肢',
-                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: context.colors.textSecondary)),
+                    style: TextStyle(fontSize: AppTextSize.small, fontWeight: FontWeight.w600, color: context.colors.textSecondary)),
                 SizedBox(height: 8),
                 ..._options.asMap().entries.map((entry) {
                   return Container(
@@ -785,7 +776,7 @@ class _QuestionEditDialogState extends State<_QuestionEditDialog> {
                     child: Row(
                       children: [
                         Expanded(
-                          child: Text(entry.value, style: TextStyle(fontSize: 14)),
+                          child: Text(entry.value, style: TextStyle(fontSize: AppTextSize.bodyMd)),
                         ),
                         GestureDetector(
                           onTap: () => setState(() => _options.removeAt(entry.key)),
@@ -803,7 +794,7 @@ class _QuestionEditDialogState extends State<_QuestionEditDialog> {
                         onSubmitted: (_) => _addOption(),
                         decoration: InputDecoration(
                           hintText: '選択肢を入力...',
-                          hintStyle: TextStyle(fontSize: 13, color: context.colors.textHint),
+                          hintStyle: TextStyle(fontSize: AppTextSize.body, color: context.colors.textHint),
                           filled: true,
                           fillColor: context.colors.tagBg,
                           border: OutlineInputBorder(
@@ -816,7 +807,7 @@ class _QuestionEditDialogState extends State<_QuestionEditDialog> {
                           ),
                           contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                         ),
-                        style: TextStyle(fontSize: 13),
+                        style: TextStyle(fontSize: AppTextSize.body),
                       ),
                     ),
                     SizedBox(width: 8),
@@ -832,13 +823,13 @@ class _QuestionEditDialogState extends State<_QuestionEditDialog> {
               // プレースホルダー（text の場合）
               if (_type == 'text' || _type == 'select_or_text') ...[
                 Text('プレースホルダー',
-                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: context.colors.textSecondary)),
+                    style: TextStyle(fontSize: AppTextSize.small, fontWeight: FontWeight.w600, color: context.colors.textSecondary)),
                 SizedBox(height: 6),
                 TextField(
                   controller: _placeholderController,
                   decoration: InputDecoration(
                     hintText: '例: 活動内容を入力してください',
-                    hintStyle: TextStyle(fontSize: 13, color: context.colors.textHint),
+                    hintStyle: TextStyle(fontSize: AppTextSize.body, color: context.colors.textHint),
                     filled: true,
                     fillColor: context.colors.tagBg,
                     border: OutlineInputBorder(
@@ -858,8 +849,8 @@ class _QuestionEditDialogState extends State<_QuestionEditDialog> {
               SwitchListTile(
                 value: _required,
                 onChanged: (v) => setState(() => _required = v),
-                title: Text('必須項目', style: TextStyle(fontSize: 14)),
-                subtitle: Text('この質問は回答必須にする', style: TextStyle(fontSize: 12, color: context.colors.textTertiary)),
+                title: Text('必須項目', style: TextStyle(fontSize: AppTextSize.bodyMd)),
+                subtitle: Text('この質問は回答必須にする', style: TextStyle(fontSize: AppTextSize.small, color: context.colors.textTertiary)),
                 activeColor: context.colors.aiAccent,
                 contentPadding: EdgeInsets.zero,
               ),
@@ -888,7 +879,7 @@ class _QuestionEditDialogState extends State<_QuestionEditDialog> {
         child: Text(
           label,
           style: TextStyle(
-            fontSize: 13,
+            fontSize: AppTextSize.body,
             color: selected ? Colors.white : context.colors.textPrimary,
             fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
           ),

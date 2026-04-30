@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
 import 'app_theme.dart';
+import 'widgets/app_feedback.dart';
 
 /// 新ルール（月末を含む週の土曜まで）を初適用する月。
 /// この月以前は旧ルール（月初〜月末）として扱う。
@@ -180,9 +181,7 @@ class _PlusShiftRequestDialogState extends State<PlusShiftRequestDialog> {
 
   Future<void> _save() async {
     if (_myStaffId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('ログインユーザーが確認できませんでした')),
-      );
+      AppFeedback.info(context, 'ログインユーザーが確認できませんでした');
       return;
     }
     setState(() => _saving = true);
@@ -261,17 +260,13 @@ class _PlusShiftRequestDialogState extends State<PlusShiftRequestDialog> {
       }
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('シフト希望を保存しました')),
-        );
+        AppFeedback.info(context, 'シフト希望を保存しました');
         Navigator.of(context).pop(true);
       }
     } catch (e) {
       debugPrint('シフト希望の保存失敗: $e');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('保存に失敗しました: $e')),
-        );
+        AppFeedback.info(context, '保存に失敗しました: $e');
       }
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -285,16 +280,16 @@ class _PlusShiftRequestDialogState extends State<PlusShiftRequestDialog> {
     late final Color fg;
     late final String label;
     if (days < 0) {
-      bg = Colors.red.shade700;
+      bg = AppColors.error;
       fg = Colors.white;
       label = '締切超過 ${-days}日';
     } else if (days <= 3) {
-      bg = isDark ? Colors.red.shade900.withValues(alpha: 0.4) : Colors.red.shade100;
-      fg = isDark ? Colors.red.shade200 : Colors.red.shade900;
+      bg = isDark ? AppColors.errorDark.withValues(alpha: 0.4) : AppColors.errorBg;
+      fg = isDark ? AppColors.errorBg : AppColors.errorDark;
       label = '締切まであと$days日';
     } else {
-      bg = isDark ? Colors.orange.shade900.withValues(alpha: 0.4) : Colors.orange.shade100;
-      fg = isDark ? Colors.orange.shade200 : Colors.orange.shade900;
+      bg = isDark ? AppColors.warningDark.withValues(alpha: 0.4) : AppColors.warningBg;
+      fg = isDark ? AppColors.warningBg : AppColors.warningDark;
       label = '締切まであと$days日';
     }
     return Container(
@@ -306,7 +301,7 @@ class _PlusShiftRequestDialogState extends State<PlusShiftRequestDialog> {
       child: Text(
         label,
         style: TextStyle(
-          fontSize: 12,
+          fontSize: AppTextSize.small,
           fontWeight: FontWeight.bold,
           color: fg,
         ),
@@ -337,7 +332,7 @@ class _PlusShiftRequestDialogState extends State<PlusShiftRequestDialog> {
           const SizedBox(width: 8),
           Text(label,
               style: TextStyle(
-                  fontSize: 13,
+                  fontSize: AppTextSize.body,
                   fontWeight:
                       selected ? FontWeight.w700 : FontWeight.w500)),
           if (selected) ...[
@@ -360,19 +355,19 @@ class _PlusShiftRequestDialogState extends State<PlusShiftRequestDialog> {
         PopupMenuItem<String>(
           value: 'ng',
           child:
-              itemRow(Colors.red.shade400, '休み希望', isNg && !isStrong),
+              itemRow(AppColors.errorBorder, '休み希望', isNg && !isStrong),
         ),
         PopupMenuItem<String>(
           value: 'strong',
-          child: itemRow(Colors.red.shade800, '絶対休み', isStrong),
+          child: itemRow(AppColors.errorDark, '絶対休み', isStrong),
         ),
         PopupMenuItem<String>(
           value: 'halfAm',
-          child: itemRow(Colors.orange.shade600, '午前休', isHalfAm),
+          child: itemRow(AppColors.warning, '午前休', isHalfAm),
         ),
         PopupMenuItem<String>(
           value: 'halfPm',
-          child: itemRow(Colors.amber.shade800, '午後休', isHalfPm),
+          child: itemRow(AppColors.primaryDark, '午後休', isHalfPm),
         ),
         if (hasAny) const PopupMenuDivider(),
         if (hasAny)
@@ -382,7 +377,7 @@ class _PlusShiftRequestDialogState extends State<PlusShiftRequestDialog> {
               children: [
                 Icon(Icons.clear, size: 14),
                 SizedBox(width: 8),
-                Text('解除', style: TextStyle(fontSize: 13)),
+                Text('解除', style: TextStyle(fontSize: AppTextSize.body)),
               ],
             ),
           ),
@@ -429,7 +424,7 @@ class _PlusShiftRequestDialogState extends State<PlusShiftRequestDialog> {
           ),
         ),
         const SizedBox(width: 4),
-        Text(label, style: TextStyle(fontSize: 11)),
+        Text(label, style: TextStyle(fontSize: AppTextSize.caption)),
       ],
     );
   }
@@ -463,12 +458,12 @@ class _PlusShiftRequestDialogState extends State<PlusShiftRequestDialog> {
                   child: Text(
                     weekLabels[i],
                     style: TextStyle(
-                      fontSize: 12,
+                      fontSize: AppTextSize.small,
                       fontWeight: FontWeight.bold,
                       color: isSun
-                          ? Colors.red
+                          ? AppColors.error
                           : isSat
-                              ? Colors.blue
+                              ? AppColors.info
                               : context.colors.textPrimary,
                     ),
                   ),
@@ -489,9 +484,9 @@ class _PlusShiftRequestDialogState extends State<PlusShiftRequestDialog> {
                 // 範囲外でも日付は表示（薄く・操作不可）
                 final dow = date.weekday;
                 final outColor = dow == 7
-                    ? Colors.red.withValues(alpha: 0.35)
+                    ? AppColors.error.withValues(alpha: 0.35)
                     : dow == 6
-                        ? Colors.blue.withValues(alpha: 0.35)
+                        ? AppColors.info.withValues(alpha: 0.35)
                         : context.colors.textTertiary;
                 return Expanded(
                   child: Padding(
@@ -502,7 +497,7 @@ class _PlusShiftRequestDialogState extends State<PlusShiftRequestDialog> {
                         child: Text(
                           '${date.month}/${date.day}',
                           style: TextStyle(
-                            fontSize: 11,
+                            fontSize: AppTextSize.caption,
                             fontWeight: FontWeight.w500,
                             color: outColor,
                           ),
@@ -518,23 +513,23 @@ class _PlusShiftRequestDialogState extends State<PlusShiftRequestDialog> {
               final isHalfPm = _myHalfPmDates.contains(date);
               final dow = date.weekday; // 月=1, ..., 日=7
               final dayColor = dow == 7
-                  ? Colors.red
+                  ? AppColors.error
                   : dow == 6
-                      ? Colors.blue
+                      ? AppColors.info
                       : context.colors.textPrimary;
               final Color bgColor;
               final String? badgeLabel;
               if (isHalfAm) {
-                bgColor = Colors.orange.shade600;
+                bgColor = AppColors.warning;
                 badgeLabel = '午前休';
               } else if (isHalfPm) {
-                bgColor = Colors.amber.shade800;
+                bgColor = AppColors.primaryDark;
                 badgeLabel = '午後休';
               } else if (isStrong) {
-                bgColor = Colors.red.shade800;
+                bgColor = AppColors.errorDark;
                 badgeLabel = '絶対休';
               } else if (isNg) {
-                bgColor = Colors.red.shade400;
+                bgColor = AppColors.errorBorder;
                 badgeLabel = '休';
               } else {
                 bgColor = context.colors.tagBg;
@@ -573,7 +568,7 @@ class _PlusShiftRequestDialogState extends State<PlusShiftRequestDialog> {
                               Text(
                                 badgeLabel,
                                 style: const TextStyle(
-                                  fontSize: 9,
+                                  fontSize: AppTextSize.xxs,
                                   color: Colors.white,
                                   fontWeight: FontWeight.bold,
                                 ),
@@ -616,13 +611,13 @@ class _PlusShiftRequestDialogState extends State<PlusShiftRequestDialog> {
                     child: Row(
                       children: [
                         const Icon(Icons.how_to_vote,
-                            color: Colors.orange, size: 22),
+                            color: AppColors.warning, size: 22),
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
                             '${widget.targetMonth.year}年${widget.targetMonth.month}月のシフト希望',
                             style: TextStyle(
-                                fontSize: 16, fontWeight: FontWeight.bold),
+                                fontSize: AppTextSize.titleSm, fontWeight: FontWeight.bold),
                           ),
                         ),
                         IconButton(
@@ -643,7 +638,7 @@ class _PlusShiftRequestDialogState extends State<PlusShiftRequestDialog> {
                           child: Text(
                             '締切: ${DateFormat('M/d', 'ja').format(_deadline)}',
                             style: TextStyle(
-                                fontSize: 12, color: context.colors.textSecondary),
+                                fontSize: AppTextSize.small, color: context.colors.textSecondary),
                           ),
                         ),
                       ],
@@ -663,25 +658,25 @@ class _PlusShiftRequestDialogState extends State<PlusShiftRequestDialog> {
                               padding: const EdgeInsets.all(10),
                               decoration: BoxDecoration(
                                 color: isDark
-                                    ? Colors.orange.shade900.withValues(alpha: 0.25)
-                                    : Colors.orange.shade50,
+                                    ? AppColors.warningDark.withValues(alpha: 0.25)
+                                    : AppColors.warningBg,
                                 borderRadius: BorderRadius.circular(8),
                                 border: Border.all(
                                   color: isDark
-                                      ? Colors.orange.shade700.withValues(alpha: 0.4)
-                                      : Colors.orange.shade100,
+                                      ? AppColors.warning.withValues(alpha: 0.4)
+                                      : AppColors.warningBg,
                                 ),
                               ),
                               child: Row(
                                 children: [
                                   Icon(Icons.info_outline,
                                       size: 16,
-                                      color: isDark ? Colors.orange.shade200 : Colors.orange.shade800),
+                                      color: isDark ? AppColors.warningBg : AppColors.warningDark),
                                   const SizedBox(width: 6),
                                   Expanded(
                                     child: Text(
                                       '日付をタップしてメニューから「休み希望 / 絶対休み / 午前休 / 午後休 / 解除」を選択',
-                                      style: TextStyle(fontSize: 12, color: ctx.colors.textPrimary),
+                                      style: TextStyle(fontSize: AppTextSize.small, color: ctx.colors.textPrimary),
                                     ),
                                   ),
                                 ],
@@ -697,10 +692,10 @@ class _PlusShiftRequestDialogState extends State<PlusShiftRequestDialog> {
                             spacing: 12,
                             runSpacing: 4,
                             children: [
-                              _stateLegend(Colors.red.shade400, '休み希望'),
-                              _stateLegend(Colors.red.shade800, '絶対休み'),
-                              _stateLegend(Colors.orange.shade600, '午前休'),
-                              _stateLegend(Colors.amber.shade800, '午後休'),
+                              _stateLegend(AppColors.errorBorder, '休み希望'),
+                              _stateLegend(AppColors.errorDark, '絶対休み'),
+                              _stateLegend(AppColors.warning, '午前休'),
+                              _stateLegend(AppColors.primaryDark, '午後休'),
                             ],
                           ),
                           const SizedBox(height: 8),
@@ -734,7 +729,7 @@ class _PlusShiftRequestDialogState extends State<PlusShiftRequestDialog> {
                               : const Icon(Icons.save, size: 18),
                           label: const Text('保存'),
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.orange,
+                            backgroundColor: AppColors.warning,
                             foregroundColor: Colors.white,
                           ),
                         ),
@@ -1066,17 +1061,13 @@ class _PlusShiftDecisionDialogState extends State<PlusShiftDecisionDialog> {
       }
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('シフトを実予定に反映しました')),
-        );
+        AppFeedback.info(context, 'シフトを実予定に反映しました');
         Navigator.of(context).pop(true);
       }
     } catch (e) {
       debugPrint('シフト反映失敗: $e');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('反映に失敗しました: $e')),
-        );
+        AppFeedback.info(context, '反映に失敗しました: $e');
       }
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -1120,7 +1111,7 @@ class _PlusShiftDecisionDialogState extends State<PlusShiftDecisionDialog> {
                             Expanded(
                               child: Text(
                                 staff['name'] as String,
-                                style: TextStyle(fontSize: 13),
+                                style: TextStyle(fontSize: AppTextSize.body),
                               ),
                             ),
                             if ((_requestedHalfAmDates[staff['id']] ?? {})
@@ -1129,13 +1120,13 @@ class _PlusShiftDecisionDialogState extends State<PlusShiftDecisionDialog> {
                                 padding: const EdgeInsets.symmetric(
                                     horizontal: 6, vertical: 2),
                                 decoration: BoxDecoration(
-                                  color: Colors.orange.shade600,
+                                  color: AppColors.warning,
                                   borderRadius: BorderRadius.circular(4),
                                 ),
                                 child: const Text(
                                   '午前休',
                                   style: TextStyle(
-                                    fontSize: 10,
+                                    fontSize: AppTextSize.xs,
                                     color: Colors.white,
                                     fontWeight: FontWeight.bold,
                                   ),
@@ -1147,13 +1138,13 @@ class _PlusShiftDecisionDialogState extends State<PlusShiftDecisionDialog> {
                                 padding: const EdgeInsets.symmetric(
                                     horizontal: 6, vertical: 2),
                                 decoration: BoxDecoration(
-                                  color: Colors.amber.shade800,
+                                  color: AppColors.primaryDark,
                                   borderRadius: BorderRadius.circular(4),
                                 ),
                                 child: const Text(
                                   '午後休',
                                   style: TextStyle(
-                                    fontSize: 10,
+                                    fontSize: AppTextSize.xs,
                                     color: Colors.white,
                                     fontWeight: FontWeight.bold,
                                   ),
@@ -1165,13 +1156,13 @@ class _PlusShiftDecisionDialogState extends State<PlusShiftDecisionDialog> {
                                 padding: const EdgeInsets.symmetric(
                                     horizontal: 6, vertical: 2),
                                 decoration: BoxDecoration(
-                                  color: Colors.red.shade800,
+                                  color: AppColors.errorDark,
                                   borderRadius: BorderRadius.circular(4),
                                 ),
                                 child: const Text(
                                   '絶対休',
                                   style: TextStyle(
-                                    fontSize: 10,
+                                    fontSize: AppTextSize.xs,
                                     color: Colors.white,
                                     fontWeight: FontWeight.bold,
                                   ),
@@ -1183,14 +1174,14 @@ class _PlusShiftDecisionDialogState extends State<PlusShiftDecisionDialog> {
                                 padding: const EdgeInsets.symmetric(
                                     horizontal: 6, vertical: 2),
                                 decoration: BoxDecoration(
-                                  color: Colors.orange.shade100,
+                                  color: AppColors.warningBg,
                                   borderRadius: BorderRadius.circular(4),
                                 ),
                                 child: Text(
                                   '希望',
                                   style: TextStyle(
-                                    fontSize: 10,
-                                    color: Colors.orange.shade900,
+                                    fontSize: AppTextSize.xs,
+                                    color: AppColors.warningDark,
                                     fontWeight: FontWeight.bold,
                                   ),
                                 ),
@@ -1255,13 +1246,13 @@ class _PlusShiftDecisionDialogState extends State<PlusShiftDecisionDialog> {
                       final titleRow = Row(
                         children: [
                           const Icon(Icons.edit_calendar,
-                              color: Colors.orange, size: 22),
+                              color: AppColors.warning, size: 22),
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(
                               '${widget.targetMonth.year}年${widget.targetMonth.month}月 シフト決定',
                               style: const TextStyle(
-                                  fontSize: 17, fontWeight: FontWeight.bold),
+                                  fontSize: AppTextSize.title, fontWeight: FontWeight.bold),
                               overflow: TextOverflow.ellipsis,
                             ),
                           ),
@@ -1279,7 +1270,7 @@ class _PlusShiftDecisionDialogState extends State<PlusShiftDecisionDialog> {
                             child: Text(
                               '希望提出: $submittedCount/${_plusStaffs.length}人',
                               style: TextStyle(
-                                  fontSize: 12,
+                                  fontSize: AppTextSize.small,
                                   color: context.colors.textSecondary),
                               overflow: TextOverflow.ellipsis,
                             ),
@@ -1297,7 +1288,7 @@ class _PlusShiftDecisionDialogState extends State<PlusShiftDecisionDialog> {
                                 : const Icon(Icons.download_done, size: 18),
                             label: const Text('シフトに反映'),
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.green.shade700,
+                              backgroundColor: AppColors.success,
                               foregroundColor: Colors.white,
                             ),
                           ),
@@ -1316,19 +1307,19 @@ class _PlusShiftDecisionDialogState extends State<PlusShiftDecisionDialog> {
                       return Row(
                         children: [
                           const Icon(Icons.edit_calendar,
-                              color: Colors.orange, size: 22),
+                              color: AppColors.warning, size: 22),
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(
                               '${widget.targetMonth.year}年${widget.targetMonth.month}月 シフト決定',
                               style: const TextStyle(
-                                  fontSize: 17, fontWeight: FontWeight.bold),
+                                  fontSize: AppTextSize.title, fontWeight: FontWeight.bold),
                             ),
                           ),
                           Text(
                             '希望提出: $submittedCount/${_plusStaffs.length}人',
                             style: TextStyle(
-                                fontSize: 12,
+                                fontSize: AppTextSize.small,
                                 color: context.colors.textSecondary),
                           ),
                           const SizedBox(width: 12),
@@ -1344,7 +1335,7 @@ class _PlusShiftDecisionDialogState extends State<PlusShiftDecisionDialog> {
                                 : const Icon(Icons.download_done, size: 18),
                             label: const Text('シフトに反映'),
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.green.shade700,
+                              backgroundColor: AppColors.success,
                               foregroundColor: Colors.white,
                             ),
                           ),
@@ -1367,25 +1358,25 @@ class _PlusShiftDecisionDialogState extends State<PlusShiftDecisionDialog> {
                         padding: const EdgeInsets.all(8),
                         decoration: BoxDecoration(
                           color: isDark
-                              ? Colors.orange.shade900.withValues(alpha: 0.25)
-                              : Colors.orange.shade50,
+                              ? AppColors.warningDark.withValues(alpha: 0.25)
+                              : AppColors.warningBg,
                           borderRadius: BorderRadius.circular(6),
                           border: Border.all(
                             color: isDark
-                                ? Colors.orange.shade700.withValues(alpha: 0.4)
-                                : Colors.orange.shade100,
+                                ? AppColors.warning.withValues(alpha: 0.4)
+                                : AppColors.warningBg,
                           ),
                         ),
                         child: Row(
                           children: [
                             Icon(Icons.info_outline,
                                 size: 14,
-                                color: isDark ? Colors.orange.shade200 : Colors.orange.shade800),
+                                color: isDark ? AppColors.warningBg : AppColors.warningDark),
                             const SizedBox(width: 6),
                             Expanded(
                               child: Text(
                                 '日付をタップして休みスタッフを決定。オレンジの「希望」バッジ付きはスタッフから提出された希望です。',
-                                style: TextStyle(fontSize: 11, color: ctx.colors.textPrimary),
+                                style: TextStyle(fontSize: AppTextSize.caption, color: ctx.colors.textPrimary),
                               ),
                             ),
                           ],
@@ -1405,22 +1396,22 @@ class _PlusShiftDecisionDialogState extends State<PlusShiftDecisionDialog> {
                         horizontal: 16, vertical: 8),
                     child: Row(
                       children: [
-                        _legendSwatch(Colors.red.shade400, '休み確定'),
+                        _legendSwatch(AppColors.errorBorder, '休み確定'),
                         const SizedBox(width: 12),
                         _legendSwatch(
-                            Colors.orange.shade100, '希望（未確定）',
-                            borderColor: Colors.orange.shade400),
+                            AppColors.warningBg, '希望（未確定）',
+                            borderColor: AppColors.warningBorder),
                         const SizedBox(width: 12),
-                        _legendSwatch(Colors.red.shade800, '絶対休み'),
+                        _legendSwatch(AppColors.errorDark, '絶対休み'),
                         const SizedBox(width: 12),
-                        _legendSwatch(Colors.orange.shade600, '午前休'),
+                        _legendSwatch(AppColors.warning, '午前休'),
                         const SizedBox(width: 12),
-                        _legendSwatch(Colors.amber.shade800, '午後休'),
+                        _legendSwatch(AppColors.primaryDark, '午後休'),
                         const Spacer(),
                         Text(
                           '※「シフトに反映」を押すと実シフトに書き込まれます',
                           style: TextStyle(
-                              fontSize: 11,
+                              fontSize: AppTextSize.caption,
                               color: context.colors.textSecondary),
                         ),
                       ],
@@ -1463,7 +1454,7 @@ class _PlusShiftDecisionDialogState extends State<PlusShiftDecisionDialog> {
                   alignment: Alignment.center,
                   decoration: BoxDecoration(
                     color: isSun
-                        ? (isDark ? Colors.red.shade900.withValues(alpha: 0.2) : Colors.red.shade50)
+                        ? (isDark ? AppColors.errorDark.withValues(alpha: 0.2) : AppColors.errorBg)
                         : context.colors.chipBg,
                     border: Border(
                       right: BorderSide(color: context.colors.borderMedium),
@@ -1477,12 +1468,12 @@ class _PlusShiftDecisionDialogState extends State<PlusShiftDecisionDialog> {
                   child: Text(
                     labels7[i],
                     style: TextStyle(
-                      fontSize: 12,
+                      fontSize: AppTextSize.small,
                       fontWeight: FontWeight.bold,
                       color: isSun
-                          ? Colors.red.shade400
+                          ? AppColors.errorBorder
                           : isSat
-                              ? Colors.blue.shade400
+                              ? AppColors.infoBorder
                               : context.colors.textPrimary,
                     ),
                   ),
@@ -1527,9 +1518,9 @@ class _PlusShiftDecisionDialogState extends State<PlusShiftDecisionDialog> {
     final isSat = columnIndex == 5;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final numberColor = isSun
-        ? Colors.red.shade400
+        ? AppColors.errorBorder
         : isSat
-            ? Colors.blue.shade400
+            ? AppColors.infoBorder
             : context.colors.textPrimary;
     final isOtherMonth =
         date != null && date.month != widget.targetMonth.month;
@@ -1544,7 +1535,7 @@ class _PlusShiftDecisionDialogState extends State<PlusShiftDecisionDialog> {
       return Container(
         constraints: const BoxConstraints(minHeight: 80),
         decoration: BoxDecoration(
-          color: isDark ? Colors.red.shade900.withValues(alpha: 0.15) : Colors.red.shade50,
+          color: isDark ? AppColors.errorDark.withValues(alpha: 0.15) : AppColors.errorBg,
           border: Border.all(color: context.colors.borderMedium),
         ),
         padding: const EdgeInsets.all(4),
@@ -1555,8 +1546,8 @@ class _PlusShiftDecisionDialogState extends State<PlusShiftDecisionDialog> {
               Text(
                 dayLabel,
                 style: TextStyle(
-                  fontSize: 12,
-                  color: (isDark ? Colors.red.shade300 : Colors.red.shade300)
+                  fontSize: AppTextSize.small,
+                  color: (isDark ? AppColors.errorBorder : AppColors.errorBorder)
                       .withValues(alpha: outOfRange ? 0.4 : 1.0),
                   fontWeight: FontWeight.bold,
                 ),
@@ -1565,8 +1556,8 @@ class _PlusShiftDecisionDialogState extends State<PlusShiftDecisionDialog> {
             Text(
               '定休',
               style: TextStyle(
-                fontSize: 9,
-                color: (isDark ? Colors.red.shade300 : Colors.red.shade300)
+                fontSize: AppTextSize.xxs,
+                color: (isDark ? AppColors.errorBorder : AppColors.errorBorder)
                     .withValues(alpha: outOfRange ? 0.4 : 1.0),
               ),
             ),
@@ -1596,7 +1587,7 @@ class _PlusShiftDecisionDialogState extends State<PlusShiftDecisionDialog> {
         child: Text(
           dayLabel,
           style: TextStyle(
-            fontSize: 12,
+            fontSize: AppTextSize.small,
             color: numberColor.withValues(alpha: 0.4),
             fontWeight: FontWeight.w500,
           ),
@@ -1631,13 +1622,13 @@ class _PlusShiftDecisionDialogState extends State<PlusShiftDecisionDialog> {
             children: [
               Text(tag,
                   style: const TextStyle(
-                      fontSize: 10,
+                      fontSize: AppTextSize.xs,
                       color: Colors.white,
                       fontWeight: FontWeight.bold)),
               const SizedBox(width: 2),
               Text(name,
                   style: const TextStyle(
-                      fontSize: 10,
+                      fontSize: AppTextSize.xs,
                       color: Colors.white,
                       fontWeight: FontWeight.bold)),
             ],
@@ -1650,7 +1641,7 @@ class _PlusShiftDecisionDialogState extends State<PlusShiftDecisionDialog> {
         orElse: () => <String, dynamic>{'name': '?'},
       );
       chips.add(halfChip(
-          Colors.orange.shade600, '前', staff['name'] as String));
+          AppColors.warning, '前', staff['name'] as String));
     }
     for (final staffId in halfPmStaffIds) {
       final staff = _plusStaffs.firstWhere(
@@ -1658,7 +1649,7 @@ class _PlusShiftDecisionDialogState extends State<PlusShiftDecisionDialog> {
         orElse: () => <String, dynamic>{'name': '?'},
       );
       chips.add(halfChip(
-          Colors.amber.shade800, '後', staff['name'] as String));
+          AppColors.primaryDark, '後', staff['name'] as String));
     }
     for (final staffId in offStaffIds) {
       final staff = _plusStaffs.firstWhere(
@@ -1673,14 +1664,14 @@ class _PlusShiftDecisionDialogState extends State<PlusShiftDecisionDialog> {
       final Color chipFg;
       Border? chipBorder;
       if (isStrong) {
-        chipBg = Colors.red.shade800;
+        chipBg = AppColors.errorDark;
         chipFg = Colors.white;
       } else if (isRequested) {
-        chipBg = isDark ? Colors.orange.shade900.withValues(alpha: 0.4) : Colors.orange.shade100;
-        chipFg = isDark ? Colors.orange.shade100 : Colors.orange.shade900;
-        chipBorder = Border.all(color: Colors.orange.shade400);
+        chipBg = isDark ? AppColors.warningDark.withValues(alpha: 0.4) : AppColors.warningBg;
+        chipFg = isDark ? AppColors.warningBg : AppColors.warningDark;
+        chipBorder = Border.all(color: AppColors.warningBorder);
       } else {
-        chipBg = Colors.red.shade400;
+        chipBg = AppColors.errorBorder;
         chipFg = Colors.white;
       }
       chips.add(
@@ -1698,7 +1689,7 @@ class _PlusShiftDecisionDialogState extends State<PlusShiftDecisionDialog> {
                 const Text(
                   '!',
                   style: TextStyle(
-                    fontSize: 10,
+                    fontSize: AppTextSize.xs,
                     color: Colors.white,
                     fontWeight: FontWeight.bold,
                   ),
@@ -1708,7 +1699,7 @@ class _PlusShiftDecisionDialogState extends State<PlusShiftDecisionDialog> {
               Text(
                 staff['name'] as String,
                 style: TextStyle(
-                  fontSize: 10,
+                  fontSize: AppTextSize.xs,
                   color: chipFg,
                   fontWeight: FontWeight.bold,
                 ),
@@ -1736,7 +1727,7 @@ class _PlusShiftDecisionDialogState extends State<PlusShiftDecisionDialog> {
                 Text(
                   dayLabel,
                   style: TextStyle(
-                    fontSize: 12,
+                    fontSize: AppTextSize.small,
                     fontWeight: FontWeight.bold,
                     color: numberColor,
                   ),
@@ -1753,7 +1744,7 @@ class _PlusShiftDecisionDialogState extends State<PlusShiftDecisionDialog> {
                     child: Text(
                       '${offStaffIds.length}',
                       style: TextStyle(
-                          fontSize: 9, fontWeight: FontWeight.bold),
+                          fontSize: AppTextSize.xxs, fontWeight: FontWeight.bold),
                     ),
                   ),
                 ],
@@ -1789,7 +1780,7 @@ class _PlusShiftDecisionDialogState extends State<PlusShiftDecisionDialog> {
           ),
         ),
         const SizedBox(width: 4),
-        Text(label, style: TextStyle(fontSize: 12)),
+        Text(label, style: TextStyle(fontSize: AppTextSize.small)),
       ],
     );
   }
