@@ -43,13 +43,38 @@ class _ChatListScreenState extends State<ChatListScreen> {
   String _myDisplayName = '';
   final Map<String, String> _drafts = {};
 
+  // チャット種別フィルタ: 'all' | 'staff' | 'parent'
+  String _filter = 'all';
+  Set<String> _staffUids = {};
+  bool _staffUidsLoaded = false;
+
   StreamSubscription<String>? _pendingChatRoomSub;
 
   @override
   void initState() {
     super.initState();
     _initStream();
+    _loadStaffUids();
     _setupPendingChatRoomListener();
+  }
+
+  Future<void> _loadStaffUids() async {
+    try {
+      final snap = await FirebaseFirestore.instance.collection('staffs').get();
+      final ids = <String>{};
+      for (final d in snap.docs) {
+        final uid = d.data()['uid'];
+        if (uid is String && uid.isNotEmpty) ids.add(uid);
+      }
+      if (!mounted) return;
+      setState(() {
+        _staffUids = ids;
+        _staffUidsLoaded = true;
+      });
+    } catch (e) {
+      debugPrint('staff UID 読み込み失敗: $e');
+      if (mounted) setState(() => _staffUidsLoaded = true);
+    }
   }
 
   @override
@@ -194,6 +219,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
             child: Column(
               children: [
                 _buildCommonHeader('チャット', isLeftPane: true),
+                _buildFilterToggle(),
                 Expanded(child: _buildFirestoreRoomList(isWide: true)),
               ],
             ),
@@ -218,6 +244,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
             color: context.colors.cardBg,
             child: SafeArea(bottom: false, child: _buildCommonHeader('チャット', isLeftPane: true)),
           ),
+          _buildFilterToggle(),
           Expanded(child: _buildFirestoreRoomList(isWide: false)),
         ],
       ),
@@ -367,6 +394,66 @@ class _ChatListScreenState extends State<ChatListScreen> {
     );
   }
 
+  // ルームがフィルタ条件に合うか判定（false=非表示）
+  bool _matchesFilter(DocumentSnapshot roomDoc) {
+    if (_filter == 'all') return true;
+    final data = roomDoc.data() as Map<String, dynamic>;
+    final members = List<String>.from(data['members'] ?? []);
+    final isGroup = members.length > 2 ||
+        ((data['groupName'] ?? '').toString().isNotEmpty);
+    // グループはスタッフ扱い
+    if (isGroup) return _filter == 'staff';
+    final peerId = members.firstWhere((id) => id != currentUser?.uid, orElse: () => '');
+    if (peerId.isEmpty) return true;
+    final isStaff = _staffUids.contains(peerId);
+    return _filter == 'staff' ? isStaff : !isStaff;
+  }
+
+  Widget _buildFilterToggle() {
+    Widget seg(String value, String label) {
+      final selected = _filter == value;
+      return Expanded(
+        child: InkWell(
+          onTap: () => setState(() => _filter = value),
+          child: Container(
+            margin: const EdgeInsets.all(2),
+            padding: const EdgeInsets.symmetric(vertical: 6),
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: selected ? AppColors.primary : Colors.transparent,
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: selected ? Colors.white : context.colors.textSecondary,
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
+      child: Container(
+        decoration: BoxDecoration(
+          color: context.colors.inputFill,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Row(
+          children: [
+            seg('all', '全て'),
+            seg('staff', 'スタッフ'),
+            seg('parent', '保護者'),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildFirestoreRoomList({required bool isWide}) {
     if (_roomsStream == null) return const Center(child: Text('ストリームが初期化されていません'));
 
@@ -377,8 +464,21 @@ class _ChatListScreenState extends State<ChatListScreen> {
         if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
         if (!snapshot.hasData || snapshot.data!.docs.isEmpty) return const Center(child: Text('チャット履歴はありません'));
 
-        final docs = snapshot.data!.docs;
-        
+        final allDocs = snapshot.data!.docs;
+        final docs = _staffUidsLoaded
+            ? allDocs.where(_matchesFilter).toList()
+            : allDocs;
+        if (docs.isEmpty) {
+          return Center(
+            child: Text(
+              _filter == 'staff' ? 'スタッフとのチャットはありません'
+                : _filter == 'parent' ? '保護者とのチャットはありません'
+                : 'チャット履歴はありません',
+              style: TextStyle(color: context.colors.textSecondary),
+            ),
+          );
+        }
+
         if (isWide && _selectedRoomId == null && docs.isNotEmpty) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted) {
@@ -1601,7 +1701,7 @@ class _ChatDetailViewState extends State<ChatDetailView> {
     if (type == 'image') {
       content = Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         GestureDetector(onTap: () => _showImagePreview(msg['url']), child: ClipRRect(borderRadius: BorderRadius.circular(12), child: CachedNetworkImage(imageUrl: msg['url'], width: 200, fit: BoxFit.cover, placeholder: (c, u) => Container(width: 200, height: 150, decoration: BoxDecoration(color: context.colors.borderLight, borderRadius: BorderRadius.circular(12)), child: Center(child: SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2)))), errorWidget: (c, u, e) => Icon(Icons.broken_image)))),
-        if (text.isNotEmpty) ...[const SizedBox(height: 8), SelectableText.rich(TextSpan(children: _buildTextSpansWithLinks(text, ctx: context)))]
+        if (text.isNotEmpty) ...[const SizedBox(height: 8), SelectionArea(child: Text.rich(TextSpan(children: _buildTextSpansWithLinks(text, ctx: context))))]
       ]);
     } else if (type == 'video') {
       final vUrl = (msg['url'] ?? '') as String;
@@ -1628,7 +1728,7 @@ class _ChatDetailViewState extends State<ChatDetailView> {
             ),
           ),
         ),
-        if (text.isNotEmpty) ...[const SizedBox(height: 8), SelectableText.rich(TextSpan(children: _buildTextSpansWithLinks(text, ctx: context)))]
+        if (text.isNotEmpty) ...[const SizedBox(height: 8), SelectionArea(child: Text.rich(TextSpan(children: _buildTextSpansWithLinks(text, ctx: context))))]
       ]);
     } else if (type == 'file') {
       final String fName = msg['fileName'] ?? 'ファイル';
@@ -1690,7 +1790,7 @@ class _ChatDetailViewState extends State<ChatDetailView> {
                 ],
               ),
             ),
-            if (text.isNotEmpty) ...[const SizedBox(height: 8), SelectableText.rich(TextSpan(children: _buildTextSpansWithLinks(text, ctx: context)))],
+            if (text.isNotEmpty) ...[const SizedBox(height: 8), SelectionArea(child: Text.rich(TextSpan(children: _buildTextSpansWithLinks(text, ctx: context))))],
             const SizedBox(height: 6),
             Divider(height: 1, color: context.colors.borderMedium),
             const SizedBox(height: 4),
@@ -1722,7 +1822,7 @@ class _ChatDetailViewState extends State<ChatDetailView> {
           fontFamilyFallback: ['Hiragino Sans', 'Roboto', 'sans-serif'],
         ),
       );
-    } else { content = SelectableText.rich(TextSpan(children: _buildTextSpansWithLinks(text, ctx: context))); }
+    } else { content = SelectionArea(child: Text.rich(TextSpan(children: _buildTextSpansWithLinks(text, ctx: context)))); }
 
     String readText = '';
     if (isMe && isRead) {
