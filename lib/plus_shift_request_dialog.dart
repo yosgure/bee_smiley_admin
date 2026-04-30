@@ -435,24 +435,27 @@ class _PlusShiftRequestDialogState extends State<PlusShiftRequestDialog> {
   }
 
   Widget _buildCalendar() {
-    // 日曜始まりで、範囲開始日の週頭〜範囲終了日の週末までを描画する。
+    // 月曜始まりで、範囲開始日の週頭〜範囲終了日の週末までを描画する。
     final rangeStart = _rangeStart;
     final rangeEnd = _rangeEnd;
+    // Mon=1...Sun=7。月曜まで戻す。
     final gridStart =
-        rangeStart.subtract(Duration(days: rangeStart.weekday % 7));
-    final gridEnd = rangeEnd.add(Duration(days: 6 - rangeEnd.weekday % 7));
+        rangeStart.subtract(Duration(days: (rangeStart.weekday - 1) % 7));
+    // 日曜まで進める。
+    final gridEnd =
+        rangeEnd.add(Duration(days: (7 - rangeEnd.weekday) % 7));
     final totalCells = gridEnd.difference(gridStart).inDays + 1;
     final rows = (totalCells / 7).ceil();
 
-    const weekLabels = ['日', '月', '火', '水', '木', '金', '土'];
+    const weekLabels = ['月', '火', '水', '木', '金', '土', '日'];
 
     return Column(
       children: [
         // 曜日ヘッダ
         Row(
           children: List.generate(7, (i) {
-            final isSun = i == 0;
-            final isSat = i == 6;
+            final isSat = i == 5;
+            final isSun = i == 6;
             return Expanded(
               child: Center(
                 child: Padding(
@@ -483,7 +486,31 @@ class _PlusShiftRequestDialogState extends State<PlusShiftRequestDialog> {
               final inRange =
                   !date.isBefore(rangeStart) && !date.isAfter(rangeEnd);
               if (!inRange) {
-                return const Expanded(child: SizedBox(height: 48));
+                // 範囲外でも日付は表示（薄く・操作不可）
+                final dow = date.weekday;
+                final outColor = dow == 7
+                    ? Colors.red.withValues(alpha: 0.35)
+                    : dow == 6
+                        ? Colors.blue.withValues(alpha: 0.35)
+                        : context.colors.textTertiary;
+                return Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.all(2),
+                    child: SizedBox(
+                      height: 48,
+                      child: Center(
+                        child: Text(
+                          '${date.month}/${date.day}',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w500,
+                            color: outColor,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                );
               }
               final isNg = _myNgDates.contains(date);
               final isStrong = _myNgStrongDates.contains(date);
@@ -1220,53 +1247,116 @@ class _PlusShiftDecisionDialogState extends State<PlusShiftDecisionDialog> {
             ? const Center(child: CircularProgressIndicator())
             : Column(
                 children: [
-                  // ヘッダ
+                  // ヘッダ（狭幅では2段組）
                   Padding(
                     padding: const EdgeInsets.fromLTRB(20, 16, 12, 8),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.edit_calendar,
-                            color: Colors.orange, size: 22),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            '${widget.targetMonth.year}年${widget.targetMonth.month}月 シフト決定',
+                    child: LayoutBuilder(builder: (ctx, c) {
+                      final compact = c.maxWidth < 560;
+                      final titleRow = Row(
+                        children: [
+                          const Icon(Icons.edit_calendar,
+                              color: Colors.orange, size: 22),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              '${widget.targetMonth.year}年${widget.targetMonth.month}月 シフト決定',
+                              style: const TextStyle(
+                                  fontSize: 17, fontWeight: FontWeight.bold),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          IconButton(
+                            onPressed: () => Navigator.of(context).pop(),
+                            icon: const Icon(Icons.close),
+                            tooltip: '閉じる',
+                          ),
+                        ],
+                      );
+                      final actionsRow = Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Flexible(
+                            child: Text(
+                              '希望提出: $submittedCount/${_plusStaffs.length}人',
+                              style: TextStyle(
+                                  fontSize: 12,
+                                  color: context.colors.textSecondary),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          ElevatedButton.icon(
+                            onPressed: _saving ? null : _save,
+                            icon: _saving
+                                ? const SizedBox(
+                                    width: 14,
+                                    height: 14,
+                                    child: CircularProgressIndicator(
+                                        strokeWidth: 2, color: Colors.white),
+                                  )
+                                : const Icon(Icons.download_done, size: 18),
+                            label: const Text('シフトに反映'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.green.shade700,
+                              foregroundColor: Colors.white,
+                            ),
+                          ),
+                        ],
+                      );
+                      if (compact) {
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            titleRow,
+                            const SizedBox(height: 4),
+                            actionsRow,
+                          ],
+                        );
+                      }
+                      return Row(
+                        children: [
+                          const Icon(Icons.edit_calendar,
+                              color: Colors.orange, size: 22),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              '${widget.targetMonth.year}年${widget.targetMonth.month}月 シフト決定',
+                              style: const TextStyle(
+                                  fontSize: 17, fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                          Text(
+                            '希望提出: $submittedCount/${_plusStaffs.length}人',
                             style: TextStyle(
-                                fontSize: 17,
-                                fontWeight: FontWeight.bold),
+                                fontSize: 12,
+                                color: context.colors.textSecondary),
                           ),
-                        ),
-                        Text(
-                          '希望提出: $submittedCount/${_plusStaffs.length}人',
-                          style: TextStyle(
-                              fontSize: 12, color: context.colors.textSecondary),
-                        ),
-                        const SizedBox(width: 12),
-                        ElevatedButton.icon(
-                          onPressed: _saving ? null : _save,
-                          icon: _saving
-                              ? const SizedBox(
-                                  width: 14,
-                                  height: 14,
-                                  child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      color: Colors.white),
-                                )
-                              : const Icon(Icons.download_done, size: 18),
-                          label: const Text('シフトに反映'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.green.shade700,
-                            foregroundColor: Colors.white,
+                          const SizedBox(width: 12),
+                          ElevatedButton.icon(
+                            onPressed: _saving ? null : _save,
+                            icon: _saving
+                                ? const SizedBox(
+                                    width: 14,
+                                    height: 14,
+                                    child: CircularProgressIndicator(
+                                        strokeWidth: 2, color: Colors.white),
+                                  )
+                                : const Icon(Icons.download_done, size: 18),
+                            label: const Text('シフトに反映'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.green.shade700,
+                              foregroundColor: Colors.white,
+                            ),
                           ),
-                        ),
-                        const SizedBox(width: 4),
-                        IconButton(
-                          onPressed: () => Navigator.of(context).pop(),
-                          icon: const Icon(Icons.close),
-                          tooltip: '閉じる',
-                        ),
-                      ],
-                    ),
+                          const SizedBox(width: 4),
+                          IconButton(
+                            onPressed: () => Navigator.of(context).pop(),
+                            icon: const Icon(Icons.close),
+                            tooltip: '閉じる',
+                          ),
+                        ],
+                      );
+                    }),
                   ),
                   // 説明
                   Builder(builder: (ctx) {
@@ -1416,8 +1506,9 @@ class _PlusShiftDecisionDialogState extends State<PlusShiftDecisionDialog> {
                           !date.isAfter(rangeEnd);
                       return Expanded(
                         child: _buildDayCell(
-                          date: inRange ? date : null,
+                          date: date,
                           columnIndex: c,
+                          outOfRange: !inRange,
                         ),
                       );
                     }),
@@ -1431,7 +1522,7 @@ class _PlusShiftDecisionDialogState extends State<PlusShiftDecisionDialog> {
     );
   }
 
-  Widget _buildDayCell({required DateTime? date, required int columnIndex}) {
+  Widget _buildDayCell({required DateTime? date, required int columnIndex, bool outOfRange = false}) {
     final isSun = columnIndex == 6;
     final isSat = columnIndex == 5;
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -1465,7 +1556,8 @@ class _PlusShiftDecisionDialogState extends State<PlusShiftDecisionDialog> {
                 dayLabel,
                 style: TextStyle(
                   fontSize: 12,
-                  color: isDark ? Colors.red.shade300 : Colors.red.shade300,
+                  color: (isDark ? Colors.red.shade300 : Colors.red.shade300)
+                      .withValues(alpha: outOfRange ? 0.4 : 1.0),
                   fontWeight: FontWeight.bold,
                 ),
               ),
@@ -1474,7 +1566,8 @@ class _PlusShiftDecisionDialogState extends State<PlusShiftDecisionDialog> {
               '定休',
               style: TextStyle(
                 fontSize: 9,
-                color: isDark ? Colors.red.shade300 : Colors.red.shade300,
+                color: (isDark ? Colors.red.shade300 : Colors.red.shade300)
+                    .withValues(alpha: outOfRange ? 0.4 : 1.0),
               ),
             ),
           ],
@@ -1488,6 +1581,25 @@ class _PlusShiftDecisionDialogState extends State<PlusShiftDecisionDialog> {
         decoration: BoxDecoration(
           color: context.colors.tagBg,
           border: Border.all(color: context.colors.borderMedium),
+        ),
+      );
+    }
+
+    if (outOfRange) {
+      return Container(
+        constraints: const BoxConstraints(minHeight: 80),
+        decoration: BoxDecoration(
+          color: context.colors.tagBg.withValues(alpha: 0.4),
+          border: Border.all(color: context.colors.borderMedium),
+        ),
+        padding: const EdgeInsets.all(4),
+        child: Text(
+          dayLabel,
+          style: TextStyle(
+            fontSize: 12,
+            color: numberColor.withValues(alpha: 0.4),
+            fontWeight: FontWeight.w500,
+          ),
         ),
       );
     }

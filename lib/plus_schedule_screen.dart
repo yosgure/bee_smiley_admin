@@ -1773,6 +1773,7 @@ void _goToPage(int page) {
                     ),
                     child: const Text('今日', style: TextStyle(fontSize: 13)),
                   ),
+                  _buildMobilePlusMenuButton(),
                 ] else ...[
                   // ダッシュボードモード: タイトル
                   const SizedBox(width: 12),
@@ -3294,6 +3295,51 @@ final plusStaff = _staffList.where((s) =>
   }
 
   final GlobalKey _plusMenuButtonKey = GlobalKey();
+  final GlobalKey _plusMenuButtonMobileKey = GlobalKey();
+
+  /// モバイル版の「…」メニューボタン（モバイルヘッダーに配置）
+  Widget _buildMobilePlusMenuButton() {
+    final target = resolveShiftRequestTargetMonth();
+    final deadline = DateTime(target.year, target.month - 1, 10);
+    final today = DateTime.now();
+    final t = DateTime(today.year, today.month, today.day);
+    final d = DateTime(deadline.year, deadline.month, deadline.day);
+    final daysLeft = d.difference(t).inDays;
+    final needsAttention = daysLeft <= 3;
+
+    return Material(
+      color: Colors.transparent,
+      borderRadius: BorderRadius.circular(8),
+      child: InkWell(
+        key: _plusMenuButtonMobileKey,
+        borderRadius: BorderRadius.circular(8),
+        onTap: () => _showPlusMenu(anchorKey: _plusMenuButtonMobileKey),
+        child: Padding(
+          padding: const EdgeInsets.all(8),
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              Icon(Icons.more_vert, color: context.colors.textPrimary, size: 22),
+              if (needsAttention)
+                Positioned(
+                  right: -2,
+                  top: -2,
+                  child: Container(
+                    width: 8,
+                    height: 8,
+                    decoration: BoxDecoration(
+                      color: daysLeft < 0 ? Colors.red.shade700 : Colors.red.shade400,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: context.colors.scaffoldBg, width: 1.5),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 
   /// 右上の「…」メニュー。シフト希望など関連ツールへの入口。
   Widget _buildPlusMenuButton() {
@@ -3342,7 +3388,7 @@ final plusStaff = _staffList.where((s) =>
     );
   }
 
-  Future<void> _showPlusMenu() async {
+  Future<void> _showPlusMenu({GlobalKey? anchorKey}) async {
     final target = resolveShiftRequestTargetMonth();
     final deadline = DateTime(target.year, target.month - 1, 10);
     final today = DateTime.now();
@@ -3352,7 +3398,8 @@ final plusStaff = _staffList.where((s) =>
     final needsAttention = daysLeft <= 3;
 
     // ボタン位置を取得（画面右端からの距離と上端からの距離）
-    final renderBox = _plusMenuButtonKey.currentContext?.findRenderObject() as RenderBox?;
+    final key = anchorKey ?? _plusMenuButtonKey;
+    final renderBox = key.currentContext?.findRenderObject() as RenderBox?;
     if (renderBox == null) return;
     final origin = renderBox.localToGlobal(Offset.zero);
     final screen = MediaQuery.of(context).size;
