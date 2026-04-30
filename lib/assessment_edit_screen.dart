@@ -1,7 +1,7 @@
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show kIsWeb, compute;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
@@ -10,6 +10,26 @@ import 'package:image_picker/image_picker.dart';
 import 'package:image/image.dart' as img;
 import 'app_theme.dart';
 import 'main.dart';
+
+// isolate実行用トップレベル関数（compute用）。長辺1200px・JPEG品質80に圧縮。
+Uint8List _compressImageBytes(Uint8List bytes) {
+  try {
+    img.Image? image = img.decodeImage(bytes);
+    if (image == null) return bytes;
+    const int maxDimension = 1200;
+    if (image.width > maxDimension || image.height > maxDimension) {
+      if (image.width > image.height) {
+        image = img.copyResize(image, width: maxDimension);
+      } else {
+        image = img.copyResize(image, height: maxDimension);
+      }
+    }
+    final compressed = img.encodeJpg(image, quality: 80);
+    return Uint8List.fromList(compressed);
+  } catch (_) {
+    return bytes;
+  }
+}
 
 class AssessmentEditScreen extends StatefulWidget {
   final String studentId;
@@ -204,14 +224,47 @@ class _AssessmentEditScreenState extends State<AssessmentEditScreen> {
   Future<void> _pickMedia(int index) async {
     final picker = ImagePicker();
     final List<XFile> files = await picker.pickMultipleMedia();
-    if (files.isNotEmpty) {
-      setState(() {
-        final media = _weeklyEntries[index]['media'] as List<Map<String, dynamic>>;
-        for (final f in files) {
-          media.add({'type': _detectMediaType(f), 'url': null, 'localFile': f});
-        }
-      });
+    if (files.isEmpty) return;
+    final media = _weeklyEntries[index]['media'] as List<Map<String, dynamic>>;
+    setState(() {
+      for (final f in files) {
+        final m = <String, dynamic>{
+          'type': _detectMediaType(f),
+          'url': null,
+          'localFile': f,
+          'uploadError': null,
+        };
+        media.add(m);
+        // 追加直後にバックグラウンドアップロード開始（並列）
+        m['uploadFuture'] = _startUpload(m);
+      }
+    });
+  }
+
+  // メディア1件のバックグラウンドアップロード。url を埋めて Future を返す。
+  Future<void> _startUpload(Map<String, dynamic> m) async {
+    final XFile? local = m['localFile'] as XFile?;
+    if (local == null) return;
+    try {
+      final String? url = (m['type'] == 'video')
+          ? await _uploadVideo(local)
+          : await _uploadImage(local);
+      m['url'] = url;
+      m['uploadError'] = url == null ? 'アップロード失敗' : null;
+    } catch (e) {
+      m['uploadError'] = e;
+    } finally {
+      if (mounted) setState(() {});
     }
+  }
+
+  Future<void> _retryUpload(Map<String, dynamic> m) async {
+    if (m['localFile'] == null) return;
+    setState(() {
+      m['uploadError'] = null;
+      m['url'] = null;
+    });
+    m['uploadFuture'] = _startUpload(m);
   }
 
   String _detectMediaType(XFile f) {
@@ -246,13 +299,11 @@ class _AssessmentEditScreenState extends State<AssessmentEditScreen> {
     });
   }
 
-  // ★修正: 画像を圧縮してアップロード（目標: 約500KB以下）
   Future<String?> _uploadImage(XFile file) async {
     try {
       Uint8List fileBytes = await file.readAsBytes();
-
-      // 画像を圧縮
-      fileBytes = await _compressImage(fileBytes);
+      // 圧縮はisolateに逃がしてUIをブロックしない（Webでは同一isolate実行）
+      fileBytes = await compute(_compressImageBytes, fileBytes);
 
       final String fileName = '${DateTime.now().millisecondsSinceEpoch}_${file.name}';
       final ref = FirebaseStorage.instance.ref().child('assessment_photos/$fileName');
@@ -269,7 +320,6 @@ class _AssessmentEditScreenState extends State<AssessmentEditScreen> {
       final Uint8List bytes = await file.readAsBytes();
       final String fileName = '${DateTime.now().millisecondsSinceEpoch}_${file.name}';
       final ref = FirebaseStorage.instance.ref().child('assessment_videos/$fileName');
-      // 拡張子から content type を簡易判定（mp4/mov/webm 等）
       final lower = file.name.toLowerCase();
       String contentType = 'video/mp4';
       if (lower.endsWith('.mov')) contentType = 'video/quicktime';
@@ -279,34 +329,6 @@ class _AssessmentEditScreenState extends State<AssessmentEditScreen> {
     } catch (e) {
       debugPrint('Error uploading video: $e');
       return null;
-    }
-  }
-
-  // ★追加: 画像圧縮処理（目標: 約500KB）
-  Future<Uint8List> _compressImage(Uint8List bytes) async {
-    try {
-      // 画像をデコード
-      img.Image? image = img.decodeImage(bytes);
-      if (image == null) return bytes;
-
-      // 長辺を1200pxに制限（これで大体500KB以下になる）
-      const int maxDimension = 1200;
-      if (image.width > maxDimension || image.height > maxDimension) {
-        if (image.width > image.height) {
-          image = img.copyResize(image, width: maxDimension);
-        } else {
-          image = img.copyResize(image, height: maxDimension);
-        }
-      }
-
-      // JPEG品質80%で圧縮
-      final compressed = img.encodeJpg(image, quality: 80);
-      
-      debugPrint('Image compressed: ${bytes.length} -> ${compressed.length} bytes');
-      return Uint8List.fromList(compressed);
-    } catch (e) {
-      debugPrint('Error compressing image: $e');
-      return bytes; // 圧縮に失敗した場合は元の画像を返す
     }
   }
 
@@ -344,22 +366,27 @@ class _AssessmentEditScreenState extends State<AssessmentEditScreen> {
       };
 
       if (widget.type == 'weekly') {
+        // 進行中のアップロードがあれば全て完了を待つ（並列のまま）
+        final pending = <Future>[];
+        for (final entry in _weeklyEntries) {
+          for (final m in (entry['media'] as List).cast<Map<String, dynamic>>()) {
+            // url未確定 + ローカルファイル有 + 進行Futureなしなら、保険で開始
+            if (m['url'] == null && m['localFile'] != null && m['uploadFuture'] == null) {
+              m['uploadFuture'] = _startUpload(m);
+            }
+            final f = m['uploadFuture'] as Future?;
+            if (f != null) pending.add(f);
+          }
+        }
+        if (pending.isNotEmpty) await Future.wait(pending);
+
         List<Map<String, dynamic>> savedEntries = [];
         for (var entry in _weeklyEntries) {
-          // メディアをアップロードして mediaItems を作る
           final List<Map<String, dynamic>> mediaInput =
               List<Map<String, dynamic>>.from(entry['media'] as List);
           final List<Map<String, dynamic>> mediaItems = [];
           for (final m in mediaInput) {
-            String? url = m['url'] as String?;
-            final XFile? local = m['localFile'] as XFile?;
-            if (local != null) {
-              if (m['type'] == 'video') {
-                url = await _uploadVideo(local);
-              } else {
-                url = await _uploadImage(local);
-              }
-            }
+            final url = m['url'] as String?;
             if (url != null && url.isNotEmpty) {
               mediaItems.add({'type': m['type'] ?? 'image', 'url': url});
             }
@@ -605,6 +632,10 @@ class _AssessmentEditScreenState extends State<AssessmentEditScreen> {
     final type = m['type'] as String? ?? 'image';
     final XFile? local = m['localFile'] as XFile?;
     final String? url = m['url'] as String?;
+    final Object? uploadError = m['uploadError'];
+    final bool isUploading = local != null && url == null && uploadError == null;
+    final bool hasError = uploadError != null;
+
     Widget content;
     if (type == 'video') {
       content = Container(
@@ -630,6 +661,40 @@ class _AssessmentEditScreenState extends State<AssessmentEditScreen> {
             borderRadius: BorderRadius.circular(8),
             child: SizedBox(width: 80, height: 80, child: content),
           ),
+          if (isUploading)
+            Positioned.fill(
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: Container(
+                  color: Colors.black54,
+                  alignment: Alignment.center,
+                  child: const SizedBox(
+                    width: 22, height: 22,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                  ),
+                ),
+              ),
+            ),
+          if (hasError)
+            Positioned.fill(
+              child: InkWell(
+                onTap: () => _retryUpload(m),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: Container(
+                    color: Colors.red.withValues(alpha: 0.55),
+                    alignment: Alignment.center,
+                    child: const Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.refresh, color: Colors.white, size: 22),
+                        Text('再試行', style: TextStyle(color: Colors.white, fontSize: 10)),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
           Positioned(
             top: 0,
             right: 0,

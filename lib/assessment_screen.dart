@@ -539,11 +539,6 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
                     .where((r) => r['isQuickDraft'] != true)
                     .map((r) => r['tool'] as String? ?? '不明')
                     .join('、');
-                int photoCount = 0;
-                for (final r in records) {
-                  final m = r['mediaItems'] as List?;
-                  if (m != null) photoCount += m.length;
-                }
                 final hasOnlyQuickDraft = records.isNotEmpty &&
                     records.every((r) => r['isQuickDraft'] == true);
 
@@ -560,10 +555,6 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
                           ),
                           const SizedBox(width: 8),
                           _buildStatusBadge(data['isPublished'] == true),
-                          if (photoCount > 0) ...[
-                            const SizedBox(width: 6),
-                            _buildPhotoBadge(photoCount, hasOnlyQuickDraft),
-                          ],
                           const Spacer(),
                           Icon(Icons.chevron_right_rounded, color: context.colors.textTertiary, size: 18),
                         ],
@@ -692,28 +683,6 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
     return ListView(
       padding: const EdgeInsets.symmetric(horizontal: 8),
       children: items,
-    );
-  }
-
-  Widget _buildPhotoBadge(int count, bool emphasize) {
-    final color = emphasize ? AppColors.primary : context.colors.textSecondary;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.10),
-        borderRadius: BorderRadius.circular(4),
-        border: Border.all(color: color.withOpacity(0.4), width: 0.5),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.photo_camera_rounded, size: 10, color: color),
-          const SizedBox(width: 3),
-          Text('$count',
-              style: TextStyle(
-                  fontSize: 10, fontWeight: FontWeight.bold, color: color)),
-        ],
-      ),
     );
   }
 
