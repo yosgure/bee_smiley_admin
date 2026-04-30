@@ -869,12 +869,12 @@ class _ChatMessageListState extends State<_ChatMessageList> {
         if (!snapshot.exists) return;
         final data = snapshot.data() as Map<String, dynamic>;
         final stamps = Map<String, dynamic>.from(data['stamps'] ?? {});
-        
+
         List<String> userList = [];
         if (stamps[emoji] is List) {
           userList = List<String>.from(stamps[emoji]);
         }
-        
+
         if (userList.contains(widget.myUid)) {
           userList.remove(widget.myUid);
           if (userList.isEmpty) {
@@ -886,8 +886,17 @@ class _ChatMessageListState extends State<_ChatMessageList> {
           userList.add(widget.myUid);
           stamps[emoji] = userList;
         }
-        
-        transaction.update(msgRef, {'stamps': stamps});
+
+        // スタンプを付けた = 読んだ証拠なので readBy にも自分を追加
+        final readBy = List<String>.from(data['readBy'] ?? []);
+        if (!readBy.contains(widget.myUid)) {
+          readBy.add(widget.myUid);
+        }
+
+        transaction.update(msgRef, {
+          'stamps': stamps,
+          'readBy': readBy,
+        });
       });
     } catch (e) {
       debugPrint('スタンプ追加エラー: $e');

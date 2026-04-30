@@ -2522,7 +2522,10 @@ class _ChatDetailViewState extends State<ChatDetailView> {
       else if (stamps[emoji] is int) userList = [];
       if (userList.contains(uid)) { userList.remove(uid); if (userList.isEmpty) stamps.remove(emoji); else stamps[emoji] = userList; }
       else { userList.add(uid); stamps[emoji] = userList; }
-      transaction.update(msgRef, {'stamps': stamps});
+      // スタンプを付けた = 読んだ証拠なので readBy にも自分を追加
+      final readBy = List<String>.from(data['readBy'] ?? []);
+      if (!readBy.contains(uid)) readBy.add(uid);
+      transaction.update(msgRef, {'stamps': stamps, 'readBy': readBy});
     });
   }
 
