@@ -281,7 +281,7 @@ class _AiChatMainScreenState extends State<AiChatMainScreen> {
                     children: [
                       Center(
                         child: Text('AI相談',
-                            style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600, color: context.colors.textPrimary)),
+                            style: TextStyle(fontSize: AppTextSize.title, fontWeight: FontWeight.w600, color: context.colors.textPrimary)),
                       ),
                       Positioned(right: 0, child: Row(mainAxisSize: MainAxisSize.min, children: [
                       // 新規フリーチャット
@@ -346,7 +346,7 @@ class _AiChatMainScreenState extends State<AiChatMainScreen> {
               const SizedBox(width: 4),
               Text(label,
                   style: TextStyle(
-                    fontSize: 12,
+                    fontSize: AppTextSize.small,
                     fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
                     color: selected ? context.colors.aiAccent : context.colors.textSecondary,
                   )),
@@ -371,10 +371,10 @@ class _AiChatMainScreenState extends State<AiChatMainScreen> {
             ),
             child: TextField(
               controller: _searchController,
-              style: TextStyle(fontSize: 13, color: context.colors.textPrimary),
+              style: TextStyle(fontSize: AppTextSize.body, color: context.colors.textPrimary),
               decoration: InputDecoration(
                 hintText: '検索...',
-                hintStyle: TextStyle(color: context.colors.textHint, fontSize: 13),
+                hintStyle: TextStyle(color: context.colors.textHint, fontSize: AppTextSize.body),
                 prefixIcon: Icon(Icons.search_rounded, color: context.colors.textHint, size: 16),
                 filled: false,
                 border: InputBorder.none,
@@ -420,7 +420,7 @@ class _AiChatMainScreenState extends State<AiChatMainScreen> {
       if (header != lastHeader) {
         items.add(Padding(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-          child: Text(header, style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: context.colors.aiAccent)),
+          child: Text(header, style: TextStyle(fontSize: AppTextSize.small, fontWeight: FontWeight.bold, color: context.colors.aiAccent)),
         ));
         lastHeader = header;
       }
@@ -449,7 +449,7 @@ class _AiChatMainScreenState extends State<AiChatMainScreen> {
             Icon(Icons.history_rounded, size: 40, color: context.colors.borderMedium),
             const SizedBox(height: 8),
             Text('履歴がありません',
-                style: TextStyle(color: context.colors.textTertiary, fontSize: 13)),
+                style: TextStyle(color: context.colors.textTertiary, fontSize: AppTextSize.body)),
           ],
         ),
       );
@@ -509,7 +509,7 @@ class _AiChatMainScreenState extends State<AiChatMainScreen> {
                     child: Text(
                       studentName,
                       style: TextStyle(
-                        fontSize: 13,
+                        fontSize: AppTextSize.body,
                         fontWeight: isActive ? FontWeight.w600 : FontWeight.w500,
                         color: isActive ? context.colors.aiAccent : context.colors.textPrimary,
                       ),
@@ -518,14 +518,14 @@ class _AiChatMainScreenState extends State<AiChatMainScreen> {
                     ),
                   ),
                   Text(dateStr,
-                      style: TextStyle(fontSize: 10, color: context.colors.textTertiary)),
+                      style: TextStyle(fontSize: AppTextSize.xs, color: context.colors.textTertiary)),
                 ],
               ),
               if (displayText.isNotEmpty) ...[
                 const SizedBox(height: 2),
                 Text(
                   displayText,
-                  style: TextStyle(fontSize: 11, color: context.colors.textTertiary),
+                  style: TextStyle(fontSize: AppTextSize.caption, color: context.colors.textTertiary),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -569,12 +569,12 @@ class _AiChatMainScreenState extends State<AiChatMainScreen> {
             ).createShader(bounds),
             child: const Text(
               'AI相談',
-              style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.white),
+              style: TextStyle(fontSize: AppTextSize.hero, fontWeight: FontWeight.bold, color: Colors.white),
             ),
           ),
           const SizedBox(height: 8),
           Text('左の生徒を選んで相談を始めましょう',
-              style: TextStyle(fontSize: 14, color: context.colors.textTertiary)),
+              style: TextStyle(fontSize: AppTextSize.bodyMd, color: context.colors.textTertiary)),
         ],
       ),
     );
@@ -637,7 +637,7 @@ class _HoverableStudentItemState extends State<_HoverableStudentItem> {
                   child: Text(
                     widget.name.isNotEmpty ? widget.name[0] : '?',
                     style: TextStyle(
-                      fontSize: 13,
+                      fontSize: AppTextSize.body,
                       fontWeight: FontWeight.bold,
                       color: widget.isActive
                           ? context.colors.aiAccent
@@ -651,7 +651,7 @@ class _HoverableStudentItemState extends State<_HoverableStudentItem> {
                 child: Text(
                   widget.name,
                   style: TextStyle(
-                    fontSize: 13,
+                    fontSize: AppTextSize.body,
                     fontWeight: isHighlighted ? FontWeight.w600 : FontWeight.normal,
                     color: widget.isActive
                         ? context.colors.aiAccent

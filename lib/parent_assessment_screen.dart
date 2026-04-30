@@ -10,6 +10,7 @@ import 'package:gal/gal.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:video_player/video_player.dart';
 import 'app_theme.dart';
+import 'widgets/app_feedback.dart';
 
 class ParentAssessmentScreen extends StatefulWidget {
   final String? childId;
@@ -129,7 +130,7 @@ Widget _buildHeader({bool showBack = false}) {
                 // 詳細画面: 週次アセスメント or 月次サマリ
                 Text(
                   _selectedType == 'weekly' ? '週次アセスメント' : '月次サマリ',
-                  style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
+                  style: TextStyle(fontSize: AppTextSize.title, fontWeight: FontWeight.w600),
                 )
               else if (hasMultipleChildren)
                 // 一覧画面（複数の子ども）: ドロップダウン
@@ -143,7 +144,7 @@ Widget _buildHeader({bool showBack = false}) {
                     children: [
                       Text(
                         '${widget.childName}のアセスメント',
-                        style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
+                        style: TextStyle(fontSize: AppTextSize.title, fontWeight: FontWeight.w600),
                       ),
                       SizedBox(width: 4),
                       Icon(Icons.arrow_drop_down, color: context.colors.iconMuted),
@@ -192,7 +193,7 @@ Widget _buildHeader({bool showBack = false}) {
                 // 一覧画面（子ども1人）: シンプルなテキスト
                 Text(
                   '${widget.childName}のアセスメント',
-                  style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
+                  style: TextStyle(fontSize: AppTextSize.title, fontWeight: FontWeight.w600),
                 ),
             ],
           ),
@@ -220,7 +221,7 @@ Widget _buildHeader({bool showBack = false}) {
               padding: const EdgeInsets.all(16.0),
               child: Text(
                 'データの取得に失敗しました\n${snapshot.error}',
-                style: TextStyle(color: Colors.red, fontSize: 12),
+                style: TextStyle(color: AppColors.error, fontSize: AppTextSize.small),
                 textAlign: TextAlign.center,
               ),
             ),
@@ -302,7 +303,7 @@ Widget _buildHeader({bool showBack = false}) {
         ),
         title: Text(
           dateStr,
-          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+          style: TextStyle(fontWeight: FontWeight.bold, fontSize: AppTextSize.bodyLarge),
         ),
         trailing: Icon(Icons.chevron_right, color: context.colors.iconMuted),
       ),
@@ -437,14 +438,14 @@ Widget _buildHeader({bool showBack = false}) {
             // 教具名
             Text(
               tool,
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: AppTextSize.titleSm),
             ),
             const SizedBox(height: 12),
             // タスク
             if (task.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.only(top: 4),
-                child: Text(task, style: TextStyle(fontSize: 13, color: context.colors.textSecondary)),
+                child: Text(task, style: TextStyle(fontSize: AppTextSize.body, color: context.colors.textSecondary)),
               ),
             
             // 評価と時間
@@ -453,9 +454,9 @@ Widget _buildHeader({bool showBack = false}) {
               spacing: 8,
               runSpacing: 6,
               children: [
-                Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), decoration: BoxDecoration(color: context.colors.chipBg, borderRadius: BorderRadius.circular(8)), child: Text('評価: $rating', style: TextStyle(fontSize: 12))),
+                Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), decoration: BoxDecoration(color: context.colors.chipBg, borderRadius: BorderRadius.circular(8)), child: Text('評価: $rating', style: TextStyle(fontSize: AppTextSize.small))),
                 if (duration.toString().isNotEmpty)
-                  Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), decoration: BoxDecoration(color: context.colors.chipBg, borderRadius: BorderRadius.circular(8)), child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.timer_outlined, size: 14, color: context.colors.iconMuted), SizedBox(width: 4), Text(duration.toString(), style: TextStyle(fontSize: 12))])),
+                  Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), decoration: BoxDecoration(color: context.colors.chipBg, borderRadius: BorderRadius.circular(8)), child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.timer_outlined, size: 14, color: context.colors.iconMuted), SizedBox(width: 4), Text(duration.toString(), style: TextStyle(fontSize: AppTextSize.small))])),
               ],
             ),
             
@@ -469,7 +470,7 @@ Widget _buildHeader({bool showBack = false}) {
                   color: context.colors.tagBg,
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: Text(comment, style: TextStyle(fontSize: 14, height: 1.5)),
+                child: Text(comment, style: TextStyle(fontSize: AppTextSize.bodyMd, height: 1.5)),
               ),
             ],
             
@@ -571,7 +572,7 @@ Widget _buildHeader({bool showBack = false}) {
           if (monthlyEntries.isNotEmpty) ...[
             const Text(
               '非認知能力・伸びている力',
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: AppColors.primary),
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: AppTextSize.bodyLarge, color: AppColors.primary),
             ),
             SizedBox(height: 12),
             ...monthlyEntries.map((e) => Container(
@@ -598,7 +599,7 @@ Widget _buildHeader({bool showBack = false}) {
                           TextSpan(text: e['skill'] ?? ''),
                         ],
                       ),
-                      style: TextStyle(fontSize: 14),
+                      style: TextStyle(fontSize: AppTextSize.bodyMd),
                     ),
                   ),
                 ],
@@ -611,15 +612,15 @@ Widget _buildHeader({bool showBack = false}) {
           if (sensitivePeriods.isNotEmpty) ...[
             const Text(
               '敏感期',
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: AppColors.primary),
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: AppTextSize.bodyLarge, color: AppColors.primary),
             ),
             const SizedBox(height: 12),
             Wrap(
               spacing: 8,
               runSpacing: 8,
               children: sensitivePeriods.map((tag) => Chip(
-                label: Text(tag, style: TextStyle(fontSize: 12, color: Colors.white)),
-                backgroundColor: Colors.green,
+                label: Text(tag, style: TextStyle(fontSize: AppTextSize.small, color: Colors.white)),
+                backgroundColor: AppColors.success,
                 padding: EdgeInsets.zero,
                 materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
               )).toList(),
@@ -630,7 +631,7 @@ Widget _buildHeader({bool showBack = false}) {
           // 総評
           const Text(
             '今月の様子・総評',
-            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: AppColors.primary),
+            style: TextStyle(fontWeight: FontWeight.bold, fontSize: AppTextSize.bodyLarge, color: AppColors.primary),
           ),
           SizedBox(height: 12),
           Container(
@@ -642,7 +643,7 @@ Widget _buildHeader({bool showBack = false}) {
             ),
             child: Text(
               summary.isEmpty ? 'なし' : summary,
-              style: TextStyle(height: 1.6, fontSize: 15),
+              style: TextStyle(height: 1.6, fontSize: AppTextSize.bodyLarge),
             ),
           ),
         ],
@@ -737,9 +738,7 @@ Widget _buildHeader({bool showBack = false}) {
         if (!granted) {
           if (dialogContext.mounted) {
             Navigator.pop(dialogContext);
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text("写真へのアクセスが許可されていません")),
-            );
+            AppFeedback.info(context, "写真へのアクセスが許可されていません");
           }
           return;
         }
@@ -754,17 +753,13 @@ Widget _buildHeader({bool showBack = false}) {
         await file.delete();
         if (dialogContext.mounted) {
           Navigator.pop(dialogContext);
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text("写真を保存しました"), backgroundColor: Colors.green),
-          );
+          AppFeedback.success(context, "写真を保存しました");
         }
       }
     } catch (e) {
       if (dialogContext.mounted) {
         Navigator.pop(dialogContext);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("保存に失敗しました: $e"), backgroundColor: Colors.red),
-        );
+        AppFeedback.error(context, "保存に失敗しました: $e");
       }
     }
   }
@@ -840,9 +835,7 @@ class _AssessmentVideoDialogState extends State<_AssessmentVideoDialog> {
         final granted = await Gal.requestAccess(toAlbum: true);
         if (!granted) {
           if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text("写真へのアクセスが許可されていません")),
-            );
+            AppFeedback.info(context, "写真へのアクセスが許可されていません");
           }
           return;
         }
@@ -856,16 +849,12 @@ class _AssessmentVideoDialogState extends State<_AssessmentVideoDialog> {
         await Gal.putVideo(file.path, album: "Beesmiley");
         await file.delete();
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text("動画を保存しました"), backgroundColor: Colors.green),
-          );
+          AppFeedback.success(context, "動画を保存しました");
         }
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("保存に失敗しました: $e"), backgroundColor: Colors.red),
-        );
+        AppFeedback.error(context, "保存に失敗しました: $e");
       }
     } finally {
       if (mounted) setState(() => _isSaving = false);
@@ -929,7 +918,7 @@ class _AssessmentVideoDialogState extends State<_AssessmentVideoDialog> {
                                         final pos = value.position;
                                         return Row(
                                           children: [
-                                            Text(_fmt(pos), style: const TextStyle(color: Colors.white, fontSize: 12)),
+                                            Text(_fmt(pos), style: const TextStyle(color: Colors.white, fontSize: AppTextSize.small)),
                                             Expanded(
                                               child: Slider(
                                                 value: pos.inMilliseconds.toDouble().clamp(0, total.inMilliseconds.toDouble()),
@@ -941,7 +930,7 @@ class _AssessmentVideoDialogState extends State<_AssessmentVideoDialog> {
                                                 inactiveColor: Colors.white24,
                                               ),
                                             ),
-                                            Text(_fmt(total), style: const TextStyle(color: Colors.white, fontSize: 12)),
+                                            Text(_fmt(total), style: const TextStyle(color: Colors.white, fontSize: AppTextSize.small)),
                                           ],
                                         );
                                       },

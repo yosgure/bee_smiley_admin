@@ -19,6 +19,7 @@ import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
 import 'pdf_preview_stub.dart' if (dart.library.js_interop) 'pdf_preview_web.dart';
 import 'package:video_player/video_player.dart';
 import 'app_theme.dart';
+import 'widgets/app_feedback.dart';
 import 'notification_service.dart';
 import 'classroom_utils.dart';
 import 'utils/recent_emojis.dart';
@@ -263,7 +264,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
         ? Row(
             children: [
               IconButton(icon: Icon(Icons.arrow_back_ios, size: 20, color: context.colors.textSecondary), onPressed: () => Navigator.pop(context)),
-              Expanded(child: Text(title, style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis)),
+              Expanded(child: Text(title, style: TextStyle(fontSize: AppTextSize.title, fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis)),
               Row(mainAxisSize: MainAxisSize.min, children: [
                 if (actions != null) ...actions,
               ]),
@@ -272,7 +273,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
         : Stack(
             alignment: Alignment.center,
             children: [
-              Center(child: Text(title, style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis)),
+              Center(child: Text(title, style: TextStyle(fontSize: AppTextSize.title, fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis)),
               Positioned(
                 right: 0,
                 child: Row(mainAxisSize: MainAxisSize.min, children: [
@@ -360,7 +361,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
       },
       itemBuilder: (BuildContext context) => [
         const PopupMenuItem(value: 'members', child: Text('メンバー一覧')),
-        const PopupMenuItem(value: 'delete', child: Text('チャットを削除', style: TextStyle(color: Colors.red))),
+        const PopupMenuItem(value: 'delete', child: Text('チャットを削除', style: TextStyle(color: AppColors.error))),
       ],
     );
   }
@@ -380,7 +381,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
               if (isWide) setState(() => _selectedRoomId = null);
               else Navigator.pop(context);
             },
-            child: const Text('削除', style: TextStyle(color: Colors.red)),
+            child: const Text('削除', style: TextStyle(color: AppColors.error)),
           ),
         ],
       ),
@@ -423,7 +424,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
             child: Text(
               label,
               style: TextStyle(
-                fontSize: 12,
+                fontSize: AppTextSize.small,
                 fontWeight: FontWeight.w600,
                 color: selected ? Colors.white : context.colors.textSecondary,
               ),
@@ -592,13 +593,13 @@ class _SwipeTileState extends State<_SwipeTile> with SingleTickerProviderStateMi
                         content: const Text('このチャットルームを削除しますか？'),
                         actions: [
                           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('キャンセル')),
-                          TextButton(onPressed: () { Navigator.pop(ctx); widget.onDelete(); }, child: const Text('削除', style: TextStyle(color: Colors.red))),
+                          TextButton(onPressed: () { Navigator.pop(ctx); widget.onDelete(); }, child: const Text('削除', style: TextStyle(color: AppColors.error))),
                         ],
                       ),
                     );
                   },
                   child: Container(
-                    color: Colors.red,
+                    color: AppColors.error,
                     alignment: Alignment.center,
                     child: const Text('削除', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                   ),
@@ -672,7 +673,7 @@ class _RoomListTileState extends State<_RoomListTile> {
         mainAxisAlignment: MainAxisAlignment.center,
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
-          Text(timeStr, style: TextStyle(fontSize: 11, color: context.colors.textSecondary)),
+          Text(timeStr, style: TextStyle(fontSize: AppTextSize.caption, color: context.colors.textSecondary)),
         ],
       );
     }
@@ -691,12 +692,12 @@ class _RoomListTileState extends State<_RoomListTile> {
           mainAxisAlignment: MainAxisAlignment.center,
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
-            Text(timeStr, style: TextStyle(fontSize: 11, color: context.colors.textSecondary)),
+            Text(timeStr, style: TextStyle(fontSize: AppTextSize.caption, color: context.colors.textSecondary)),
             if (unreadCount > 0)
               Container(
                 margin: const EdgeInsets.only(top: 4), width: 20, height: 20,
-                decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
-                child: Center(child: Text(unreadCount > 99 ? '99+' : '$unreadCount', style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold))),
+                decoration: const BoxDecoration(color: AppColors.error, shape: BoxShape.circle),
+                child: Center(child: Text(unreadCount > 99 ? '99+' : '$unreadCount', style: const TextStyle(color: Colors.white, fontSize: AppTextSize.caption, fontWeight: FontWeight.bold))),
               ),
           ],
         );
@@ -727,7 +728,7 @@ class _RoomListTileState extends State<_RoomListTile> {
           child: (photoUrl == null || photoUrl.isEmpty) ? Text(groupName.isNotEmpty ? groupName[0] : 'G', style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold)) : null,
         ),
         title: Text(groupName, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontWeight: widget.isSelected ? FontWeight.bold : FontWeight.normal, color: widget.isSelected ? AppColors.primary : context.colors.textPrimary)),
-        subtitle: Text(room['lastMessage'] ?? '', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12, color: context.colors.textSecondary)),
+        subtitle: Text(room['lastMessage'] ?? '', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: AppTextSize.small, color: context.colors.textSecondary)),
         trailing: _buildTrailing(roomId, timeStr),
         onTap: () => widget.onTap(roomId, groupName, true, memberNames),
       );
@@ -773,7 +774,7 @@ class _RoomListTileState extends State<_RoomListTile> {
             child: (photoUrl == null || photoUrl.isEmpty) ? Text(name.isNotEmpty ? name[0] : '?', style: TextStyle(color: isStaff ? AppColors.primary : AppColors.accent, fontWeight: FontWeight.bold)) : null,
           ),
           title: Text(name, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontWeight: widget.isSelected ? FontWeight.bold : FontWeight.normal, color: widget.isSelected ? AppColors.primary : context.colors.textPrimary)),
-          subtitle: Text(room['lastMessage'] ?? '', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12, color: context.colors.textSecondary)),
+          subtitle: Text(room['lastMessage'] ?? '', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: AppTextSize.small, color: context.colors.textSecondary)),
           trailing: _buildTrailing(roomId, timeStr),
           onTap: () => widget.onTap(roomId, name, false, memberNames),
         );
@@ -893,14 +894,14 @@ class _NewChatDialogState extends State<NewChatDialog> with SingleTickerProvider
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Container(width: double.infinity, padding: const EdgeInsets.fromLTRB(16, 12, 16, 8), color: context.colors.cardBg, child: Text(header, style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary, fontSize: 14))),
+            Container(width: double.infinity, padding: const EdgeInsets.fromLTRB(16, 12, 16, 8), color: context.colors.cardBg, child: Text(header, style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary, fontSize: AppTextSize.bodyMd))),
             Divider(height: 1, thickness: 1, color: context.colors.scaffoldBgAlt),
             ...groupUsers.map((user) {
               final uid = user['uid']; final isSelected = _selectedUids.contains(uid); final photoUrl = user['photoUrl']; final name = user['name'];
               return ListTile(
                 contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
                 leading: CircleAvatar(backgroundColor: isStaffTab ? AppColors.primary.withOpacity(0.15) : AppColors.accent.shade100, backgroundImage: photoUrl != null && photoUrl.isNotEmpty ? NetworkImage(photoUrl) : null, child: (photoUrl == null || photoUrl.isEmpty) ? Text(name.isNotEmpty ? name[0] : '?', style: TextStyle(color: isStaffTab ? AppColors.primary : AppColors.accent, fontWeight: FontWeight.bold)) : null),
-                title: Text(name, style: TextStyle(fontSize: 16)),
+                title: Text(name, style: TextStyle(fontSize: AppTextSize.titleSm)),
                 trailing: isStaffTab && _isGroupMode ? Checkbox(value: isSelected, activeColor: AppColors.primary, onChanged: (val) => _toggleSelection(uid)) : null,
                 onTap: () { if (isStaffTab && _isGroupMode) _toggleSelection(uid); else if (isStaffTab) _startSingleChat(uid, user['name']); else _startFamilyChat(user); },
               );
@@ -985,7 +986,7 @@ class _NewChatDialogState extends State<NewChatDialog> with SingleTickerProvider
               padding: const EdgeInsets.all(16),
               child: Column(
                 children: [
-                  const Text('新規チャット', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  const Text('新規チャット', style: TextStyle(fontSize: AppTextSize.titleLg, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 16),
                   TextField(controller: _searchController, decoration: const InputDecoration(hintText: '名前で検索...', prefixIcon: Icon(Icons.search), border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8), isDense: true, filled: false), onChanged: _onSearch),
                   const SizedBox(height: 16),
@@ -997,7 +998,7 @@ class _NewChatDialogState extends State<NewChatDialog> with SingleTickerProvider
                         return Column(
                           children: [
                             const SizedBox(height: 12),
-                            Row(mainAxisAlignment: MainAxisAlignment.end, children: [const Text('グループ作成', style: TextStyle(fontSize: 14)), const SizedBox(width: 8), Switch(value: _isGroupMode, activeColor: AppColors.primary, onChanged: (val) => setState(() => _isGroupMode = val))]),
+                            Row(mainAxisAlignment: MainAxisAlignment.end, children: [const Text('グループ作成', style: TextStyle(fontSize: AppTextSize.bodyMd)), const SizedBox(width: 8), Switch(value: _isGroupMode, activeColor: AppColors.primary, onChanged: (val) => setState(() => _isGroupMode = val))]),
                             if (_isGroupMode) ...[
                               const SizedBox(height: 16),
                               Row(children: [
@@ -1244,14 +1245,14 @@ class _ChatDetailViewState extends State<ChatDetailView> {
                     child: Text(
                       initial,
                       style: TextStyle(
-                        fontSize: 12,
+                        fontSize: AppTextSize.small,
                         fontWeight: FontWeight.bold,
                         color: context.colors.textSecondary,
                       ),
                     ),
                   ),
                   const SizedBox(width: 10),
-                  Text(name, style: TextStyle(fontSize: 15, color: context.colors.textPrimary)),
+                  Text(name, style: TextStyle(fontSize: AppTextSize.bodyLarge, color: context.colors.textPrimary)),
                 ],
               ),
             ),
@@ -1274,11 +1275,11 @@ class _ChatDetailViewState extends State<ChatDetailView> {
               height: 56, padding: const EdgeInsets.symmetric(horizontal: 16),
               decoration: BoxDecoration(color: context.colors.cardBg, border: Border(bottom: BorderSide(color: context.colors.borderMedium, width: 1))),
               child: Row(children: [
-                Expanded(child: Text(widget.roomName, style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis)),
+                Expanded(child: Text(widget.roomName, style: TextStyle(fontSize: AppTextSize.title, fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis)),
                 PopupMenuButton<String>(
                   icon: Icon(Icons.more_vert, color: context.colors.textSecondary),
                   onSelected: (value) { if (value == 'delete') _deleteChat(); if (value == 'members') _showMembers(); },
-                  itemBuilder: (context) => [if (widget.isGroup) const PopupMenuItem(value: 'members', child: Text('メンバー一覧')), const PopupMenuItem(value: 'delete', child: Text('チャットを削除', style: TextStyle(color: Colors.red)))],
+                  itemBuilder: (context) => [if (widget.isGroup) const PopupMenuItem(value: 'members', child: Text('メンバー一覧')), const PopupMenuItem(value: 'delete', child: Text('チャットを削除', style: TextStyle(color: AppColors.error)))],
                 ),
               ]),
             ),
@@ -1322,7 +1323,7 @@ class _ChatDetailViewState extends State<ChatDetailView> {
                             margin: const EdgeInsets.symmetric(vertical: 16),
                             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                             decoration: BoxDecoration(color: context.colors.borderLight, borderRadius: BorderRadius.circular(12)),
-                            child: Text(dateStr, style: TextStyle(fontSize: 12, color: context.colors.textSecondary)),
+                            child: Text(dateStr, style: TextStyle(fontSize: AppTextSize.small, color: context.colors.textSecondary)),
                           ));
                         }
                       }
@@ -1343,7 +1344,7 @@ class _ChatDetailViewState extends State<ChatDetailView> {
   void _deleteChat() {
     showDialog(context: context, builder: (ctx) => AlertDialog(
       title: const Text('チャットを削除'), content: const Text('このチャットルームを削除しますか？'),
-      actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('キャンセル')), TextButton(onPressed: () async { Navigator.pop(ctx); await FirebaseFirestore.instance.collection('chat_rooms').doc(widget.roomId).delete(); }, child: const Text('削除', style: TextStyle(color: Colors.red)))],
+      actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('キャンセル')), TextButton(onPressed: () async { Navigator.pop(ctx); await FirebaseFirestore.instance.collection('chat_rooms').doc(widget.roomId).delete(); }, child: const Text('削除', style: TextStyle(color: AppColors.error)))],
     ));
   }
 
@@ -1396,10 +1397,10 @@ class _ChatDetailViewState extends State<ChatDetailView> {
                         child: TextField(
                           controller: _textController, focusNode: _focusNode,
                           maxLines: null, minLines: 3, keyboardType: TextInputType.multiline,
-                          style: TextStyle(fontSize: 15, height: 1.5, fontFamily: 'NotoSansJP', fontFamilyFallback: ['Hiragino Sans', 'Roboto', 'sans-serif']),
+                          style: TextStyle(fontSize: AppTextSize.bodyLarge, height: 1.5, fontFamily: 'NotoSansJP', fontFamilyFallback: ['Hiragino Sans', 'Roboto', 'sans-serif']),
                           decoration: InputDecoration(
                             hintText: 'メッセージを入力してください。(Enterで送信 / Shift + Enterで改行)',
-                            hintStyle: TextStyle(fontSize: 14, color: context.colors.iconMuted),
+                            hintStyle: TextStyle(fontSize: AppTextSize.bodyMd, color: context.colors.iconMuted),
                             border: InputBorder.none,
                             filled: true,
                             fillColor: context.colors.chipBg,
@@ -1480,7 +1481,7 @@ class _ChatDetailViewState extends State<ChatDetailView> {
                   },
                   child: TextField(
                     controller: _textController, focusNode: _focusNode, maxLines: null, minLines: 1, keyboardType: TextInputType.multiline,
-                    style: TextStyle(fontSize: 15, height: 1.5, fontFamily: 'NotoSansJP', fontFamilyFallback: ['Hiragino Sans', 'Roboto', 'sans-serif']),
+                    style: TextStyle(fontSize: AppTextSize.bodyLarge, height: 1.5, fontFamily: 'NotoSansJP', fontFamilyFallback: ['Hiragino Sans', 'Roboto', 'sans-serif']),
                     decoration: InputDecoration(hintText: 'メッセージを入力', filled: true, fillColor: context.colors.chipBg, border: OutlineInputBorder(borderRadius: BorderRadius.circular(20), borderSide: BorderSide.none), contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6), isDense: true),
                     contextMenuBuilder: (ctx, editableTextState) => AdaptiveTextSelectionToolbar.editableText(
                       editableTextState: editableTextState,
@@ -1528,7 +1529,7 @@ class _ChatDetailViewState extends State<ChatDetailView> {
                 Text(
                   '$senderName への返信',
                   style: const TextStyle(
-                    fontSize: 11,
+                    fontSize: AppTextSize.caption,
                     fontWeight: FontWeight.bold,
                     color: AppColors.primary,
                   ),
@@ -1538,7 +1539,7 @@ class _ChatDetailViewState extends State<ChatDetailView> {
                   preview,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: TextStyle(fontSize: 12, color: context.colors.textSecondary),
+                  style: TextStyle(fontSize: AppTextSize.small, color: context.colors.textSecondary),
                 ),
               ],
             ),
@@ -1556,12 +1557,12 @@ class _ChatDetailViewState extends State<ChatDetailView> {
     );
   }
 
-  TextStyle _chatTextStyleOf(BuildContext context) => TextStyle(fontSize: 15, height: 1.5, color: context.colors.textPrimary, fontFamily: 'NotoSansJP', fontFamilyFallback: const ['Hiragino Sans', 'Roboto', 'sans-serif']);
-  static const _chatLinkStyle = TextStyle(fontSize: 15, height: 1.5, color: Colors.blue, decoration: TextDecoration.underline, decorationColor: Colors.blue, fontFamily: 'NotoSansJP', fontFamilyFallback: ['Hiragino Sans', 'Roboto', 'sans-serif']);
+  TextStyle _chatTextStyleOf(BuildContext context) => TextStyle(fontSize: AppTextSize.bodyLarge, height: 1.5, color: context.colors.textPrimary, fontFamily: 'NotoSansJP', fontFamilyFallback: const ['Hiragino Sans', 'Roboto', 'sans-serif']);
+  static const _chatLinkStyle = TextStyle(fontSize: AppTextSize.bodyLarge, height: 1.5, color: AppColors.info, decoration: TextDecoration.underline, decorationColor: AppColors.info, fontFamily: 'NotoSansJP', fontFamilyFallback: ['Hiragino Sans', 'Roboto', 'sans-serif']);
 
   List<InlineSpan> _buildTextSpansWithLinks(String text, {BuildContext? ctx}) {
-    final textStyle = ctx != null ? _chatTextStyleOf(ctx) : const TextStyle(fontSize: 15, height: 1.5, color: Colors.black87, fontFamily: 'NotoSansJP', fontFamilyFallback: ['Hiragino Sans', 'Roboto', 'sans-serif']);
-    final mentionStyle = TextStyle(fontSize: 15, height: 1.5, color: AppColors.primary, fontWeight: FontWeight.bold, fontFamily: 'NotoSansJP', fontFamilyFallback: const ['Hiragino Sans', 'Roboto', 'sans-serif']);
+    final textStyle = ctx != null ? _chatTextStyleOf(ctx) : const TextStyle(fontSize: AppTextSize.bodyLarge, height: 1.5, color: Colors.black87, fontFamily: 'NotoSansJP', fontFamilyFallback: ['Hiragino Sans', 'Roboto', 'sans-serif']);
+    final mentionStyle = TextStyle(fontSize: AppTextSize.bodyLarge, height: 1.5, color: AppColors.primary, fontWeight: FontWeight.bold, fontFamily: 'NotoSansJP', fontFamilyFallback: const ['Hiragino Sans', 'Roboto', 'sans-serif']);
     // メンバー名一覧（長い順）でメンションを完全一致させ、苗字+名前（間に空白）もハイライトされるようにする
     final memberNames = widget.memberNames.values
         .map((v) => v.toString())
@@ -1653,7 +1654,7 @@ class _ChatDetailViewState extends State<ChatDetailView> {
             Text(
               senderName,
               style: TextStyle(
-                fontSize: 11,
+                fontSize: AppTextSize.caption,
                 fontWeight: FontWeight.bold,
                 color: accentColor,
               ),
@@ -1663,7 +1664,7 @@ class _ChatDetailViewState extends State<ChatDetailView> {
               preview,
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
-              style: TextStyle(fontSize: 12, color: context.colors.textSecondary),
+              style: TextStyle(fontSize: AppTextSize.small, color: context.colors.textSecondary),
             ),
           ],
         ),
@@ -1741,12 +1742,12 @@ class _ChatDetailViewState extends State<ChatDetailView> {
       final fExt = fName.split('.').last.toLowerCase();
       IconData fIcon;
       Color fIconBg;
-      if (fExt == 'pdf') { fIcon = Icons.picture_as_pdf; fIconBg = Colors.red.shade400; }
-      else if (['doc', 'docx'].contains(fExt)) { fIcon = Icons.description; fIconBg = Colors.blue.shade600; }
-      else if (['xls', 'xlsx', 'csv'].contains(fExt)) { fIcon = Icons.table_chart; fIconBg = Colors.green.shade600; }
-      else if (['ppt', 'pptx'].contains(fExt)) { fIcon = Icons.slideshow; fIconBg = Colors.orange.shade600; }
-      else if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'].contains(fExt)) { fIcon = Icons.image; fIconBg = Colors.teal; }
-      else if (['zip', 'rar', '7z', 'tar', 'gz'].contains(fExt)) { fIcon = Icons.folder_zip; fIconBg = Colors.amber.shade700; }
+      if (fExt == 'pdf') { fIcon = Icons.picture_as_pdf; fIconBg = AppColors.errorBorder; }
+      else if (['doc', 'docx'].contains(fExt)) { fIcon = Icons.description; fIconBg = AppColors.info; }
+      else if (['xls', 'xlsx', 'csv'].contains(fExt)) { fIcon = Icons.table_chart; fIconBg = AppColors.success; }
+      else if (['ppt', 'pptx'].contains(fExt)) { fIcon = Icons.slideshow; fIconBg = AppColors.warning; }
+      else if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'].contains(fExt)) { fIcon = Icons.image; fIconBg = AppColors.secondary; }
+      else if (['zip', 'rar', '7z', 'tar', 'gz'].contains(fExt)) { fIcon = Icons.folder_zip; fIconBg = AppColors.primary; }
       else { fIcon = Icons.insert_drive_file; fIconBg = context.colors.textSecondary; }
 
       content = ConstrainedBox(
@@ -1771,14 +1772,14 @@ class _ChatDetailViewState extends State<ChatDetailView> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(fName, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500), overflow: TextOverflow.ellipsis, maxLines: 2),
+                        Text(fName, style: TextStyle(fontSize: AppTextSize.body, fontWeight: FontWeight.w500), overflow: TextOverflow.ellipsis, maxLines: 2),
                         if (expiryText.isNotEmpty) ...[
                           const SizedBox(height: 2),
-                          Text(expiryText, style: TextStyle(fontSize: 11, color: context.colors.textSecondary)),
+                          Text(expiryText, style: TextStyle(fontSize: AppTextSize.caption, color: context.colors.textSecondary)),
                         ],
                         if (sizeText.isNotEmpty) ...[
                           const SizedBox(height: 2),
-                          Text('サイズ: $sizeText', style: TextStyle(fontSize: 11, color: context.colors.textSecondary)),
+                          Text('サイズ: $sizeText', style: TextStyle(fontSize: AppTextSize.caption, color: context.colors.textSecondary)),
                         ],
                       ],
                     ),
@@ -1800,7 +1801,7 @@ class _ChatDetailViewState extends State<ChatDetailView> {
                   },
                   child: Padding(
                     padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
-                    child: Text('保存', style: TextStyle(fontSize: 13, color: Colors.blue.shade700, fontWeight: FontWeight.w500)),
+                    child: Text('保存', style: TextStyle(fontSize: AppTextSize.body, color: AppColors.info, fontWeight: FontWeight.w500)),
                   ),
                 ),
               ],
@@ -1812,7 +1813,7 @@ class _ChatDetailViewState extends State<ChatDetailView> {
       content = Text(
         text,
         style: const TextStyle(
-          fontSize: 38,
+          fontSize: AppTextSize.heroXl,
           height: 1.5,
           fontFamily: 'NotoSansJP',
           fontFamilyFallback: ['Hiragino Sans', 'Roboto', 'sans-serif'],
@@ -1852,7 +1853,7 @@ class _ChatDetailViewState extends State<ChatDetailView> {
 
     // モバイル: chevron を時間テキストの真横に並べ、まとめてタップ領域にする
     Widget mobileTimeChevron() {
-      final timeStyle = TextStyle(fontSize: 10, color: context.colors.textSecondary);
+      final timeStyle = TextStyle(fontSize: AppTextSize.xs, color: context.colors.textSecondary);
       // Icon の bbox は視覚的なグリフより上寄りなので、少し下にオフセットして時間の baseline に揃える
       final chevronIcon = Transform.translate(
         offset: const Offset(0, 3),
@@ -1900,7 +1901,7 @@ class _ChatDetailViewState extends State<ChatDetailView> {
             child: Column(
               crossAxisAlignment: isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
               children: [
-                if (senderName.isNotEmpty) Padding(padding: const EdgeInsets.only(left: 8, bottom: 2), child: Text(senderName, style: TextStyle(fontSize: 11, color: context.colors.textSecondary))),
+                if (senderName.isNotEmpty) Padding(padding: const EdgeInsets.only(left: 8, bottom: 2), child: Text(senderName, style: TextStyle(fontSize: AppTextSize.caption, color: context.colors.textSecondary))),
                 Row(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.end,
@@ -1909,7 +1910,7 @@ class _ChatDetailViewState extends State<ChatDetailView> {
                       if (isDesktop) ...[
                         desktopMenuButton(isHovering),
                         const SizedBox(width: 2),
-                        Column(crossAxisAlignment: CrossAxisAlignment.end, children: [if (readText.isNotEmpty) Text(readText, style: TextStyle(fontSize: 10, color: context.colors.textSecondary)), Text(timeStr, style: TextStyle(fontSize: 10, color: context.colors.textSecondary))]),
+                        Column(crossAxisAlignment: CrossAxisAlignment.end, children: [if (readText.isNotEmpty) Text(readText, style: TextStyle(fontSize: AppTextSize.xs, color: context.colors.textSecondary)), Text(timeStr, style: TextStyle(fontSize: AppTextSize.xs, color: context.colors.textSecondary))]),
                       ] else
                         mobileTimeChevron(),
                       const SizedBox(width: 4),
@@ -1918,7 +1919,7 @@ class _ChatDetailViewState extends State<ChatDetailView> {
                     if (!isMe) ...[
                       const SizedBox(width: 4),
                       if (isDesktop) ...[
-                        Text(timeStr, style: TextStyle(fontSize: 10, color: context.colors.textSecondary)),
+                        Text(timeStr, style: TextStyle(fontSize: AppTextSize.xs, color: context.colors.textSecondary)),
                         const SizedBox(width: 2),
                         desktopMenuButton(isHovering),
                       ] else
@@ -1988,8 +1989,8 @@ class _ChatDetailViewState extends State<ChatDetailView> {
       required VoidCallback onTapAction,
       bool destructive = false,
     }) {
-      final textColor = destructive ? Colors.red : context.colors.textPrimary;
-      final iconColor = destructive ? Colors.red : context.colors.textSecondary;
+      final textColor = destructive ? AppColors.error : context.colors.textPrimary;
+      final iconColor = destructive ? AppColors.error : context.colors.textSecondary;
       return PopupMenuItem<String>(
         enabled: false,
         padding: EdgeInsets.zero,
@@ -2009,7 +2010,7 @@ class _ChatDetailViewState extends State<ChatDetailView> {
               children: [
                 Icon(icon, size: 18, color: iconColor),
                 const SizedBox(width: 8),
-                Text(label, style: TextStyle(fontSize: 14, color: textColor)),
+                Text(label, style: TextStyle(fontSize: AppTextSize.bodyMd, color: textColor)),
               ],
             ),
           ),
@@ -2224,7 +2225,7 @@ class _ChatDetailViewState extends State<ChatDetailView> {
     return Tooltip(
       message: tooltipText,
       waitDuration: const Duration(milliseconds: 300),
-      textStyle: const TextStyle(color: Colors.white, fontSize: 12),
+      textStyle: const TextStyle(color: Colors.white, fontSize: AppTextSize.small),
       decoration: BoxDecoration(color: Colors.grey[800], borderRadius: BorderRadius.circular(8)),
       child: GestureDetector(
         onTap: () => _toggleReaction(msgId, emoji),
@@ -2289,9 +2290,7 @@ class _ChatDetailViewState extends State<ChatDetailView> {
             const ['mp4', 'mov', 'avi', 'webm', 'mkv', 'm4v'].contains(ext);
         if (isVideo && bytes.length > 50 * 1024 * 1024) {
           if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('動画サイズが大きすぎます (50MBまで)')),
-            );
+            AppFeedback.info(context, '動画サイズが大きすぎます (50MBまで)');
           }
           continue;
         }
@@ -2318,9 +2317,7 @@ class _ChatDetailViewState extends State<ChatDetailView> {
         _clearPersistedDraft();
       } catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('アップロード失敗: $e')),
-          );
+          AppFeedback.info(context, 'アップロード失敗: $e');
         }
       } finally {
         if (mounted) setState(() => _isUploading = false);
@@ -2365,9 +2362,7 @@ class _ChatDetailViewState extends State<ChatDetailView> {
         } else if (videoExts.contains(ext)) {
           if (bytes.length > 50 * 1024 * 1024) {
             if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('動画サイズが大きすぎます (50MBまで)')),
-              );
+              AppFeedback.info(context, '動画サイズが大きすぎます (50MBまで)');
             }
             continue;
           }
@@ -2436,9 +2431,7 @@ class _ChatDetailViewState extends State<ChatDetailView> {
         } else if (videoExts.contains(ext)) {
           if (bytes.length > 50 * 1024 * 1024) {
             if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('動画サイズが大きすぎます (50MBまで)')),
-              );
+              AppFeedback.info(context, '動画サイズが大きすぎます (50MBまで)');
             }
             continue;
           }
@@ -2559,7 +2552,7 @@ class _ChatDetailViewState extends State<ChatDetailView> {
           await roomRef.update({'lastMessage': '', 'lastMessageTime': FieldValue.serverTimestamp()});
         }
         Navigator.of(dialogContext).pop();
-      }, child: const Text('削除', style: TextStyle(color: Colors.red)))],
+      }, child: const Text('削除', style: TextStyle(color: AppColors.error)))],
     ));
   }
 
@@ -2580,7 +2573,7 @@ class _ChatDetailViewState extends State<ChatDetailView> {
         actionsPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
         title: Text(
           'メッセージを編集',
-          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: context.colors.textPrimary),
+          style: TextStyle(fontSize: AppTextSize.titleSm, fontWeight: FontWeight.bold, color: context.colors.textPrimary),
         ),
         // AlertDialog の content は内部で scrollable 化されているため、
         // 長文でも自動スクロールでき、actions（保存ボタン）は常に下に固定される
@@ -2758,7 +2751,7 @@ class _ChatDetailViewState extends State<ChatDetailView> {
                     Expanded(
                       child: Text(
                         fileName,
-                        style: const TextStyle(color: Colors.white, fontSize: 14),
+                        style: const TextStyle(color: Colors.white, fontSize: AppTextSize.bodyMd),
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
@@ -2964,7 +2957,7 @@ class _VideoPlayerDialogState extends State<VideoPlayerDialog> {
                                               _fmtDuration(pos),
                                               style: const TextStyle(
                                                   color: Colors.white,
-                                                  fontSize: 12),
+                                                  fontSize: AppTextSize.small),
                                             ),
                                             Expanded(
                                               child: Slider(
@@ -2990,7 +2983,7 @@ class _VideoPlayerDialogState extends State<VideoPlayerDialog> {
                                               _fmtDuration(total),
                                               style: const TextStyle(
                                                   color: Colors.white,
-                                                  fontSize: 12),
+                                                  fontSize: AppTextSize.small),
                                             ),
                                           ],
                                         );
@@ -3134,7 +3127,7 @@ class _TeamMemberDialogState extends State<_TeamMemberDialog> {
                     icon: Icon(Icons.close, color: context.colors.textSecondary),
                     onPressed: () => Navigator.pop(context),
                   ),
-                  const Expanded(child: Text('メンバー一覧', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold), textAlign: TextAlign.center)),
+                  const Expanded(child: Text('メンバー一覧', style: TextStyle(fontSize: AppTextSize.titleSm, fontWeight: FontWeight.bold), textAlign: TextAlign.center)),
                   IconButton(
                     icon: Icon(_isEditing ? Icons.check : Icons.edit, color: _isEditing ? AppColors.primary : context.colors.textSecondary),
                     onPressed: () {
@@ -3161,7 +3154,7 @@ class _TeamMemberDialogState extends State<_TeamMemberDialog> {
                         child: _isSavingPhoto
                           ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2))
                           : (_groupPhotoUrl == null || _groupPhotoUrl!.isEmpty)
-                            ? Text(_groupName != null && _groupName!.isNotEmpty ? _groupName![0] : 'G', style: const TextStyle(fontSize: 24, color: AppColors.primary, fontWeight: FontWeight.bold))
+                            ? Text(_groupName != null && _groupName!.isNotEmpty ? _groupName![0] : 'G', style: const TextStyle(fontSize: AppTextSize.headline, color: AppColors.primary, fontWeight: FontWeight.bold))
                             : null,
                       ),
                       Positioned(
@@ -3195,7 +3188,7 @@ class _TeamMemberDialogState extends State<_TeamMemberDialog> {
                       title: Text(name),
                       trailing: _isEditing && uid != widget.currentUid
                         ? IconButton(
-                            icon: const Icon(Icons.remove_circle, color: Colors.red),
+                            icon: const Icon(Icons.remove_circle, color: AppColors.error),
                             onPressed: () => _removeMember(uid),
                           )
                         : null,

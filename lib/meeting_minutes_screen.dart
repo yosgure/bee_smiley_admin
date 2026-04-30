@@ -6,6 +6,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'app_theme.dart';
+import 'widgets/app_feedback.dart';
 import 'main.dart';
 
 // ============================================================
@@ -34,7 +35,7 @@ class _MeetingMinutesScreenState extends State<MeetingMinutesScreen> {
     return Scaffold(
       backgroundColor: context.colors.scaffoldBg,
       appBar: AppBar(
-        title: const Text('議事録・研修記録', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
+        title: const Text('議事録・研修記録', style: TextStyle(fontSize: AppTextSize.title, fontWeight: FontWeight.w600)),
         backgroundColor: context.colors.cardBg,
         elevation: 0,
         foregroundColor: context.colors.textPrimary,
@@ -70,7 +71,7 @@ class _MeetingMinutesScreenState extends State<MeetingMinutesScreen> {
                       value: _categoryFilter,
                       isExpanded: true,
                       icon: Icon(Icons.expand_more, color: context.colors.textSecondary),
-                      style: TextStyle(fontSize: 13, color: context.colors.textPrimary),
+                      style: TextStyle(fontSize: AppTextSize.body, color: context.colors.textPrimary),
                       items: [
                         const DropdownMenuItem<String?>(value: null, child: Text('種類: すべて')),
                         ...MeetingCategory.all.map((c) => DropdownMenuItem<String?>(
@@ -116,7 +117,7 @@ class _MeetingMinutesScreenState extends State<MeetingMinutesScreen> {
               children: [
                 Icon(Icons.description_outlined, size: 56, color: context.colors.textTertiary),
                 const SizedBox(height: 12),
-                Text('記録はありません', style: TextStyle(color: context.colors.textSecondary, fontSize: 14)),
+                Text('記録はありません', style: TextStyle(color: context.colors.textSecondary, fontSize: AppTextSize.bodyMd)),
               ],
             ),
           );
@@ -179,7 +180,7 @@ class _MeetingListTile extends StatelessWidget {
                 children: [
                   Text(
                     date != null ? DateFormat('yyyy/M/d (E)', 'ja').format(date) : '',
-                    style: TextStyle(fontSize: 12, color: context.colors.textSecondary, fontWeight: FontWeight.w600),
+                    style: TextStyle(fontSize: AppTextSize.small, color: context.colors.textSecondary, fontWeight: FontWeight.w600),
                   ),
                   const SizedBox(width: 8),
                   Container(
@@ -190,7 +191,7 @@ class _MeetingListTile extends StatelessWidget {
                     ),
                     child: Text(categoryLabel,
                         style: const TextStyle(
-                            fontSize: 11, color: AppColors.primary, fontWeight: FontWeight.w700)),
+                            fontSize: AppTextSize.caption, color: AppColors.primary, fontWeight: FontWeight.w700)),
                   ),
                   const Spacer(),
                   if (materials.isNotEmpty)
@@ -198,14 +199,14 @@ class _MeetingListTile extends StatelessWidget {
                       Icon(Icons.attach_file, size: 12, color: context.colors.textTertiary),
                       const SizedBox(width: 2),
                       Text('${materials.length}',
-                          style: TextStyle(fontSize: 11, color: context.colors.textTertiary)),
+                          style: TextStyle(fontSize: AppTextSize.caption, color: context.colors.textTertiary)),
                     ]),
                 ],
               ),
               if (note.isNotEmpty) ...[
                 const SizedBox(height: 4),
                 Text(note,
-                    style: TextStyle(fontSize: 13, color: context.colors.textPrimary, fontWeight: FontWeight.w600)),
+                    style: TextStyle(fontSize: AppTextSize.body, color: context.colors.textPrimary, fontWeight: FontWeight.w600)),
               ],
               if (participantNames.isNotEmpty) ...[
                 const SizedBox(height: 4),
@@ -213,14 +214,14 @@ class _MeetingListTile extends StatelessWidget {
                   '参加: ${participantNames.join('、')}',
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: TextStyle(fontSize: 11, color: context.colors.textTertiary),
+                  style: TextStyle(fontSize: AppTextSize.caption, color: context.colors.textTertiary),
                 ),
               ],
               if (content.isNotEmpty) ...[
                 const SizedBox(height: 6),
                 Text(
                   content.length > 140 ? '${content.substring(0, 140)}…' : content,
-                  style: TextStyle(fontSize: 12, color: context.colors.textSecondary, height: 1.4),
+                  style: TextStyle(fontSize: AppTextSize.small, color: context.colors.textSecondary, height: 1.4),
                 ),
               ],
             ],
@@ -335,16 +336,12 @@ class _MeetingMinutesEditScreenState extends State<MeetingMinutesEditScreen> {
         await FirebaseFirestore.instance.collection('meeting_minutes').add(data);
       }
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(_isEdit ? '更新しました' : '登録しました'), backgroundColor: Colors.green),
-        );
+        AppFeedback.success(context, _isEdit ? '更新しました' : '登録しました');
         Navigator.pop(context);
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('保存失敗: $e'), backgroundColor: Colors.red),
-        );
+        AppFeedback.error(context, '保存失敗: $e');
       }
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -352,25 +349,20 @@ class _MeetingMinutesEditScreenState extends State<MeetingMinutesEditScreen> {
   }
 
   Future<void> _delete() async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (c) => AlertDialog(
-        title: const Text('この記録を削除しますか？'),
-        content: const Text('この操作は取り消せません。'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('キャンセル')),
-          TextButton(onPressed: () => Navigator.pop(c, true),
-              child: const Text('削除', style: TextStyle(color: Colors.red))),
-        ],
-      ),
+    final ok = await AppFeedback.confirm(
+      context,
+      title: 'この記録を削除しますか？',
+      message: 'この操作は取り消せません。',
+      confirmLabel: '削除',
+      destructive: true,
     );
-    if (ok != true) return;
+    if (!ok) return;
     try {
       await widget.doc!.reference.delete();
       if (mounted) Navigator.pop(context);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('削除失敗: $e')));
+        AppFeedback.info(context, '削除失敗: $e');
       }
     }
   }
@@ -418,9 +410,7 @@ class _MeetingMinutesEditScreenState extends State<MeetingMinutesEditScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('アップロード失敗: $e'), backgroundColor: Colors.red),
-        );
+        AppFeedback.error(context, 'アップロード失敗: $e');
       }
     } finally {
       if (mounted) setState(() => _uploading = false);
@@ -449,14 +439,14 @@ class _MeetingMinutesEditScreenState extends State<MeetingMinutesEditScreen> {
       backgroundColor: context.colors.scaffoldBg,
       appBar: AppBar(
         title: Text(_isEdit ? '議事録・研修記録を編集' : '議事録・研修記録を作成',
-            style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
+            style: const TextStyle(fontSize: AppTextSize.title, fontWeight: FontWeight.w600)),
         backgroundColor: context.colors.cardBg,
         elevation: 0,
         foregroundColor: context.colors.textPrimary,
         leading: IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(context)),
         actions: [
           if (_isEdit)
-            IconButton(icon: Icon(Icons.delete_outline, color: Colors.red.shade400), onPressed: _delete),
+            IconButton(icon: Icon(Icons.delete_outline, color: AppColors.errorBorder), onPressed: _delete),
         ],
       ),
       body: Align(
@@ -481,7 +471,7 @@ class _MeetingMinutesEditScreenState extends State<MeetingMinutesEditScreen> {
                   value: _category,
                   isExpanded: true,
                   icon: Icon(Icons.expand_more, color: context.colors.textSecondary),
-                  style: TextStyle(fontSize: 14, color: context.colors.textPrimary),
+                  style: TextStyle(fontSize: AppTextSize.bodyMd, color: context.colors.textPrimary),
                   items: MeetingCategory.all
                       .map((c) => DropdownMenuItem<String>(
                             value: c.id,
@@ -528,7 +518,7 @@ class _MeetingMinutesEditScreenState extends State<MeetingMinutesEditScreen> {
                     Icon(Icons.event, size: 18, color: AppColors.primary),
                     const SizedBox(width: 10),
                     Text(DateFormat('yyyy/M/d (E)', 'ja').format(_meetingDate),
-                        style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: context.colors.textPrimary)),
+                        style: TextStyle(fontSize: AppTextSize.bodyMd, fontWeight: FontWeight.w600, color: context.colors.textPrimary)),
                   ],
                 ),
               ),
@@ -551,7 +541,7 @@ class _MeetingMinutesEditScreenState extends State<MeetingMinutesEditScreen> {
                     ? Row(children: [
                         Icon(Icons.add_circle_outline, size: 18, color: context.colors.textSecondary),
                         const SizedBox(width: 8),
-                        Text('参加者を選択', style: TextStyle(fontSize: 13, color: context.colors.textSecondary)),
+                        Text('参加者を選択', style: TextStyle(fontSize: AppTextSize.body, color: context.colors.textSecondary)),
                       ])
                     : Wrap(
                         spacing: 6,
@@ -565,7 +555,7 @@ class _MeetingMinutesEditScreenState extends State<MeetingMinutesEditScreen> {
                                   ),
                                   child: Text(s.name,
                                       style: const TextStyle(
-                                          fontSize: 12, color: AppColors.primary, fontWeight: FontWeight.w600)),
+                                          fontSize: AppTextSize.small, color: AppColors.primary, fontWeight: FontWeight.w600)),
                                 ))
                             .toList(),
                       ),
@@ -625,7 +615,7 @@ class _MeetingMinutesEditScreenState extends State<MeetingMinutesEditScreen> {
               child: _saving
                   ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
                   : Text(_isEdit ? '更新' : '登 録',
-                      style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+                      style: const TextStyle(fontSize: AppTextSize.bodyLarge, fontWeight: FontWeight.bold)),
             ),
           ],
         ),
@@ -653,13 +643,13 @@ class _MeetingMinutesEditScreenState extends State<MeetingMinutesEditScreen> {
           color: hasUrl ? AppColors.primary : context.colors.textSecondary,
         ),
         title: Text(m.label.isNotEmpty ? m.label : m.url,
-            style: const TextStyle(fontSize: 13), overflow: TextOverflow.ellipsis),
+            style: const TextStyle(fontSize: AppTextSize.body), overflow: TextOverflow.ellipsis),
         subtitle: noUrl
             ? Text('URL未設定（タップで設定）',
-                style: TextStyle(fontSize: 11, color: Colors.orange.shade600))
+                style: TextStyle(fontSize: AppTextSize.caption, color: AppColors.warning))
             : (m.label.isNotEmpty
                 ? Text(m.url,
-                    style: TextStyle(fontSize: 11, color: context.colors.textTertiary),
+                    style: TextStyle(fontSize: AppTextSize.caption, color: context.colors.textTertiary),
                     overflow: TextOverflow.ellipsis)
                 : null),
         onTap: () => _editMaterial(i),
@@ -676,7 +666,7 @@ class _MeetingMinutesEditScreenState extends State<MeetingMinutesEditScreen> {
                 },
               ),
             IconButton(
-              icon: Icon(Icons.close, size: 16, color: Colors.red.shade400),
+              icon: Icon(Icons.close, size: 16, color: AppColors.errorBorder),
               onPressed: () => setState(() => _materials.removeAt(i)),
             ),
           ],
@@ -689,8 +679,8 @@ class _MeetingMinutesEditScreenState extends State<MeetingMinutesEditScreen> {
     return InputDecoration(
       labelText: label,
       hintText: hint,
-      labelStyle: TextStyle(fontSize: 13, color: context.colors.textSecondary),
-      hintStyle: TextStyle(fontSize: 13, color: context.colors.textHint),
+      labelStyle: TextStyle(fontSize: AppTextSize.body, color: context.colors.textSecondary),
+      hintStyle: TextStyle(fontSize: AppTextSize.body, color: context.colors.textHint),
       filled: true,
       fillColor: context.colors.cardBg,
       border: OutlineInputBorder(
@@ -703,7 +693,7 @@ class _MeetingMinutesEditScreenState extends State<MeetingMinutesEditScreen> {
   Widget _section(String s) => Padding(
         padding: const EdgeInsets.only(bottom: 8),
         child: Text(s,
-            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: context.colors.textPrimary)),
+            style: TextStyle(fontSize: AppTextSize.bodyMd, fontWeight: FontWeight.w700, color: context.colors.textPrimary)),
       );
 
 }
@@ -812,9 +802,9 @@ class _StaffMultiPickerDialogState extends State<_StaffMultiPickerDialog> {
               child: Row(
                 children: [
                   Text('参加者を選択',
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: context.colors.textPrimary)),
+                      style: TextStyle(fontSize: AppTextSize.titleSm, fontWeight: FontWeight.bold, color: context.colors.textPrimary)),
                   const Spacer(),
-                  Text('${_selected.length}名', style: TextStyle(fontSize: 13, color: context.colors.textSecondary)),
+                  Text('${_selected.length}名', style: TextStyle(fontSize: AppTextSize.body, color: context.colors.textSecondary)),
                 ],
               ),
             ),
@@ -846,7 +836,7 @@ class _StaffMultiPickerDialogState extends State<_StaffMultiPickerDialog> {
                         _selected.remove(s.id);
                       }
                     }),
-                    title: Text(s.name, style: const TextStyle(fontSize: 14)),
+                    title: Text(s.name, style: const TextStyle(fontSize: AppTextSize.bodyMd)),
                     dense: true,
                     controlAffinity: ListTileControlAffinity.leading,
                   );

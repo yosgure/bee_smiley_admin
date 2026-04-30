@@ -230,7 +230,7 @@ class _Greeting extends StatelessWidget {
           Text(
             '$hello、$userNameさん。',
             style: TextStyle(
-              fontSize: 18,
+              fontSize: AppTextSize.titleLg,
               fontWeight: FontWeight.w600,
               color: c.textPrimary,
             ),
@@ -238,7 +238,7 @@ class _Greeting extends StatelessWidget {
           const SizedBox(height: 6),
           Text(
             '今日整えたいのは $urgentLeadCount 人、契約あと一歩は $almostContractCount 人です。$suffix。',
-            style: TextStyle(fontSize: 13, color: c.textSecondary, height: 1.5),
+            style: TextStyle(fontSize: AppTextSize.body, color: c.textSecondary, height: 1.5),
           ),
         ],
       ),
@@ -351,12 +351,12 @@ class _UrgentMainCard extends StatelessWidget {
                 children: [
                   Text('本日のやること完了 🌱',
                       style: TextStyle(
-                          fontSize: 18,
+                          fontSize: AppTextSize.titleLg,
                           fontWeight: FontWeight.w700,
                           color: s.text)),
                   const SizedBox(height: 4),
                   Text('新しい気づきがあれば、ここに浮上します',
-                      style: TextStyle(fontSize: 12, color: s.text)),
+                      style: TextStyle(fontSize: AppTextSize.small, color: s.text)),
                 ],
               ),
             ),
@@ -383,13 +383,13 @@ class _UrgentMainCard extends StatelessWidget {
               const SizedBox(width: 8),
               Text('今日整えたいこと',
                   style: TextStyle(
-                      fontSize: 14,
+                      fontSize: AppTextSize.bodyMd,
                       fontWeight: FontWeight.w700,
                       color: a.text)),
               const Spacer(),
               Text('$uniqueLeadCount',
                   style: TextStyle(
-                      fontSize: 36,
+                      fontSize: AppTextSize.heroLg2,
                       fontWeight: FontWeight.w800,
                       color: a.icon,
                       height: 1.0)),
@@ -397,7 +397,7 @@ class _UrgentMainCard extends StatelessWidget {
               Padding(
                 padding: const EdgeInsets.only(top: 14),
                 child: Text('人',
-                    style: TextStyle(fontSize: 12, color: a.text)),
+                    style: TextStyle(fontSize: AppTextSize.small, color: a.text)),
               ),
             ],
           ),
@@ -405,7 +405,7 @@ class _UrgentMainCard extends StatelessWidget {
           Text(
             '確認ポイントは合計 ${summary.urgentTotal} 件（同じリードで複数該当する場合があります）',
             style: TextStyle(
-                fontSize: 11,
+                fontSize: AppTextSize.caption,
                 color: a.text.withValues(alpha: 0.75),
                 height: 1.4),
           ),
@@ -469,7 +469,7 @@ class _UrgentMainCard extends StatelessWidget {
               child: Text(
                 label,
                 style: TextStyle(
-                  fontSize: 13,
+                  fontSize: AppTextSize.body,
                   color: textColor,
                   fontWeight: active ? FontWeight.w700 : FontWeight.w500,
                 ),
@@ -477,13 +477,13 @@ class _UrgentMainCard extends StatelessWidget {
             ),
             Text('$count',
                 style: TextStyle(
-                  fontSize: 16,
+                  fontSize: AppTextSize.titleSm,
                   fontWeight: FontWeight.w700,
                   color: textColor,
                 )),
             const SizedBox(width: 2),
             Text('件',
-                style: TextStyle(fontSize: 11, color: textColor.withValues(alpha: 0.7))),
+                style: TextStyle(fontSize: AppTextSize.caption, color: textColor.withValues(alpha: 0.7))),
             const SizedBox(width: 6),
             Icon(active ? Icons.filter_alt : Icons.chevron_right,
                 size: 16, color: textColor.withValues(alpha: 0.6)),
@@ -518,7 +518,7 @@ class _TodayCard extends StatelessWidget {
               const SizedBox(width: 6),
               Text('今日進めると良い',
                   style: TextStyle(
-                      fontSize: 13,
+                      fontSize: AppTextSize.body,
                       fontWeight: FontWeight.w700,
                       color: c.textPrimary)),
             ],
@@ -541,15 +541,15 @@ class _TodayCard extends StatelessWidget {
         children: [
           Expanded(
               child: Text(label,
-                  style: TextStyle(fontSize: 12, color: c.textSecondary))),
+                  style: TextStyle(fontSize: AppTextSize.small, color: c.textSecondary))),
           Text('$count',
               style: TextStyle(
-                  fontSize: 16,
+                  fontSize: AppTextSize.titleSm,
                   fontWeight: FontWeight.w700,
                   color: c.textPrimary)),
           const SizedBox(width: 2),
           Text('人',
-              style: TextStyle(fontSize: 10, color: c.textTertiary)),
+              style: TextStyle(fontSize: AppTextSize.xs, color: c.textTertiary)),
         ],
       ),
     );
@@ -584,11 +584,11 @@ class _MonthlyCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              const Text('🌸', style: TextStyle(fontSize: 16)),
+              const Text('🌸', style: TextStyle(fontSize: AppTextSize.titleSm)),
               const SizedBox(width: 6),
               Text('今月の歩み',
                   style: TextStyle(
-                      fontSize: 13,
+                      fontSize: AppTextSize.body,
                       fontWeight: FontWeight.w700,
                       color: c.textPrimary)),
             ],
@@ -599,7 +599,7 @@ class _MonthlyCard extends StatelessWidget {
             children: [
               Text('$enrolled',
                   style: TextStyle(
-                      fontSize: 28,
+                      fontSize: AppTextSize.hero,
                       fontWeight: FontWeight.w800,
                       color: c.textPrimary,
                       height: 1.0)),
@@ -608,7 +608,7 @@ class _MonthlyCard extends StatelessWidget {
                 padding: const EdgeInsets.only(bottom: 4),
                 child: Text('/ $goal 人 入会',
                     style:
-                        TextStyle(fontSize: 12, color: c.textSecondary)),
+                        TextStyle(fontSize: AppTextSize.small, color: c.textSecondary)),
               ),
             ],
           ),
@@ -639,15 +639,15 @@ class _MonthlyCard extends StatelessWidget {
         children: [
           Expanded(
               child: Text(label,
-                  style: TextStyle(fontSize: 11, color: c.textTertiary))),
+                  style: TextStyle(fontSize: AppTextSize.caption, color: c.textTertiary))),
           Text('$count',
               style: TextStyle(
-                  fontSize: 13,
+                  fontSize: AppTextSize.body,
                   fontWeight: FontWeight.w700,
                   color: c.textSecondary)),
           const SizedBox(width: 2),
           Text('人',
-              style: TextStyle(fontSize: 10, color: c.textTertiary)),
+              style: TextStyle(fontSize: AppTextSize.xs, color: c.textTertiary)),
         ],
       ),
     );
@@ -714,7 +714,7 @@ class _InsightCard extends StatelessWidget {
               const SizedBox(width: 6),
               Text('気づき',
                   style: TextStyle(
-                      fontSize: 13,
+                      fontSize: AppTextSize.body,
                       fontWeight: FontWeight.w700,
                       color: c.textPrimary)),
             ],
@@ -724,13 +724,13 @@ class _InsightCard extends StatelessWidget {
             Text(
               '今日の気づきは特にありません',
               style:
-                  TextStyle(fontSize: 12, color: c.textTertiary, height: 1.5),
+                  TextStyle(fontSize: AppTextSize.small, color: c.textTertiary, height: 1.5),
             )
           else ...[
             Text(
               insight.text,
               style: TextStyle(
-                  fontSize: 12, color: c.textPrimary, height: 1.5),
+                  fontSize: AppTextSize.small, color: c.textPrimary, height: 1.5),
             ),
           ],
         ],
@@ -771,7 +771,7 @@ class _UrgentSection extends StatelessWidget {
           children: [
             Text('今日整えたいリード',
                 style: TextStyle(
-                    fontSize: 15,
+                    fontSize: AppTextSize.bodyLarge,
                     fontWeight: FontWeight.w700,
                     color: c.textPrimary)),
             const SizedBox(width: 8),
@@ -787,7 +787,7 @@ class _UrgentSection extends StatelessWidget {
               activeFilter == null
                   ? '$totalLeadCount人 / $totalObservations件の確認ポイント'
                   : '絞り込み中 ${rows.length}人 / 全 $totalLeadCount人',
-              style: TextStyle(fontSize: 12, color: c.textSecondary),
+              style: TextStyle(fontSize: AppTextSize.small, color: c.textSecondary),
             ),
           ],
         ),
@@ -823,7 +823,7 @@ class _UrgentSection extends StatelessWidget {
           children: [
             Text(label,
                 style: TextStyle(
-                    fontSize: 11, color: s.text, fontWeight: FontWeight.w600)),
+                    fontSize: AppTextSize.caption, color: s.text, fontWeight: FontWeight.w600)),
             const SizedBox(width: 4),
             Icon(Icons.close, size: 12, color: s.icon),
           ],
@@ -846,7 +846,7 @@ class _UrgentSection extends StatelessWidget {
             activeFilter != null
                 ? '該当するリードはありません'
                 : '今すぐ対応するリードはありません',
-            style: TextStyle(fontSize: 13, color: c.textSecondary),
+            style: TextStyle(fontSize: AppTextSize.body, color: c.textSecondary),
           ),
         ],
       ),
@@ -897,7 +897,7 @@ class _UrgentSection extends StatelessWidget {
   Widget _headerRow(BuildContext context) {
     final c = context.colors;
     TextStyle hs() =>
-        TextStyle(fontSize: 11, color: c.textTertiary, fontWeight: FontWeight.w600);
+        TextStyle(fontSize: AppTextSize.caption, color: c.textTertiary, fontWeight: FontWeight.w600);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
@@ -952,13 +952,13 @@ class _UrgentRowTile extends StatelessWidget {
                 flex: 14,
                 child: Text(
                   crmRelativeTime(lead.lastContactAt ?? lead.inquiredAt),
-                  style: TextStyle(fontSize: 12, color: c.textSecondary),
+                  style: TextStyle(fontSize: AppTextSize.small, color: c.textSecondary),
                 )),
             Expanded(
                 flex: 10,
                 child: Text(
                   lead.assigneeName ?? '—',
-                  style: TextStyle(fontSize: 12, color: c.textSecondary),
+                  style: TextStyle(fontSize: AppTextSize.small, color: c.textSecondary),
                   overflow: TextOverflow.ellipsis,
                 )),
           ],
@@ -976,14 +976,14 @@ class _UrgentRowTile extends StatelessWidget {
         Text(
           lead.childFullName.isEmpty ? '（名前未登録）' : lead.childFullName,
           style: TextStyle(
-              fontSize: 13,
+              fontSize: AppTextSize.body,
               fontWeight: FontWeight.w600,
               color: c.textPrimary),
           overflow: TextOverflow.ellipsis,
         ),
         if (age != null)
           Text('$age歳',
-              style: TextStyle(fontSize: 11, color: c.textTertiary)),
+              style: TextStyle(fontSize: AppTextSize.caption, color: c.textTertiary)),
       ],
     );
   }
@@ -1000,7 +1000,7 @@ class _UrgentRowTile extends StatelessWidget {
       ),
       child: Text(label,
           style: TextStyle(
-              fontSize: 10, fontWeight: FontWeight.bold, color: color)),
+              fontSize: AppTextSize.xs, fontWeight: FontWeight.bold, color: color)),
     );
   }
 
@@ -1018,7 +1018,7 @@ class _UrgentRowTile extends StatelessWidget {
       child: Text(
         crmUrgentReasonLabel(r),
         style: TextStyle(
-            fontSize: 10, fontWeight: FontWeight.w700, color: s.text),
+            fontSize: AppTextSize.xs, fontWeight: FontWeight.w700, color: s.text),
         overflow: TextOverflow.ellipsis,
       ),
     );
@@ -1030,7 +1030,7 @@ class _UrgentRowTile extends StatelessWidget {
     final note = lead.nextActionNote;
     if (at == null && note.isEmpty) {
       return Text('次の一手を決める',
-          style: TextStyle(fontSize: 12, color: c.textTertiary));
+          style: TextStyle(fontSize: AppTextSize.small, color: c.textTertiary));
     }
     final isOverdue = at != null && at.isBefore(DateTime.now());
     final dateStr =
@@ -1044,7 +1044,7 @@ class _UrgentRowTile extends StatelessWidget {
               Flexible(
                 child: Text(dateStr,
                     style: TextStyle(
-                        fontSize: 12,
+                        fontSize: AppTextSize.small,
                         fontWeight: FontWeight.w600,
                         color: c.textPrimary),
                     overflow: TextOverflow.ellipsis),
@@ -1059,7 +1059,7 @@ class _UrgentRowTile extends StatelessWidget {
                 ),
                 child: const Text('期限超過',
                     style: TextStyle(
-                        fontSize: 9,
+                        fontSize: AppTextSize.xxs,
                         fontWeight: FontWeight.w700,
                         color: Color(0xFFD35400))),
               ),
@@ -1073,7 +1073,7 @@ class _UrgentRowTile extends StatelessWidget {
                 ),
                 child: const Text('次回予定',
                     style: TextStyle(
-                        fontSize: 9,
+                        fontSize: AppTextSize.xxs,
                         fontWeight: FontWeight.w700,
                         color: Color(0xFF1565C0))),
               ),
@@ -1082,7 +1082,7 @@ class _UrgentRowTile extends StatelessWidget {
         ),
         if (note.isNotEmpty)
           Text(note,
-              style: TextStyle(fontSize: 11, color: c.textSecondary),
+              style: TextStyle(fontSize: AppTextSize.caption, color: c.textSecondary),
               maxLines: 1,
               overflow: TextOverflow.ellipsis),
       ],
@@ -1146,7 +1146,7 @@ class _UrgentCard extends StatelessWidget {
                           ? '（名前未登録）'
                           : lead.childFullName,
                       style: TextStyle(
-                          fontSize: 14,
+                          fontSize: AppTextSize.bodyMd,
                           fontWeight: FontWeight.w700,
                           color: c.textPrimary),
                     ),
@@ -1161,7 +1161,7 @@ class _UrgentCard extends StatelessWidget {
                             color: style.border.withValues(alpha: 0.4))),
                     child: Text(crmUrgentReasonLabel(row.topReason),
                         style: TextStyle(
-                            fontSize: 10,
+                            fontSize: AppTextSize.xs,
                             fontWeight: FontWeight.w700,
                             color: style.text)),
                   ),
@@ -1170,20 +1170,20 @@ class _UrgentCard extends StatelessWidget {
               const SizedBox(height: 6),
               Text(
                 '${CrmOptions.stageLabel(lead.stage)} ・ 最終接触 ${crmRelativeTime(lead.lastContactAt ?? lead.inquiredAt)}',
-                style: TextStyle(fontSize: 11, color: c.textSecondary),
+                style: TextStyle(fontSize: AppTextSize.caption, color: c.textSecondary),
               ),
               if (lead.hasNextAction) ...[
                 const SizedBox(height: 6),
                 Text(
                   '次: ${lead.nextActionAt != null ? DateFormat('M/d HH:mm', 'ja').format(lead.nextActionAt!) : ''} ${lead.nextActionNote}',
-                  style: TextStyle(fontSize: 12, color: c.textPrimary),
+                  style: TextStyle(fontSize: AppTextSize.small, color: c.textPrimary),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
               ] else ...[
                 const SizedBox(height: 6),
                 Text('次の一手を決める',
-                    style: TextStyle(fontSize: 12, color: c.textTertiary)),
+                    style: TextStyle(fontSize: AppTextSize.small, color: c.textTertiary)),
               ],
             ],
           ),
@@ -1227,7 +1227,7 @@ class _ClosingBanner extends StatelessWidget {
           Expanded(
             child: Text(msg,
                 style: TextStyle(
-                    fontSize: 13, color: c.textSecondary, height: 1.5)),
+                    fontSize: AppTextSize.body, color: c.textSecondary, height: 1.5)),
           ),
         ],
       ),

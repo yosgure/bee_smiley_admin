@@ -9,6 +9,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:intl/intl.dart';
 import 'package:image/image.dart' as img;
 import 'app_theme.dart';
+import 'widgets/app_feedback.dart';
 import 'time_list_picker.dart';
 
 class EventScreen extends StatefulWidget {
@@ -38,9 +39,7 @@ class _EventScreenState extends State<EventScreen> with SingleTickerProviderStat
       }
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('リンクを開けませんでした')),
-        );
+        AppFeedback.info(context, 'リンクを開けませんでした');
       }
     }
   }
@@ -226,7 +225,7 @@ class _EventScreenState extends State<EventScreen> with SingleTickerProviderStat
                       child: Text(
                         event['title'] ?? '名称未設定',
                         style: TextStyle(
-                          fontSize: 18, 
+                          fontSize: AppTextSize.titleLg, 
                           fontWeight: FontWeight.bold,
                           color: context.colors.textPrimary,
                         ),
@@ -259,7 +258,7 @@ class _EventScreenState extends State<EventScreen> with SingleTickerProviderStat
                           '申込締切: $deadlineStr まで',
                           style: TextStyle(
                             color: context.colors.textSecondary,
-                            fontSize: 12,
+                            fontSize: AppTextSize.small,
                           ),
                         ),
                       ],
@@ -275,7 +274,7 @@ class _EventScreenState extends State<EventScreen> with SingleTickerProviderStat
                     padding: const EdgeInsets.only(left: 26, top: 2),
                     child: Text(
                       event['address'],
-                      style: TextStyle(color: context.colors.textTertiary, fontSize: 12),
+                      style: TextStyle(color: context.colors.textTertiary, fontSize: AppTextSize.small),
                     ),
                   ),
                 
@@ -289,7 +288,7 @@ class _EventScreenState extends State<EventScreen> with SingleTickerProviderStat
                   style: TextStyle(
                     color: context.colors.textPrimary,
                     height: 1.6,
-                    fontSize: 14,
+                    fontSize: AppTextSize.bodyMd,
                   ),
                 ),
                 
@@ -334,7 +333,7 @@ class _EventScreenState extends State<EventScreen> with SingleTickerProviderStat
           child: Text(
             text,
             style: TextStyle(
-              fontSize: 14,
+              fontSize: AppTextSize.bodyMd,
               fontWeight: FontWeight.w500,
               color: context.colors.textPrimary,
             ),
@@ -479,15 +478,11 @@ class _EventCreateScreenState extends State<EventCreateScreen> {
 
   Future<void> _submit() async {
     if (_titleController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('イベント名を入力してください')),
-      );
+      AppFeedback.info(context, 'イベント名を入力してください');
       return;
     }
     if (_deadlineDate.isAfter(_eventDate)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('締め切り日はイベント日程より前に設定してください')),
-      );
+      AppFeedback.info(context, '締め切り日はイベント日程より前に設定してください');
       return;
     }
 
@@ -525,14 +520,10 @@ class _EventCreateScreenState extends State<EventCreateScreen> {
 
       if (mounted) {
         Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('イベントを公開しました')),
-        );
+        AppFeedback.info(context, 'イベントを公開しました');
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('エラー: $e')),
-      );
+      AppFeedback.info(context, 'エラー: $e');
     } finally {
       if (mounted) setState(() => _isUploading = false);
     }
@@ -603,7 +594,7 @@ class _EventCreateScreenState extends State<EventCreateScreen> {
                               const SizedBox(height: 8),
                               Text(
                                 'カバー写真を追加',
-                                style: TextStyle(color: context.colors.textTertiary, fontSize: 14),
+                                style: TextStyle(color: context.colors.textTertiary, fontSize: AppTextSize.bodyMd),
                               ),
                             ],
                           )
@@ -676,7 +667,7 @@ class _EventCreateScreenState extends State<EventCreateScreen> {
         style: TextStyle(
           fontWeight: FontWeight.w600, 
           color: context.colors.textPrimary,
-          fontSize: 13,
+          fontSize: AppTextSize.body,
         ),
       ),
     );
@@ -696,7 +687,7 @@ class _EventCreateScreenState extends State<EventCreateScreen> {
           hintText: hint,
           border: InputBorder.none,
           contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-          hintStyle: TextStyle(color: context.colors.textHint, fontSize: 14),
+          hintStyle: TextStyle(color: context.colors.textHint, fontSize: AppTextSize.bodyMd),
         ),
       ),
     );
@@ -727,7 +718,7 @@ class _EventCreateScreenState extends State<EventCreateScreen> {
             Text(
               DateFormat('yyyy年 MM月 dd日 (E)', 'ja').format(date),
               style: TextStyle(
-                fontSize: 14, 
+                fontSize: AppTextSize.bodyMd, 
                 fontWeight: FontWeight.w500,
                 color: isDeadline ? AppColors.error : context.colors.textPrimary,
               ),
@@ -761,7 +752,7 @@ class _EventCreateScreenState extends State<EventCreateScreen> {
             Text(
               time != null ? time.format(context) : label,
               style: TextStyle(
-                fontSize: 14, 
+                fontSize: AppTextSize.bodyMd, 
                 fontWeight: FontWeight.w500,
                 color: time != null ? context.colors.textPrimary : context.colors.textHint,
               ),

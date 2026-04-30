@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import 'assessment_edit_screen.dart';
 import 'assessment_detail_screen.dart';
 import 'app_theme.dart';
+import 'widgets/app_feedback.dart';
 import 'classroom_utils.dart';
 import 'lesson_quick_capture.dart';
 import 'main.dart';
@@ -197,9 +198,7 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
 
   void _onAddPressed() {
     if (_selectedStudentId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('児童を選択してください')),
-      );
+      AppFeedback.info(context, '児童を選択してください');
       return;
     }
     final type = _currentTabIndex == 0 ? 'weekly' : 'monthly';
@@ -276,7 +275,7 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
               child: Text(
                 '記録',
                 style: TextStyle(
-                  fontSize: 17,
+                  fontSize: AppTextSize.title,
                   fontWeight: FontWeight.w600,
                   color: context.colors.textPrimary,
                 ),
@@ -296,17 +295,17 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
                 child: DropdownButton<String>(
                   value: _selectedClassroom,
                   isExpanded: true,
-                  hint: Text('全教室', style: TextStyle(fontSize: 13, color: context.colors.textHint)),
-                  style: TextStyle(fontSize: 13, color: context.colors.textPrimary),
+                  hint: Text('全教室', style: TextStyle(fontSize: AppTextSize.body, color: context.colors.textHint)),
+                  style: TextStyle(fontSize: AppTextSize.body, color: context.colors.textPrimary),
                   icon: Icon(Icons.expand_more, size: 16, color: context.colors.textHint),
                   items: [
                     DropdownMenuItem<String>(
                       value: null,
-                      child: Text('全教室', style: TextStyle(fontSize: 13, color: context.colors.textPrimary)),
+                      child: Text('全教室', style: TextStyle(fontSize: AppTextSize.body, color: context.colors.textPrimary)),
                     ),
                     ..._classrooms.map((c) => DropdownMenuItem(
                       value: c,
-                      child: Text(c, style: TextStyle(fontSize: 13, color: context.colors.textPrimary)),
+                      child: Text(c, style: TextStyle(fontSize: AppTextSize.body, color: context.colors.textPrimary)),
                     )),
                   ],
                   onChanged: (val) => setState(() => _selectedClassroom = val),
@@ -326,10 +325,10 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
               ),
               child: TextField(
                 controller: _searchController,
-                style: TextStyle(fontSize: 13, color: context.colors.textPrimary),
+                style: TextStyle(fontSize: AppTextSize.body, color: context.colors.textPrimary),
                 decoration: InputDecoration(
                   hintText: '検索...',
-                  hintStyle: TextStyle(color: context.colors.textHint, fontSize: 13),
+                  hintStyle: TextStyle(color: context.colors.textHint, fontSize: AppTextSize.body),
                   prefixIcon: Icon(Icons.search_rounded, color: context.colors.textHint, size: 16),
                   filled: false,
                   border: InputBorder.none,
@@ -345,7 +344,7 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
             child: _isLoading
                 ? Center(child: CircularProgressIndicator(color: AppColors.primary))
                 : students.isEmpty
-                    ? Center(child: Text('該当する児童がいません', style: TextStyle(color: context.colors.textTertiary, fontSize: 13)))
+                    ? Center(child: Text('該当する児童がいません', style: TextStyle(color: context.colors.textTertiary, fontSize: AppTextSize.body)))
                     : _buildStudentListWithIndex(students),
           ),
         ],
@@ -377,7 +376,7 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
                 Text(
                   '今のレッスン',
                   style: TextStyle(
-                    fontSize: 12,
+                    fontSize: AppTextSize.small,
                     fontWeight: FontWeight.bold,
                     color: AppColors.primary,
                   ),
@@ -385,7 +384,7 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
                 const SizedBox(width: 6),
                 Text(
                   label,
-                  style: TextStyle(fontSize: 11, color: context.colors.textSecondary),
+                  style: TextStyle(fontSize: AppTextSize.caption, color: context.colors.textSecondary),
                 ),
                 const Spacer(),
                 Tooltip(
@@ -424,7 +423,7 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
         appBar: AppBar(
           title: Text(
             _selectedStudentId != null ? _selectedStudentName : '',
-            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+            style: const TextStyle(fontSize: AppTextSize.titleSm, fontWeight: FontWeight.w600),
           ),
           centerTitle: true,
           backgroundColor: context.colors.cardBg,
@@ -440,8 +439,8 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
             labelColor: AppColors.primary,
             unselectedLabelColor: context.colors.textSecondary,
             indicatorColor: AppColors.primary,
-            labelStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-            unselectedLabelStyle: const TextStyle(fontSize: 13),
+            labelStyle: const TextStyle(fontSize: AppTextSize.body, fontWeight: FontWeight.w600),
+            unselectedLabelStyle: const TextStyle(fontSize: AppTextSize.body),
             tabs: const [
               Tab(text: '週次アセスメント'),
               Tab(text: '月次サマリ'),
@@ -466,7 +465,7 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
                 icon: const Icon(Icons.edit, color: Colors.white, size: 18),
                 label: Text(
                   _currentTabIndex == 0 ? '週次アセスメント作成' : '月次サマリ作成',
-                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: AppTextSize.body),
                 ),
               )
             : null,
@@ -492,14 +491,14 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
           Text(
             '記録',
             style: TextStyle(
-              fontSize: 22,
+              fontSize: AppTextSize.display,
               fontWeight: FontWeight.bold,
               color: context.colors.textPrimary,
             ),
           ),
           const SizedBox(height: 6),
           Text('左の生徒を選んで記録を表示',
-              style: TextStyle(fontSize: 13, color: context.colors.textTertiary)),
+              style: TextStyle(fontSize: AppTextSize.body, color: context.colors.textTertiary)),
         ],
       ),
     );
@@ -519,7 +518,7 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
           return Center(child: CircularProgressIndicator(color: AppColors.primary));
         }
         if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-          return Center(child: Text('データがありません', style: TextStyle(color: context.colors.textTertiary, fontSize: 13)));
+          return Center(child: Text('データがありません', style: TextStyle(color: context.colors.textTertiary, fontSize: AppTextSize.body)));
         }
 
         final docs = snapshot.data!.docs;
@@ -551,7 +550,7 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
                         children: [
                           Text(
                             DateFormat('yyyy/MM/dd (E)', 'ja').format(date),
-                            style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: context.colors.textPrimary),
+                            style: TextStyle(fontWeight: FontWeight.w600, fontSize: AppTextSize.bodyMd, color: context.colors.textPrimary),
                           ),
                           const SizedBox(width: 8),
                           _buildStatusBadge(data['isPublished'] == true),
@@ -564,7 +563,7 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
                         hasOnlyQuickDraft
                             ? '写真のみ（教具・コメント未入力）'
                             : (toolNames.isEmpty ? '記録なし' : toolNames),
-                        style: TextStyle(color: context.colors.textSecondary, fontSize: 12, height: 1.4),
+                        style: TextStyle(color: context.colors.textSecondary, fontSize: AppTextSize.small, height: 1.4),
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -593,7 +592,7 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
           return Center(child: CircularProgressIndicator(color: AppColors.primary));
         }
         if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-          return Center(child: Text('データがありません', style: TextStyle(color: context.colors.textTertiary, fontSize: 13)));
+          return Center(child: Text('データがありません', style: TextStyle(color: context.colors.textTertiary, fontSize: AppTextSize.body)));
         }
 
         final docs = snapshot.data!.docs;
@@ -618,7 +617,7 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
                         children: [
                           Text(
                             DateFormat('yyyy年 MM月', 'ja').format(date),
-                            style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: context.colors.textPrimary),
+                            style: TextStyle(fontWeight: FontWeight.w600, fontSize: AppTextSize.bodyMd, color: context.colors.textPrimary),
                           ),
                           const SizedBox(width: 8),
                           _buildStatusBadge(data['isPublished'] == true),
@@ -631,7 +630,7 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
                         data['summary'] ?? '',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: TextStyle(color: context.colors.textSecondary, fontSize: 12),
+                        style: TextStyle(color: context.colors.textSecondary, fontSize: AppTextSize.small),
                       ),
                     ],
                   ),
@@ -669,7 +668,7 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
       if (header != lastHeader) {
         items.add(Padding(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-          child: Text(header, style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.primary)),
+          child: Text(header, style: TextStyle(fontSize: AppTextSize.small, fontWeight: FontWeight.bold, color: AppColors.primary)),
         ));
         lastHeader = header;
       }
@@ -690,19 +689,19 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       decoration: BoxDecoration(
-        color: isPublished ? Colors.green.withValues(alpha: 0.1) : AppColors.accent.withValues(alpha: 0.1),
+        color: isPublished ? AppColors.success.withValues(alpha: 0.1) : AppColors.accent.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(4),
         border: Border.all(
-          color: isPublished ? Colors.green : AppColors.accent,
+          color: isPublished ? AppColors.success : AppColors.accent,
           width: 0.5,
         ),
       ),
       child: Text(
         isPublished ? '公開中' : '下書き',
         style: TextStyle(
-          fontSize: 10,
+          fontSize: AppTextSize.xs,
           fontWeight: FontWeight.bold,
-          color: isPublished ? Colors.green.shade700 : AppColors.accent.shade700,
+          color: isPublished ? AppColors.success : AppColors.accent.shade700,
         ),
       ),
     );
@@ -768,7 +767,7 @@ class _CurrentLessonTileState extends State<_CurrentLessonTile> {
                   child: Text(
                     firstChar,
                     style: TextStyle(
-                      fontSize: 13,
+                      fontSize: AppTextSize.body,
                       fontWeight: FontWeight.bold,
                       color: AppColors.primary,
                     ),
@@ -780,7 +779,7 @@ class _CurrentLessonTileState extends State<_CurrentLessonTile> {
                 child: Text(
                   widget.name,
                   style: TextStyle(
-                    fontSize: 14,
+                    fontSize: AppTextSize.bodyMd,
                     fontWeight: FontWeight.w600,
                     color: context.colors.textPrimary,
                   ),
@@ -801,7 +800,7 @@ class _CurrentLessonTileState extends State<_CurrentLessonTile> {
                     SizedBox(width: 4),
                     Text('撮影',
                         style: TextStyle(
-                            fontSize: 11,
+                            fontSize: AppTextSize.caption,
                             color: Colors.white,
                             fontWeight: FontWeight.bold)),
                   ],
@@ -908,7 +907,7 @@ class _HoverableStudentItemState extends State<_HoverableStudentItem> {
                   child: Text(
                     firstChar,
                     style: TextStyle(
-                      fontSize: 13,
+                      fontSize: AppTextSize.body,
                       fontWeight: FontWeight.bold,
                       color: widget.isActive ? AppColors.primary : context.colors.textSecondary,
                     ),
@@ -920,7 +919,7 @@ class _HoverableStudentItemState extends State<_HoverableStudentItem> {
                 child: Text(
                   widget.name,
                   style: TextStyle(
-                    fontSize: 13,
+                    fontSize: AppTextSize.body,
                     fontWeight: isHighlighted ? FontWeight.w600 : FontWeight.normal,
                     color: widget.isActive ? AppColors.primary : context.colors.textPrimary,
                   ),

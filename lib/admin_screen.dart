@@ -23,6 +23,7 @@ import 'notification_settings_screen.dart';
 import 'ai_command_manage_screen.dart';
 import 'hug_mapping_screen.dart';
 import 'app_theme.dart';
+import 'widgets/app_feedback.dart';
 import 'main.dart' show themeNotifier, setThemeMode;
 
 class AdminScreen extends StatefulWidget {
@@ -58,23 +59,7 @@ class _AdminScreenState extends State<AdminScreen> {
   }
 
   Future<void> _logout(BuildContext context) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('ログアウト'),
-        content: const Text('ログアウトしますか？'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('キャンセル'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('ログアウト', style: TextStyle(color: Colors.red)),
-          ),
-        ],
-      ),
-    );
+    final confirmed = await AppFeedback.confirm(context, title: 'ログアウト', message: 'ログアウトしますか？', confirmLabel: 'ログアウト', cancelLabel: 'キャンセル', destructive: true);
 
     if (confirmed == true) {
       await FirebaseAuth.instance.signOut();
@@ -155,14 +140,14 @@ void _navigateTo(BuildContext context, Widget screen) {
               _MenuData(
                 title: '管理者・スタッフ',
                 icon: Icons.badge,
-                color: Colors.blue,
+                color: AppColors.info,
                 description: '先生や職員の登録・権限設定',
                 destination: const StaffManageScreen(),
               ),
               _MenuData(
                 title: '保護者・児童',
                 icon: Icons.family_restroom,
-                color: Colors.blue,
+                color: AppColors.info,
                 description: '児童情報と連絡先の管理',
                 destination: const StudentManageScreen(),
               ),
@@ -197,7 +182,7 @@ void _navigateTo(BuildContext context, Widget screen) {
               _MenuData(
                 title: 'hug連携設定',
                 icon: Icons.sync_alt,
-                color: Colors.teal,
+                color: AppColors.secondary,
                 description: '児童・スタッフのhug IDマッピング',
                 destination: const HugMappingScreen(),
               ),
@@ -211,7 +196,7 @@ void _navigateTo(BuildContext context, Widget screen) {
     _MenuData(
       title: '教室設定',
       icon: Icons.store,
-      color: Colors.brown,
+      color: AppColors.secondary,
       description: '予定で使う部屋・場所',
       destination: const ClassroomMasterScreen(),
     ),
@@ -234,18 +219,18 @@ Container(
     leading: Container(
       padding: const EdgeInsets.all(6),
       decoration: BoxDecoration(
-        color: Colors.green.withOpacity(0.1),
+        color: AppColors.success.withOpacity(0.1),
         borderRadius: BorderRadius.circular(8),
       ),
-      child: const Icon(Icons.how_to_reg, color: Colors.green, size: 24),
+      child: const Icon(Icons.how_to_reg, color: AppColors.success, size: 24),
     ),
     title: const Text(
       '入退室管理',
-      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+      style: TextStyle(fontSize: AppTextSize.titleSm, fontWeight: FontWeight.bold),
     ),
     subtitle: Text(
       'タブレット用の入退室画面',
-      style: TextStyle(fontSize: 12, color: context.colors.textSecondary),
+      style: TextStyle(fontSize: AppTextSize.small, color: context.colors.textSecondary),
     ),
     trailing: Icon(Icons.arrow_forward_ios, size: 16, color: context.colors.iconMuted),
     onTap: () {
@@ -276,7 +261,7 @@ Container(
             style: TextStyle(
               color: context.colors.textSecondary,
               fontWeight: FontWeight.bold,
-              fontSize: 13,
+              fontSize: AppTextSize.body,
             ),
           ),
         ),
@@ -298,18 +283,18 @@ Container(
                 leading: Container(
                   padding: const EdgeInsets.all(6),
                   decoration: BoxDecoration(
-                    color: Colors.teal.withOpacity(0.1),
+                    color: AppColors.secondary.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: const Icon(Icons.upload_file, color: Colors.teal, size: 24),
+                  child: const Icon(Icons.upload_file, color: AppColors.secondary, size: 24),
                 ),
                 title: const Text(
                   'インポート（登録）',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  style: TextStyle(fontSize: AppTextSize.titleSm, fontWeight: FontWeight.bold),
                 ),
                 subtitle: Text(
                   'CSVファイルから一括登録',
-                  style: TextStyle(fontSize: 12, color: context.colors.textSecondary),
+                  style: TextStyle(fontSize: AppTextSize.small, color: context.colors.textSecondary),
                 ),
                 trailing: Icon(Icons.arrow_forward_ios, size: 16, color: context.colors.iconMuted),
                 onTap: () => _showCsvImportMenu(context),
@@ -319,18 +304,18 @@ Container(
                 leading: Container(
                   padding: const EdgeInsets.all(6),
                   decoration: BoxDecoration(
-                    color: Colors.indigo.withOpacity(0.1),
+                    color: AppColors.secondary.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: const Icon(Icons.download, color: Colors.indigo, size: 24),
+                  child: const Icon(Icons.download, color: AppColors.secondary, size: 24),
                 ),
                 title: const Text(
                   'エクスポート（出力）',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  style: TextStyle(fontSize: AppTextSize.titleSm, fontWeight: FontWeight.bold),
                 ),
                 subtitle: Text(
                   'データをCSVファイルに出力',
-                  style: TextStyle(fontSize: 12, color: context.colors.textSecondary),
+                  style: TextStyle(fontSize: AppTextSize.small, color: context.colors.textSecondary),
                 ),
                 trailing: Icon(Icons.arrow_forward_ios, size: 16, color: context.colors.iconMuted),
                 onTap: () => _showCsvExportMenu(context),
@@ -356,7 +341,7 @@ Container(
               mainAxisSize: MainAxisSize.min,
               children: [
                 ListTile(
-                  leading: const Icon(Icons.badge, color: Colors.blue),
+                  leading: const Icon(Icons.badge, color: AppColors.info),
                   title: const Text('スタッフ'),
                   subtitle: const Text('先生・職員を一括登録'),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
@@ -366,7 +351,7 @@ Container(
                   },
                 ),
                 ListTile(
-                  leading: const Icon(Icons.family_restroom, color: Colors.blue),
+                  leading: const Icon(Icons.family_restroom, color: AppColors.info),
                   title: const Text('保護者・児童'),
                   subtitle: const Text('保護者と児童を一括登録'),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
@@ -420,11 +405,11 @@ Container(
                 ),
                 const Text(
                   'CSVインポート',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  style: TextStyle(fontSize: AppTextSize.titleLg, fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 16),
                 ListTile(
-                  leading: const Icon(Icons.badge, color: Colors.blue),
+                  leading: const Icon(Icons.badge, color: AppColors.info),
                   title: const Text('スタッフ'),
                   subtitle: const Text('先生・職員を一括登録'),
                   onTap: () {
@@ -433,7 +418,7 @@ Container(
                   },
                 ),
                 ListTile(
-                  leading: const Icon(Icons.family_restroom, color: Colors.blue),
+                  leading: const Icon(Icons.family_restroom, color: AppColors.info),
                   title: const Text('保護者・児童'),
                   subtitle: const Text('保護者と児童を一括登録'),
                   onTap: () {
@@ -473,7 +458,7 @@ Container(
               mainAxisSize: MainAxisSize.min,
               children: [
                 ListTile(
-                  leading: const Icon(Icons.badge, color: Colors.blue),
+                  leading: const Icon(Icons.badge, color: AppColors.info),
                   title: const Text('スタッフ'),
                   subtitle: const Text('スタッフ一覧をCSV出力'),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
@@ -483,7 +468,7 @@ Container(
                   },
                 ),
                 ListTile(
-                  leading: const Icon(Icons.family_restroom, color: Colors.blue),
+                  leading: const Icon(Icons.family_restroom, color: AppColors.info),
                   title: const Text('保護者・児童'),
                   subtitle: const Text('保護者・児童一覧をCSV出力'),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
@@ -537,11 +522,11 @@ Container(
                 ),
                 const Text(
                   'CSVエクスポート',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  style: TextStyle(fontSize: AppTextSize.titleLg, fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 16),
                 ListTile(
-                  leading: const Icon(Icons.badge, color: Colors.blue),
+                  leading: const Icon(Icons.badge, color: AppColors.info),
                   title: const Text('スタッフ'),
                   subtitle: const Text('スタッフ一覧をCSV出力'),
                   onTap: () {
@@ -550,7 +535,7 @@ Container(
                   },
                 ),
                 ListTile(
-                  leading: const Icon(Icons.family_restroom, color: Colors.blue),
+                  leading: const Icon(Icons.family_restroom, color: AppColors.info),
                   title: const Text('保護者・児童'),
                   subtitle: const Text('保護者・児童一覧をCSV出力'),
                   onTap: () {
@@ -588,7 +573,7 @@ Container(
             style: TextStyle(
               color: context.colors.textSecondary,
               fontWeight: FontWeight.bold,
-              fontSize: 13,
+              fontSize: AppTextSize.body,
             ),
           ),
         ),
@@ -608,18 +593,18 @@ Container(
             leading: Container(
               padding: const EdgeInsets.all(6),
               decoration: BoxDecoration(
-                color: Colors.deepPurple.withOpacity(0.1),
+                color: AppColors.aiAccent.withOpacity(0.1),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Icon(
                 context.isDark ? Icons.dark_mode : Icons.light_mode,
-                color: Colors.deepPurple,
+                color: AppColors.aiAccent,
                 size: 24,
               ),
             ),
             title: const Text(
               'テーマ',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              style: TextStyle(fontSize: AppTextSize.titleSm, fontWeight: FontWeight.bold),
             ),
             subtitle: Text(
               currentMode == ThemeMode.system
@@ -627,7 +612,7 @@ Container(
                   : currentMode == ThemeMode.dark
                       ? 'ダーク'
                       : 'ライト',
-              style: TextStyle(fontSize: 12, color: context.colors.textSecondary),
+              style: TextStyle(fontSize: AppTextSize.small, color: context.colors.textSecondary),
             ),
             trailing: SegmentedButton<ThemeMode>(
               segments: const [
@@ -666,7 +651,7 @@ Container(
             style: TextStyle(
               color: context.colors.textSecondary,
               fontWeight: FontWeight.bold,
-              fontSize: 13,
+              fontSize: AppTextSize.body,
             ),
           ),
         ),
@@ -722,7 +707,7 @@ Container(
                           child: Container(
                             padding: const EdgeInsets.all(2),
                             decoration: BoxDecoration(
-                              color: Colors.blue,
+                              color: AppColors.info,
                               shape: BoxShape.circle,
                               border: Border.all(color: context.colors.cardBg, width: 1.5),
                             ),
@@ -734,11 +719,11 @@ Container(
                 ),
                 title: Text(
                   '氏名',
-                  style: TextStyle(fontSize: 12, color: context.colors.textSecondary),
+                  style: TextStyle(fontSize: AppTextSize.small, color: context.colors.textSecondary),
                 ),
                 subtitle: Text(
                   name.isNotEmpty ? name : '---',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: context.colors.textPrimary),
+                  style: TextStyle(fontSize: AppTextSize.titleSm, fontWeight: FontWeight.bold, color: context.colors.textPrimary),
                 ),
                 trailing: photoUrl != null && photoUrl.isNotEmpty
                     ? TextButton(
@@ -748,7 +733,7 @@ Container(
                           minimumSize: const Size(50, 30),
                           tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                         ),
-                        child: const Text('削除', style: TextStyle(color: Colors.red, fontSize: 12)),
+                        child: const Text('削除', style: TextStyle(color: AppColors.error, fontSize: AppTextSize.small)),
                       )
                     : null,
               ),
@@ -757,18 +742,18 @@ Container(
                 leading: Container(
                   padding: const EdgeInsets.all(6),
                   decoration: BoxDecoration(
-                    color: Colors.green.withOpacity(0.1),
+                    color: AppColors.success.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: const Icon(Icons.badge, color: Colors.green, size: 24),
+                  child: const Icon(Icons.badge, color: AppColors.success, size: 24),
                 ),
                 title: Text(
                   'ログインID',
-                  style: TextStyle(fontSize: 12, color: context.colors.textSecondary),
+                  style: TextStyle(fontSize: AppTextSize.small, color: context.colors.textSecondary),
                 ),
                 subtitle: Text(
                   loginId.isNotEmpty ? loginId : '---',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: context.colors.textPrimary),
+                  style: TextStyle(fontSize: AppTextSize.titleSm, fontWeight: FontWeight.bold, color: context.colors.textPrimary),
                 ),
               ),
               const Divider(height: 1, indent: 60),
@@ -776,14 +761,14 @@ Container(
                 leading: Container(
                   padding: const EdgeInsets.all(6),
                   decoration: BoxDecoration(
-                    color: Colors.blue.withOpacity(0.1),
+                    color: AppColors.info.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: const Icon(Icons.notifications_outlined, color: Colors.blue, size: 24),
+                  child: const Icon(Icons.notifications_outlined, color: AppColors.info, size: 24),
                 ),
                 title: const Text(
                   '通知設定',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  style: TextStyle(fontSize: AppTextSize.titleSm, fontWeight: FontWeight.bold),
                 ),
                 trailing: Icon(Icons.arrow_forward_ios, size: 16, color: context.colors.iconMuted),
                 onTap: () {
@@ -802,7 +787,7 @@ Container(
                 ),
                 title: const Text(
                   'パスワード変更',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  style: TextStyle(fontSize: AppTextSize.titleSm, fontWeight: FontWeight.bold),
                 ),
                 trailing: Icon(Icons.arrow_forward_ios, size: 16, color: context.colors.iconMuted),
                 onTap: () => _showChangePasswordDialog(context),
@@ -812,14 +797,14 @@ Container(
                 leading: Container(
                   padding: const EdgeInsets.all(6),
                   decoration: BoxDecoration(
-                    color: Colors.red.withOpacity(0.1),
+                    color: AppColors.error.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: const Icon(Icons.logout, color: Colors.red, size: 24),
+                  child: const Icon(Icons.logout, color: AppColors.error, size: 24),
                 ),
                 title: const Text(
                   'ログアウト',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.red),
+                  style: TextStyle(fontSize: AppTextSize.titleSm, fontWeight: FontWeight.bold, color: AppColors.error),
                 ),
                 onTap: () => _logout(context),
               ),
@@ -901,15 +886,11 @@ Container(
       });
       await _loadStaffInfo();
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('プロフィール写真を更新しました'), backgroundColor: Colors.green),
-        );
+        AppFeedback.success(context, 'プロフィール写真を更新しました');
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('エラー: $e'), backgroundColor: Colors.red),
-        );
+        AppFeedback.error(context, 'エラー: $e');
       }
     } finally {
       if (mounted) setState(() => _isUploadingPhoto = false);
@@ -919,20 +900,7 @@ Container(
   Future<void> _deletePhoto() async {
     final docId = _staffData?['docId'];
     if (docId == null) return;
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('写真を削除'),
-        content: const Text('プロフィール写真を削除しますか？'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('キャンセル')),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('削除', style: TextStyle(color: Colors.red)),
-          ),
-        ],
-      ),
-    );
+    final confirmed = await AppFeedback.confirm(context, title: '写真を削除', message: 'プロフィール写真を削除しますか？', confirmLabel: '削除', cancelLabel: 'キャンセル', destructive: true);
     if (confirmed != true) return;
     setState(() => _isUploadingPhoto = true);
     try {
@@ -941,15 +909,11 @@ Container(
       });
       await _loadStaffInfo();
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('写真を削除しました')),
-        );
+        AppFeedback.info(context, '写真を削除しました');
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('エラー: $e'), backgroundColor: Colors.red),
-        );
+        AppFeedback.error(context, 'エラー: $e');
       }
     } finally {
       if (mounted) setState(() => _isUploadingPhoto = false);
@@ -1012,21 +976,15 @@ Container(
                       final confirmPassword = confirmPasswordController.text;
 
                       if (currentPassword.isEmpty || newPassword.isEmpty || confirmPassword.isEmpty) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('すべての項目を入力してください')),
-                        );
+                        AppFeedback.info(context, 'すべての項目を入力してください');
                         return;
                       }
                       if (newPassword != confirmPassword) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('新しいパスワードが一致しません')),
-                        );
+                        AppFeedback.info(context, '新しいパスワードが一致しません');
                         return;
                       }
                       if (newPassword.length < 6) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('パスワードは6文字以上で入力してください')),
-                        );
+                        AppFeedback.info(context, 'パスワードは6文字以上で入力してください');
                         return;
                       }
                       setState(() => isLoading = true);
@@ -1039,24 +997,15 @@ Container(
                         await user.reauthenticateWithCredential(credential);
                         await user.updatePassword(newPassword);
                         Navigator.pop(ctx);
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('パスワードを変更しました'),
-                            backgroundColor: Colors.green,
-                          ),
-                        );
+                        AppFeedback.success(context, 'パスワードを変更しました');
                       } on FirebaseAuthException catch (e) {
                         String message = 'エラーが発生しました';
                         if (e.code == 'wrong-password') {
                           message = '現在のパスワードが正しくありません';
                         }
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text(message), backgroundColor: Colors.red),
-                        );
+                        AppFeedback.error(context, message);
                       } catch (e) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('エラー: $e'), backgroundColor: Colors.red),
-                        );
+                        AppFeedback.error(context, 'エラー: $e');
                       } finally {
                         setState(() => isLoading = false);
                       }
@@ -1086,7 +1035,7 @@ Container(
             style: TextStyle(
               color: context.colors.textSecondary,
               fontWeight: FontWeight.bold,
-              fontSize: 13,
+              fontSize: AppTextSize.body,
             ),
           ),
         ),
@@ -1121,18 +1070,16 @@ Container(
                     ),
                     title: Text(
                       item.title,
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                      style: TextStyle(fontSize: AppTextSize.titleSm, fontWeight: FontWeight.bold),
                     ),
                     subtitle: Text(
                       item.description,
-                      style: TextStyle(fontSize: 12, color: context.colors.textSecondary),
+                      style: TextStyle(fontSize: AppTextSize.small, color: context.colors.textSecondary),
                     ),
                     trailing: Icon(Icons.arrow_forward_ios, size: 16, color: context.colors.iconMuted),
                     onTap: () {
                       if (item.destination == null) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('この画面はまだ実装されていません')),
-                        );
+                        AppFeedback.info(context, 'この画面はまだ実装されていません');
                         return;
                       }
                       _navigateTo(context, item.destination!);

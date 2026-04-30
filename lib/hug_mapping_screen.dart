@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'app_theme.dart';
+import 'widgets/app_feedback.dart';
 
 /// hug連携のIDマッピング管理画面
 /// Firestoreの hug_settings/child_mapping, hug_settings/staff_mapping を管理
@@ -56,9 +57,7 @@ class _HugMappingScreenState extends State<HugMappingScreen>
     } catch (e) {
       setState(() => _isLoading = false);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('読み込みエラー: $e')),
-        );
+        AppFeedback.info(context, '読み込みエラー: $e');
       }
     }
   }
@@ -79,18 +78,13 @@ class _HugMappingScreenState extends State<HugMappingScreen>
 
   /// 全児童のHUGプロファイルを一括同期
   Future<void> _syncAllHugDocs() async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('全児童のプロファイルを同期'),
-        content: const Text('マッピング済みの全児童についてHUG情報を取得し直します。数分かかることがあります。'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('キャンセル')),
-          ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('同期開始')),
-        ],
-      ),
+    final confirmed = await AppFeedback.confirm(
+      context,
+      title: '全児童のプロファイルを同期',
+      message: 'マッピング済みの全児童についてHUG情報を取得し直します。数分かかることがあります。',
+      confirmLabel: '同期開始',
     );
-    if (confirmed != true) return;
+    if (!confirmed) return;
     setState(() => _isSyncingAll = true);
     try {
       final callable = FirebaseFunctions.instanceFor(region: 'asia-northeast1')
@@ -102,14 +96,10 @@ class _HugMappingScreenState extends State<HugMappingScreen>
       final unmapped = data['skippedUnmapped'] ?? 0;
       final errors = (data['errors'] as List?)?.length ?? 0;
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('同期完了: $synced件/$total件 同期、未マッピング: $unmapped件、エラー: $errors件')),
-      );
+      AppFeedback.info(context, '同期完了: $synced件/$total件 同期、未マッピング: $unmapped件、エラー: $errors件');
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('一括同期エラー: $e'), backgroundColor: Colors.red),
-        );
+        AppFeedback.error(context, '一括同期エラー: $e');
       }
     } finally {
       if (mounted) setState(() => _isSyncingAll = false);
@@ -153,12 +143,7 @@ class _HugMappingScreenState extends State<HugMappingScreen>
       );
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('hugからの取得エラー: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        AppFeedback.error(context, 'hugからの取得エラー: $e');
       }
     } finally {
       if (mounted) setState(() => _isFetching = false);
@@ -287,7 +272,7 @@ class _MappingList extends StatelessWidget {
                       Text('右下の＋ボタンで追加するか、\nAppBarの↓ボタンでhugから自動取得してください',
                           textAlign: TextAlign.center,
                           style: TextStyle(
-                              color: context.colors.iconMuted, fontSize: 12)),
+                              color: context.colors.iconMuted, fontSize: AppTextSize.small)),
                     ],
                   ),
                 )
@@ -302,7 +287,7 @@ class _MappingList extends StatelessWidget {
                       subtitle: Text('$idLabel: ${entry.value}'),
                       trailing: IconButton(
                         icon:
-                            const Icon(Icons.delete_outline, color: Colors.red),
+                            const Icon(Icons.delete_outline, color: AppColors.error),
                         onPressed: () => onRemove(entry.key),
                       ),
                       onTap: () => _showEditDialog(context, entry.key, entry.value),
@@ -482,12 +467,7 @@ class _FetchResultDialogState extends State<_FetchResultDialog> {
           onPressed: () {
             widget.onApply(_childMap, _staffMap);
             Navigator.pop(context);
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('マッピングを更新しました'),
-                backgroundColor: Colors.green,
-              ),
-            );
+            AppFeedback.success(context, 'マッピングを更新しました');
           },
           child: const Text('適用'),
         ),
@@ -513,17 +493,17 @@ class _FetchResultDialogState extends State<_FetchResultDialog> {
           dense: true,
           leading: Icon(
             isNew ? Icons.add_circle : Icons.check_circle,
-            color: isNew ? Colors.blue : Colors.green,
+            color: isNew ? AppColors.info : AppColors.success,
             size: 20,
           ),
-          title: Text(entry.key, style: const TextStyle(fontSize: 14)),
+          title: Text(entry.key, style: const TextStyle(fontSize: AppTextSize.bodyMd)),
           subtitle: Text('ID: ${entry.value}',
-              style: const TextStyle(fontSize: 12)),
+              style: const TextStyle(fontSize: AppTextSize.small)),
           trailing: Text(
             isNew ? '新規' : '登録済',
             style: TextStyle(
-              fontSize: 11,
-              color: isNew ? Colors.blue : Colors.grey,
+              fontSize: AppTextSize.caption,
+              color: isNew ? AppColors.info : Colors.grey,
             ),
           ),
         );

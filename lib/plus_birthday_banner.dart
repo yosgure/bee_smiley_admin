@@ -150,7 +150,7 @@ class _PlusBirthdayBannerState extends State<PlusBirthdayBanner> {
         : '最短: ${first.name} あと${first.daysUntil}日';
 
     return Material(
-      color: Colors.pink.shade50,
+      color: AppColors.aiAccentBg,
       child: InkWell(
         onTap: () => _setExpanded(!_expanded),
         child: Padding(
@@ -161,14 +161,14 @@ class _PlusBirthdayBannerState extends State<PlusBirthdayBanner> {
               // サマリ行
               Row(
                 children: [
-                  const Text('🎂', style: TextStyle(fontSize: 14)),
+                  const Text('🎂', style: TextStyle(fontSize: AppTextSize.bodyMd)),
                   const SizedBox(width: 6),
                   Text(
                     '近日の誕生日 ${visible.length}名',
                     style: TextStyle(
-                      fontSize: 12,
+                      fontSize: AppTextSize.small,
                       fontWeight: FontWeight.bold,
-                      color: Colors.pink.shade900,
+                      color: AppColors.aiAccent,
                     ),
                   ),
                   const SizedBox(width: 10),
@@ -176,8 +176,8 @@ class _PlusBirthdayBannerState extends State<PlusBirthdayBanner> {
                     child: Text(
                       summary,
                       style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.pink.shade900,
+                        fontSize: AppTextSize.small,
+                        color: AppColors.aiAccent,
                       ),
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -186,14 +186,14 @@ class _PlusBirthdayBannerState extends State<PlusBirthdayBanner> {
                   Text(
                     _expanded ? '閉じる' : '詳細',
                     style: TextStyle(
-                      fontSize: 11,
-                      color: Colors.pink.shade700,
+                      fontSize: AppTextSize.caption,
+                      color: AppColors.aiAccent,
                     ),
                   ),
                   Icon(
                     _expanded ? Icons.expand_less : Icons.expand_more,
                     size: 16,
-                    color: Colors.pink.shade700,
+                    color: AppColors.aiAccent,
                   ),
                 ],
               ),
@@ -206,7 +206,7 @@ class _PlusBirthdayBannerState extends State<PlusBirthdayBanner> {
                   decoration: BoxDecoration(
                     color: context.colors.cardBg,
                     borderRadius: BorderRadius.circular(6),
-                    border: Border.all(color: Colors.pink.shade200),
+                    border: Border.all(color: AppColors.aiAccentBg),
                   ),
                   child: Column(
                     children: [
@@ -235,9 +235,9 @@ class _PlusBirthdayBannerState extends State<PlusBirthdayBanner> {
             child: Text(
               dateLabel,
               style: TextStyle(
-                fontSize: 12,
+                fontSize: AppTextSize.small,
                 fontWeight: FontWeight.bold,
-                color: Colors.pink.shade800,
+                color: AppColors.aiAccent,
               ),
             ),
           ),
@@ -246,9 +246,9 @@ class _PlusBirthdayBannerState extends State<PlusBirthdayBanner> {
             child: Text(
               daysLabel,
               style: TextStyle(
-                fontSize: 11,
+                fontSize: AppTextSize.caption,
                 color: e.daysUntil == 0
-                    ? Colors.pink.shade700
+                    ? AppColors.aiAccent
                     : context.colors.textSecondary,
                 fontWeight: e.daysUntil == 0
                     ? FontWeight.bold
@@ -259,7 +259,7 @@ class _PlusBirthdayBannerState extends State<PlusBirthdayBanner> {
           Expanded(
             child: Text(
               e.name,
-              style: TextStyle(fontSize: 12),
+              style: TextStyle(fontSize: AppTextSize.small),
               overflow: TextOverflow.ellipsis,
             ),
           ),
@@ -268,10 +268,10 @@ class _PlusBirthdayBannerState extends State<PlusBirthdayBanner> {
               minimumSize: const Size(0, 24),
               padding: const EdgeInsets.symmetric(horizontal: 8),
               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              foregroundColor: Colors.pink.shade700,
+              foregroundColor: AppColors.aiAccent,
             ),
             onPressed: () => _dismissEntry(e.entryKey),
-            child: const Text('確認済み', style: TextStyle(fontSize: 11)),
+            child: const Text('確認済み', style: TextStyle(fontSize: AppTextSize.caption)),
           ),
         ],
       ),

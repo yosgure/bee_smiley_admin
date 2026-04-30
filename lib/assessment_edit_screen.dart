@@ -9,6 +9,7 @@ import 'package:intl/intl.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:image/image.dart' as img;
 import 'app_theme.dart';
+import 'widgets/app_feedback.dart';
 import 'main.dart';
 
 // isolate実行用トップレベル関数（compute用）。長辺1200px・JPEG品質80に圧縮。
@@ -451,7 +452,7 @@ class _AssessmentEditScreenState extends State<AssessmentEditScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(isPublished ? '公開しました' : '下書きを保存しました'),
-            backgroundColor: isPublished ? Colors.green : Colors.blueGrey,
+            backgroundColor: isPublished ? AppColors.success : context.colors.textSecondary,
             duration: const Duration(seconds: 2),
           ),
         );
@@ -467,7 +468,7 @@ class _AssessmentEditScreenState extends State<AssessmentEditScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('エラー: $e')));
+        AppFeedback.info(context, 'エラー: $e');
       }
     } finally {
       if (mounted) setState(() => _isSaving = false);
@@ -514,7 +515,7 @@ class _AssessmentEditScreenState extends State<AssessmentEditScreen> {
                 ),
                 child: _isSaving 
                   ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
-                  : const Text('下書き保存', style: TextStyle(fontSize: 13, color: AppColors.primary)),
+                  : const Text('下書き保存', style: TextStyle(fontSize: AppTextSize.body, color: AppColors.primary)),
               ),
             ),
           // 公開ボタン（公開済みの場合は「更新」）
@@ -528,7 +529,7 @@ class _AssessmentEditScreenState extends State<AssessmentEditScreen> {
               ),
               child: _isSaving 
                 ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: AppColors.onPrimary, strokeWidth: 2))
-                : Text(isAlreadyPublished ? '更新' : '公開', style: const TextStyle(fontSize: 13)),
+                : Text(isAlreadyPublished ? '更新' : '公開', style: const TextStyle(fontSize: AppTextSize.body)),
             ),
           ),
         ],
@@ -554,7 +555,7 @@ class _AssessmentEditScreenState extends State<AssessmentEditScreen> {
                       Center(
                         child: Text(
                           widget.studentName,
-                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: context.colors.textPrimary),
+                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: AppTextSize.titleLg, color: context.colors.textPrimary),
                         ),
                       ),
                       const SizedBox(height: 16),
@@ -579,7 +580,7 @@ class _AssessmentEditScreenState extends State<AssessmentEditScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('写真・動画', style: TextStyle(fontSize: 12, color: context.colors.textSecondary, fontWeight: FontWeight.bold)),
+        Text('写真・動画', style: TextStyle(fontSize: AppTextSize.small, color: context.colors.textSecondary, fontWeight: FontWeight.bold)),
         const SizedBox(height: 8),
         SizedBox(
           height: 88,
@@ -621,7 +622,7 @@ class _AssessmentEditScreenState extends State<AssessmentEditScreen> {
           children: [
             Icon(icon, color: context.colors.textSecondary),
             const SizedBox(height: 4),
-            Text(label, style: TextStyle(fontSize: 11, color: context.colors.textSecondary)),
+            Text(label, style: TextStyle(fontSize: AppTextSize.caption, color: context.colors.textSecondary)),
           ],
         ),
       ),
@@ -682,13 +683,13 @@ class _AssessmentEditScreenState extends State<AssessmentEditScreen> {
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(8),
                   child: Container(
-                    color: Colors.red.withValues(alpha: 0.55),
+                    color: AppColors.error.withValues(alpha: 0.55),
                     alignment: Alignment.center,
                     child: const Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Icon(Icons.refresh, color: Colors.white, size: 22),
-                        Text('再試行', style: TextStyle(color: Colors.white, fontSize: 10)),
+                        Text('再試行', style: TextStyle(color: Colors.white, fontSize: AppTextSize.xs)),
                       ],
                     ),
                   ),
@@ -744,7 +745,7 @@ class _AssessmentEditScreenState extends State<AssessmentEditScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(isWeekly ? 'レッスン日' : '対象月', style: TextStyle(fontWeight: FontWeight.bold, color: context.colors.textSecondary, fontSize: 12)),
+            Text(isWeekly ? 'レッスン日' : '対象月', style: TextStyle(fontWeight: FontWeight.bold, color: context.colors.textSecondary, fontSize: AppTextSize.small)),
             const SizedBox(height: 8),
             Row(
               children: [
@@ -754,7 +755,7 @@ class _AssessmentEditScreenState extends State<AssessmentEditScreen> {
                   isWeekly 
                       ? DateFormat('yyyy/MM/dd (E)', 'ja').format(_selectedDate)
                       : DateFormat('yyyy年 M月度').format(_selectedDate),
-                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  style: const TextStyle(fontSize: AppTextSize.titleLg, fontWeight: FontWeight.bold),
                 ),
                 const Spacer(),
                 Icon(Icons.arrow_drop_down, color: context.colors.textSecondary),
@@ -789,7 +790,7 @@ class _AssessmentEditScreenState extends State<AssessmentEditScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text('教具 ${index + 1}', style: TextStyle(color: context.colors.textSecondary, fontSize: 12)),
+                      Text('教具 ${index + 1}', style: TextStyle(color: context.colors.textSecondary, fontSize: AppTextSize.small)),
                       if (_weeklyEntries.length > 1)
                         IconButton(
                           icon: Icon(Icons.close, color: context.colors.textSecondary, size: 20),
@@ -817,7 +818,7 @@ class _AssessmentEditScreenState extends State<AssessmentEditScreen> {
                             entry['tool'] ?? '教具を選択',
                             style: TextStyle(
                               color: entry['tool'] == null ? context.colors.textSecondary : context.colors.textPrimary,
-                              fontSize: 16,
+                              fontSize: AppTextSize.titleSm,
                               fontWeight: entry['tool'] != null ? FontWeight.bold : FontWeight.normal,
                             ),
                           ),
@@ -830,13 +831,13 @@ class _AssessmentEditScreenState extends State<AssessmentEditScreen> {
                   
                   Row(
                     children: [
-                      Text('評価', style: TextStyle(fontSize: 12, color: context.colors.textSecondary, fontWeight: FontWeight.bold)),
+                      Text('評価', style: TextStyle(fontSize: AppTextSize.small, color: context.colors.textSecondary, fontWeight: FontWeight.bold)),
                       const SizedBox(width: 12),
-                      _buildCircleRating(index, '△', Colors.blue),
+                      _buildCircleRating(index, '△', AppColors.info),
                       const SizedBox(width: 8),
                       _buildCircleRating(index, '○', AppColors.accent),
                       const SizedBox(width: 8),
-                      _buildCircleRating(index, '◎', Colors.red),
+                      _buildCircleRating(index, '◎', AppColors.error),
                     ],
                   ),
                   const SizedBox(height: 16),
@@ -889,7 +890,7 @@ class _AssessmentEditScreenState extends State<AssessmentEditScreen> {
           style: TextStyle(
             color: isSelected ? Colors.white : context.colors.textSecondary,
             fontWeight: FontWeight.bold,
-            fontSize: 16,
+            fontSize: AppTextSize.titleSm,
           ),
         ),
       ),
@@ -928,7 +929,7 @@ class _AssessmentEditScreenState extends State<AssessmentEditScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text('項目 ${index + 1}', style: TextStyle(fontWeight: FontWeight.bold, color: context.colors.textSecondary, fontSize: 12)),
+                      Text('項目 ${index + 1}', style: TextStyle(fontWeight: FontWeight.bold, color: context.colors.textSecondary, fontSize: AppTextSize.small)),
                       if (_monthlyEntries.length > 1)
                         IconButton(
                           icon: Icon(Icons.close, size: 18, color: context.colors.textSecondary),
@@ -1072,7 +1073,7 @@ class _ToolSelectDialogState extends State<_ToolSelectDialog> {
               padding: const EdgeInsets.all(16),
               child: Column(
                 children: [
-                  const Text('教具を選択', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  const Text('教具を選択', style: TextStyle(fontSize: AppTextSize.titleLg, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 16),
                   TextField(
                     controller: _searchController,

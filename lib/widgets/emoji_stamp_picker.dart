@@ -55,7 +55,7 @@ class _EmojiStampPickerBody extends StatelessWidget {
         alignment: Alignment.center,
         child: s == 'bee'
             ? Image.asset('assets/logo_beesmileymark.png', width: 32, height: 32)
-            : Text(s, style: const TextStyle(fontSize: 26)),
+            : Text(s, style: const TextStyle(fontSize: AppTextSize.emoji)),
       ),
     );
   }
@@ -96,7 +96,7 @@ class _EmojiStampPickerBody extends StatelessWidget {
               height: double.infinity,
               checkPlatformCompatibility: true,
               emojiTextStyle: TextStyle(
-                fontSize: 24,
+                fontSize: AppTextSize.headline,
                 color: textPrimary,
               ),
               emojiViewConfig: EmojiViewConfig(

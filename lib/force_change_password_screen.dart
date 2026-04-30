@@ -104,7 +104,7 @@ class _ForceChangePasswordScreenState extends State<ForceChangePasswordScreen> {
                 const Text(
                   '初回ログインのため\n新しいパスワードを設定してください',
                   textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  style: TextStyle(fontSize: AppTextSize.titleLg, fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 32),
                 TextField(
@@ -128,7 +128,7 @@ class _ForceChangePasswordScreenState extends State<ForceChangePasswordScreen> {
                 ),
                 if (_errorMessage != null) ...[
                   const SizedBox(height: 16),
-                  Text(_errorMessage!, style: const TextStyle(color: Colors.red)),
+                  Text(_errorMessage!, style: const TextStyle(color: AppColors.error)),
                 ],
                 const SizedBox(height: 24),
                 SizedBox(

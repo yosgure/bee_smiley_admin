@@ -160,17 +160,17 @@ class _AbsenceRecordDialogState extends State<AbsenceRecordDialog> {
               padding: const EdgeInsets.fromLTRB(20, 16, 8, 8),
               child: Row(
                 children: [
-                  Icon(Icons.event_busy_rounded, size: 20, color: Colors.red.shade400),
+                  Icon(Icons.event_busy_rounded, size: 20, color: AppColors.errorBorder),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text('欠席記録入力', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                        const Text('欠席記録入力', style: TextStyle(fontSize: AppTextSize.titleSm, fontWeight: FontWeight.w600)),
                         const SizedBox(height: 2),
                         Text(
                           '${widget.studentName} / 欠席日 ${df.format(widget.absenceDate)}',
-                          style: TextStyle(fontSize: 11, color: c.textSecondary),
+                          style: TextStyle(fontSize: AppTextSize.caption, color: c.textSecondary),
                         ),
                       ],
                     ),
@@ -252,7 +252,7 @@ class _AbsenceRecordDialogState extends State<AbsenceRecordDialog> {
                   ElevatedButton(
                     onPressed: _canSubmit ? _submit : null,
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.red.shade400,
+                      backgroundColor: AppColors.errorBorder,
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -271,7 +271,7 @@ class _AbsenceRecordDialogState extends State<AbsenceRecordDialog> {
 
   Widget _sectionLabel(String label) => Padding(
         padding: const EdgeInsets.only(bottom: 6),
-        child: Text(label, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: context.colors.textSecondary)),
+        child: Text(label, style: TextStyle(fontSize: AppTextSize.small, fontWeight: FontWeight.w600, color: context.colors.textSecondary)),
       );
 
   Widget _textField({
@@ -289,11 +289,11 @@ class _AbsenceRecordDialogState extends State<AbsenceRecordDialog> {
           controller: controller,
           maxLines: maxLines,
           minLines: 1,
-          style: const TextStyle(fontSize: 14),
+          style: const TextStyle(fontSize: AppTextSize.bodyMd),
           onChanged: (_) => setState(() {}),
           decoration: InputDecoration(
             hintText: hint,
-            hintStyle: TextStyle(fontSize: 13, color: c.textHint),
+            hintStyle: TextStyle(fontSize: AppTextSize.body, color: c.textHint),
             filled: true,
             fillColor: c.tagBg,
             border: OutlineInputBorder(
@@ -343,7 +343,7 @@ class _AbsenceRecordDialogState extends State<AbsenceRecordDialog> {
                 child: Text(
                   opt,
                   style: TextStyle(
-                    fontSize: 12,
+                    fontSize: AppTextSize.small,
                     color: selected ? Colors.white : c.textPrimary,
                     fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
                   ),
@@ -355,11 +355,11 @@ class _AbsenceRecordDialogState extends State<AbsenceRecordDialog> {
         const SizedBox(height: 6),
         TextField(
           controller: controller,
-          style: const TextStyle(fontSize: 14),
+          style: const TextStyle(fontSize: AppTextSize.bodyMd),
           onChanged: (_) => setState(() {}),
           decoration: InputDecoration(
             hintText: hint,
-            hintStyle: TextStyle(fontSize: 13, color: c.textHint),
+            hintStyle: TextStyle(fontSize: AppTextSize.body, color: c.textHint),
             filled: true,
             fillColor: c.tagBg,
             border: OutlineInputBorder(
@@ -407,7 +407,7 @@ class _AbsenceRecordDialogState extends State<AbsenceRecordDialog> {
                   child: Text(
                     hasValue ? df.format(value) : '日付を選択...',
                     style: TextStyle(
-                      fontSize: 14,
+                      fontSize: AppTextSize.bodyMd,
                       color: hasValue ? c.textPrimary : c.textHint,
                       fontWeight: hasValue ? FontWeight.w500 : FontWeight.normal,
                     ),
@@ -450,7 +450,7 @@ class _AbsenceRecordDialogState extends State<AbsenceRecordDialog> {
             ),
           )
         else if (_plusStaffOptions == null || _plusStaffOptions!.isEmpty)
-          Text('プラス所属スタッフが見つかりません', style: TextStyle(fontSize: 13, color: c.textTertiary))
+          Text('プラス所属スタッフが見つかりません', style: TextStyle(fontSize: AppTextSize.body, color: c.textTertiary))
         else
           Wrap(
             spacing: 6,
@@ -469,7 +469,7 @@ class _AbsenceRecordDialogState extends State<AbsenceRecordDialog> {
                   child: Text(
                     name,
                     style: TextStyle(
-                      fontSize: 12,
+                      fontSize: AppTextSize.small,
                       color: selected ? Colors.white : c.textPrimary,
                       fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
                     ),

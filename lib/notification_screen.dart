@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import 'app_theme.dart';
+import 'widgets/app_feedback.dart';
 
 class NotificationScreen extends StatefulWidget {
   const NotificationScreen({super.key});
@@ -102,7 +103,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
                               child: Text(
                                 data['title'] ?? '(タイトルなし)',
                                 style: TextStyle(
-                                  fontSize: 18,
+                                  fontSize: AppTextSize.titleLg,
                                   fontWeight: FontWeight.bold,
                                   color: context.colors.textPrimary,
                                 ),
@@ -124,7 +125,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
                             const SizedBox(width: 6),
                             Text(
                               dateStr,
-                              style: TextStyle(color: context.colors.textSecondary, fontSize: 13),
+                              style: TextStyle(color: context.colors.textSecondary, fontSize: AppTextSize.body),
                             ),
                           ],
                         ),
@@ -136,7 +137,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
                             Expanded(
                               child: Text(
                                 '対象: $targetStr',
-                                style: TextStyle(color: context.colors.textSecondary, fontSize: 13),
+                                style: TextStyle(color: context.colors.textSecondary, fontSize: AppTextSize.body),
                                 overflow: TextOverflow.ellipsis,
                               ),
                             ),
@@ -147,7 +148,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
                           data['body'] ?? data['detail'] ?? '',
                           maxLines: 3,
                           overflow: TextOverflow.ellipsis,
-                          style: TextStyle(color: context.colors.textPrimary, fontSize: 14, height: 1.5),
+                          style: TextStyle(color: context.colors.textPrimary, fontSize: AppTextSize.bodyMd, height: 1.5),
                         ),
                       ],
                     ),
@@ -188,7 +189,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
               Navigator.pop(ctx);
               await _notificationsRef.doc(docId).delete();
             },
-            child: const Text('削除', style: TextStyle(color: Colors.red)),
+            child: const Text('削除', style: TextStyle(color: AppColors.error)),
           ),
         ],
       ),
@@ -285,11 +286,11 @@ class _NotificationEditScreenState extends State<NotificationEditScreen> {
 
   Future<void> _save() async {
     if (_titleController.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('タイトルを入力してください')));
+      AppFeedback.info(context, 'タイトルを入力してください');
       return;
     }
     if (_targetType == 'specific' && _selectedClassrooms.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('教室を選択してください')));
+      AppFeedback.info(context, '教室を選択してください');
       return;
     }
 
@@ -313,11 +314,11 @@ class _NotificationEditScreenState extends State<NotificationEditScreen> {
 
       if (mounted) {
         Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('お知らせを保存しました')));
+        AppFeedback.info(context, 'お知らせを保存しました');
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('エラーが発生しました: $e')));
+        AppFeedback.info(context, 'エラーが発生しました: $e');
       }
     } finally {
       if (mounted) setState(() => _isLoadingSave = false);
@@ -359,7 +360,7 @@ class _NotificationEditScreenState extends State<NotificationEditScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('タイトル', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+              const Text('タイトル', style: TextStyle(fontWeight: FontWeight.bold, fontSize: AppTextSize.titleSm)),
               const SizedBox(height: 8),
               TextField(
                 controller: _titleController,
@@ -371,7 +372,7 @@ class _NotificationEditScreenState extends State<NotificationEditScreen> {
               ),
               const SizedBox(height: 24),
 
-              const Text('本文', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+              const Text('本文', style: TextStyle(fontWeight: FontWeight.bold, fontSize: AppTextSize.titleSm)),
               const SizedBox(height: 8),
               TextField(
                 controller: _bodyController,
@@ -384,7 +385,7 @@ class _NotificationEditScreenState extends State<NotificationEditScreen> {
               ),
               const SizedBox(height: 24),
 
-              const Text('配信対象', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+              const Text('配信対象', style: TextStyle(fontWeight: FontWeight.bold, fontSize: AppTextSize.titleSm)),
               const SizedBox(height: 8),
               Row(
                 children: [

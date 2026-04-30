@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:csv/csv.dart';
 import 'app_theme.dart';
+import 'widgets/app_feedback.dart';
 import 'crm/crm_home_screen.dart';
 import 'main.dart';
 import 'services/undo_service.dart';
@@ -159,7 +160,7 @@ class _CrmLeadScreenState extends State<CrmLeadScreen> {
       backgroundColor: context.colors.scaffoldBg,
       appBar: AppBar(
         title: const Text('CRM',
-            style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
+            style: TextStyle(fontSize: AppTextSize.title, fontWeight: FontWeight.w600)),
         backgroundColor: context.colors.cardBg,
         elevation: 0,
         foregroundColor: context.colors.textPrimary,
@@ -222,7 +223,7 @@ class _CrmLeadScreenState extends State<CrmLeadScreen> {
               selected: {_viewMode},
               onSelectionChanged: (s) => setState(() => _viewMode = s.first),
               style: ButtonStyle(
-                textStyle: WidgetStateProperty.all(const TextStyle(fontSize: 12)),
+                textStyle: WidgetStateProperty.all(const TextStyle(fontSize: AppTextSize.small)),
                 padding: WidgetStateProperty.all(
                     const EdgeInsets.symmetric(horizontal: 10, vertical: 4)),
               ),
@@ -260,14 +261,14 @@ class _CrmLeadScreenState extends State<CrmLeadScreen> {
         mainAxisSize: MainAxisSize.min,
         children: [
           Text('$label:',
-              style: TextStyle(fontSize: 11, color: context.colors.textSecondary)),
+              style: TextStyle(fontSize: AppTextSize.caption, color: context.colors.textSecondary)),
           const SizedBox(width: 4),
           DropdownButtonHideUnderline(
             child: DropdownButton<String>(
               value: value,
               items: items,
               onChanged: onChanged,
-              style: TextStyle(fontSize: 12, color: context.colors.textPrimary),
+              style: TextStyle(fontSize: AppTextSize.small, color: context.colors.textPrimary),
               isDense: true,
             ),
           ),
@@ -327,10 +328,10 @@ class _CrmLeadScreenState extends State<CrmLeadScreen> {
               size: 56, color: context.colors.textTertiary),
           const SizedBox(height: 12),
           Text('リードはまだありません',
-              style: TextStyle(color: context.colors.textSecondary, fontSize: 14)),
+              style: TextStyle(color: context.colors.textSecondary, fontSize: AppTextSize.bodyMd)),
           const SizedBox(height: 4),
           Text('右下の「新規リード」から登録できます',
-              style: TextStyle(color: context.colors.textTertiary, fontSize: 12)),
+              style: TextStyle(color: context.colors.textTertiary, fontSize: AppTextSize.small)),
         ],
       ),
     );
@@ -347,26 +348,8 @@ class _CrmLeadScreenState extends State<CrmLeadScreen> {
   // CSVインポート（Notionエクスポート用・一回限り）
   // ------------------------------------------------------------
   Future<void> _importFromNotionCsv() async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (c) => AlertDialog(
-        title: const Text('NotionエクスポートCSVをインポート'),
-        content: const Text(
-            '選択したCSVをリードとして一括登録します。\n'
-            '同じCSVを二度インポートすると重複するので注意してください。\n\n続行しますか？'),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(c, false),
-              child: const Text('キャンセル')),
-          TextButton(
-              onPressed: () => Navigator.pop(c, true),
-              child: const Text('選択',
-                  style: TextStyle(
-                      color: AppColors.primary,
-                      fontWeight: FontWeight.bold))),
-        ],
-      ),
-    );
+    final confirmed = await AppFeedback.confirm(context, title: 'NotionエクスポートCSVをインポート', message: '選択したCSVをリードとして一括登録します。\n'
+            '同じCSVを二度インポートすると重複するので注意してください。\n\n続行しますか？', confirmLabel: '選択', cancelLabel: 'キャンセル');
     if (confirmed != true) return;
 
     final picked = await FilePicker.platform.pickFiles(
@@ -389,7 +372,7 @@ class _CrmLeadScreenState extends State<CrmLeadScreen> {
             eol: '\n', shouldParseNumbers: false, allowInvalid: true)
         .convert(text);
     if (rows.length < 2) {
-      _snack('行がありません', Colors.orange);
+      _snack('行がありません', AppColors.warning);
       return;
     }
     final header = rows.first.map((e) => e.toString().trim()).toList();
@@ -579,11 +562,11 @@ class _CrmLeadScreenState extends State<CrmLeadScreen> {
           },
         );
       } else {
-        _snack('インポート完了: $ok件（スキップ $skipped）', Colors.green);
+        _snack('インポート完了: $ok件（スキップ $skipped）', AppColors.success);
       }
     } catch (e) {
       messenger.hideCurrentSnackBar();
-      _snack('インポート失敗: $e', Colors.red);
+      _snack('インポート失敗: $e', AppColors.error);
     }
   }
 
@@ -673,7 +656,7 @@ class _KanbanColumn extends StatelessWidget {
                 const SizedBox(width: 8),
                 Text(label,
                     style: TextStyle(
-                        fontSize: 13,
+                        fontSize: AppTextSize.body,
                         fontWeight: FontWeight.bold,
                         color: context.colors.textPrimary)),
                 const Spacer(),
@@ -683,7 +666,7 @@ class _KanbanColumn extends StatelessWidget {
                       color: color, borderRadius: BorderRadius.circular(10)),
                   child: Text('${docs.length}',
                       style: const TextStyle(
-                          fontSize: 11,
+                          fontSize: AppTextSize.caption,
                           fontWeight: FontWeight.bold,
                           color: Colors.white)),
                 ),
@@ -781,7 +764,7 @@ class _LeadKanbanCard extends StatelessWidget {
                       Expanded(
                         child: Text(
                           '${DateFormat('M/d').format(nextAt)} $nextNote',
-                          style: TextStyle(fontSize: 10, color: alertStyle.text),
+                          style: TextStyle(fontSize: AppTextSize.xs, color: alertStyle.text),
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
@@ -803,7 +786,7 @@ class _LeadKanbanCard extends StatelessWidget {
           color: context.colors.chipBg,
           borderRadius: BorderRadius.circular(4)),
       child: Text(text,
-          style: TextStyle(fontSize: 10, color: context.colors.textSecondary)),
+          style: TextStyle(fontSize: AppTextSize.xs, color: context.colors.textSecondary)),
     );
   }
 }
@@ -881,7 +864,7 @@ class _LeadTableRow extends StatelessWidget {
                     ),
                     child: Text(CrmOptions.stageLabel(stage),
                         style: TextStyle(
-                            fontSize: 11,
+                            fontSize: AppTextSize.caption,
                             color: color,
                             fontWeight: FontWeight.bold)),
                   ),
@@ -890,7 +873,7 @@ class _LeadTableRow extends StatelessWidget {
                     child: Text(
                       childName.isEmpty ? '(児童名未入力)' : childName,
                       style: TextStyle(
-                          fontSize: 14,
+                          fontSize: AppTextSize.bodyMd,
                           fontWeight: FontWeight.bold,
                           color: context.colors.textPrimary),
                     ),
@@ -898,7 +881,7 @@ class _LeadTableRow extends StatelessWidget {
                   if (source.isNotEmpty)
                     Text(CrmOptions.labelOf(CrmOptions.sources, source),
                         style: TextStyle(
-                            fontSize: 11,
+                            fontSize: AppTextSize.caption,
                             color: context.colors.textSecondary)),
                 ],
               ),
@@ -938,7 +921,7 @@ class _LeadTableRow extends StatelessWidget {
       children: [
         Icon(icon, size: 12, color: c),
         const SizedBox(width: 4),
-        Text(text, style: TextStyle(fontSize: 11, color: c)),
+        Text(text, style: TextStyle(fontSize: AppTextSize.caption, color: c)),
       ],
     );
   }
@@ -1059,7 +1042,7 @@ class _CrmDunningView extends StatelessWidget {
             const SizedBox(height: 12),
             Text('今日の対応タスクはありません 🎉',
                 style: TextStyle(
-                    color: context.colors.textSecondary, fontSize: 14)),
+                    color: context.colors.textSecondary, fontSize: AppTextSize.bodyMd)),
           ],
         ),
       );
@@ -1097,7 +1080,7 @@ class _CrmDunningView extends StatelessWidget {
               children: [
                 Text(title,
                     style: TextStyle(
-                        fontSize: 13,
+                        fontSize: AppTextSize.body,
                         fontWeight: FontWeight.bold,
                         color: context.colors.textPrimary)),
                 const SizedBox(width: 6),
@@ -1111,7 +1094,7 @@ class _CrmDunningView extends StatelessWidget {
                   ),
                   child: Text('${items.length}',
                       style: TextStyle(
-                          fontSize: 10,
+                          fontSize: AppTextSize.xs,
                           color: style.text,
                           fontWeight: FontWeight.bold)),
                 ),
@@ -1172,7 +1155,7 @@ class _DunningLeadRow extends StatelessWidget {
                           ),
                           child: Text(CrmOptions.stageLabel(stage),
                               style: TextStyle(
-                                  fontSize: 10,
+                                  fontSize: AppTextSize.xs,
                                   color: stageColor,
                                   fontWeight: FontWeight.bold)),
                         ),
@@ -1181,7 +1164,7 @@ class _DunningLeadRow extends StatelessWidget {
                           child: Text(
                             childName.isEmpty ? '(児童名未入力)' : childName,
                             style: TextStyle(
-                                fontSize: 14,
+                                fontSize: AppTextSize.bodyMd,
                                 fontWeight: FontWeight.bold,
                                 color: context.colors.textPrimary),
                             overflow: TextOverflow.ellipsis,
@@ -1191,13 +1174,13 @@ class _DunningLeadRow extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
                     Text(item.reasonText,
-                        style: TextStyle(fontSize: 11, color: style.text)),
+                        style: TextStyle(fontSize: AppTextSize.caption, color: style.text)),
                     if (nextAt != null) ...[
                       const SizedBox(height: 2),
                       Text(
                           '次回: ${DateFormat('M/d').format(nextAt)} $nextNote',
                           style: TextStyle(
-                              fontSize: 11,
+                              fontSize: AppTextSize.caption,
                               color: context.colors.textSecondary)),
                     ],
                   ],
@@ -1334,7 +1317,7 @@ class _CrmChurnView extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
           child: Text('全離脱リード（${churned.length}件）',
               style: TextStyle(
-                  fontSize: 12,
+                  fontSize: AppTextSize.small,
                   fontWeight: FontWeight.bold,
                   color: context.colors.textPrimary)),
         ),
@@ -1368,7 +1351,7 @@ class _CrmChurnView extends StatelessWidget {
             children: [
               Text('$title（$total件）',
                   style: TextStyle(
-                      fontSize: 13,
+                      fontSize: AppTextSize.body,
                       fontWeight: FontWeight.bold,
                       color: context.colors.textPrimary)),
               if (title == '失注理由' && topCompetitor >= 3) ...[
@@ -1384,7 +1367,7 @@ class _CrmChurnView extends StatelessWidget {
                   ),
                   child: Text('競合分析推奨',
                       style: TextStyle(
-                          fontSize: 10,
+                          fontSize: AppTextSize.xs,
                           color: context.alerts.urgent.text,
                           fontWeight: FontWeight.bold)),
                 ),
@@ -1403,7 +1386,7 @@ class _CrmChurnView extends StatelessWidget {
                       width: 140,
                       child: Text(label,
                           style: TextStyle(
-                              fontSize: 11,
+                              fontSize: AppTextSize.caption,
                               color: context.colors.textSecondary),
                           overflow: TextOverflow.ellipsis)),
                   Expanded(
@@ -1418,7 +1401,7 @@ class _CrmChurnView extends StatelessWidget {
                   const SizedBox(width: 8),
                   Text('${e.value}',
                       style: TextStyle(
-                          fontSize: 11,
+                          fontSize: AppTextSize.caption,
                           color: context.colors.textPrimary,
                           fontWeight: FontWeight.bold)),
                 ],
@@ -1600,22 +1583,22 @@ class _CrmDashboardViewState extends State<_CrmDashboardView> {
           const SizedBox(height: 12),
           Row(
             children: [
-              _kpiCard(context, '総問い合わせ', '$totalInquiries', Colors.blue),
+              _kpiCard(context, '総問い合わせ', '$totalInquiries', AppColors.info),
               const SizedBox(width: 8),
-              _kpiCard(context, '入会数', '$wonCount', Colors.green),
+              _kpiCard(context, '入会数', '$wonCount', AppColors.success),
               const SizedBox(width: 8),
               _kpiCard(context, '入会率',
-                  '${winRate.toStringAsFixed(1)}%', Colors.deepPurple),
+                  '${winRate.toStringAsFixed(1)}%', AppColors.aiAccent),
             ],
           ),
           const SizedBox(height: 8),
           Row(
             children: [
               _kpiCard(context, '体験率',
-                  '${trialRate.toStringAsFixed(1)}%', Colors.teal),
+                  '${trialRate.toStringAsFixed(1)}%', AppColors.secondary),
               const SizedBox(width: 8),
               _kpiCard(context, '体験→入会',
-                  '${trialToWin.toStringAsFixed(1)}%', Colors.orange),
+                  '${trialToWin.toStringAsFixed(1)}%', AppColors.warning),
               const SizedBox(width: 8),
               _kpiCard(context, '失注', '$lostCount', Colors.grey),
             ],
@@ -1640,14 +1623,14 @@ class _CrmDashboardViewState extends State<_CrmDashboardView> {
               avgConsideringIdle,
               staleConsideringCount,
               staleConsidering,
-              Colors.orange),
+              AppColors.warning),
           _stageIdleCard(
               context,
               '入会手続中',
               avgProcessingIdle,
               staleProcessingCount,
               staleProcessing,
-              Colors.purple),
+              AppColors.aiAccent),
 
           const SizedBox(height: 16),
           _sectionTitle(context, '受給者証ステータス別ファネル'),
@@ -1711,7 +1694,7 @@ class _CrmDashboardViewState extends State<_CrmDashboardView> {
                 ),
                 child: Text(p.label,
                     style: TextStyle(
-                        fontSize: 12,
+                        fontSize: AppTextSize.small,
                         fontWeight:
                             sel ? FontWeight.bold : FontWeight.normal,
                         color: sel
@@ -1755,30 +1738,30 @@ class _CrmDashboardViewState extends State<_CrmDashboardView> {
                       child: Text(
                           CrmOptions.labelOf(CrmOptions.sources, e.key),
                           style: TextStyle(
-                              fontSize: 12,
+                              fontSize: AppTextSize.small,
                               color: context.colors.textPrimary))),
                   Expanded(
                       child: Text('$t',
                           textAlign: TextAlign.right,
-                          style: const TextStyle(fontSize: 12))),
+                          style: const TextStyle(fontSize: AppTextSize.small))),
                   Expanded(
                       child: Text('$tr',
                           textAlign: TextAlign.right,
-                          style: const TextStyle(fontSize: 12))),
+                          style: const TextStyle(fontSize: AppTextSize.small))),
                   Expanded(
                       child: Text('$w',
                           textAlign: TextAlign.right,
-                          style: const TextStyle(fontSize: 12))),
+                          style: const TextStyle(fontSize: AppTextSize.small))),
                   Expanded(
                       child: Text('${trialRate.toStringAsFixed(0)}%',
                           textAlign: TextAlign.right,
                           style: TextStyle(
-                              fontSize: 12, color: Colors.teal.shade700))),
+                              fontSize: AppTextSize.small, color: AppColors.secondary))),
                   Expanded(
                       child: Text('${winRate.toStringAsFixed(0)}%',
                           textAlign: TextAlign.right,
                           style: const TextStyle(
-                              fontSize: 12, fontWeight: FontWeight.bold))),
+                              fontSize: AppTextSize.small, fontWeight: FontWeight.bold))),
                 ],
               ),
             );
@@ -1790,7 +1773,7 @@ class _CrmDashboardViewState extends State<_CrmDashboardView> {
 
   Widget _kpiTableHeader() {
     final s = TextStyle(
-        fontSize: 11,
+        fontSize: AppTextSize.caption,
         fontWeight: FontWeight.bold,
         color: context.colors.textSecondary);
     return Row(
@@ -1834,14 +1817,14 @@ class _CrmDashboardViewState extends State<_CrmDashboardView> {
               children: [
                 Text(label,
                     style: TextStyle(
-                        fontSize: 12,
+                        fontSize: AppTextSize.small,
                         fontWeight: FontWeight.bold,
                         color: context.colors.textPrimary)),
                 const SizedBox(height: 2),
                 Text(
                     '平均滞留: ${avgIdle == null ? '-' : '${avgIdle.toStringAsFixed(1)}日'}',
                     style: TextStyle(
-                        fontSize: 11, color: context.colors.textSecondary)),
+                        fontSize: AppTextSize.caption, color: context.colors.textSecondary)),
               ],
             ),
           ),
@@ -1856,7 +1839,7 @@ class _CrmDashboardViewState extends State<_CrmDashboardView> {
               ),
               child: Text('$threshold日+ $staleCount件',
                   style: TextStyle(
-                      fontSize: 11,
+                      fontSize: AppTextSize.caption,
                       color: urgent.text,
                       fontWeight: FontWeight.bold)),
             ),
@@ -1895,7 +1878,7 @@ class _CrmDashboardViewState extends State<_CrmDashboardView> {
                     width: 60,
                     child: Text(label,
                         style: TextStyle(
-                            fontSize: 12,
+                            fontSize: AppTextSize.small,
                             color: context.colors.textPrimary))),
                 Expanded(
                   child: Stack(
@@ -1913,7 +1896,7 @@ class _CrmDashboardViewState extends State<_CrmDashboardView> {
                         child: Container(
                           height: 18,
                           decoration: BoxDecoration(
-                              color: Colors.blue.withValues(alpha: 0.55),
+                              color: AppColors.info.withValues(alpha: 0.55),
                               borderRadius: BorderRadius.circular(4)),
                         ),
                       ),
@@ -1925,14 +1908,14 @@ class _CrmDashboardViewState extends State<_CrmDashboardView> {
                     width: 40,
                     child: Text('$total件',
                         textAlign: TextAlign.right,
-                        style: const TextStyle(fontSize: 11))),
+                        style: const TextStyle(fontSize: AppTextSize.caption))),
                 SizedBox(
                     width: 70,
                     child: Text('入会$w(${rate.toStringAsFixed(0)}%)',
                         textAlign: TextAlign.right,
                         style: TextStyle(
-                            fontSize: 11,
-                            color: Colors.green.shade700,
+                            fontSize: AppTextSize.caption,
+                            color: AppColors.success,
                             fontWeight: FontWeight.bold))),
               ],
             ),
@@ -1956,18 +1939,18 @@ class _CrmDashboardViewState extends State<_CrmDashboardView> {
         children: [
           Text(avg == null ? '—' : avg.toStringAsFixed(1),
               style: TextStyle(
-                  fontSize: 28,
+                  fontSize: AppTextSize.hero,
                   fontWeight: FontWeight.bold,
                   color: context.colors.textPrimary)),
           const SizedBox(width: 6),
           Text('日',
               style: TextStyle(
-                  fontSize: 14, color: context.colors.textSecondary)),
+                  fontSize: AppTextSize.bodyMd, color: context.colors.textSecondary)),
           const SizedBox(width: 16),
           Expanded(
             child: Text('$sampleCount$hint',
                 style: TextStyle(
-                    fontSize: 11, color: context.colors.textSecondary)),
+                    fontSize: AppTextSize.caption, color: context.colors.textSecondary)),
           ),
         ],
       ),
@@ -2001,11 +1984,11 @@ class _CrmDashboardViewState extends State<_CrmDashboardView> {
           children: [
             Text(label,
                 style: TextStyle(
-                    fontSize: 11, color: context.colors.textSecondary)),
+                    fontSize: AppTextSize.caption, color: context.colors.textSecondary)),
             const SizedBox(height: 4),
             Text(value,
                 style: TextStyle(
-                    fontSize: 22, fontWeight: FontWeight.bold, color: color)),
+                    fontSize: AppTextSize.display, fontWeight: FontWeight.bold, color: color)),
           ],
         ),
       ),
@@ -2015,7 +1998,7 @@ class _CrmDashboardViewState extends State<_CrmDashboardView> {
   Widget _sectionTitle(BuildContext context, String text) {
     return Text(text,
         style: TextStyle(
-            fontSize: 13,
+            fontSize: AppTextSize.body,
             fontWeight: FontWeight.bold,
             color: context.colors.textPrimary));
   }
@@ -2030,7 +2013,7 @@ class _CrmDashboardViewState extends State<_CrmDashboardView> {
               width: 110,
               child: Text(label,
                   style: TextStyle(
-                      fontSize: 12, color: context.colors.textPrimary))),
+                      fontSize: AppTextSize.small, color: context.colors.textPrimary))),
           Expanded(
             child: Stack(
               children: [
@@ -2058,7 +2041,7 @@ class _CrmDashboardViewState extends State<_CrmDashboardView> {
               child: Text('$value',
                   textAlign: TextAlign.right,
                   style: TextStyle(
-                      fontSize: 12,
+                      fontSize: AppTextSize.small,
                       fontWeight: FontWeight.bold,
                       color: context.colors.textPrimary))),
         ],
@@ -2083,24 +2066,24 @@ class _CrmDashboardViewState extends State<_CrmDashboardView> {
                 flex: 3,
                 child: Text(label,
                     style: TextStyle(
-                        fontSize: 12, color: context.colors.textPrimary))),
+                        fontSize: AppTextSize.small, color: context.colors.textPrimary))),
             Expanded(
               child: Text('$total件',
                   textAlign: TextAlign.right,
                   style: TextStyle(
-                      fontSize: 12, color: context.colors.textSecondary)),
+                      fontSize: AppTextSize.small, color: context.colors.textSecondary)),
             ),
             Expanded(
               child: Text('入会$won',
                   textAlign: TextAlign.right,
                   style: TextStyle(
-                      fontSize: 12, color: Colors.green.shade700)),
+                      fontSize: AppTextSize.small, color: AppColors.success)),
             ),
             Expanded(
               child: Text('${winRate.toStringAsFixed(1)}%',
                   textAlign: TextAlign.right,
                   style: const TextStyle(
-                      fontSize: 12, fontWeight: FontWeight.bold)),
+                      fontSize: AppTextSize.small, fontWeight: FontWeight.bold)),
             ),
           ],
         ),
@@ -2274,24 +2257,19 @@ class _CrmLeadEditScreenState extends State<CrmLeadEditScreen> {
     if (!_canSave) return;
     // 失注/退会への遷移時は理由必須
     if (_stage == 'lost' && (_lossReason == null || _lossReason!.isEmpty)) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('失注理由を選択してください'), backgroundColor: Colors.orange));
+      AppFeedback.warning(context, '失注理由を選択してください');
       return;
     }
     if (_stage == 'withdrawn' &&
         (_withdrawReason == null || _withdrawReason!.isEmpty)) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('退会理由を選択してください'), backgroundColor: Colors.orange));
+      AppFeedback.warning(context, '退会理由を選択してください');
       return;
     }
     // 旧ステージからの遷移ルール検証（新規作成時は検証不要）
     if (_isEdit) {
       final prevStage = widget.doc!.data()['stage'] as String? ?? 'considering';
       if (!CrmOptions.canTransition(prevStage, _stage)) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text(
-                '「${CrmOptions.stageLabel(prevStage)}」→「${CrmOptions.stageLabel(_stage)}」への遷移は許可されていません'),
-            backgroundColor: Colors.orange));
+        AppFeedback.warning(context, '「${CrmOptions.stageLabel(prevStage)}」→「${CrmOptions.stageLabel(_stage)}」への遷移は許可されていません');
         return;
       }
     }
@@ -2357,15 +2335,12 @@ class _CrmLeadEditScreenState extends State<CrmLeadEditScreen> {
         await FirebaseFirestore.instance.collection('crm_leads').add(data);
       }
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text(_isEdit ? '更新しました' : '登録しました'),
-            backgroundColor: Colors.green));
+        AppFeedback.success(context, _isEdit ? '更新しました' : '登録しました');
         Navigator.pop(context);
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('保存失敗: $e'), backgroundColor: Colors.red));
+        AppFeedback.error(context, '保存失敗: $e');
       }
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -2374,38 +2349,27 @@ class _CrmLeadEditScreenState extends State<CrmLeadEditScreen> {
 
   Future<void> _delete() async {
     if (!_isEdit) return;
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (c) => AlertDialog(
-        title: const Text('このリードを削除しますか？'),
-        content: const Text('この操作は取り消せません。'),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(c, false),
-              child: const Text('キャンセル')),
-          TextButton(
-              onPressed: () => Navigator.pop(c, true),
-              child:
-                  const Text('削除', style: TextStyle(color: Colors.red))),
-        ],
-      ),
+    final ok = await AppFeedback.confirm(
+      context,
+      title: 'このリードを削除しますか？',
+      message: 'この操作は取り消せません。',
+      confirmLabel: '削除',
+      destructive: true,
     );
-    if (ok != true) return;
+    if (!ok) return;
     try {
       await widget.doc!.reference.delete();
       if (mounted) Navigator.pop(context);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text('削除失敗: $e'), backgroundColor: Colors.red));
+        AppFeedback.error(context, '削除失敗: $e');
       }
     }
   }
 
   Future<void> _addActivity() async {
     if (!_isEdit) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('先にリードを保存してください'), backgroundColor: Colors.orange));
+      AppFeedback.warning(context, '先にリードを保存してください');
       return;
     }
     final result = await showDialog<Map<String, dynamic>>(
@@ -2443,29 +2407,19 @@ class _CrmLeadEditScreenState extends State<CrmLeadEditScreen> {
       if (mounted) setState(() {});
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text('追加失敗: $e'), backgroundColor: Colors.red));
+        AppFeedback.error(context, '追加失敗: $e');
       }
     }
   }
 
   Future<void> _removeActivity(Map<String, dynamic> entry) async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (c) => AlertDialog(
-        title: const Text('この履歴を削除しますか？'),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(c, false),
-              child: const Text('キャンセル')),
-          TextButton(
-              onPressed: () => Navigator.pop(c, true),
-              child:
-                  const Text('削除', style: TextStyle(color: Colors.red))),
-        ],
-      ),
+    final ok = await AppFeedback.confirm(
+      context,
+      title: 'この履歴を削除しますか？',
+      confirmLabel: '削除',
+      destructive: true,
     );
-    if (ok != true) return;
+    if (!ok) return;
     try {
       await widget.doc!.reference.update({
         'activities': FieldValue.arrayRemove([entry]),
@@ -2474,42 +2428,21 @@ class _CrmLeadEditScreenState extends State<CrmLeadEditScreen> {
       if (mounted) setState(() {});
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text('削除失敗: $e'), backgroundColor: Colors.red));
+        AppFeedback.error(context, '削除失敗: $e');
       }
     }
   }
 
   Future<void> _convertToFamily() async {
     if (!_isEdit) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('先にリードを保存してください'), backgroundColor: Colors.orange));
+      AppFeedback.warning(context, '先にリードを保存してください');
       return;
     }
     if (_convertedFamilyId != null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('すでに保護者・児童マスタに登録済みです'),
-          backgroundColor: Colors.orange));
+      AppFeedback.warning(context, 'すでに保護者・児童マスタに登録済みです');
       return;
     }
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (c) => AlertDialog(
-        title: const Text('入会処理'),
-        content: const Text(
-            'このリードを保護者・児童マスタに登録し、ステージを「入会」にします。\nよろしいですか？'),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(c, false),
-              child: const Text('キャンセル')),
-          TextButton(
-              onPressed: () => Navigator.pop(c, true),
-              child: const Text('入会処理',
-                  style: TextStyle(
-                      color: Colors.green, fontWeight: FontWeight.bold))),
-        ],
-      ),
-    );
+    final ok = await AppFeedback.confirm(context, title: '入会処理', message: 'このリードを保護者・児童マスタに登録し、ステージを「入会」にします。\nよろしいですか？', confirmLabel: '入会処理', cancelLabel: 'キャンセル');
     if (ok != true) return;
     try {
       final user = FirebaseAuth.instance.currentUser;
@@ -2558,14 +2491,11 @@ class _CrmLeadEditScreenState extends State<CrmLeadEditScreen> {
           _enrolledAt = enrolledAt;
           _convertedFamilyId = ref.id;
         });
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            content: Text('入会処理が完了しました'),
-            backgroundColor: Colors.green));
+        AppFeedback.success(context, '入会処理が完了しました');
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text('入会処理失敗: $e'), backgroundColor: Colors.red));
+        AppFeedback.error(context, '入会処理失敗: $e');
       }
     }
   }
@@ -2578,7 +2508,7 @@ class _CrmLeadEditScreenState extends State<CrmLeadEditScreen> {
       appBar: AppBar(
         title: Text(_isEdit ? 'リード詳細' : '新規リード',
             style:
-                const TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
+                const TextStyle(fontSize: AppTextSize.title, fontWeight: FontWeight.w600)),
         backgroundColor: context.colors.cardBg,
         elevation: 0,
         foregroundColor: context.colors.textPrimary,
@@ -2588,7 +2518,7 @@ class _CrmLeadEditScreenState extends State<CrmLeadEditScreen> {
         actions: [
           if (_isEdit)
             IconButton(
-                icon: Icon(Icons.delete_outline, color: Colors.red.shade400),
+                icon: Icon(Icons.delete_outline, color: AppColors.errorBorder),
                 onPressed: _delete),
         ],
       ),
@@ -2604,8 +2534,8 @@ class _CrmLeadEditScreenState extends State<CrmLeadEditScreen> {
                     icon: const Icon(Icons.how_to_reg, size: 18),
                     label: const Text('入会処理'),
                     style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.green.shade700,
-                      side: BorderSide(color: Colors.green.shade400),
+                      foregroundColor: AppColors.success,
+                      side: BorderSide(color: AppColors.successBorder),
                       padding: const EdgeInsets.symmetric(vertical: 12),
                     ),
                   ),
@@ -2631,7 +2561,7 @@ class _CrmLeadEditScreenState extends State<CrmLeadEditScreen> {
                               color: Colors.white, strokeWidth: 2))
                       : Text(_isEdit ? '更新' : '登録',
                           style: const TextStyle(
-                              fontSize: 14, fontWeight: FontWeight.bold)),
+                              fontSize: AppTextSize.bodyMd, fontWeight: FontWeight.bold)),
                 ),
               ),
             ],
@@ -2664,20 +2594,20 @@ class _CrmLeadEditScreenState extends State<CrmLeadEditScreen> {
               padding:
                   const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               decoration: BoxDecoration(
-                color: Colors.green.withValues(alpha: 0.1),
+                color: AppColors.success.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.green.shade300),
+                border: Border.all(color: AppColors.successBorder),
               ),
               child: Row(
                 children: [
                   Icon(Icons.check_circle,
-                      color: Colors.green.shade700, size: 18),
+                      color: AppColors.success, size: 18),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text('保護者・児童マスタに登録済（ID: $_convertedFamilyId）',
                         style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.green.shade800,
+                            fontSize: AppTextSize.small,
+                            color: AppColors.successDark,
                             fontWeight: FontWeight.w600)),
                   ),
                 ],
@@ -2799,7 +2729,7 @@ class _CrmLeadEditScreenState extends State<CrmLeadEditScreen> {
               onChanged: (v) => setState(() => _reapproachOk = v ?? true),
               title: Text('再アプローチ可',
                   style: TextStyle(
-                      fontSize: 13, color: context.colors.textPrimary)),
+                      fontSize: AppTextSize.body, color: context.colors.textPrimary)),
               dense: true,
               controlAffinity: ListTileControlAffinity.leading,
               contentPadding: EdgeInsets.zero,
@@ -2881,7 +2811,7 @@ class _CrmLeadEditScreenState extends State<CrmLeadEditScreen> {
             alignment: Alignment.center,
             child: Text('まだ履歴がありません',
                 style: TextStyle(
-                    fontSize: 12, color: context.colors.textTertiary)),
+                    fontSize: AppTextSize.small, color: context.colors.textTertiary)),
           )
         else
           ...activities.map((a) => _activityTile(a)),
@@ -2917,7 +2847,7 @@ class _CrmLeadEditScreenState extends State<CrmLeadEditScreen> {
                 child: Text(
                     CrmOptions.labelOf(CrmOptions.activityTypes, type),
                     style: TextStyle(
-                        fontSize: 10,
+                        fontSize: AppTextSize.xs,
                         color: color,
                         fontWeight: FontWeight.bold)),
               ),
@@ -2925,14 +2855,14 @@ class _CrmLeadEditScreenState extends State<CrmLeadEditScreen> {
               if (at != null)
                 Text(DateFormat('M/d (E) HH:mm', 'ja').format(at),
                     style: TextStyle(
-                        fontSize: 11,
+                        fontSize: AppTextSize.caption,
                         color: context.colors.textSecondary,
                         fontWeight: FontWeight.w600)),
               const Spacer(),
               if (author.isNotEmpty)
                 Text(author,
                     style: TextStyle(
-                        fontSize: 10, color: context.colors.textTertiary)),
+                        fontSize: AppTextSize.xs, color: context.colors.textTertiary)),
               InkWell(
                 onTap: () => _removeActivity(a),
                 child: Padding(
@@ -2948,7 +2878,7 @@ class _CrmLeadEditScreenState extends State<CrmLeadEditScreen> {
               padding: const EdgeInsets.only(top: 6),
               child: Text(body,
                   style: TextStyle(
-                      fontSize: 13,
+                      fontSize: AppTextSize.body,
                       color: context.colors.textPrimary,
                       height: 1.4)),
             ),
@@ -2959,11 +2889,11 @@ class _CrmLeadEditScreenState extends State<CrmLeadEditScreen> {
 
   Color _activityTypeColor(String type) {
     return switch (type) {
-      'tel' => Colors.green,
-      'email' => Colors.blue,
-      'line' => Colors.lightGreen,
-      'visit' => Colors.purple,
-      'task' => Colors.orange,
+      'tel' => AppColors.success,
+      'email' => AppColors.info,
+      'line' => AppColors.success,
+      'visit' => AppColors.aiAccent,
+      'task' => AppColors.warning,
       _ => Colors.grey,
     };
   }
@@ -2975,7 +2905,7 @@ class _CrmLeadEditScreenState extends State<CrmLeadEditScreen> {
       padding: const EdgeInsets.only(bottom: 8),
       child: Text(text,
           style: TextStyle(
-              fontSize: 13,
+              fontSize: AppTextSize.body,
               fontWeight: FontWeight.bold,
               color: context.colors.textPrimary)),
     );
@@ -2992,9 +2922,9 @@ class _CrmLeadEditScreenState extends State<CrmLeadEditScreen> {
         labelText: label,
         hintText: hint,
         labelStyle:
-            TextStyle(fontSize: 12, color: context.colors.textSecondary),
+            TextStyle(fontSize: AppTextSize.small, color: context.colors.textSecondary),
         hintStyle:
-            TextStyle(fontSize: 12, color: context.colors.textTertiary),
+            TextStyle(fontSize: AppTextSize.small, color: context.colors.textTertiary),
         isDense: true,
         filled: true,
         fillColor: context.colors.cardBg,
@@ -3025,7 +2955,7 @@ class _CrmLeadEditScreenState extends State<CrmLeadEditScreen> {
         decoration: InputDecoration(
           labelText: '$label${required ? " *" : ""}',
           labelStyle:
-              TextStyle(fontSize: 12, color: context.colors.textSecondary),
+              TextStyle(fontSize: AppTextSize.small, color: context.colors.textSecondary),
           isDense: true,
           filled: true,
           fillColor: context.colors.cardBg,
@@ -3044,7 +2974,7 @@ class _CrmLeadEditScreenState extends State<CrmLeadEditScreen> {
                     ? '未設定'
                     : DateFormat('yyyy/M/d (E)', 'ja').format(value),
                 style: TextStyle(
-                    fontSize: 13,
+                    fontSize: AppTextSize.body,
                     color: value == null
                         ? context.colors.textTertiary
                         : context.colors.textPrimary),
@@ -3093,7 +3023,7 @@ class _CrmLeadEditScreenState extends State<CrmLeadEditScreen> {
             ),
             child: Text(s.label,
                 style: TextStyle(
-                    fontSize: 12,
+                    fontSize: AppTextSize.small,
                     fontWeight: sel ? FontWeight.bold : FontWeight.normal,
                     color: sel ? s.color : context.colors.textPrimary)),
           ),
@@ -3109,7 +3039,7 @@ class _CrmLeadEditScreenState extends State<CrmLeadEditScreen> {
       decoration: InputDecoration(
         labelText: '流入媒体',
         labelStyle:
-            TextStyle(fontSize: 12, color: context.colors.textSecondary),
+            TextStyle(fontSize: AppTextSize.small, color: context.colors.textSecondary),
         isDense: true,
         filled: true,
         fillColor: context.colors.cardBg,
@@ -3123,7 +3053,7 @@ class _CrmLeadEditScreenState extends State<CrmLeadEditScreen> {
       items: CrmOptions.sources
           .map((s) => DropdownMenuItem(
               value: s.id,
-              child: Text(s.label, style: const TextStyle(fontSize: 13))))
+              child: Text(s.label, style: const TextStyle(fontSize: AppTextSize.body))))
           .toList(),
       onChanged: (v) => setState(() => _source = v ?? 'other'),
     );
@@ -3134,7 +3064,7 @@ class _CrmLeadEditScreenState extends State<CrmLeadEditScreen> {
       decoration: InputDecoration(
         labelText: '性別',
         labelStyle:
-            TextStyle(fontSize: 12, color: context.colors.textSecondary),
+            TextStyle(fontSize: AppTextSize.small, color: context.colors.textSecondary),
         isDense: true,
         filled: true,
         fillColor: context.colors.cardBg,
@@ -3151,7 +3081,7 @@ class _CrmLeadEditScreenState extends State<CrmLeadEditScreen> {
           return Padding(
             padding: const EdgeInsets.only(right: 6),
             child: ChoiceChip(
-              label: Text(g, style: const TextStyle(fontSize: 11)),
+              label: Text(g, style: const TextStyle(fontSize: AppTextSize.caption)),
               selected: sel,
               onSelected: (_) => setState(() => _childGender = sel ? '' : g),
               padding: const EdgeInsets.symmetric(horizontal: 4),
@@ -3168,14 +3098,14 @@ class _CrmLeadEditScreenState extends State<CrmLeadEditScreen> {
       children: [
         Text('受給者証:',
             style: TextStyle(
-                fontSize: 12, color: context.colors.textSecondary)),
+                fontSize: AppTextSize.small, color: context.colors.textSecondary)),
         const SizedBox(width: 8),
         ...CrmOptions.permitStatus.map((s) {
           final sel = _permitStatus == s.id;
           return Padding(
             padding: const EdgeInsets.only(right: 6),
             child: ChoiceChip(
-              label: Text(s.label, style: const TextStyle(fontSize: 11)),
+              label: Text(s.label, style: const TextStyle(fontSize: AppTextSize.caption)),
               selected: sel,
               onSelected: (_) => setState(() => _permitStatus = s.id),
               padding: const EdgeInsets.symmetric(horizontal: 4),
@@ -3192,14 +3122,14 @@ class _CrmLeadEditScreenState extends State<CrmLeadEditScreen> {
       children: [
         Text('連絡優先:',
             style: TextStyle(
-                fontSize: 12, color: context.colors.textSecondary)),
+                fontSize: AppTextSize.small, color: context.colors.textSecondary)),
         const SizedBox(width: 8),
         ...CrmOptions.channels.map((s) {
           final sel = _preferredChannel == s.id;
           return Padding(
             padding: const EdgeInsets.only(right: 6),
             child: ChoiceChip(
-              label: Text(s.label, style: const TextStyle(fontSize: 11)),
+              label: Text(s.label, style: const TextStyle(fontSize: AppTextSize.caption)),
               selected: sel,
               onSelected: (_) => setState(() => _preferredChannel = s.id),
               padding: const EdgeInsets.symmetric(horizontal: 4),
@@ -3216,14 +3146,14 @@ class _CrmLeadEditScreenState extends State<CrmLeadEditScreen> {
       children: [
         Text('入会確度:',
             style: TextStyle(
-                fontSize: 12, color: context.colors.textSecondary)),
+                fontSize: AppTextSize.small, color: context.colors.textSecondary)),
         const SizedBox(width: 8),
         ...CrmOptions.confidence.map((s) {
           final sel = _confidence == s.id;
           return Padding(
             padding: const EdgeInsets.only(right: 6),
             child: ChoiceChip(
-              label: Text(s.label, style: const TextStyle(fontSize: 11)),
+              label: Text(s.label, style: const TextStyle(fontSize: AppTextSize.caption)),
               selected: sel,
               onSelected: (_) => setState(() => _confidence = s.id),
               padding: const EdgeInsets.symmetric(horizontal: 4),
@@ -3255,7 +3185,7 @@ class _CrmLeadEditScreenState extends State<CrmLeadEditScreen> {
             ),
             child: Text(s.label,
                 style: TextStyle(
-                    fontSize: 12,
+                    fontSize: AppTextSize.small,
                     fontWeight: sel ? FontWeight.bold : FontWeight.normal,
                     color: sel ? warning.text : context.colors.textPrimary)),
           ),
@@ -3284,7 +3214,7 @@ class _CrmLeadEditScreenState extends State<CrmLeadEditScreen> {
             ),
             child: Text(s.label,
                 style: TextStyle(
-                    fontSize: 12,
+                    fontSize: AppTextSize.small,
                     fontWeight: sel ? FontWeight.bold : FontWeight.normal,
                     color: sel ? urgent.text : context.colors.textPrimary)),
           ),
@@ -3344,7 +3274,7 @@ class _AddActivityDialogState extends State<_AddActivityDialog> {
             children: [
               const Text('対応履歴を追加',
                   style: TextStyle(
-                      fontSize: 15, fontWeight: FontWeight.bold)),
+                      fontSize: AppTextSize.bodyLarge, fontWeight: FontWeight.bold)),
               const SizedBox(height: 12),
               Wrap(
                 spacing: 6,
@@ -3352,7 +3282,7 @@ class _AddActivityDialogState extends State<_AddActivityDialog> {
                 children: CrmOptions.activityTypes.map((t) {
                   final sel = _type == t.id;
                   return ChoiceChip(
-                    label: Text(t.label, style: const TextStyle(fontSize: 12)),
+                    label: Text(t.label, style: const TextStyle(fontSize: AppTextSize.small)),
                     selected: sel,
                     onSelected: (_) => setState(() => _type = t.id),
                   );
@@ -3370,7 +3300,7 @@ class _AddActivityDialogState extends State<_AddActivityDialog> {
                   ),
                   child: Text(
                       DateFormat('yyyy/M/d (E) HH:mm', 'ja').format(_at),
-                      style: const TextStyle(fontSize: 13)),
+                      style: const TextStyle(fontSize: AppTextSize.body)),
                 ),
               ),
               const SizedBox(height: 12),

@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
 import 'app_theme.dart';
+import 'widgets/app_feedback.dart';
 import 'classroom_utils.dart';
 import 'main.dart';
 
@@ -31,7 +32,7 @@ class _ComplaintScreenState extends State<ComplaintScreen> {
     return Scaffold(
       backgroundColor: context.colors.scaffoldBg,
       appBar: AppBar(
-        title: const Text('苦情受付', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
+        title: const Text('苦情受付', style: TextStyle(fontSize: AppTextSize.title, fontWeight: FontWeight.w600)),
         backgroundColor: context.colors.cardBg,
         elevation: 0,
         foregroundColor: context.colors.textPrimary,
@@ -67,9 +68,9 @@ class _ComplaintScreenState extends State<ComplaintScreen> {
                 children: [
                   Icon(Icons.inbox_outlined, size: 56, color: context.colors.textTertiary),
                   const SizedBox(height: 12),
-                  Text('受付記録はまだありません', style: TextStyle(color: context.colors.textSecondary, fontSize: 14)),
+                  Text('受付記録はまだありません', style: TextStyle(color: context.colors.textSecondary, fontSize: AppTextSize.bodyMd)),
                   const SizedBox(height: 4),
-                  Text('右下の「新規受付」から記録できます', style: TextStyle(color: context.colors.textTertiary, fontSize: 12)),
+                  Text('右下の「新規受付」から記録できます', style: TextStyle(color: context.colors.textTertiary, fontSize: AppTextSize.small)),
                 ],
               ),
             );
@@ -122,7 +123,7 @@ class _ComplaintListTile extends StatelessWidget {
                 children: [
                   Text(
                     occurredAt != null ? DateFormat('yyyy/M/d (E) HH:mm', 'ja').format(occurredAt) : '',
-                    style: TextStyle(fontSize: 12, color: context.colors.textSecondary, fontWeight: FontWeight.w600),
+                    style: TextStyle(fontSize: AppTextSize.small, color: context.colors.textSecondary, fontWeight: FontWeight.w600),
                   ),
                   const SizedBox(width: 8),
                   if (category.isNotEmpty)
@@ -133,30 +134,30 @@ class _ComplaintListTile extends StatelessWidget {
                         borderRadius: BorderRadius.circular(6),
                       ),
                       child: Text(ComplaintOptions.labelOf(ComplaintOptions.category, category),
-                          style: TextStyle(fontSize: 11, color: context.colors.textSecondary)),
+                          style: TextStyle(fontSize: AppTextSize.caption, color: context.colors.textSecondary)),
                     ),
                   const Spacer(),
                   if (reporterToHq)
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                       decoration: BoxDecoration(
-                        color: Colors.red.withValues(alpha: 0.12),
+                        color: AppColors.error.withValues(alpha: 0.12),
                         borderRadius: BorderRadius.circular(4),
-                        border: Border.all(color: Colors.red, width: 0.5),
+                        border: Border.all(color: AppColors.error, width: 0.5),
                       ),
-                      child: const Text('本社報告', style: TextStyle(fontSize: 10, color: Colors.red, fontWeight: FontWeight.w600)),
+                      child: const Text('本社報告', style: TextStyle(fontSize: AppTextSize.xs, color: AppColors.error, fontWeight: FontWeight.w600)),
                     ),
                 ],
               ),
               const SizedBox(height: 8),
               Text(
                 '申出人: $claimantName${childName.isNotEmpty ? '　利用児: $childName' : ''}',
-                style: TextStyle(fontSize: 13, color: context.colors.textPrimary, fontWeight: FontWeight.w600),
+                style: TextStyle(fontSize: AppTextSize.body, color: context.colors.textPrimary, fontWeight: FontWeight.w600),
               ),
               const SizedBox(height: 4),
               Text(
                 content.length > 80 ? '${content.substring(0, 80)}…' : content,
-                style: TextStyle(fontSize: 12, color: context.colors.textSecondary, height: 1.4),
+                style: TextStyle(fontSize: AppTextSize.small, color: context.colors.textSecondary, height: 1.4),
               ),
             ],
           ),
@@ -378,16 +379,12 @@ class _ComplaintEditScreenState extends State<ComplaintEditScreen> {
         await FirebaseFirestore.instance.collection('complaint_reports').add(data);
       }
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(_isEdit ? '更新しました' : '受付しました'), backgroundColor: Colors.green),
-        );
+        AppFeedback.success(context, _isEdit ? '更新しました' : '受付しました');
         Navigator.pop(context);
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('保存失敗: $e'), backgroundColor: Colors.red),
-        );
+        AppFeedback.error(context, '保存失敗: $e');
       }
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -395,25 +392,20 @@ class _ComplaintEditScreenState extends State<ComplaintEditScreen> {
   }
 
   Future<void> _delete() async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (c) => AlertDialog(
-        title: const Text('この受付記録を削除しますか？'),
-        content: const Text('この操作は取り消せません。'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('キャンセル')),
-          TextButton(onPressed: () => Navigator.pop(c, true),
-              child: const Text('削除', style: TextStyle(color: Colors.red))),
-        ],
-      ),
+    final ok = await AppFeedback.confirm(
+      context,
+      title: 'この受付記録を削除しますか？',
+      message: 'この操作は取り消せません。',
+      confirmLabel: '削除',
+      destructive: true,
     );
-    if (ok != true) return;
+    if (!ok) return;
     try {
       await widget.doc!.reference.delete();
       if (mounted) Navigator.pop(context);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('削除失敗: $e')));
+        AppFeedback.info(context, '削除失敗: $e');
       }
     }
   }
@@ -424,14 +416,14 @@ class _ComplaintEditScreenState extends State<ComplaintEditScreen> {
       backgroundColor: context.colors.scaffoldBg,
       appBar: AppBar(
         title: Text(_isEdit ? '受付記録を編集' : '苦情受付',
-            style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
+            style: const TextStyle(fontSize: AppTextSize.title, fontWeight: FontWeight.w600)),
         backgroundColor: context.colors.cardBg,
         elevation: 0,
         foregroundColor: context.colors.textPrimary,
         leading: IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(context)),
         actions: [
           if (_isEdit)
-            IconButton(icon: Icon(Icons.delete_outline, color: Colors.red.shade400), onPressed: _delete),
+            IconButton(icon: Icon(Icons.delete_outline, color: AppColors.errorBorder), onPressed: _delete),
         ],
       ),
       body: SingleChildScrollView(
@@ -510,7 +502,7 @@ class _ComplaintEditScreenState extends State<ComplaintEditScreen> {
             const SizedBox(height: 20),
             _section('苦情内容'),
             Text('言われたことをそのまま記入してください（自分の感覚で文章を作らない）',
-                style: TextStyle(fontSize: 12, color: context.colors.textTertiary)),
+                style: TextStyle(fontSize: AppTextSize.small, color: context.colors.textTertiary)),
             const SizedBox(height: 8),
             TextField(
               controller: _contentCtrl,
@@ -518,7 +510,7 @@ class _ComplaintEditScreenState extends State<ComplaintEditScreen> {
               onChanged: (_) => setState(() {}),
               decoration: InputDecoration(
                 hintText: '例：「〜と言われた」',
-                hintStyle: TextStyle(fontSize: 13, color: context.colors.textHint),
+                hintStyle: TextStyle(fontSize: AppTextSize.body, color: context.colors.textHint),
                 filled: true,
                 fillColor: context.colors.cardBg,
                 border: OutlineInputBorder(
@@ -540,7 +532,7 @@ class _ComplaintEditScreenState extends State<ComplaintEditScreen> {
               child: _saving
                   ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
                   : Text(_isEdit ? '更新' : '送 信',
-                      style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+                      style: const TextStyle(fontSize: AppTextSize.bodyLarge, fontWeight: FontWeight.bold)),
             ),
           ],
         ),
@@ -551,13 +543,13 @@ class _ComplaintEditScreenState extends State<ComplaintEditScreen> {
   Widget _section(String s) => Padding(
         padding: const EdgeInsets.only(bottom: 8),
         child: Text(s,
-            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: context.colors.textPrimary)),
+            style: TextStyle(fontSize: AppTextSize.bodyMd, fontWeight: FontWeight.w700, color: context.colors.textPrimary)),
       );
 
   Widget _section2(String s) => Padding(
         padding: const EdgeInsets.only(bottom: 6, top: 4),
         child: Text(s,
-            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: context.colors.textSecondary)),
+            style: TextStyle(fontSize: AppTextSize.body, fontWeight: FontWeight.w600, color: context.colors.textSecondary)),
       );
 
   Widget _textField(String label, TextEditingController c,
@@ -569,7 +561,7 @@ class _ComplaintEditScreenState extends State<ComplaintEditScreen> {
       onChanged: (_) => setState(() {}),
       decoration: InputDecoration(
         labelText: label,
-        labelStyle: TextStyle(fontSize: 13, color: context.colors.textSecondary),
+        labelStyle: TextStyle(fontSize: AppTextSize.body, color: context.colors.textSecondary),
         isDense: true,
         filled: true,
         fillColor: context.colors.cardBg,
@@ -624,12 +616,12 @@ class _ComplaintEditScreenState extends State<ComplaintEditScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(label, style: TextStyle(fontSize: 11, color: context.colors.textSecondary)),
+                  Text(label, style: TextStyle(fontSize: AppTextSize.caption, color: context.colors.textSecondary)),
                   const SizedBox(height: 2),
                   Text(
                     selected?.name ?? '未選択',
                     style: TextStyle(
-                      fontSize: 13,
+                      fontSize: AppTextSize.body,
                       fontWeight: FontWeight.w600,
                       color: selected == null ? context.colors.textTertiary : context.colors.textPrimary,
                     ),
@@ -680,15 +672,15 @@ class _ComplaintEditScreenState extends State<ComplaintEditScreen> {
             const SizedBox(width: 10),
             Expanded(
               child: _selectedChild == null
-                  ? Text('児童を選択', style: TextStyle(fontSize: 13, color: context.colors.textSecondary))
+                  ? Text('児童を選択', style: TextStyle(fontSize: AppTextSize.body, color: context.colors.textSecondary))
                   : Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         if (_selectedChild!.fullKana.isNotEmpty)
                           Text(_selectedChild!.fullKana,
-                              style: TextStyle(fontSize: 11, color: context.colors.textTertiary)),
+                              style: TextStyle(fontSize: AppTextSize.caption, color: context.colors.textTertiary)),
                         Text(_selectedChild!.fullName,
-                            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: context.colors.textPrimary)),
+                            style: TextStyle(fontSize: AppTextSize.bodyMd, fontWeight: FontWeight.w600, color: context.colors.textPrimary)),
                       ],
                     ),
             ),
@@ -714,11 +706,11 @@ class _ComplaintEditScreenState extends State<ComplaintEditScreen> {
           children: [
             Icon(Icons.schedule, size: 18, color: AppColors.primary),
             const SizedBox(width: 10),
-            Text('発生日時', style: TextStyle(fontSize: 12, color: context.colors.textSecondary)),
+            Text('発生日時', style: TextStyle(fontSize: AppTextSize.small, color: context.colors.textSecondary)),
             const SizedBox(width: 12),
             Text(
               DateFormat('yyyy/M/d (E) HH:mm', 'ja').format(_occurredAt),
-              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: context.colors.textPrimary),
+              style: TextStyle(fontSize: AppTextSize.bodyMd, fontWeight: FontWeight.w600, color: context.colors.textPrimary),
             ),
           ],
         ),
@@ -751,12 +743,12 @@ class _ComplaintEditScreenState extends State<ComplaintEditScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(label, style: TextStyle(fontSize: 11, color: context.colors.textSecondary)),
+                  Text(label, style: TextStyle(fontSize: AppTextSize.caption, color: context.colors.textSecondary)),
                   const SizedBox(height: 2),
                   Text(
                     t != null ? '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}'
                               : (nullable ? '未設定' : '—'),
-                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: context.colors.textPrimary),
+                    style: TextStyle(fontSize: AppTextSize.body, fontWeight: FontWeight.w600, color: context.colors.textPrimary),
                   ),
                 ],
               ),
@@ -791,7 +783,7 @@ class _ComplaintEditScreenState extends State<ComplaintEditScreen> {
             ),
             child: Text(opt.label,
                 style: TextStyle(
-                  fontSize: 13,
+                  fontSize: AppTextSize.body,
                   fontWeight: isSel ? FontWeight.bold : FontWeight.normal,
                   color: isSel ? AppColors.primary : context.colors.textPrimary,
                 )),
@@ -816,7 +808,7 @@ class _ComplaintEditScreenState extends State<ComplaintEditScreen> {
         ),
         child: Text(label,
             style: TextStyle(
-              fontSize: 13,
+              fontSize: AppTextSize.body,
               fontWeight: selected ? FontWeight.bold : FontWeight.normal,
               color: selected ? AppColors.primary : context.colors.textPrimary,
             )),
@@ -919,7 +911,7 @@ class _StaffPickerDialogState extends State<_StaffPickerDialog> {
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
               child: Text('講師を選択',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: context.colors.textPrimary)),
+                  style: TextStyle(fontSize: AppTextSize.titleSm, fontWeight: FontWeight.bold, color: context.colors.textPrimary)),
             ),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -941,7 +933,7 @@ class _StaffPickerDialogState extends State<_StaffPickerDialog> {
                   final s = list[i];
                   final sel = s.id == widget.selected?.id;
                   return ListTile(
-                    title: Text(s.name, style: const TextStyle(fontSize: 14)),
+                    title: Text(s.name, style: const TextStyle(fontSize: AppTextSize.bodyMd)),
                     trailing: sel ? const Icon(Icons.check, color: AppColors.primary) : null,
                     onTap: () => Navigator.pop(context, s),
                   );
@@ -998,7 +990,7 @@ class _ChildPickerDialogState extends State<_ChildPickerDialog> {
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
               child: Text('利用児を選択',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: context.colors.textPrimary)),
+                  style: TextStyle(fontSize: AppTextSize.titleSm, fontWeight: FontWeight.bold, color: context.colors.textPrimary)),
             ),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -1020,11 +1012,11 @@ class _ChildPickerDialogState extends State<_ChildPickerDialog> {
                   final ch = list[i];
                   final sel = ch.id == widget.selected?.id;
                   return ListTile(
-                    title: Text(ch.fullName, style: const TextStyle(fontSize: 14)),
+                    title: Text(ch.fullName, style: const TextStyle(fontSize: AppTextSize.bodyMd)),
                     subtitle: ch.fullKana.isEmpty
                         ? null
                         : Text(ch.fullKana,
-                            style: TextStyle(fontSize: 11, color: Theme.of(context).hintColor)),
+                            style: TextStyle(fontSize: AppTextSize.caption, color: Theme.of(context).hintColor)),
                     trailing: sel ? const Icon(Icons.check, color: AppColors.primary) : null,
                     onTap: () => Navigator.pop(context, ch),
                   );

@@ -50,7 +50,7 @@ Future<TimeOfDay?> showTimeListPicker({
                       controller: inputController,
                       autofocus: false,
                       keyboardType: TextInputType.datetime,
-                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w500),
+                      style: const TextStyle(fontSize: AppTextSize.titleLg, fontWeight: FontWeight.w500),
                       decoration: InputDecoration(
                         labelText: '時刻',
                         hintText: '例: 9:30',
@@ -106,7 +106,7 @@ Future<TimeOfDay?> showTimeListPicker({
                               padding: const EdgeInsets.symmetric(horizontal: 4),
                               child: Text(':',
                                   style: TextStyle(
-                                    fontSize: 20,
+                                    fontSize: AppTextSize.xl,
                                     fontWeight: FontWeight.bold,
                                     color: context.colors.textSecondary,
                                   )),

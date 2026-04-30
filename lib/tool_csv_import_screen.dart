@@ -144,7 +144,7 @@ return Scaffold(
                   Text('【CSVルール: 教具】', style: TextStyle(fontWeight: FontWeight.bold)),
                   Text('列順: 教具名, ふりがな, 発達課題, 動画URL, カテゴリ'),
                   SizedBox(height: 8),
-                  Text('例: ピンクタワー,ぴんくたわー,大きさの識別,https://...,感覚', style: TextStyle(fontSize: 12, fontFamily: 'monospace')),
+                  Text('例: ピンクタワー,ぴんくたわー,大きさの識別,https://...,感覚', style: TextStyle(fontSize: AppTextSize.small, fontFamily: 'monospace')),
                 ],
               ),
             ),

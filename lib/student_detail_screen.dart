@@ -265,7 +265,7 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> with SingleTi
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(widget.studentName, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                Text(widget.studentName, style: const TextStyle(fontSize: AppTextSize.xl, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 4),
                 if (_isLoadingInfo)
                   const SizedBox(width: 12, height: 12, child: CircularProgressIndicator(strokeWidth: 2))
@@ -276,7 +276,7 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> with SingleTi
                       const SizedBox(width: 8),
                       _buildInfoTag(Icons.wc, _gender),
                       const SizedBox(width: 8),
-                      Text(_birthDateStr, style: TextStyle(color: context.colors.textSecondary, fontSize: 12)),
+                      Text(_birthDateStr, style: TextStyle(color: context.colors.textSecondary, fontSize: AppTextSize.small)),
                     ],
                   ),
               ],
@@ -296,7 +296,7 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> with SingleTi
         children: [
           Icon(icon, size: 12, color: context.colors.textSecondary),
           const SizedBox(width: 4),
-          Text(text, style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: context.colors.textPrimary)),
+          Text(text, style: TextStyle(fontSize: AppTextSize.small, fontWeight: FontWeight.bold, color: context.colors.textPrimary)),
         ],
       ),
     );
@@ -317,7 +317,7 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> with SingleTi
               padding: const EdgeInsets.all(16.0),
               child: SelectableText(
                 'エラーが発生しました。\nFirestoreのインデックスが必要です。以下のURLから作成してください:\n\n${snapshot.error}',
-                style: const TextStyle(color: Colors.red, fontSize: 12),
+                style: const TextStyle(color: AppColors.error, fontSize: AppTextSize.small),
               ),
             ),
           );
@@ -393,7 +393,7 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> with SingleTi
                             children: [
                               Text(
                                 dateStr,
-                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: AppTextSize.titleSm),
                               ),
                               Icon(Icons.chevron_right, color: context.colors.textSecondary),
                             ],
@@ -404,7 +404,7 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> with SingleTi
                               subtitle,
                               maxLines: 2,
                               overflow: TextOverflow.ellipsis,
-                              style: TextStyle(color: context.colors.textPrimary, fontSize: 14),
+                              style: TextStyle(color: context.colors.textPrimary, fontSize: AppTextSize.bodyMd),
                             ),
                           ],
                         ],

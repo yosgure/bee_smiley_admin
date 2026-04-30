@@ -10,6 +10,7 @@ import 'student_detail_screen.dart';
 import 'plus_schedule_screen.dart';
 import 'bee_dashboard_screen.dart';
 import 'app_theme.dart';
+import 'widgets/app_feedback.dart';
 import 'main.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'classroom_utils.dart';
@@ -518,7 +519,7 @@ Future<void> _saveDisplayDate(DateTime date) async {
                 Text(
                   _headerTextWithYear,
                   style: TextStyle(
-                    color: context.colors.textPrimary, fontSize: 22, fontWeight: FontWeight.w400,
+                    color: context.colors.textPrimary, fontSize: AppTextSize.display, fontWeight: FontWeight.w400,
                   ),
                 ),
               ],
@@ -555,7 +556,7 @@ Future<void> _saveDisplayDate(DateTime date) async {
                         Text(
                           _headerText,
                           style: TextStyle(
-                            color: context.colors.textPrimary, fontSize: 17, fontWeight: FontWeight.w600,
+                            color: context.colors.textPrimary, fontSize: AppTextSize.title, fontWeight: FontWeight.w600,
                           ),
                         ),
                       ],
@@ -575,7 +576,7 @@ Future<void> _saveDisplayDate(DateTime date) async {
                           child: Text(
                             '${DateTime.now().day}',
                             style: TextStyle(
-                              fontSize: 11,
+                              fontSize: AppTextSize.caption,
                               fontWeight: FontWeight.bold,
                               color: context.colors.textPrimary,
                               height: 1.0,
@@ -807,7 +808,7 @@ Future<void> _saveDisplayDate(DateTime date) async {
                             isAllDay: false,
                             subject: '🎂 $displayName',
                             notes: 'BIRTHDAY',
-                            color: Colors.pink.shade300,
+                            color: AppColors.aiAccent,
                           ));
                         }
                       }
@@ -922,7 +923,7 @@ Future<void> _saveDisplayDate(DateTime date) async {
                                               appointment.subject.replaceAll('⚠️ ', ''), 
                                               style: TextStyle(
                                                 color: AppColors.error, 
-                                                fontSize: 12,
+                                                fontSize: AppTextSize.small,
                                                 height: 1.0, 
                                               ),
                                               maxLines: 1,
@@ -955,7 +956,7 @@ Future<void> _saveDisplayDate(DateTime date) async {
                                               appointment.subject.replaceAll('◯ ', ''),
                                               style: TextStyle(
                                                 color: Colors.white,
-                                                fontSize: 12, 
+                                                fontSize: AppTextSize.small, 
                                                 decoration: TextDecoration.none,
                                                 height: 1.0,
                                               ),
@@ -1022,7 +1023,7 @@ Future<void> _saveDisplayDate(DateTime date) async {
                                                 appointment.subject,
                                                 style: const TextStyle(
                                                   color: Colors.white,
-                                                  fontSize: 10,
+                                                  fontSize: AppTextSize.xs,
                                                   fontWeight: FontWeight.w400,
                                                   height: 1.15,
                                                   letterSpacing: -0.3,
@@ -1036,7 +1037,7 @@ Future<void> _saveDisplayDate(DateTime date) async {
                                                     '${appointment.subject}、$timeText',
                                                     style: const TextStyle(
                                                       color: Colors.white,
-                                                      fontSize: 12,
+                                                      fontSize: AppTextSize.small,
                                                       fontWeight: FontWeight.w400,
                                                       height: 1.2,
                                                     ),
@@ -1051,7 +1052,7 @@ Future<void> _saveDisplayDate(DateTime date) async {
                                                         appointment.subject,
                                                         style: const TextStyle(
                                                           color: Colors.white,
-                                                          fontSize: 12,
+                                                          fontSize: AppTextSize.small,
                                                           fontWeight: FontWeight.w400,
                                                           height: 1.2,
                                                         ),
@@ -1064,7 +1065,7 @@ Future<void> _saveDisplayDate(DateTime date) async {
                                                         timeText,
                                                         style: TextStyle(
                                                           color: Colors.white.withOpacity(0.9),
-                                                          fontSize: 11,
+                                                          fontSize: AppTextSize.caption,
                                                           fontWeight: FontWeight.w400,
                                                           height: 1.2,
                                                         ),
@@ -1082,7 +1083,7 @@ Future<void> _saveDisplayDate(DateTime date) async {
                                   timeFormat: 'H:mm',
                                   // 時間グリッドは1時間単位
                                   timeInterval: Duration(minutes: 60),
-                                  timeTextStyle: TextStyle(color: context.colors.textSecondary, fontSize: 11),
+                                  timeTextStyle: TextStyle(color: context.colors.textSecondary, fontSize: AppTextSize.caption),
                                   dateFormat: 'd',
                                   dayFormat: 'EEE',
                                   allDayPanelColor: context.colors.cardBg,
@@ -1097,7 +1098,7 @@ Future<void> _saveDisplayDate(DateTime date) async {
                                   indicatorTimeFormat: 'HH:mm',
                                   timeIndicatorStyle: TextStyle(
                                     color: AppColors.primary,
-                                    fontSize: 12,
+                                    fontSize: AppTextSize.small,
                                     fontWeight: FontWeight.bold,
                                   ),
                                 ),
@@ -1198,7 +1199,7 @@ Future<void> _saveDisplayDate(DateTime date) async {
           child: SfCalendarTheme(
             data: SfCalendarThemeData(
               backgroundColor: Colors.transparent,
-              headerTextStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+              headerTextStyle: const TextStyle(fontSize: AppTextSize.body, fontWeight: FontWeight.bold),
             ),
             child: SfCalendar(
               controller: _miniCalendarController,
@@ -1209,10 +1210,10 @@ Future<void> _saveDisplayDate(DateTime date) async {
               headerHeight: 40,
               viewHeaderHeight: 30,
               viewHeaderStyle: ViewHeaderStyle(
-                dayTextStyle: TextStyle(fontSize: 11, color: context.colors.textSecondary, fontWeight: FontWeight.w500),
+                dayTextStyle: TextStyle(fontSize: AppTextSize.caption, color: context.colors.textSecondary, fontWeight: FontWeight.w500),
               ),
               headerStyle: CalendarHeaderStyle(
-                textStyle: TextStyle(fontSize: 13, color: context.colors.textPrimary, fontWeight: FontWeight.bold),
+                textStyle: TextStyle(fontSize: AppTextSize.body, color: context.colors.textPrimary, fontWeight: FontWeight.bold),
                 backgroundColor: Colors.transparent,
               ),
               todayHighlightColor: AppColors.primary,
@@ -1225,11 +1226,11 @@ Future<void> _saveDisplayDate(DateTime date) async {
                 numberOfWeeksInView: 6,
                 appointmentDisplayMode: MonthAppointmentDisplayMode.none,
                 monthCellStyle: MonthCellStyle(
-                  textStyle: TextStyle(fontSize: 12, color: context.colors.textPrimary),
-                  trailingDatesTextStyle: TextStyle(fontSize: 12, color: context.colors.textSecondary),
-                  leadingDatesTextStyle: TextStyle(fontSize: 12, color: context.colors.textSecondary),
+                  textStyle: TextStyle(fontSize: AppTextSize.small, color: context.colors.textPrimary),
+                  trailingDatesTextStyle: TextStyle(fontSize: AppTextSize.small, color: context.colors.textSecondary),
+                  leadingDatesTextStyle: TextStyle(fontSize: AppTextSize.small, color: context.colors.textSecondary),
                   todayBackgroundColor: Colors.transparent,
-                  todayTextStyle: TextStyle(fontSize: 12, color: AppColors.primary, fontWeight: FontWeight.bold),
+                  todayTextStyle: TextStyle(fontSize: AppTextSize.small, color: AppColors.primary, fontWeight: FontWeight.bold),
                 ),
               ),
               onTap: (details) {
@@ -1247,12 +1248,12 @@ Future<void> _saveDisplayDate(DateTime date) async {
             children: [
               _buildFilterCheckbox('マイカレンダー', _showMySchedule, (val) { setState(() => _showMySchedule = val); _saveFilterPrefs(); }, AppColors.primary),
               _buildFilterCheckbox('マイタスク', _showMyTasks, (val) { setState(() => _showMyTasks = val); _saveFilterPrefs(); }, AppColors.secondary),
-              _buildFilterCheckbox('誕生日', _showBirthdays, (val) { setState(() => _showBirthdays = val); _saveFilterPrefs(); }, Colors.pink.shade300),
+              _buildFilterCheckbox('誕生日', _showBirthdays, (val) { setState(() => _showBirthdays = val); _saveFilterPrefs(); }, AppColors.aiAccent),
               const SizedBox(height: 8),
               if (_myClassrooms.isEmpty)
                 Padding(
                   padding: EdgeInsets.only(left: 32, top: 4),
-                  child: Text('担当教室なし', style: TextStyle(color: context.colors.textSecondary, fontSize: 12)),
+                  child: Text('担当教室なし', style: TextStyle(color: context.colors.textSecondary, fontSize: AppTextSize.small)),
                 )
               else
                 ..._myClassrooms.map((roomName) {
@@ -1280,12 +1281,12 @@ Future<void> _saveDisplayDate(DateTime date) async {
             children: [
               _buildFilterCheckbox('マイカレンダー', _showMySchedule, (val) { setState(() => _showMySchedule = val); _saveFilterPrefs(); }, AppColors.primary),
               _buildFilterCheckbox('マイタスク', _showMyTasks, (val) { setState(() => _showMyTasks = val); _saveFilterPrefs(); }, AppColors.secondary),
-              _buildFilterCheckbox('誕生日', _showBirthdays, (val) { setState(() => _showBirthdays = val); _saveFilterPrefs(); }, Colors.pink.shade300),
+              _buildFilterCheckbox('誕生日', _showBirthdays, (val) { setState(() => _showBirthdays = val); _saveFilterPrefs(); }, AppColors.aiAccent),
               const SizedBox(height: 8),
               if (_myClassrooms.isEmpty)
                 Padding(
                   padding: EdgeInsets.only(left: 32, top: 4),
-                  child: Text('担当教室なし', style: TextStyle(color: context.colors.textSecondary, fontSize: 12)),
+                  child: Text('担当教室なし', style: TextStyle(color: context.colors.textSecondary, fontSize: AppTextSize.small)),
                 )
               else
                 ..._myClassrooms.map((roomName) {
@@ -1384,7 +1385,7 @@ Future<void> _saveDisplayDate(DateTime date) async {
                     child: Text(
                       labels[index],
                       style: TextStyle(
-                        fontSize: 14,
+                        fontSize: AppTextSize.bodyMd,
                         fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
                         color: isSelected ? context.colors.textPrimary : context.colors.textSecondary,
                       ),
@@ -1430,7 +1431,7 @@ Future<void> _saveDisplayDate(DateTime date) async {
           children: [
             SizedBox(width: 24, height: 24, child: Checkbox(value: value, activeColor: color, onChanged: (val) => onChanged(val!))),
             SizedBox(width: 8),
-            Expanded(child: Text(title, style: TextStyle(fontSize: 13, color: context.colors.textPrimary))),
+            Expanded(child: Text(title, style: TextStyle(fontSize: AppTextSize.body, color: context.colors.textPrimary))),
           ],
         ),
       ),
@@ -1454,7 +1455,7 @@ Future<void> _saveDisplayDate(DateTime date) async {
     return Container(
       margin: isMobile ? const EdgeInsets.symmetric(vertical: 0.5) : const EdgeInsets.symmetric(vertical: 1),
       decoration: BoxDecoration(
-        color: Colors.pink.shade300,
+        color: AppColors.aiAccent,
         borderRadius: BorderRadius.circular(2),
       ),
       padding: EdgeInsets.symmetric(horizontal: isMobile ? 1 : 2),
@@ -1673,7 +1674,7 @@ Future<void> _saveDisplayDate(DateTime date) async {
                         children: [
                           const Text(
                             '保留中のタスク',
-                            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                            style: TextStyle(fontSize: AppTextSize.titleLg, fontWeight: FontWeight.bold),
                           ),
                           IconButton(
                             icon: const Icon(Icons.close, size: 24),
@@ -1709,12 +1710,12 @@ Future<void> _saveDisplayDate(DateTime date) async {
                                         children: [
                                           Text(
                                             data['title'] ?? '無題',
-                                            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                                            style: TextStyle(fontSize: AppTextSize.bodyLarge, fontWeight: FontWeight.w600),
                                           ),
                                           const SizedBox(height: 4),
                                           Text(
                                             DateFormat('yyyy/MM/dd').format(date),
-                                            style: TextStyle(fontSize: 13, color: AppColors.error),
+                                            style: TextStyle(fontSize: AppTextSize.body, color: AppColors.error),
                                           ),
                                         ],
                                       ),
@@ -1821,7 +1822,7 @@ Future<void> _saveDisplayDate(DateTime date) async {
                 children: [
                   const Icon(Icons.check_circle, color: AppColors.secondary),
                   const SizedBox(width: 8),
-                  const Expanded(child: Text('タスク詳細', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold))),
+                  const Expanded(child: Text('タスク詳細', style: TextStyle(fontSize: AppTextSize.titleLg, fontWeight: FontWeight.bold))),
                   IconButton(
                     icon: Icon(Icons.edit, size: 20, color: context.colors.iconMuted),
                     tooltip: '編集',
@@ -1850,13 +1851,13 @@ Future<void> _saveDisplayDate(DateTime date) async {
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(title, style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: context.colors.textPrimary)),
+                      Text(title, style: TextStyle(fontSize: AppTextSize.display, fontWeight: FontWeight.bold, color: context.colors.textPrimary)),
                       SizedBox(height: 16),
                       Row(
                         children: [
                           Icon(Icons.calendar_today, size: 16, color: context.colors.textSecondary),
                           SizedBox(width: 8),
-                          Text(DateFormat('yyyy年MM月dd日 (E)', 'ja').format(date), style: TextStyle(fontSize: 14, color: context.colors.textSecondary)),
+                          Text(DateFormat('yyyy年MM月dd日 (E)', 'ja').format(date), style: TextStyle(fontSize: AppTextSize.bodyMd, color: context.colors.textSecondary)),
                         ],
                       ),
                       if (notes.isNotEmpty) ...[
@@ -1868,7 +1869,7 @@ Future<void> _saveDisplayDate(DateTime date) async {
                             color: context.colors.inputFill, 
                             borderRadius: AppStyles.radiusSmall,
                           ),
-                          child: Text(notes, style: TextStyle(fontSize: 14, height: 1.5, color: context.colors.textPrimary)),
+                          child: Text(notes, style: TextStyle(fontSize: AppTextSize.bodyMd, height: 1.5, color: context.colors.textPrimary)),
                         ),
                       ],
                     ],
@@ -1881,9 +1882,9 @@ Future<void> _saveDisplayDate(DateTime date) async {
                   onPressed: () async {
                     Navigator.pop(ctx);
                     await doc.reference.delete();
-                    if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('タスクを完了しました')));
+                    if (mounted) AppFeedback.info(context, 'タスクを完了しました');
                   },
-                  child: const Text('完了とする', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.primary)),
+                  child: const Text('完了とする', style: TextStyle(fontSize: AppTextSize.small, fontWeight: FontWeight.bold, color: AppColors.primary)),
                 ),
               ],
             );
@@ -1973,7 +1974,7 @@ Future<void> _saveDisplayDate(DateTime date) async {
                           Expanded(
                             child: Text(
                               subject,
-                              style: TextStyle(fontSize: 22, fontWeight: FontWeight.w500, color: context.colors.textPrimary, height: 1.2),
+                              style: TextStyle(fontSize: AppTextSize.display, fontWeight: FontWeight.w500, color: context.colors.textPrimary, height: 1.2),
                             ),
                           ),
                         ],
@@ -2049,7 +2050,7 @@ Future<void> _saveDisplayDate(DateTime date) async {
                                             ),
                                             child: Text(
                                               displayName, 
-                                              style: TextStyle(fontSize: 14, height: 1.1, color: isAbsent ? Colors.grey : AppColors.primary, decoration: isAbsent ? TextDecoration.lineThrough : TextDecoration.none),
+                                              style: TextStyle(fontSize: AppTextSize.bodyMd, height: 1.1, color: isAbsent ? Colors.grey : AppColors.primary, decoration: isAbsent ? TextDecoration.lineThrough : TextDecoration.none),
                                             ),
                                           ),
                                         ),
@@ -2065,7 +2066,7 @@ Future<void> _saveDisplayDate(DateTime date) async {
                                         child: Text(
                                           '$trialName（体）',
                                           style: TextStyle(
-                                            fontSize: 14,
+                                            fontSize: AppTextSize.bodyMd,
                                             height: 1.1,
                                             color: AppColors.accent,
                                           ),
@@ -2101,7 +2102,7 @@ Future<void> _saveDisplayDate(DateTime date) async {
       margin: const EdgeInsets.only(right: 4),
       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
       decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(2), border: Border.all(color: color.withOpacity(0.5))),
-      child: Text(text, style: TextStyle(fontSize: 10, color: color)),
+      child: Text(text, style: TextStyle(fontSize: AppTextSize.xs, color: color)),
     );
   }
   
@@ -2334,7 +2335,7 @@ Future<void> _saveDisplayDate(DateTime date) async {
       children: [
         Icon(icon, size: 20, color: context.colors.textSecondary),
         SizedBox(width: 20),
-        Expanded(child: Text(text, style: TextStyle(fontSize: 14, color: context.colors.textPrimary))),
+        Expanded(child: Text(text, style: TextStyle(fontSize: AppTextSize.bodyMd, color: context.colors.textPrimary))),
       ],
     );
   }
@@ -2399,7 +2400,7 @@ Future<void> _saveDisplayDate(DateTime date) async {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: items.map((item) => Padding(
               padding: const EdgeInsets.only(bottom: 4.0),
-              child: Text(item, style: TextStyle(fontSize: 14, color: context.colors.textPrimary)),
+              child: Text(item, style: TextStyle(fontSize: AppTextSize.bodyMd, color: context.colors.textPrimary)),
             )).toList(),
           ),
         ),

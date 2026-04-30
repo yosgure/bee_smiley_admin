@@ -132,7 +132,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           padding: const EdgeInsets.only(bottom: 16.0),
                           child: Text(
                             _errorMessage!,
-                            style: const TextStyle(color: Colors.red, fontSize: 14),
+                            style: const TextStyle(color: AppColors.error, fontSize: AppTextSize.bodyMd),
                             textAlign: TextAlign.center,
                           ),
                         ),
@@ -162,7 +162,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                 )
                               : const Text(
                                   'ログイン',
-                                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                                  style: TextStyle(fontSize: AppTextSize.titleLg, fontWeight: FontWeight.bold),
                                 ),
                         ),
                       ),
