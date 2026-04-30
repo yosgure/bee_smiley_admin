@@ -133,7 +133,7 @@ extension PlusScheduleMobile on _PlusScheduleContentState {
                   Text(
                     '講師フィルター',
                     style: TextStyle(
-                      fontSize: 16,
+                      fontSize: AppTextSize.titleSm,
                       fontWeight: FontWeight.bold,
                       color: context.colors.textPrimary,
                     ),
@@ -216,7 +216,7 @@ extension PlusScheduleMobile on _PlusScheduleContentState {
               child: Text(
                 label,
                 style: TextStyle(
-                  fontSize: 15,
+                  fontSize: AppTextSize.bodyLarge,
                   fontWeight: isSpecial ? FontWeight.w500 : FontWeight.normal,
                 ),
               ),
@@ -268,7 +268,7 @@ extension PlusScheduleMobile on _PlusScheduleContentState {
                             child: Text(
                               dateStr,
                               style: TextStyle(
-                                fontSize: 17,
+                                fontSize: AppTextSize.title,
                                 fontWeight: FontWeight.w600,
                                 color: context.colors.textPrimary,
                               ),
@@ -289,7 +289,7 @@ extension PlusScheduleMobile on _PlusScheduleContentState {
                       minimumSize: Size.zero,
                       tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     ),
-                    child: const Text('今日', style: TextStyle(fontSize: 13)),
+                    child: const Text('今日', style: TextStyle(fontSize: AppTextSize.body)),
                   ),
                   _buildMobilePlusMenuButton(),
                 ] else ...[
@@ -300,7 +300,7 @@ extension PlusScheduleMobile on _PlusScheduleContentState {
                   Text(
                     'ダッシュボード',
                     style: TextStyle(
-                      fontSize: 16,
+                      fontSize: AppTextSize.titleSm,
                       fontWeight: FontWeight.w500,
                       color: context.colors.textPrimary,
                     ),
@@ -359,7 +359,7 @@ extension PlusScheduleMobile on _PlusScheduleContentState {
               Text(
                 label,
                 style: TextStyle(
-                  fontSize: 13,
+                  fontSize: AppTextSize.body,
                   fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
                   color: isSelected ? AppColors.primary : context.colors.textSecondary,
                 ),
@@ -445,7 +445,7 @@ extension PlusScheduleMobile on _PlusScheduleContentState {
             Text(
               '日曜日は休みです',
               style: TextStyle(
-                fontSize: 18,
+                fontSize: AppTextSize.titleLg,
                 color: context.colors.textSecondary,
               ),
             ),
@@ -465,7 +465,7 @@ extension PlusScheduleMobile on _PlusScheduleContentState {
             Text(
               '休み',
               style: TextStyle(
-                fontSize: 18,
+                fontSize: AppTextSize.titleLg,
                 color: context.colors.textSecondary,
               ),
             ),
@@ -485,7 +485,7 @@ extension PlusScheduleMobile on _PlusScheduleContentState {
             Text(
               'データを読み込んでいます...',
               style: TextStyle(
-                fontSize: 16,
+                fontSize: AppTextSize.titleSm,
                 color: context.colors.textSecondary,
               ),
             ),
@@ -554,7 +554,7 @@ extension PlusScheduleMobile on _PlusScheduleContentState {
                 child: Text(
                   timeSlot,
                   style: const TextStyle(
-                    fontSize: 14,
+                    fontSize: AppTextSize.bodyMd,
                     fontWeight: FontWeight.w500,
                     color: AppColors.primary,
                   ),
@@ -564,7 +564,7 @@ extension PlusScheduleMobile on _PlusScheduleContentState {
               Text(
                 '${lessons.length}件',
                 style: TextStyle(
-                  fontSize: 12,
+                  fontSize: AppTextSize.small,
                   color: context.colors.textSecondary,
                 ),
               ),
@@ -578,7 +578,7 @@ extension PlusScheduleMobile on _PlusScheduleContentState {
             child: Text(
               '予定なし',
               style: TextStyle(
-                fontSize: 14,
+                fontSize: AppTextSize.bodyMd,
                 color: context.colors.textTertiary,
               ),
             ),
@@ -638,7 +638,7 @@ extension PlusScheduleMobile on _PlusScheduleContentState {
                   Text(
                     displayName,
                     style: TextStyle(
-                      fontSize: 15,
+                      fontSize: AppTextSize.bodyLarge,
                       fontWeight: FontWeight.w500,
                       color: isEvent ? const Color(0xFFFF5722) : (course == '感覚統合' ? const Color(0xFF009688) : context.colors.textPrimary),
                     ),
@@ -652,7 +652,7 @@ extension PlusScheduleMobile on _PlusScheduleContentState {
                         const SizedBox(width: 4),
                         Text(
                           teachers.map((t) => t.toString().split(' ').first).join(', '),
-                          style: TextStyle(fontSize: 12, color: context.colors.textSecondary),
+                          style: TextStyle(fontSize: AppTextSize.small, color: context.colors.textSecondary),
                         ),
                         const SizedBox(width: 12),
                       ],
@@ -661,7 +661,7 @@ extension PlusScheduleMobile on _PlusScheduleContentState {
                         const SizedBox(width: 4),
                         Text(
                           room,
-                          style: TextStyle(fontSize: 12, color: context.colors.textSecondary),
+                          style: TextStyle(fontSize: AppTextSize.small, color: context.colors.textSecondary),
                         ),
                       ],
                     ],
@@ -782,7 +782,7 @@ extension PlusScheduleMobile on _PlusScheduleContentState {
                                   controller: mobileTitleController,
                                   autofocus: true,
                                   style: const TextStyle(
-                                    fontSize: 20,
+                                    fontSize: AppTextSize.xl,
                                     fontWeight: FontWeight.bold,
                                   ),
                                   decoration: InputDecoration(
@@ -812,7 +812,7 @@ extension PlusScheduleMobile on _PlusScheduleContentState {
                                         child: Text(
                                           mobileTitleController.text.isEmpty ? 'イベント名を入力' : mobileTitleController.text,
                                           style: TextStyle(
-                                            fontSize: 20,
+                                            fontSize: AppTextSize.xl,
                                             fontWeight: FontWeight.bold,
                                             color: mobileTitleController.text.isEmpty ? context.colors.textSecondary : null,
                                           ),
@@ -827,13 +827,13 @@ extension PlusScheduleMobile on _PlusScheduleContentState {
                                 Text(
                                   studentName,
                                   style: const TextStyle(
-                                    fontSize: 20,
+                                    fontSize: AppTextSize.xl,
                                     fontWeight: FontWeight.bold,
                                   ),
                                 ),
                               Text(
                                 '${DateFormat('M月d日 (E)', 'ja').format(date)}　${_timeSlots[slotIndex]}',
-                                style: TextStyle(fontSize: 13, color: context.colors.textSecondary),
+                                style: TextStyle(fontSize: AppTextSize.body, color: context.colors.textSecondary),
                               ),
                             ],
                           ),
@@ -887,7 +887,7 @@ extension PlusScheduleMobile on _PlusScheduleContentState {
                                               ? '全員'
                                               : selectedTeachers.join('、'),
                                       style: TextStyle(
-                                        fontSize: 15,
+                                        fontSize: AppTextSize.bodyLarge,
                                         color: selectedTeachers.isEmpty ? context.colors.textSecondary : context.colors.textPrimary,
                                       ),
                                     ),
@@ -926,7 +926,7 @@ extension PlusScheduleMobile on _PlusScheduleContentState {
                                     child: Text(
                                       selectedRoom.isEmpty ? '部屋を選択' : selectedRoom,
                                       style: TextStyle(
-                                        fontSize: 15,
+                                        fontSize: AppTextSize.bodyLarge,
                                         color: selectedRoom.isEmpty ? context.colors.textSecondary : context.colors.textPrimary,
                                       ),
                                     ),
@@ -969,7 +969,7 @@ extension PlusScheduleMobile on _PlusScheduleContentState {
                                     ),
                                   ),
                                   const SizedBox(width: 8),
-                                  Expanded(child: Text(selectedCourse, style: const TextStyle(fontSize: 15))),
+                                  Expanded(child: Text(selectedCourse, style: const TextStyle(fontSize: AppTextSize.bodyLarge))),
                                   Icon(Icons.arrow_drop_down, color: context.colors.textSecondary),
                                 ],
                               ),
@@ -987,7 +987,7 @@ extension PlusScheduleMobile on _PlusScheduleContentState {
                               children: [
                                 const Icon(Icons.task_alt, size: 18, color: AppColors.accent),
                                 const SizedBox(width: 8),
-                                const Text('タスク', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                                const Text('タスク', style: TextStyle(fontWeight: FontWeight.bold, fontSize: AppTextSize.bodyMd)),
                               ],
                             ),
                             const SizedBox(height: 12),
@@ -1010,11 +1010,11 @@ extension PlusScheduleMobile on _PlusScheduleContentState {
                                         child: Column(
                                           crossAxisAlignment: CrossAxisAlignment.start,
                                           children: [
-                                            Text(task['title'] ?? '', style: const TextStyle(fontSize: 13)),
+                                            Text(task['title'] ?? '', style: const TextStyle(fontSize: AppTextSize.body)),
                                             if (task['dueDate'] != null)
                                               Text(
                                                 '期限: ${DateFormat('M/d').format((task['dueDate'] as Timestamp).toDate())}',
-                                                style: TextStyle(fontSize: 11, color: context.colors.textSecondary),
+                                                style: TextStyle(fontSize: AppTextSize.caption, color: context.colors.textSecondary),
                                               ),
                                           ],
                                         ),
@@ -1049,7 +1049,7 @@ extension PlusScheduleMobile on _PlusScheduleContentState {
                                       contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                                       isDense: true,
                                     ),
-                                    style: const TextStyle(fontSize: 13),
+                                    style: const TextStyle(fontSize: AppTextSize.body),
                                     onChanged: (_) => setSheetState(() {}),
                                   ),
                                 ),
@@ -1080,7 +1080,7 @@ extension PlusScheduleMobile on _PlusScheduleContentState {
                                           const SizedBox(width: 4),
                                           Text(
                                             DateFormat('M/d').format(newTaskDueDate!),
-                                            style: const TextStyle(fontSize: 12),
+                                            style: const TextStyle(fontSize: AppTextSize.small),
                                           ),
                                           const SizedBox(width: 4),
                                           GestureDetector(
@@ -1133,7 +1133,7 @@ extension PlusScheduleMobile on _PlusScheduleContentState {
                               children: [
                                 const Icon(Icons.psychology, size: 18, color: AppColors.primary),
                                 const SizedBox(width: 8),
-                                const Text('療育プラン', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                                const Text('療育プラン', style: TextStyle(fontWeight: FontWeight.bold, fontSize: AppTextSize.bodyMd)),
                               ],
                             ),
                             const SizedBox(height: 8),
@@ -1146,7 +1146,7 @@ extension PlusScheduleMobile on _PlusScheduleContentState {
                               ),
                               maxLines: 3,
                               minLines: 2,
-                              style: const TextStyle(fontSize: 13),
+                              style: const TextStyle(fontSize: AppTextSize.body),
                             ),
                             const SizedBox(height: 16),
                             // 園訪問
@@ -1154,7 +1154,7 @@ extension PlusScheduleMobile on _PlusScheduleContentState {
                               children: [
                                 Icon(Icons.school, size: 18, color: const Color(0xFF00897B)),
                                 const SizedBox(width: 8),
-                                const Text('園訪問', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                                const Text('園訪問', style: TextStyle(fontWeight: FontWeight.bold, fontSize: AppTextSize.bodyMd)),
                               ],
                             ),
                             const SizedBox(height: 8),
@@ -1167,7 +1167,7 @@ extension PlusScheduleMobile on _PlusScheduleContentState {
                               ),
                               maxLines: 3,
                               minLines: 2,
-                              style: const TextStyle(fontSize: 13),
+                              style: const TextStyle(fontSize: AppTextSize.body),
                             ),
                             const SizedBox(height: 16),
                             // 就学相談
@@ -1175,7 +1175,7 @@ extension PlusScheduleMobile on _PlusScheduleContentState {
                               children: [
                                 Icon(Icons.celebration, size: 18, color: const Color(0xFF3949AB)),
                                 const SizedBox(width: 8),
-                                const Text('就学相談', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                                const Text('就学相談', style: TextStyle(fontWeight: FontWeight.bold, fontSize: AppTextSize.bodyMd)),
                               ],
                             ),
                             const SizedBox(height: 8),
@@ -1188,7 +1188,7 @@ extension PlusScheduleMobile on _PlusScheduleContentState {
                               ),
                               maxLines: 3,
                               minLines: 2,
-                              style: const TextStyle(fontSize: 13),
+                              style: const TextStyle(fontSize: AppTextSize.body),
                             ),
                             const SizedBox(height: 16),
                             // 移動希望
@@ -1196,7 +1196,7 @@ extension PlusScheduleMobile on _PlusScheduleContentState {
                               children: [
                                 Icon(Icons.swap_horiz, size: 18, color: const Color(0xFF8E24AA)),
                                 const SizedBox(width: 8),
-                                const Text('移動希望', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                                const Text('移動希望', style: TextStyle(fontWeight: FontWeight.bold, fontSize: AppTextSize.bodyMd)),
                               ],
                             ),
                             const SizedBox(height: 8),
@@ -1209,7 +1209,7 @@ extension PlusScheduleMobile on _PlusScheduleContentState {
                               ),
                               maxLines: 3,
                               minLines: 2,
-                              style: const TextStyle(fontSize: 13),
+                              style: const TextStyle(fontSize: AppTextSize.body),
                             ),
                           ],
                         ],
@@ -1309,7 +1309,7 @@ extension PlusScheduleMobile on _PlusScheduleContentState {
                             padding: const EdgeInsets.symmetric(vertical: 14),
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                           ),
-                          child: const Text('保存', style: TextStyle(fontSize: 16)),
+                          child: const Text('保存', style: TextStyle(fontSize: AppTextSize.titleSm)),
                         ),
                       ),
                     ),
@@ -1336,13 +1336,13 @@ extension PlusScheduleMobile on _PlusScheduleContentState {
               Text(
                 label,
                 style: TextStyle(
-                  fontSize: 12,
+                  fontSize: AppTextSize.small,
                   color: context.colors.textTertiary,
                 ),
               ),
               Text(
                 value,
-                style: const TextStyle(fontSize: 14),
+                style: const TextStyle(fontSize: AppTextSize.bodyMd),
               ),
             ],
           ),

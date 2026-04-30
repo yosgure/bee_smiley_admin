@@ -26,7 +26,7 @@ extension PlusScheduleTaskDialog on _PlusScheduleContentState {
                 const SizedBox(width: 8),
                 Text(
                   '${DateFormat('M月d日 (E)', 'ja').format(date)} のタスク',
-                  style: const TextStyle(fontSize: 18),
+                  style: const TextStyle(fontSize: AppTextSize.titleLg),
                 ),
               ],
             ),
@@ -68,13 +68,13 @@ extension PlusScheduleTaskDialog on _PlusScheduleContentState {
                                         studentName,
                                         style: const TextStyle(
                                           fontWeight: FontWeight.bold,
-                                          fontSize: 14,
+                                          fontSize: AppTextSize.bodyMd,
                                         ),
                                       ),
                                     Text(
                                       task['title'] ?? '',
                                       style: TextStyle(
-                                        fontSize: 14,
+                                        fontSize: AppTextSize.bodyMd,
                                         color: studentName != null ? context.colors.textSecondary : context.colors.textPrimary,
                                       ),
                                     ),
@@ -121,7 +121,7 @@ extension PlusScheduleTaskDialog on _PlusScheduleContentState {
                           Text(
                             'タスクを追加',
                             style: TextStyle(
-                              fontSize: 14,
+                              fontSize: AppTextSize.bodyMd,
                               color: AppColors.primary,
                               fontWeight: FontWeight.w500,
                             ),
@@ -168,7 +168,7 @@ extension PlusScheduleTaskDialog on _PlusScheduleContentState {
               children: [
                 const Icon(Icons.task_alt, color: AppColors.accent),
                 const SizedBox(width: 8),
-                const Text('タスクを追加', style: TextStyle(fontSize: 18)),
+                const Text('タスクを追加', style: TextStyle(fontSize: AppTextSize.titleLg)),
               ],
             ),
             content: SizedBox(
@@ -258,7 +258,7 @@ extension PlusScheduleTaskDialog on _PlusScheduleContentState {
                                     ? '生徒を選択'
                                     : selectedStudent!['name'] as String,
                                 style: TextStyle(
-                                  fontSize: 15,
+                                  fontSize: AppTextSize.bodyLarge,
                                   color: selectedStudent == null
                                       ? context.colors.textSecondary
                                       : context.colors.textPrimary,
@@ -330,7 +330,7 @@ extension PlusScheduleTaskDialog on _PlusScheduleContentState {
                             child: Text(
                               DateFormat('M月d日 (E)', 'ja').format(selectedDueDate),
                               style: TextStyle(
-                                fontSize: 15,
+                                fontSize: AppTextSize.bodyLarge,
                                 color: context.colors.textPrimary,
                               ),
                             ),

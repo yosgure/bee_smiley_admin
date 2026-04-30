@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import 'app_theme.dart';
+import 'widgets/app_feedback.dart';
 import 'classroom_utils.dart';
 import 'student_profile_dialog.dart';
 
@@ -24,17 +25,17 @@ class _PlusDashboardContentState extends State<PlusDashboardContent> {
 
   // コース色定義
   static const Map<String, Color> _courseColors = {
-    '通常': Colors.blue,
-    'モンテッソーリ': Colors.lightBlue,
-    '感覚統合': Colors.teal,
-    '言語': Colors.purple,
-    '就学支援': Colors.indigo,
-    '放デイ': Colors.amber,
+    '通常': AppColors.info,
+    'モンテッソーリ': AppColors.info,
+    '感覚統合': AppColors.secondary,
+    '言語': AppColors.aiAccent,
+    '就学支援': AppColors.secondary,
+    '放デイ': AppColors.primary,
     '契約': AppColors.accent,
-    '体験': Colors.green,
-    '欠席': Colors.red, // 旧データ互換用
-    '欠席（加算あり）': Colors.red,
-    '策定会議': Colors.deepPurple,
+    '体験': AppColors.success,
+    '欠席': AppColors.error, // 旧データ互換用
+    '欠席（加算あり）': AppColors.error,
+    '策定会議': AppColors.aiAccent,
   };
 
   final List<String> _courseList = ['通常', 'モンテッソーリ', '感覚統合', '言語', '就学支援', '放デイ', '契約', '体験', '欠席（加算あり）', '策定会議'];
@@ -274,9 +275,7 @@ class _PlusDashboardContentState extends State<PlusDashboardContent> {
     } catch (e) {
       debugPrint('Error saving schedule: $e');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('保存に失敗しました')),
-        );
+        AppFeedback.info(context, '保存に失敗しました');
       }
     }
   }
@@ -471,7 +470,7 @@ class _PlusDashboardContentState extends State<PlusDashboardContent> {
               Text(
                 label,
                 style: TextStyle(
-                  fontSize: 13,
+                  fontSize: AppTextSize.body,
                   fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
                   color: isSelected ? AppColors.primary : context.colors.textSecondary,
                 ),
@@ -568,7 +567,7 @@ class _PlusDashboardContentState extends State<PlusDashboardContent> {
               Text(
                 label,
                 style: TextStyle(
-                  fontSize: 11,
+                  fontSize: AppTextSize.caption,
                   fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
                   color: isSelected ? AppColors.primary : context.colors.textSecondary,
                 ),
@@ -623,7 +622,7 @@ class _PlusDashboardContentState extends State<PlusDashboardContent> {
     return _buildNoteListSection(
       title: '園訪問',
       icon: Icons.school,
-      iconColor: Colors.teal.shade600,
+      iconColor: AppColors.secondary,
       notes: notes,
       noteKey: 'schoolVisit',
       emptyMessage: '園訪問の記録はありません',
@@ -639,7 +638,7 @@ class _PlusDashboardContentState extends State<PlusDashboardContent> {
     return _buildNoteListSection(
       title: '就学相談',
       icon: Icons.celebration,
-      iconColor: Colors.indigo.shade600,
+      iconColor: AppColors.secondary,
       notes: notes,
       noteKey: 'schoolConsultation',
       emptyMessage: '就学相談の記録はありません',
@@ -655,7 +654,7 @@ class _PlusDashboardContentState extends State<PlusDashboardContent> {
     return _buildNoteListSection(
       title: '移動希望',
       icon: Icons.swap_horiz,
-      iconColor: Colors.purple.shade600,
+      iconColor: AppColors.aiAccent,
       notes: notes,
       noteKey: 'moveRequest',
       emptyMessage: '移動希望の記録はありません',
@@ -699,7 +698,7 @@ class _PlusDashboardContentState extends State<PlusDashboardContent> {
                 Text(
                   title,
                   style: TextStyle(
-                    fontSize: 14,
+                    fontSize: AppTextSize.bodyMd,
                     fontWeight: FontWeight.bold,
                     color: context.colors.textPrimary,
                   ),
@@ -708,7 +707,7 @@ class _PlusDashboardContentState extends State<PlusDashboardContent> {
                 Text(
                   '${notes.length}件',
                   style: TextStyle(
-                    fontSize: 12,
+                    fontSize: AppTextSize.small,
                     color: context.colors.textSecondary,
                   ),
                 ),
@@ -721,7 +720,7 @@ class _PlusDashboardContentState extends State<PlusDashboardContent> {
                 ? Center(
                     child: Text(
                       emptyMessage,
-                      style: TextStyle(color: context.colors.textSecondary, fontSize: 13),
+                      style: TextStyle(color: context.colors.textSecondary, fontSize: AppTextSize.body),
                     ),
                   )
                 : ListView.builder(
@@ -745,7 +744,7 @@ class _PlusDashboardContentState extends State<PlusDashboardContent> {
                   Text(
                     '$titleを追加',
                     style: TextStyle(
-                      fontSize: 13,
+                      fontSize: AppTextSize.body,
                       color: AppColors.primary,
                       fontWeight: FontWeight.w500,
                     ),
@@ -780,7 +779,7 @@ class _PlusDashboardContentState extends State<PlusDashboardContent> {
               child: Text(
                 studentName,
                 style: const TextStyle(
-                  fontSize: 13,
+                  fontSize: AppTextSize.body,
                 ),
                 overflow: TextOverflow.ellipsis,
               ),
@@ -791,7 +790,7 @@ class _PlusDashboardContentState extends State<PlusDashboardContent> {
               child: Text(
                 content,
                 style: TextStyle(
-                  fontSize: 13,
+                  fontSize: AppTextSize.body,
                   color: context.colors.textPrimary,
                 ),
                 maxLines: 2,
@@ -836,7 +835,7 @@ class _PlusDashboardContentState extends State<PlusDashboardContent> {
       builder: (dialogContext) => AlertDialog(
         backgroundColor: context.colors.cardBg,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        title: Text('$titleを削除', style: TextStyle(fontSize: 16)),
+        title: Text('$titleを削除', style: TextStyle(fontSize: AppTextSize.titleSm)),
         content: Text('$studentNameの$titleを削除しますか？'),
         actions: [
           TextButton(
@@ -923,7 +922,7 @@ class _PlusDashboardContentState extends State<PlusDashboardContent> {
             children: [
               Icon(icon, size: 20, color: iconColor),
               const SizedBox(width: 8),
-              Text('$titleを追加', style: TextStyle(fontSize: 16)),
+              Text('$titleを追加', style: TextStyle(fontSize: AppTextSize.titleSm)),
             ],
           ),
           content: SizedBox(
@@ -950,7 +949,7 @@ class _PlusDashboardContentState extends State<PlusDashboardContent> {
                           child: Text(
                             selectedStudent ?? '生徒を選択',
                             style: TextStyle(
-                              fontSize: 14,
+                              fontSize: AppTextSize.bodyMd,
                               color: selectedStudent != null ? context.colors.textPrimary : context.colors.textSecondary,
                             ),
                           ),
@@ -1044,19 +1043,19 @@ class _PlusDashboardContentState extends State<PlusDashboardContent> {
         title = '園訪問';
         hintText = '園訪問の記録や予定を記入';
         icon = Icons.school;
-        iconColor = Colors.teal.shade600;
+        iconColor = AppColors.secondary;
         break;
       case 'schoolConsultation':
         title = '就学相談';
         hintText = '就学相談の記録や予定を記入';
         icon = Icons.celebration;
-        iconColor = Colors.indigo.shade600;
+        iconColor = AppColors.secondary;
         break;
       case 'moveRequest':
         title = '移動希望';
         hintText = '曜日や時間の変更希望を記入';
         icon = Icons.swap_horiz;
-        iconColor = Colors.purple.shade600;
+        iconColor = AppColors.aiAccent;
         break;
       default:
         title = 'メモ';
@@ -1074,7 +1073,7 @@ class _PlusDashboardContentState extends State<PlusDashboardContent> {
           children: [
             Icon(icon, size: 20, color: iconColor),
             const SizedBox(width: 8),
-            Text('$studentName - $title', style: TextStyle(fontSize: 16)),
+            Text('$studentName - $title', style: TextStyle(fontSize: AppTextSize.titleSm)),
           ],
         ),
         content: SizedBox(
@@ -1168,7 +1167,7 @@ class _PlusDashboardContentState extends State<PlusDashboardContent> {
                 Text(
                   'タスク',
                   style: TextStyle(
-                    fontSize: 14,
+                    fontSize: AppTextSize.bodyMd,
                     fontWeight: FontWeight.bold,
                     color: context.colors.textPrimary,
                   ),
@@ -1177,7 +1176,7 @@ class _PlusDashboardContentState extends State<PlusDashboardContent> {
                 Text(
                   '${_tasks.length}件',
                   style: TextStyle(
-                    fontSize: 12,
+                    fontSize: AppTextSize.small,
                     color: context.colors.textSecondary,
                   ),
                 ),
@@ -1190,7 +1189,7 @@ class _PlusDashboardContentState extends State<PlusDashboardContent> {
                 ? Center(
                     child: Text(
                       'タスクはありません',
-                      style: TextStyle(color: context.colors.textSecondary, fontSize: 13),
+                      style: TextStyle(color: context.colors.textSecondary, fontSize: AppTextSize.body),
                     ),
                   )
                 : ListView.builder(
@@ -1214,7 +1213,7 @@ class _PlusDashboardContentState extends State<PlusDashboardContent> {
                   Text(
                     'タスクを追加',
                     style: TextStyle(
-                      fontSize: 13,
+                      fontSize: AppTextSize.body,
                       color: AppColors.primary,
                       fontWeight: FontWeight.w500,
                     ),
@@ -1255,7 +1254,7 @@ class _PlusDashboardContentState extends State<PlusDashboardContent> {
                 child: Text(
                   title,
                   style: TextStyle(
-                    fontSize: 13,
+                    fontSize: AppTextSize.body,
                     color: context.colors.textPrimary,
                   ),
                   overflow: TextOverflow.ellipsis,
@@ -1268,7 +1267,7 @@ class _PlusDashboardContentState extends State<PlusDashboardContent> {
                 child: Text(
                   studentName,
                   style: TextStyle(
-                    fontSize: 13,
+                    fontSize: AppTextSize.body,
                     color: context.colors.textPrimary,
                   ),
                   overflow: TextOverflow.ellipsis,
@@ -1279,7 +1278,7 @@ class _PlusDashboardContentState extends State<PlusDashboardContent> {
                 child: Text(
                   title,
                   style: TextStyle(
-                    fontSize: 13,
+                    fontSize: AppTextSize.body,
                     color: context.colors.textPrimary,
                   ),
                   overflow: TextOverflow.ellipsis,
@@ -1292,14 +1291,14 @@ class _PlusDashboardContentState extends State<PlusDashboardContent> {
                 margin: const EdgeInsets.only(left: 8),
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                 decoration: BoxDecoration(
-                  color: isOverdue ? Colors.red.shade50 : AppColors.accent.shade50,
+                  color: isOverdue ? AppColors.errorBg : AppColors.accent.shade50,
                   borderRadius: BorderRadius.circular(4),
                 ),
                 child: Text(
                   _formatDueDate(dueDate.toDate()),
                   style: TextStyle(
-                    fontSize: 11,
-                    color: isOverdue ? Colors.red.shade700 : AppColors.accent.shade700,
+                    fontSize: AppTextSize.caption,
+                    color: isOverdue ? AppColors.error : AppColors.accent.shade700,
                     fontWeight: FontWeight.w500,
                   ),
                   textAlign: TextAlign.center,
@@ -1309,7 +1308,7 @@ class _PlusDashboardContentState extends State<PlusDashboardContent> {
             IconButton(
               onPressed: () => _updateTask(id, completed: true),
               icon: const Icon(Icons.check_circle_outline),
-              color: Colors.green,
+              color: AppColors.success,
               tooltip: '完了',
               iconSize: 24,
               padding: EdgeInsets.zero,
@@ -1354,7 +1353,7 @@ class _PlusDashboardContentState extends State<PlusDashboardContent> {
           return AlertDialog(
             backgroundColor: context.colors.cardBg,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            title: const Text('タスクを追加', style: TextStyle(fontSize: 18)),
+            title: const Text('タスクを追加', style: TextStyle(fontSize: AppTextSize.titleLg)),
             content: SizedBox(
               width: 400,
               child: Column(
@@ -1441,7 +1440,7 @@ class _PlusDashboardContentState extends State<PlusDashboardContent> {
                                     ? '生徒を選択'
                                     : selectedStudent!['name'] as String,
                                 style: TextStyle(
-                                  fontSize: 15,
+                                  fontSize: AppTextSize.bodyLarge,
                                   color: selectedStudent == null
                                       ? context.colors.textSecondary
                                       : context.colors.textPrimary,
@@ -1515,7 +1514,7 @@ class _PlusDashboardContentState extends State<PlusDashboardContent> {
                                   ? '${selectedDueDate!.month}/${selectedDueDate!.day}'
                                   : '期限を設定',
                               style: TextStyle(
-                                fontSize: 15,
+                                fontSize: AppTextSize.bodyLarge,
                                 color: selectedDueDate != null
                                     ? context.colors.textPrimary
                                     : context.colors.textSecondary,
@@ -1622,7 +1621,7 @@ class _PlusDashboardContentState extends State<PlusDashboardContent> {
                         Expanded(
                           child: Text(
                             isCustom ? 'タスクを編集' : '$studentName のタスク',
-                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                            style: TextStyle(fontSize: AppTextSize.titleSm, fontWeight: FontWeight.w600),
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
@@ -1642,7 +1641,7 @@ class _PlusDashboardContentState extends State<PlusDashboardContent> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         // タスク内容
-                        Text('内容', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: context.colors.textSecondary)),
+                        Text('内容', style: TextStyle(fontSize: AppTextSize.small, fontWeight: FontWeight.w600, color: context.colors.textSecondary)),
                         const SizedBox(height: 6),
                         TextField(
                           controller: titleController,
@@ -1667,11 +1666,11 @@ class _PlusDashboardContentState extends State<PlusDashboardContent> {
                             ),
                             contentPadding: const EdgeInsets.all(14),
                           ),
-                          style: TextStyle(fontSize: 14, height: 1.5),
+                          style: TextStyle(fontSize: AppTextSize.bodyMd, height: 1.5),
                         ),
                         const SizedBox(height: 20),
                         // 期限日
-                        Text('期限日', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: context.colors.textSecondary)),
+                        Text('期限日', style: TextStyle(fontSize: AppTextSize.small, fontWeight: FontWeight.w600, color: context.colors.textSecondary)),
                         const SizedBox(height: 6),
                         InkWell(
                           borderRadius: BorderRadius.circular(10),
@@ -1700,7 +1699,7 @@ class _PlusDashboardContentState extends State<PlusDashboardContent> {
                                 Text(
                                   selectedDueDate != null ? DateFormat('yyyy年M月d日').format(selectedDueDate!) : '期限を設定...',
                                   style: TextStyle(
-                                    fontSize: 14,
+                                    fontSize: AppTextSize.bodyMd,
                                     color: selectedDueDate != null ? context.colors.textPrimary : context.colors.iconMuted,
                                   ),
                                 ),
@@ -1717,7 +1716,7 @@ class _PlusDashboardContentState extends State<PlusDashboardContent> {
                         // コメント欄（生徒タスクのみ）
                         if (!isCustom) ...[
                           const SizedBox(height: 20),
-                          Text('コメント', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: context.colors.textSecondary)),
+                          Text('コメント', style: TextStyle(fontSize: AppTextSize.small, fontWeight: FontWeight.w600, color: context.colors.textSecondary)),
                           const SizedBox(height: 6),
                           TextField(
                             controller: commentController,
@@ -1742,7 +1741,7 @@ class _PlusDashboardContentState extends State<PlusDashboardContent> {
                               ),
                               contentPadding: const EdgeInsets.all(14),
                             ),
-                            style: TextStyle(fontSize: 14, height: 1.5),
+                            style: TextStyle(fontSize: AppTextSize.bodyMd, height: 1.5),
                           ),
                         ],
                       ],
@@ -1762,7 +1761,7 @@ class _PlusDashboardContentState extends State<PlusDashboardContent> {
                           icon: const Icon(Icons.delete_outline, size: 18),
                           label: const Text('削除'),
                           style: TextButton.styleFrom(
-                            foregroundColor: Colors.red.shade400,
+                            foregroundColor: AppColors.errorBorder,
                           ),
                         ),
                         const Spacer(),
@@ -1892,7 +1891,7 @@ class _PlusDashboardContentState extends State<PlusDashboardContent> {
       context: context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (dialogContext, setDialogState) {
-          final currentColor = _courseColors[selectedCourse] ?? Colors.blue;
+          final currentColor = _courseColors[selectedCourse] ?? AppColors.info;
           
           // タイトル（生徒名またはイベント）
           final String title;
@@ -1941,7 +1940,7 @@ class _PlusDashboardContentState extends State<PlusDashboardContent> {
                         Text(
                           '$day曜日 $timeSlot に追加',
                           style: const TextStyle(
-                            fontSize: 18,
+                            fontSize: AppTextSize.titleLg,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
@@ -1957,7 +1956,7 @@ class _PlusDashboardContentState extends State<PlusDashboardContent> {
                     padding: const EdgeInsets.symmetric(horizontal: 20),
                     child: Text(
                       'レギュラースケジュール',
-                      style: TextStyle(fontSize: 14, color: context.colors.textSecondary),
+                      style: TextStyle(fontSize: AppTextSize.bodyMd, color: context.colors.textSecondary),
                     ),
                   ),
                   const SizedBox(height: 16),
@@ -1991,7 +1990,7 @@ class _PlusDashboardContentState extends State<PlusDashboardContent> {
                                       color: inputMode == 'student' ? AppColors.primary : context.colors.textSecondary),
                                     const SizedBox(width: 6),
                                     Text('生徒選択', style: TextStyle(
-                                      fontSize: 13,
+                                      fontSize: AppTextSize.body,
                                       fontWeight: inputMode == 'student' ? FontWeight.bold : FontWeight.normal,
                                       color: inputMode == 'student' ? AppColors.primary : context.colors.textSecondary,
                                     )),
@@ -2019,7 +2018,7 @@ class _PlusDashboardContentState extends State<PlusDashboardContent> {
                                       color: inputMode == 'custom' ? AppColors.primary : context.colors.textSecondary),
                                     const SizedBox(width: 6),
                                     Text('イベント', style: TextStyle(
-                                      fontSize: 13,
+                                      fontSize: AppTextSize.body,
                                       fontWeight: inputMode == 'custom' ? FontWeight.bold : FontWeight.normal,
                                       color: inputMode == 'custom' ? AppColors.primary : context.colors.textSecondary,
                                     )),
@@ -2064,7 +2063,7 @@ class _PlusDashboardContentState extends State<PlusDashboardContent> {
                                             ? '生徒を選択'
                                             : selectedStudent!['name'] as String,
                                         style: TextStyle(
-                                          fontSize: 15,
+                                          fontSize: AppTextSize.bodyLarge,
                                           color: selectedStudent == null
                                               ? context.colors.textSecondary
                                               : context.colors.textPrimary,
@@ -2125,7 +2124,7 @@ class _PlusDashboardContentState extends State<PlusDashboardContent> {
                                     ),
                                   ),
                                   const SizedBox(width: 8),
-                                  Expanded(child: Text(selectedCourse, style: TextStyle(fontSize: 15))),
+                                  Expanded(child: Text(selectedCourse, style: TextStyle(fontSize: AppTextSize.bodyLarge))),
                                   Icon(Icons.arrow_drop_down, color: context.colors.textSecondary),
                                 ],
                               ),
@@ -2143,7 +2142,7 @@ class _PlusDashboardContentState extends State<PlusDashboardContent> {
                               children: [
                                 const Icon(Icons.task_alt, size: 18, color: AppColors.accent),
                                 const SizedBox(width: 8),
-                                const Text('タスク', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                                const Text('タスク', style: TextStyle(fontWeight: FontWeight.bold, fontSize: AppTextSize.bodyMd)),
                               ],
                             ),
                             const SizedBox(height: 12),
@@ -2174,11 +2173,11 @@ class _PlusDashboardContentState extends State<PlusDashboardContent> {
                                           crossAxisAlignment: CrossAxisAlignment.start,
                                           children: [
                                             Text(task['title'] ?? '',
-                                                style: TextStyle(fontSize: 13, color: context.colors.textPrimary)),
+                                                style: TextStyle(fontSize: AppTextSize.body, color: context.colors.textPrimary)),
                                             if (task['dueDate'] != null)
                                               Text(
                                                 '期限: ${DateFormat('M/d').format((task['dueDate'] as Timestamp).toDate())}',
-                                                style: TextStyle(fontSize: 11, color: context.colors.textSecondary),
+                                                style: TextStyle(fontSize: AppTextSize.caption, color: context.colors.textSecondary),
                                               ),
                                           ],
                                         ),
@@ -2191,7 +2190,7 @@ class _PlusDashboardContentState extends State<PlusDashboardContent> {
                                           });
                                         },
                                         icon: const Icon(Icons.check_circle_outline, size: 20),
-                                        color: Colors.green,
+                                        color: AppColors.success,
                                         padding: EdgeInsets.zero,
                                         constraints: const BoxConstraints(),
                                         tooltip: '完了',
@@ -2214,7 +2213,7 @@ class _PlusDashboardContentState extends State<PlusDashboardContent> {
                                       contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                                       isDense: true,
                                     ),
-                                    style: TextStyle(fontSize: 13),
+                                    style: TextStyle(fontSize: AppTextSize.body),
                                     onChanged: (_) => setDialogState(() {}),
                                   ),
                                 ),
@@ -2246,7 +2245,7 @@ InkWell(
           const SizedBox(width: 4),
           Text(
             DateFormat('M/d').format(newTaskDueDate!),
-            style: TextStyle(fontSize: 12),
+            style: TextStyle(fontSize: AppTextSize.small),
           ),
           const SizedBox(width: 4),
           GestureDetector(
@@ -2300,7 +2299,7 @@ InkWell(
                               children: [
                                 const Icon(Icons.psychology, size: 18, color: AppColors.primary),
                                 const SizedBox(width: 8),
-                                const Text('療育プラン', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                                const Text('療育プラン', style: TextStyle(fontWeight: FontWeight.bold, fontSize: AppTextSize.bodyMd)),
                               ],
                             ),
                             const SizedBox(height: 8),
@@ -2312,7 +2311,7 @@ InkWell(
                                 contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                                 isDense: true,
                               ),
-                              style: TextStyle(fontSize: 13),
+                              style: TextStyle(fontSize: AppTextSize.body),
                               maxLines: 3,
                               minLines: 2,
                             ),
@@ -2321,9 +2320,9 @@ InkWell(
                             // 園訪問
                             Row(
                               children: [
-                                const Icon(Icons.school, size: 18, color: Colors.teal),
+                                const Icon(Icons.school, size: 18, color: AppColors.secondary),
                                 const SizedBox(width: 8),
-                                const Text('園訪問', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                                const Text('園訪問', style: TextStyle(fontWeight: FontWeight.bold, fontSize: AppTextSize.bodyMd)),
                               ],
                             ),
                             const SizedBox(height: 8),
@@ -2335,7 +2334,7 @@ InkWell(
                                 contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                                 isDense: true,
                               ),
-                              style: TextStyle(fontSize: 13),
+                              style: TextStyle(fontSize: AppTextSize.body),
                               maxLines: 3,
                               minLines: 2,
                             ),
@@ -2344,9 +2343,9 @@ InkWell(
                             // 就学相談
                             Row(
                               children: [
-                                const Icon(Icons.psychology_alt, size: 18, color: Colors.indigo),
+                                const Icon(Icons.psychology_alt, size: 18, color: AppColors.secondary),
                                 const SizedBox(width: 8),
-                                const Text('就学相談', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                                const Text('就学相談', style: TextStyle(fontWeight: FontWeight.bold, fontSize: AppTextSize.bodyMd)),
                               ],
                             ),
                             const SizedBox(height: 8),
@@ -2358,7 +2357,7 @@ InkWell(
                                 contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                                 isDense: true,
                               ),
-                              style: TextStyle(fontSize: 13),
+                              style: TextStyle(fontSize: AppTextSize.body),
                               maxLines: 3,
                               minLines: 2,
                             ),
@@ -2367,9 +2366,9 @@ InkWell(
                             // 移動希望
                             Row(
                               children: [
-                                const Icon(Icons.swap_horiz, size: 18, color: Colors.purple),
+                                const Icon(Icons.swap_horiz, size: 18, color: AppColors.aiAccent),
                                 const SizedBox(width: 8),
-                                const Text('移動希望', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                                const Text('移動希望', style: TextStyle(fontWeight: FontWeight.bold, fontSize: AppTextSize.bodyMd)),
                               ],
                             ),
                             const SizedBox(height: 8),
@@ -2381,7 +2380,7 @@ InkWell(
                                 contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                                 isDense: true,
                               ),
-                              style: TextStyle(fontSize: 13),
+                              style: TextStyle(fontSize: AppTextSize.body),
                               maxLines: 3,
                               minLines: 2,
                             ),
@@ -2452,7 +2451,7 @@ InkWell(
                         ),
                         child: Text(
                           canSave ? '追加' : (inputMode == 'student' ? '生徒を選択してください' : 'タイトルを入力してください'),
-                          style: TextStyle(fontSize: 15),
+                          style: TextStyle(fontSize: AppTextSize.bodyLarge),
                         ),
                       ),
                     ),
@@ -2493,7 +2492,7 @@ void _showStudentSelectionDialog(Function(Map<String, dynamic>) onSelect) {
         return AlertDialog(
           backgroundColor: context.colors.cardBg,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          title: const Text('生徒を選択', style: TextStyle(fontSize: 18)),
+          title: const Text('生徒を選択', style: TextStyle(fontSize: AppTextSize.titleLg)),
           content: SizedBox(
             width: 350,
             height: 400,
@@ -2537,7 +2536,7 @@ void _showStudentSelectionDialog(Function(Map<String, dynamic>) onSelect) {
                                   child: Text(
                                     group,
                                     style: TextStyle(
-                                      fontSize: 13,
+                                      fontSize: AppTextSize.body,
                                       fontWeight: FontWeight.bold,
                                       color: context.colors.textSecondary,
                                     ),
@@ -2581,13 +2580,13 @@ void _showStudentSelectionDialog(Function(Map<String, dynamic>) onSelect) {
       builder: (dialogContext) => AlertDialog(
         backgroundColor: context.colors.cardBg,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        title: const Text('内容を選択', style: TextStyle(fontSize: 18)),
+        title: const Text('内容を選択', style: TextStyle(fontSize: AppTextSize.titleLg)),
         content: SizedBox(
           width: 300,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: _courseList.map((course) {
-              final color = _courseColors[course] ?? Colors.blue;
+              final color = _courseColors[course] ?? AppColors.info;
               return ListTile(
                 leading: Container(
                   width: 16,
@@ -2654,7 +2653,7 @@ void _showStudentSelectionDialog(Function(Map<String, dynamic>) onSelect) {
             studentTasks = _tasks.where((t) => t['studentName'] == studentName && t['completed'] != true).toList();
           }
           
-          final currentColor = _courseColors[selectedCourse] ?? Colors.blue;
+          final currentColor = _courseColors[selectedCourse] ?? AppColors.info;
           
           return Dialog(
             backgroundColor: context.colors.cardBg,
@@ -2708,7 +2707,7 @@ void _showStudentSelectionDialog(Function(Map<String, dynamic>) onSelect) {
                           child: Text(
                             studentName,
                             style: const TextStyle(
-                              fontSize: 22,
+                              fontSize: AppTextSize.display,
                               fontWeight: FontWeight.w400,
                             ),
                           ),
@@ -2730,7 +2729,7 @@ void _showStudentSelectionDialog(Function(Map<String, dynamic>) onSelect) {
                                 studentName: studentName,
                               ),
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.teal,
+                                backgroundColor: AppColors.secondary,
                                 foregroundColor: Colors.white,
                                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -2748,7 +2747,7 @@ void _showStudentSelectionDialog(Function(Map<String, dynamic>) onSelect) {
                     padding: const EdgeInsets.symmetric(horizontal: 20),
                     child: Text(
                       '$day曜日　$timeSlot',
-                      style: TextStyle(fontSize: 14, color: context.colors.textSecondary),
+                      style: TextStyle(fontSize: AppTextSize.bodyMd, color: context.colors.textSecondary),
                     ),
                   ),
                   const SizedBox(height: 16),
@@ -2782,7 +2781,7 @@ void _showStudentSelectionDialog(Function(Map<String, dynamic>) onSelect) {
                                     ),
                                   ),
                                   const SizedBox(width: 8),
-                                  Expanded(child: Text(selectedCourse, style: TextStyle(fontSize: 15))),
+                                  Expanded(child: Text(selectedCourse, style: TextStyle(fontSize: AppTextSize.bodyLarge))),
                                   Icon(Icons.arrow_drop_down, color: context.colors.textSecondary),
                                 ],
                               ),
@@ -2798,7 +2797,7 @@ void _showStudentSelectionDialog(Function(Map<String, dynamic>) onSelect) {
                             children: [
                               const Icon(Icons.task_alt, size: 18, color: AppColors.accent),
                               const SizedBox(width: 8),
-                              const Text('タスク', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                              const Text('タスク', style: TextStyle(fontWeight: FontWeight.bold, fontSize: AppTextSize.bodyMd)),
                             ],
                           ),
                           const SizedBox(height: 12),
@@ -2829,11 +2828,11 @@ void _showStudentSelectionDialog(Function(Map<String, dynamic>) onSelect) {
                                         crossAxisAlignment: CrossAxisAlignment.start,
                                         children: [
                                           Text(task['title'] ?? '',
-                                              style: TextStyle(fontSize: 13, color: context.colors.textPrimary)),
+                                              style: TextStyle(fontSize: AppTextSize.body, color: context.colors.textPrimary)),
                                           if (task['dueDate'] != null)
                                             Text(
                                               '期限: ${DateFormat('M/d').format((task['dueDate'] as Timestamp).toDate())}',
-                                              style: TextStyle(fontSize: 11, color: context.colors.textSecondary),
+                                              style: TextStyle(fontSize: AppTextSize.caption, color: context.colors.textSecondary),
                                             ),
                                         ],
                                       ),
@@ -2846,7 +2845,7 @@ void _showStudentSelectionDialog(Function(Map<String, dynamic>) onSelect) {
                                         });
                                       },
                                       icon: const Icon(Icons.check_circle_outline, size: 20),
-                                      color: Colors.green,
+                                      color: AppColors.success,
                                       padding: EdgeInsets.zero,
                                       constraints: const BoxConstraints(),
                                       tooltip: '完了',
@@ -2869,7 +2868,7 @@ void _showStudentSelectionDialog(Function(Map<String, dynamic>) onSelect) {
                                     contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                                     isDense: true,
                                   ),
-                                  style: TextStyle(fontSize: 13),
+                                  style: TextStyle(fontSize: AppTextSize.body),
                                   onChanged: (_) => setDialogState(() {}),
                                 ),
                               ),
@@ -2901,7 +2900,7 @@ InkWell(
           const SizedBox(width: 4),
           Text(
             DateFormat('M/d').format(newTaskDueDate!),
-            style: TextStyle(fontSize: 12),
+            style: TextStyle(fontSize: AppTextSize.small),
           ),
           const SizedBox(width: 4),
           GestureDetector(
@@ -2956,7 +2955,7 @@ InkWell(
                             children: [
                               const Icon(Icons.psychology, size: 18, color: AppColors.primary),
                               const SizedBox(width: 8),
-                              const Text('療育プラン', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                              const Text('療育プラン', style: TextStyle(fontWeight: FontWeight.bold, fontSize: AppTextSize.bodyMd)),
                             ],
                           ),
                           const SizedBox(height: 8),
@@ -2968,7 +2967,7 @@ InkWell(
                               contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                               isDense: true,
                             ),
-                            style: TextStyle(fontSize: 13),
+                            style: TextStyle(fontSize: AppTextSize.body),
                             maxLines: 3,
                             minLines: 2,
                           ),
@@ -2977,9 +2976,9 @@ InkWell(
                           // 園訪問
                           Row(
                             children: [
-                              const Icon(Icons.school, size: 18, color: Colors.teal),
+                              const Icon(Icons.school, size: 18, color: AppColors.secondary),
                               const SizedBox(width: 8),
-                              const Text('園訪問', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                              const Text('園訪問', style: TextStyle(fontWeight: FontWeight.bold, fontSize: AppTextSize.bodyMd)),
                             ],
                           ),
                           const SizedBox(height: 8),
@@ -2991,7 +2990,7 @@ InkWell(
                               contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                               isDense: true,
                             ),
-                            style: TextStyle(fontSize: 13),
+                            style: TextStyle(fontSize: AppTextSize.body),
                             maxLines: 3,
                             minLines: 2,
                           ),
@@ -3000,9 +2999,9 @@ InkWell(
                           // 就学相談
                           Row(
                             children: [
-                              const Icon(Icons.psychology_alt, size: 18, color: Colors.indigo),
+                              const Icon(Icons.psychology_alt, size: 18, color: AppColors.secondary),
                               const SizedBox(width: 8),
-                              const Text('就学相談', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                              const Text('就学相談', style: TextStyle(fontWeight: FontWeight.bold, fontSize: AppTextSize.bodyMd)),
                             ],
                           ),
                           const SizedBox(height: 8),
@@ -3014,7 +3013,7 @@ InkWell(
                               contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                               isDense: true,
                             ),
-                            style: TextStyle(fontSize: 13),
+                            style: TextStyle(fontSize: AppTextSize.body),
                             maxLines: 3,
                             minLines: 2,
                           ),
@@ -3023,9 +3022,9 @@ InkWell(
                           // 移動希望
                           Row(
                             children: [
-                              const Icon(Icons.swap_horiz, size: 18, color: Colors.purple),
+                              const Icon(Icons.swap_horiz, size: 18, color: AppColors.aiAccent),
                               const SizedBox(width: 8),
-                              const Text('移動希望', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                              const Text('移動希望', style: TextStyle(fontWeight: FontWeight.bold, fontSize: AppTextSize.bodyMd)),
                             ],
                           ),
                           const SizedBox(height: 8),
@@ -3037,7 +3036,7 @@ InkWell(
                               contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                               isDense: true,
                             ),
-                            style: TextStyle(fontSize: 13),
+                            style: TextStyle(fontSize: AppTextSize.body),
                             maxLines: 3,
                             minLines: 2,
                           ),
@@ -3164,13 +3163,13 @@ InkWell(
       builder: (context) => AlertDialog(
         backgroundColor: context.colors.cardBg,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        title: const Text('内容を選択', style: TextStyle(fontSize: 18)),
+        title: const Text('内容を選択', style: TextStyle(fontSize: AppTextSize.titleLg)),
         content: SizedBox(
           width: 300,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: _courseList.map((course) {
-              final color = _courseColors[course] ?? Colors.blue;
+              final color = _courseColors[course] ?? AppColors.info;
               return ListTile(
                 leading: Container(
                   width: 16,

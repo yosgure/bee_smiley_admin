@@ -81,7 +81,7 @@ extension PlusScheduleSideMenu on _PlusScheduleContentState {
               Text(
                 '$year年 $month月',
                 style: const TextStyle(
-                  fontSize: 16,
+                  fontSize: AppTextSize.titleSm,
                   fontWeight: FontWeight.w500,
                 ),
               ),
@@ -122,7 +122,7 @@ extension PlusScheduleSideMenu on _PlusScheduleContentState {
                   child: Text(
                     day,
                     style: TextStyle(
-                      fontSize: 12,
+                      fontSize: AppTextSize.small,
                       color: isSunday
                           ? _kSundayLabelColor
                           : (isSaturday ? _kSaturdayLabelColor : context.colors.textSecondary),
@@ -179,7 +179,7 @@ extension PlusScheduleSideMenu on _PlusScheduleContentState {
                             child: Text(
                               '$dayNumber',
                               style: TextStyle(
-                                fontSize: 13,
+                                fontSize: AppTextSize.body,
                                 color: isToday
                                     ? Colors.white
                                     : (isSunday
@@ -275,7 +275,7 @@ extension PlusScheduleSideMenu on _PlusScheduleContentState {
               child: Text(
                 label,
                 style: TextStyle(
-                  fontSize: 14,
+                  fontSize: AppTextSize.bodyMd,
                   fontWeight: isSpecial ? FontWeight.w500 : FontWeight.normal,
                 ),
               ),

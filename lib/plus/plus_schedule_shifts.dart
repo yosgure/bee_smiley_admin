@@ -97,7 +97,7 @@ extension PlusScheduleShifts on _PlusScheduleContentState {
               children: [
                 Icon(Icons.settings, color: AppColors.primary),
                 SizedBox(width: 8),
-                Text('スケジュール管理', style: TextStyle(fontSize: 18)),
+                Text('スケジュール管理', style: TextStyle(fontSize: AppTextSize.titleLg)),
               ],
             ),
             content: SizedBox(
@@ -122,14 +122,14 @@ extension PlusScheduleShifts on _PlusScheduleContentState {
                             SizedBox(width: 8),
                             Text(
                               '週単位コピー',
-                              style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                              style: TextStyle(fontSize: AppTextSize.bodyLarge, fontWeight: FontWeight.bold),
                             ),
                           ],
                         ),
                         const SizedBox(height: 12),
                         Text(
                           '現在の週: $weekLabel',
-                          style: const TextStyle(fontSize: 14),
+                          style: const TextStyle(fontSize: AppTextSize.bodyMd),
                         ),
                         const SizedBox(height: 12),
                         SizedBox(
@@ -151,7 +151,7 @@ extension PlusScheduleShifts on _PlusScheduleContentState {
                         const SizedBox(height: 8),
                         Text(
                           '※先週のシフトとレッスンを今週にコピーします',
-                          style: TextStyle(fontSize: 12, color: context.colors.textSecondary),
+                          style: TextStyle(fontSize: AppTextSize.small, color: context.colors.textSecondary),
                         ),
                       ],
                     ),
@@ -173,14 +173,14 @@ extension PlusScheduleShifts on _PlusScheduleContentState {
                             SizedBox(width: 8),
                             Text(
                               '月単位コピー',
-                              style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                              style: TextStyle(fontSize: AppTextSize.bodyLarge, fontWeight: FontWeight.bold),
                             ),
                           ],
                         ),
                         const SizedBox(height: 12),
                         Text(
                           '現在の月: ${DateFormat('yyyy年M月', 'ja').format(_weekStart)}',
-                          style: const TextStyle(fontSize: 14),
+                          style: const TextStyle(fontSize: AppTextSize.bodyMd),
                         ),
                         const SizedBox(height: 12),
                         SizedBox(
@@ -200,7 +200,7 @@ extension PlusScheduleShifts on _PlusScheduleContentState {
                         const SizedBox(height: 8),
                         Text(
                           '※前月のシフトデータを今月にコピーします',
-                          style: TextStyle(fontSize: 11, color: context.colors.textSecondary),
+                          style: TextStyle(fontSize: AppTextSize.caption, color: context.colors.textSecondary),
                         ),
                       ],
                     ),
@@ -222,14 +222,14 @@ extension PlusScheduleShifts on _PlusScheduleContentState {
                             const SizedBox(width: 8),
                             const Text(
                               'シフト希望の取り込み',
-                              style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                              style: TextStyle(fontSize: AppTextSize.bodyLarge, fontWeight: FontWeight.bold),
                             ),
                           ],
                         ),
                         const SizedBox(height: 12),
                         Text(
                           '対象月: ${DateFormat('yyyy年M月', 'ja').format(_weekStart)}',
-                          style: const TextStyle(fontSize: 14),
+                          style: const TextStyle(fontSize: AppTextSize.bodyMd),
                         ),
                         const SizedBox(height: 6),
                         FutureBuilder<DocumentSnapshot>(
@@ -240,7 +240,7 @@ extension PlusScheduleShifts on _PlusScheduleContentState {
                           builder: (context, snapshot) {
                             if (snapshot.connectionState == ConnectionState.waiting) {
                               return Text('提出状況を確認中...',
-                                  style: TextStyle(fontSize: 12, color: context.colors.textSecondary));
+                                  style: TextStyle(fontSize: AppTextSize.small, color: context.colors.textSecondary));
                             }
                             int count = 0;
                             if (snapshot.hasData && snapshot.data!.exists) {
@@ -253,7 +253,7 @@ extension PlusScheduleShifts on _PlusScheduleContentState {
                             return Text(
                               '$count人が提出済み',
                               style: TextStyle(
-                                  fontSize: 12,
+                                  fontSize: AppTextSize.small,
                                   color: count > 0 ? const Color(0xFF2E7D32) : context.colors.textSecondary,
                                   fontWeight: count > 0 ? FontWeight.bold : FontWeight.normal),
                             );
@@ -286,7 +286,7 @@ extension PlusScheduleShifts on _PlusScheduleContentState {
                         const SizedBox(height: 8),
                         Text(
                           '※希望をカレンダー上で確認しながら決定し、そのまま実シフトに反映できます',
-                          style: TextStyle(fontSize: 11, color: context.colors.textSecondary),
+                          style: TextStyle(fontSize: AppTextSize.caption, color: context.colors.textSecondary),
                         ),
                       ],
                     ),

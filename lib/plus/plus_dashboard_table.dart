@@ -72,7 +72,7 @@ extension PlusDashboardTable on _PlusDashboardContentState {
                 _timeSlots[index],
                 style: TextStyle(
                   color: context.colors.textSecondary,
-                  fontSize: 12,
+                  fontSize: AppTextSize.small,
                 ),
               ),
             ),
@@ -118,7 +118,7 @@ extension PlusDashboardTable on _PlusDashboardContentState {
                   day,
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
-                    fontSize: 14,
+                    fontSize: AppTextSize.bodyMd,
                     color: isSaturday ? AppColors.primary : context.colors.textPrimary,
                   ),
                 ),
@@ -205,7 +205,7 @@ extension PlusDashboardTable on _PlusDashboardContentState {
                   name,
                   style: TextStyle(
                     color: textColor,
-                    fontSize: 14,
+                    fontSize: AppTextSize.bodyMd,
                     fontWeight: FontWeight.w500,
                   ),
                   overflow: TextOverflow.ellipsis,
@@ -216,7 +216,7 @@ extension PlusDashboardTable on _PlusDashboardContentState {
                   courseInitial,
                   style: TextStyle(
                     color: textColor,
-                    fontSize: 12,
+                    fontSize: AppTextSize.small,
                   ),
                 ),
             ],
@@ -262,39 +262,39 @@ extension PlusDashboardTable on _PlusDashboardContentState {
 
       final widgets = <Widget>[];
       if (therapyPlan.isNotEmpty) {
-        widgets.add(const Text('【療育プラン】', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)));
-        widgets.add(Text(therapyPlan, style: TextStyle(fontSize: 12)));
+        widgets.add(const Text('【療育プラン】', style: TextStyle(fontWeight: FontWeight.bold, fontSize: AppTextSize.small)));
+        widgets.add(Text(therapyPlan, style: TextStyle(fontSize: AppTextSize.small)));
         widgets.add(const SizedBox(height: 8));
       }
       if (schoolVisit.isNotEmpty) {
-        widgets.add(const Text('【園訪問】', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)));
-        widgets.add(Text(schoolVisit, style: TextStyle(fontSize: 12)));
+        widgets.add(const Text('【園訪問】', style: TextStyle(fontWeight: FontWeight.bold, fontSize: AppTextSize.small)));
+        widgets.add(Text(schoolVisit, style: TextStyle(fontSize: AppTextSize.small)));
         widgets.add(const SizedBox(height: 8));
       }
       if (schoolConsultation.isNotEmpty) {
-        widgets.add(const Text('【就学相談】', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)));
-        widgets.add(Text(schoolConsultation, style: TextStyle(fontSize: 12)));
+        widgets.add(const Text('【就学相談】', style: TextStyle(fontWeight: FontWeight.bold, fontSize: AppTextSize.small)));
+        widgets.add(Text(schoolConsultation, style: TextStyle(fontSize: AppTextSize.small)));
         widgets.add(const SizedBox(height: 8));
       }
       if (moveRequest.isNotEmpty) {
-        widgets.add(const Text('【移動希望】', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)));
-        widgets.add(Text(moveRequest, style: TextStyle(fontSize: 12)));
+        widgets.add(const Text('【移動希望】', style: TextStyle(fontWeight: FontWeight.bold, fontSize: AppTextSize.small)));
+        widgets.add(Text(moveRequest, style: TextStyle(fontSize: AppTextSize.small)));
         widgets.add(const SizedBox(height: 8));
       }
       final studentTasks = _tasks.where((t) => t['studentName'] == name && t['completed'] != true).toList();
       if (studentTasks.isNotEmpty) {
-        widgets.add(const Text('【タスク】', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)));
+        widgets.add(const Text('【タスク】', style: TextStyle(fontWeight: FontWeight.bold, fontSize: AppTextSize.small)));
         for (var task in studentTasks) {
           final title = task['title'] as String? ?? '';
           final dueDate = task['dueDate'] as Timestamp?;
           final dueDateStr = dueDate != null ? ' (${DateFormat('M/d').format(dueDate.toDate())})' : '';
-          widgets.add(Text('・$title$dueDateStr', style: TextStyle(fontSize: 12)));
+          widgets.add(Text('・$title$dueDateStr', style: TextStyle(fontSize: AppTextSize.small)));
         }
         widgets.add(const SizedBox(height: 8));
       }
       if (scheduleNote.isNotEmpty) {
-        widgets.add(const Text('【メモ】', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)));
-        widgets.add(Text(scheduleNote, style: TextStyle(fontSize: 12)));
+        widgets.add(const Text('【メモ】', style: TextStyle(fontWeight: FontWeight.bold, fontSize: AppTextSize.small)));
+        widgets.add(Text(scheduleNote, style: TextStyle(fontSize: AppTextSize.small)));
       }
       if (widgets.isNotEmpty && widgets.last is SizedBox) {
         widgets.removeLast();
@@ -366,7 +366,7 @@ extension PlusDashboardTable on _PlusDashboardContentState {
               child: Text(
                 '計',
                 style: TextStyle(
-                  fontSize: 12,
+                  fontSize: AppTextSize.small,
                 ),
               ),
             ),
@@ -382,7 +382,7 @@ extension PlusDashboardTable on _PlusDashboardContentState {
                 child: Text(
                   '$count',
                   style: const TextStyle(
-                    fontSize: 13,
+                    fontSize: AppTextSize.body,
                   ),
                 ),
               ),

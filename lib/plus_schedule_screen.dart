@@ -5,6 +5,7 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'app_theme.dart';
+import 'widgets/app_feedback.dart';
 import 'plus_dashboard_screen.dart';
 import 'classroom_utils.dart';
 import 'plus_shift_request_dialog.dart';
@@ -91,19 +92,19 @@ class _PlusScheduleContentState extends State<PlusScheduleContent> with Automati
 
   // コース（内容）の定義と色（カスタマイズ可能）
   static const Map<String, Color> _defaultCourseColors = {
-    '通常': Colors.blue,
-    'モンテッソーリ': Colors.lightBlue,
-    '感覚統合': Colors.teal,
-    '言語': Colors.purple,
-    '就学支援': Colors.indigo,
-    '放デイ': Colors.amber,
+    '通常': AppColors.info,
+    'モンテッソーリ': AppColors.info,
+    '感覚統合': AppColors.secondary,
+    '言語': AppColors.aiAccent,
+    '就学支援': AppColors.secondary,
+    '放デイ': AppColors.primary,
     '契約': AppColors.accent,
-    '体験': Colors.green,
-    '欠席': Colors.red, // 旧データ互換用
-    '欠席（加算あり）': Colors.red,
-    '欠席（加算なし）': Colors.red,
-    '欠席（HUG登録なし）': Colors.red,
-    '策定会議': Colors.deepPurple,
+    '体験': AppColors.success,
+    '欠席': AppColors.error, // 旧データ互換用
+    '欠席（加算あり）': AppColors.error,
+    '欠席（加算なし）': AppColors.error,
+    '欠席（HUG登録なし）': AppColors.error,
+    '策定会議': AppColors.aiAccent,
   };
 
   // カスタマイズ可能なコース色
@@ -127,11 +128,11 @@ class _PlusScheduleContentState extends State<PlusScheduleContent> with Automati
   
   // カラーパレット（選択可能な色）
   static const List<Color> _colorPalette = [
-    Colors.blue, Colors.lightBlue, Colors.cyan, Colors.teal,
-    Colors.green, Colors.lightGreen, Colors.lime, Colors.yellow,
-    Colors.amber, Colors.orange, Colors.deepOrange, Colors.red,
-    Colors.pink, Colors.purple, Colors.deepPurple, Colors.indigo,
-    Colors.brown, Colors.grey, Colors.blueGrey,
+    AppColors.info, AppColors.info, AppColors.info, AppColors.secondary,
+    AppColors.success, AppColors.success, AppColors.warning, AppColors.warning,
+    AppColors.primary, AppColors.warning, AppColors.warning, AppColors.error,
+    AppColors.aiAccent, AppColors.aiAccent, AppColors.aiAccent, AppColors.secondary,
+    AppColors.secondary, Color(0xFF9E9E9E), Color(0xFF607D8B),
   ];
 
   // ホバー中の生徒名（同じ生徒の他コマをハイライト）
@@ -585,7 +586,7 @@ Map<String, dynamic>? _getCellMemo(DateTime date, int slotIndex) {
           SnackBar(
             content: Text('タスクの追加に失敗しました: $e'),
             duration: const Duration(seconds: 3),
-            backgroundColor: Colors.red,
+            backgroundColor: AppColors.error,
           ),
         );
       }
@@ -649,7 +650,7 @@ Map<String, dynamic>? _getCellMemo(DateTime date, int slotIndex) {
                       children: [
                         Icon(Icons.edit_note, color: AppColors.primary, size: 22),
                         const SizedBox(width: 10),
-                        const Text('タスクを編集', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                        const Text('タスクを編集', style: TextStyle(fontSize: AppTextSize.titleSm, fontWeight: FontWeight.w600)),
                         const Spacer(),
                         IconButton(
                           onPressed: () => Navigator.pop(dialogContext),
@@ -676,13 +677,13 @@ Map<String, dynamic>? _getCellMemo(DateTime date, int slotIndex) {
                                 const SizedBox(width: 6),
                                 Text(
                                   task['studentName'] as String,
-                                  style: TextStyle(fontSize: 13, color: context.colors.textSecondary),
+                                  style: TextStyle(fontSize: AppTextSize.body, color: context.colors.textSecondary),
                                 ),
                               ],
                             ),
                           ),
                         // タスク内容
-                        Text('内容', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: context.colors.textSecondary)),
+                        Text('内容', style: TextStyle(fontSize: AppTextSize.small, fontWeight: FontWeight.w600, color: context.colors.textSecondary)),
                         const SizedBox(height: 6),
                         TextField(
                           controller: titleController,
@@ -707,11 +708,11 @@ Map<String, dynamic>? _getCellMemo(DateTime date, int slotIndex) {
                             ),
                             contentPadding: const EdgeInsets.all(14),
                           ),
-                          style: const TextStyle(fontSize: 14, height: 1.5),
+                          style: const TextStyle(fontSize: AppTextSize.bodyMd, height: 1.5),
                         ),
                         const SizedBox(height: 20),
                         // 期限日
-                        Text('期限日', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: context.colors.textSecondary)),
+                        Text('期限日', style: TextStyle(fontSize: AppTextSize.small, fontWeight: FontWeight.w600, color: context.colors.textSecondary)),
                         const SizedBox(height: 6),
                         InkWell(
                           borderRadius: BorderRadius.circular(10),
@@ -740,7 +741,7 @@ Map<String, dynamic>? _getCellMemo(DateTime date, int slotIndex) {
                                 Text(
                                   dueDate != null ? DateFormat('yyyy年M月d日').format(dueDate!) : '期限を設定...',
                                   style: TextStyle(
-                                    fontSize: 14,
+                                    fontSize: AppTextSize.bodyMd,
                                     color: dueDate != null ? context.colors.textPrimary : context.colors.textHint,
                                   ),
                                 ),
@@ -779,7 +780,7 @@ Map<String, dynamic>? _getCellMemo(DateTime date, int slotIndex) {
                                   ),
                                   TextButton(
                                     onPressed: () => Navigator.pop(ctx, true),
-                                    child: const Text('削除', style: TextStyle(color: Colors.red)),
+                                    child: const Text('削除', style: TextStyle(color: AppColors.error)),
                                   ),
                                 ],
                               ),
@@ -793,7 +794,7 @@ Map<String, dynamic>? _getCellMemo(DateTime date, int slotIndex) {
                           icon: const Icon(Icons.delete_outline, size: 18),
                           label: const Text('削除'),
                           style: TextButton.styleFrom(
-                            foregroundColor: Colors.red.shade400,
+                            foregroundColor: AppColors.errorBorder,
                           ),
                         ),
                         const Spacer(),
@@ -1533,7 +1534,7 @@ void _goToPage(int page) {
               'スケジュール',
               style: TextStyle(
                 color: context.colors.textPrimary,
-                fontSize: 20,
+                fontSize: AppTextSize.xl,
                 fontWeight: FontWeight.w500,
               ),
             ),
@@ -1565,7 +1566,7 @@ void _goToPage(int page) {
               _formatWeekRange(),
               style: TextStyle(
                 color: context.colors.textPrimary,
-                fontSize: 20,
+                fontSize: AppTextSize.xl,
                 fontWeight: FontWeight.w500,
               ),
             ),
@@ -1582,7 +1583,7 @@ void _goToPage(int page) {
               'スケジュール',
               style: TextStyle(
                 color: context.colors.textPrimary,
-                fontSize: 20,
+                fontSize: AppTextSize.xl,
                 fontWeight: FontWeight.w500,
               ),
             ),
@@ -1614,7 +1615,7 @@ void _goToPage(int page) {
               DateFormat('yyyy年 M月', 'ja').format(_monthViewDate),
               style: TextStyle(
                 color: context.colors.textPrimary,
-                fontSize: 20,
+                fontSize: AppTextSize.xl,
                 fontWeight: FontWeight.w500,
               ),
             ),
@@ -1626,7 +1627,7 @@ void _goToPage(int page) {
               'ダッシュボード',
               style: TextStyle(
                 color: context.colors.textPrimary,
-                fontSize: 20,
+                fontSize: AppTextSize.xl,
                 fontWeight: FontWeight.w500,
               ),
             ),
@@ -1653,7 +1654,7 @@ void _goToPage(int page) {
                     minimumSize: WidgetStateProperty.all(Size.zero),
                     tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                   ),
-                  child: const Text('集計', style: TextStyle(fontSize: 13)),
+                  child: const Text('集計', style: TextStyle(fontSize: AppTextSize.body)),
                 ),
               ),
             ),
@@ -1714,7 +1715,7 @@ void _goToPage(int page) {
                     width: 8,
                     height: 8,
                     decoration: BoxDecoration(
-                      color: daysLeft < 0 ? Colors.red.shade700 : Colors.red.shade400,
+                      color: daysLeft < 0 ? AppColors.error : AppColors.errorBorder,
                       shape: BoxShape.circle,
                       border: Border.all(color: context.colors.scaffoldBg, width: 1.5),
                     ),
@@ -1760,7 +1761,7 @@ void _goToPage(int page) {
                       width: 8,
                       height: 8,
                       decoration: BoxDecoration(
-                        color: daysLeft < 0 ? Colors.red.shade700 : Colors.red.shade400,
+                        color: daysLeft < 0 ? AppColors.error : AppColors.errorBorder,
                         shape: BoxShape.circle,
                         border: Border.all(color: context.colors.scaffoldBg, width: 1.5),
                       ),
@@ -1886,9 +1887,7 @@ void _goToPage(int page) {
         break;
       case 'training':
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('法定研修のリンクは未設定です。')),
-          );
+          AppFeedback.info(context, '法定研修のリンクは未設定です。');
         }
         break;
     }
@@ -1912,12 +1911,12 @@ void _goToPage(int page) {
               const SizedBox(width: 12),
               Expanded(
                 child: Text(label,
-                    style: TextStyle(fontSize: 13, color: c.textPrimary, fontWeight: FontWeight.w500)),
+                    style: TextStyle(fontSize: AppTextSize.body, color: c.textPrimary, fontWeight: FontWeight.w500)),
               ),
               if (trailing != null)
                 Text(trailing,
                     style: TextStyle(
-                        fontSize: 11, color: trailingColor ?? c.textTertiary, fontWeight: FontWeight.w500)),
+                        fontSize: AppTextSize.caption, color: trailingColor ?? c.textTertiary, fontWeight: FontWeight.w500)),
             ],
           ),
         ),
@@ -1950,7 +1949,7 @@ void _goToPage(int page) {
               Icons.how_to_vote_outlined,
               'シフト希望',
               trailing: daysLeft < 0 ? '超過${-daysLeft}日' : 'あと$daysLeft日',
-              trailingColor: needsAttention ? Colors.red.shade400 : null,
+              trailingColor: needsAttention ? AppColors.errorBorder : null,
             ),
             menuItem('shift_decision', Icons.event_available_outlined, 'シフト決定'),
             Padding(
@@ -2017,9 +2016,9 @@ void _goToPage(int page) {
           height: 28,
           padding: const EdgeInsets.symmetric(horizontal: 10),
           decoration: BoxDecoration(
-            color: context.isDark ? Colors.pink.shade900.withOpacity(0.3) : Colors.pink.shade50.withOpacity(0.5),
+            color: context.isDark ? AppColors.aiAccent.withOpacity(0.3) : AppColors.aiAccentBg.withOpacity(0.5),
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: context.isDark ? Colors.pink.shade800.withOpacity(0.3) : Colors.pink.shade50),
+            border: Border.all(color: context.isDark ? AppColors.aiAccent.withOpacity(0.3) : AppColors.aiAccentBg),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
@@ -2028,7 +2027,7 @@ void _goToPage(int page) {
                 child: Text(
                   label,
                   style: TextStyle(
-                    fontSize: 12,
+                    fontSize: AppTextSize.small,
                     color: context.colors.textPrimary,
                     fontWeight: FontWeight.w500,
                   ),
@@ -2386,7 +2385,7 @@ void _goToPage(int page) {
                   children: [
                     Text(
                       '3/31〜累計  一番入っている人を基準(0)とした相対不足',
-                      style: TextStyle(fontSize: 12, color: context.colors.textSecondary),
+                      style: TextStyle(fontSize: AppTextSize.small, color: context.colors.textSecondary),
                     ),
                     const SizedBox(height: 12),
                     // トグル: 不足(現在) / 不足(予定込)
@@ -2411,7 +2410,7 @@ void _goToPage(int page) {
                                   '現在',
                                   textAlign: TextAlign.center,
                                   style: TextStyle(
-                                    fontSize: 13,
+                                    fontSize: AppTextSize.body,
                                     fontWeight: FontWeight.bold,
                                     color: !showWithFuture ? Colors.white : context.colors.textSecondary,
                                   ),
@@ -2432,7 +2431,7 @@ void _goToPage(int page) {
                                   '予定',
                                   textAlign: TextAlign.center,
                                   style: TextStyle(
-                                    fontSize: 13,
+                                    fontSize: AppTextSize.body,
                                     fontWeight: FontWeight.bold,
                                     color: showWithFuture ? Colors.white : context.colors.textSecondary,
                                   ),
@@ -2453,11 +2452,11 @@ void _goToPage(int page) {
                       ),
                       child: Row(
                         children: [
-                          const Expanded(flex: 3, child: Text('スタッフ', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13))),
-                          Expanded(flex: 2, child: Text(showWithFuture ? '実績+予定' : '実績', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13), textAlign: TextAlign.center)),
-                          const Expanded(flex: 2, child: Text('目標', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13), textAlign: TextAlign.center)),
-                          const Expanded(flex: 2, child: Text('差分', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13), textAlign: TextAlign.center)),
-                          const Expanded(flex: 2, child: Text('相対', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13), textAlign: TextAlign.center)),
+                          const Expanded(flex: 3, child: Text('スタッフ', style: TextStyle(fontWeight: FontWeight.bold, fontSize: AppTextSize.body))),
+                          Expanded(flex: 2, child: Text(showWithFuture ? '実績+予定' : '実績', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: AppTextSize.body), textAlign: TextAlign.center)),
+                          const Expanded(flex: 2, child: Text('目標', style: TextStyle(fontWeight: FontWeight.bold, fontSize: AppTextSize.body), textAlign: TextAlign.center)),
+                          const Expanded(flex: 2, child: Text('差分', style: TextStyle(fontWeight: FontWeight.bold, fontSize: AppTextSize.body), textAlign: TextAlign.center)),
+                          const Expanded(flex: 2, child: Text('相対', style: TextStyle(fontWeight: FontWeight.bold, fontSize: AppTextSize.body), textAlign: TextAlign.center)),
                         ],
                       ),
                     ),
@@ -2491,7 +2490,7 @@ void _goToPage(int page) {
                               flex: 3,
                               child: Row(
                                 children: [
-                                  Text(lastName, style: const TextStyle(fontSize: 14)),
+                                  Text(lastName, style: const TextStyle(fontSize: AppTextSize.bodyMd)),
                                   const SizedBox(width: 4),
                                   GestureDetector(
                                     onTap: () {
@@ -2531,7 +2530,7 @@ void _goToPage(int page) {
                                     },
                                     child: Text(
                                       '(${slotTarget}/日)',
-                                      style: TextStyle(fontSize: 11, color: context.colors.textTertiary),
+                                      style: TextStyle(fontSize: AppTextSize.caption, color: context.colors.textTertiary),
                                     ),
                                   ),
                                 ],
@@ -2541,7 +2540,7 @@ void _goToPage(int page) {
                               flex: 2,
                               child: Text(
                                 '$displayActual',
-                                style: const TextStyle(fontSize: 14),
+                                style: const TextStyle(fontSize: AppTextSize.bodyMd),
                                 textAlign: TextAlign.center,
                               ),
                             ),
@@ -2549,7 +2548,7 @@ void _goToPage(int page) {
                               flex: 2,
                               child: Text(
                                 '$displayTarget',
-                                style: const TextStyle(fontSize: 14),
+                                style: const TextStyle(fontSize: AppTextSize.bodyMd),
                                 textAlign: TextAlign.center,
                               ),
                             ),
@@ -2558,7 +2557,7 @@ void _goToPage(int page) {
                               child: Text(
                                 rawDiff <= 0 ? '0' : '$rawDiff',
                                 style: TextStyle(
-                                  fontSize: 14,
+                                  fontSize: AppTextSize.bodyMd,
                                   color: rawDiff <= 0 ? context.colors.textTertiary : context.colors.textSecondary,
                                 ),
                                 textAlign: TextAlign.center,
@@ -2569,11 +2568,11 @@ void _goToPage(int page) {
                               child: Text(
                                 displayShortage <= 0 ? '0' : '$displayShortage',
                                 style: TextStyle(
-                                  fontSize: 14,
+                                  fontSize: AppTextSize.bodyMd,
                                   fontWeight: FontWeight.bold,
                                   color: displayShortage <= 0
                                       ? context.colors.textTertiary
-                                      : showWithFuture ? Colors.orange.shade700 : Colors.red,
+                                      : showWithFuture ? AppColors.warning : AppColors.error,
                                 ),
                                 textAlign: TextAlign.center,
                               ),
@@ -2627,8 +2626,8 @@ void _goToPage(int page) {
                   Text(
                     days[index],
                     style: TextStyle(
-                      color: isSaturday ? Colors.blue : context.colors.textSecondary,
-                      fontSize: 11,
+                      color: isSaturday ? AppColors.info : context.colors.textSecondary,
+                      fontSize: AppTextSize.caption,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
@@ -2651,8 +2650,8 @@ void _goToPage(int page) {
                             child: Text(
                               '${date.day}',
                               style: TextStyle(
-                                color: isToday ? Colors.white : (isSaturday ? Colors.blue : context.colors.textPrimary),
-                                fontSize: 22,
+                                color: isToday ? Colors.white : (isSaturday ? AppColors.info : context.colors.textPrimary),
+                                fontSize: AppTextSize.display,
                                 fontWeight: FontWeight.w400,
                               ),
                             ),
@@ -2741,7 +2740,7 @@ void _goToPage(int page) {
               _timeSlots[index],
               style: TextStyle(
                 color: context.colors.textSecondary,
-                fontSize: 11,
+                fontSize: AppTextSize.caption,
               ),
             ),
           );
@@ -2925,13 +2924,13 @@ Widget _buildCellMemoIcon(DateTime date, int slotIndex, Map<String, dynamic> mem
                 children: [
                   Text(
                     memo['title'] ?? '',
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: context.colors.textPrimary),
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: AppTextSize.body, color: context.colors.textPrimary),
                   ),
                   if ((memo['comment'] ?? '').toString().isNotEmpty) ...[
                     const SizedBox(height: 4),
                     Text(
                       memo['comment'] ?? '',
-                      style: TextStyle(fontSize: 12, color: context.colors.textSecondary),
+                      style: TextStyle(fontSize: AppTextSize.small, color: context.colors.textSecondary),
                     ),
                   ],
                 ],
@@ -2979,10 +2978,10 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
         children: [
           Icon(Icons.info_outline, color: context.colors.textSecondary, size: 22),
           const SizedBox(width: 8),
-          const Text('コマメモを編集', style: TextStyle(fontSize: 18)),
+          const Text('コマメモを編集', style: TextStyle(fontSize: AppTextSize.titleLg)),
           const Spacer(),
           IconButton(
-            icon: const Icon(Icons.delete_outline, color: Colors.red, size: 20),
+            icon: const Icon(Icons.delete_outline, color: AppColors.error, size: 20),
             tooltip: '削除',
             onPressed: () async {
               final confirm = await showDialog<bool>(
@@ -2993,7 +2992,7 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
                   content: const Text('このメモを削除しますか？'),
                   actions: [
                     TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('キャンセル')),
-                    TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('削除', style: TextStyle(color: Colors.red))),
+                    TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('削除', style: TextStyle(color: AppColors.error))),
                   ],
                 ),
               );
@@ -3037,7 +3036,7 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
           children: [
             Text(
               '${DateFormat('M月d日 (E)', 'ja').format(date)} ${_timeSlots[slotIndex]}',
-              style: TextStyle(fontSize: 14, color: context.colors.textSecondary),
+              style: TextStyle(fontSize: AppTextSize.bodyMd, color: context.colors.textSecondary),
             ),
             const SizedBox(height: 16),
             TextField(
@@ -3182,16 +3181,14 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
       // エラー時はデータを再読み込み
       await _loadLessonsForWeek();
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('移動に失敗しました: $e')),
-        );
+        AppFeedback.info(context, '移動に失敗しました: $e');
       }
     }
   }
 
   Widget _buildLessonItem(Map<String, dynamic> lesson, {BuildContext? cellContext}) {
     final course = lesson['course'] as String? ?? '通常';
-    final color = _courseColors[course] ?? Colors.blue;
+    final color = _courseColors[course] ?? AppColors.info;
     final teachers = lesson['teachers'] as List<dynamic>? ?? [];
     final note = lesson['note'] as String? ?? '';
     final hasNote = note.isNotEmpty;
@@ -3229,7 +3226,7 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
           clipBehavior: Clip.hardEdge,
           padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
           decoration: BoxDecoration(
-            color: isHighlighted ? (context.isDark ? Colors.yellow.shade900.withOpacity(0.4) : Colors.yellow.shade100) : Colors.transparent,
+            color: isHighlighted ? (context.isDark ? AppColors.warning.withOpacity(0.4) : AppColors.warningBg) : Colors.transparent,
             borderRadius: BorderRadius.circular(4),
           ),
           child: Row(
@@ -3245,7 +3242,7 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
                         studentName,
                         style: TextStyle(
                           color: textColor,
-                          fontSize: 14,
+                          fontSize: AppTextSize.bodyMd,
                           fontWeight: FontWeight.w500,
                         ),
                         overflow: TextOverflow.ellipsis,
@@ -3256,7 +3253,7 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
                         courseInitial,
                         style: TextStyle(
                           color: textColor,
-                          fontSize: 12,
+                          fontSize: AppTextSize.small,
                         ),
                       ),
                   ],
@@ -3290,7 +3287,7 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
                       teacherLastNames.join('・'),
                       style: TextStyle(
                         color: context.colors.textPrimary,
-                        fontSize: 13,
+                        fontSize: AppTextSize.body,
                       ),
                     ),
                   ),
@@ -3324,7 +3321,7 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
                       lesson['room'],
                       style: TextStyle(
                         color: context.colors.textSecondary,
-                        fontSize: 13,
+                        fontSize: AppTextSize.body,
                       ),
                     ),
                   ),
@@ -3361,7 +3358,7 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
           lesson['studentName'],
           style: TextStyle(
             color: textColor,
-            fontSize: 14,
+            fontSize: AppTextSize.bodyMd,
             fontWeight: FontWeight.w500,
           ),
         ),
@@ -3517,7 +3514,7 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
 // クリック可能なレッスン内容を構築（生徒名のみ詳細ダイアログ）
   Widget _buildClickableLessonContent(Map<String, dynamic> lesson, GlobalKey key, {BuildContext? cellContext}) {
     final course = lesson['course'] as String? ?? '通常';
-    final color = _courseColors[course] ?? Colors.blue;
+    final color = _courseColors[course] ?? AppColors.info;
     final teachers = lesson['teachers'] as List<dynamic>? ?? [];
     final note = lesson['note'] as String? ?? '';
     final hasNote = note.isNotEmpty;
@@ -3551,7 +3548,7 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
           clipBehavior: Clip.hardEdge,
           padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
           decoration: BoxDecoration(
-            color: isHighlighted ? (context.isDark ? Colors.yellow.shade900.withOpacity(0.4) : Colors.yellow.shade100) : Colors.transparent,
+            color: isHighlighted ? (context.isDark ? AppColors.warning.withOpacity(0.4) : AppColors.warningBg) : Colors.transparent,
             borderRadius: BorderRadius.circular(4),
           ),
           child: Row(
@@ -3566,7 +3563,7 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
                         clickableStudentName,
                         style: TextStyle(
                           color: textColor,
-                          fontSize: 14,
+                          fontSize: AppTextSize.bodyMd,
                           fontWeight: FontWeight.w500,
                         ),
                         overflow: TextOverflow.ellipsis,
@@ -3577,7 +3574,7 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
                         courseInitial,
                         style: TextStyle(
                           color: textColor,
-                          fontSize: 12,
+                          fontSize: AppTextSize.small,
                         ),
                       ),
                   ],
@@ -3612,7 +3609,7 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
                       teacherLastNames.join('・'),
                       style: TextStyle(
                         color: context.colors.textPrimary,
-                        fontSize: 13,
+                        fontSize: AppTextSize.body,
                       ),
                     ),
                   ),
@@ -3647,7 +3644,7 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
                       lesson['room'],
                       style: TextStyle(
                         color: context.colors.textSecondary,
-                        fontSize: 13,
+                        fontSize: AppTextSize.body,
                       ),
                     ),
                   ),
@@ -3685,9 +3682,9 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
     if (therapyPlan.isNotEmpty) {
       widgets.add(const Text(
         '【療育プラン】',
-        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+        style: TextStyle(fontWeight: FontWeight.bold, fontSize: AppTextSize.small),
       ));
-      widgets.add(Text(therapyPlan, style: const TextStyle(fontSize: 12)));
+      widgets.add(Text(therapyPlan, style: const TextStyle(fontSize: AppTextSize.small)));
       widgets.add(const SizedBox(height: 8));
     }
     
@@ -3695,9 +3692,9 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
     if (schoolVisit.isNotEmpty) {
       widgets.add(const Text(
         '【園訪問】',
-        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+        style: TextStyle(fontWeight: FontWeight.bold, fontSize: AppTextSize.small),
       ));
-      widgets.add(Text(schoolVisit, style: const TextStyle(fontSize: 12)));
+      widgets.add(Text(schoolVisit, style: const TextStyle(fontSize: AppTextSize.small)));
       widgets.add(const SizedBox(height: 8));
     }
     
@@ -3705,9 +3702,9 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
     if (schoolConsultation.isNotEmpty) {
       widgets.add(const Text(
         '【就学相談】',
-        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+        style: TextStyle(fontWeight: FontWeight.bold, fontSize: AppTextSize.small),
       ));
-      widgets.add(Text(schoolConsultation, style: const TextStyle(fontSize: 12)));
+      widgets.add(Text(schoolConsultation, style: const TextStyle(fontSize: AppTextSize.small)));
       widgets.add(const SizedBox(height: 8));
     }
     
@@ -3715,9 +3712,9 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
     if (moveRequest.isNotEmpty) {
       widgets.add(const Text(
         '【移動希望】',
-        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+        style: TextStyle(fontWeight: FontWeight.bold, fontSize: AppTextSize.small),
       ));
-      widgets.add(Text(moveRequest, style: const TextStyle(fontSize: 12)));
+      widgets.add(Text(moveRequest, style: const TextStyle(fontSize: AppTextSize.small)));
       widgets.add(const SizedBox(height: 8));
     }
     
@@ -3725,7 +3722,7 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
     if (tasks.isNotEmpty) {
       widgets.add(const Text(
         '【タスク】',
-        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+        style: TextStyle(fontWeight: FontWeight.bold, fontSize: AppTextSize.small),
       ));
       for (var task in tasks) {
         final dueDate = task['dueDate'] as Timestamp?;
@@ -3734,7 +3731,7 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
             : '';
         widgets.add(Text(
           '• ${task['title']} $dueDateStr',
-          style: const TextStyle(fontSize: 12),
+          style: const TextStyle(fontSize: AppTextSize.small),
         ));
       }
       widgets.add(const SizedBox(height: 8));
@@ -3744,9 +3741,9 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
     if (note.isNotEmpty) {
       widgets.add(const Text(
         '【メモ】',
-        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+        style: TextStyle(fontWeight: FontWeight.bold, fontSize: AppTextSize.small),
       ));
-      widgets.add(Text(note, style: const TextStyle(fontSize: 12)));
+      widgets.add(Text(note, style: const TextStyle(fontSize: AppTextSize.small)));
     }
     
     // 最後の余白を削除
@@ -3935,10 +3932,10 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
       return null;
     }
 
-    const body = TextStyle(color: Colors.white, fontSize: 12, height: 1.5);
-    const sectionLabel = TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 0.5);
-    final halfLabel = TextStyle(color: Colors.orange.shade300, fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 0.5);
-    final absentLabel = TextStyle(color: Colors.red.shade300, fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 0.5);
+    const body = TextStyle(color: Colors.white, fontSize: AppTextSize.small, height: 1.5);
+    const sectionLabel = TextStyle(color: Colors.white70, fontSize: AppTextSize.caption, fontWeight: FontWeight.w700, letterSpacing: 0.5);
+    final halfLabel = TextStyle(color: AppColors.warningBorder, fontSize: AppTextSize.caption, fontWeight: FontWeight.w700, letterSpacing: 0.5);
+    final absentLabel = TextStyle(color: AppColors.errorBorder, fontSize: AppTextSize.caption, fontWeight: FontWeight.w700, letterSpacing: 0.5);
 
     final children = <InlineSpan>[];
 
@@ -3986,7 +3983,7 @@ Widget _buildStatusSegment({
 }) {
   final items = <({String value, String label, Color color})>[
     (value: 'full', label: '出勤', color: AppColors.primary),
-    (value: 'half', label: '半休', color: Colors.orange.shade700),
+    (value: 'half', label: '半休', color: AppColors.warning),
     (value: 'off', label: '休', color: context.colors.textTertiary),
   ];
   return Container(
@@ -4013,7 +4010,7 @@ Widget _buildStatusSegment({
               child: Text(
                 item.label,
                 style: TextStyle(
-                  fontSize: 11,
+                  fontSize: AppTextSize.caption,
                   fontWeight: FontWeight.bold,
                   color: selected
                       ? Colors.white
@@ -4128,7 +4125,7 @@ for (var staff in _staffList.where((s) => s['showInSchedule'] != false)) {
                 const SizedBox(width: 8),
                 Text(
                   DateFormat('M月d日 (E)', 'ja').format(date),
-                  style: const TextStyle(fontSize: 18),
+                  style: const TextStyle(fontSize: AppTextSize.titleLg),
                 ),
                 if (isMonday || isHolidayLocal) ...[
                   const SizedBox(width: 8),
@@ -4140,7 +4137,7 @@ for (var staff in _staffList.where((s) => s['showInSchedule'] != false)) {
                     ),
                     child: const Text(
                       '休み',
-                      style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                      style: TextStyle(color: Colors.white, fontSize: AppTextSize.small, fontWeight: FontWeight.bold),
                     ),
                   ),
                 ],
@@ -4166,14 +4163,14 @@ for (var staff in _staffList.where((s) => s['showInSchedule'] != false)) {
                     ),
                     child: Row(
                       children: [
-                        SizedBox(width: 80, child: Text('スタッフ', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: context.colors.textSecondary))),
-                        SizedBox(width: 70, child: Text('開始', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: context.colors.textSecondary), textAlign: TextAlign.center)),
+                        SizedBox(width: 80, child: Text('スタッフ', style: TextStyle(fontWeight: FontWeight.bold, fontSize: AppTextSize.body, color: context.colors.textSecondary))),
+                        SizedBox(width: 70, child: Text('開始', style: TextStyle(fontWeight: FontWeight.bold, fontSize: AppTextSize.body, color: context.colors.textSecondary), textAlign: TextAlign.center)),
                         const SizedBox(width: 8),
-                        SizedBox(width: 70, child: Text('終了', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: context.colors.textSecondary), textAlign: TextAlign.center)),
+                        SizedBox(width: 70, child: Text('終了', style: TextStyle(fontWeight: FontWeight.bold, fontSize: AppTextSize.body, color: context.colors.textSecondary), textAlign: TextAlign.center)),
                         const SizedBox(width: 8),
-                        Expanded(child: Text('備考', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: context.colors.textSecondary))),
+                        Expanded(child: Text('備考', style: TextStyle(fontWeight: FontWeight.bold, fontSize: AppTextSize.body, color: context.colors.textSecondary))),
                         const SizedBox(width: 8),
-                        SizedBox(width: 140, child: Text('勤怠', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: context.colors.textSecondary), textAlign: TextAlign.center)),
+                        SizedBox(width: 140, child: Text('勤怠', style: TextStyle(fontWeight: FontWeight.bold, fontSize: AppTextSize.body, color: context.colors.textSecondary), textAlign: TextAlign.center)),
                       ],
                     ),
                   ),
@@ -4201,7 +4198,7 @@ for (var staff in _staffList.where((s) => s['showInSchedule'] != false)) {
                                 child: Text(
                                   (data['name'] as String).split(' ').first,
                                   style: TextStyle(
-                                    fontSize: 14,
+                                    fontSize: AppTextSize.bodyMd,
                                     fontWeight: FontWeight.w500,
                                     color: isWorking ? context.colors.textPrimary : context.colors.textTertiary,
                                   ),
@@ -4223,16 +4220,16 @@ for (var staff in _staffList.where((s) => s['showInSchedule'] != false)) {
                                           filled: true,
                                           fillColor: context.colors.cardBg,
                                         ),
-                                        style: const TextStyle(fontSize: 14),
+                                        style: const TextStyle(fontSize: AppTextSize.bodyMd),
                                         textAlign: TextAlign.center,
                                       )
                                     : Center(
                                         child: Text(
                                           status == 'half' ? '半休' : '休み',
                                           style: TextStyle(
-                                            fontSize: 14,
+                                            fontSize: AppTextSize.bodyMd,
                                             color: status == 'half'
-                                                ? Colors.orange.shade700
+                                                ? AppColors.warning
                                                 : context.colors.textTertiary,
                                             fontWeight: status == 'half'
                                                 ? FontWeight.bold
@@ -4257,7 +4254,7 @@ for (var staff in _staffList.where((s) => s['showInSchedule'] != false)) {
                                           filled: true,
                                           fillColor: context.colors.cardBg,
                                         ),
-                                        style: const TextStyle(fontSize: 14),
+                                        style: const TextStyle(fontSize: AppTextSize.bodyMd),
                                         textAlign: TextAlign.center,
                                       )
                                     : const SizedBox.shrink(),
@@ -4277,7 +4274,7 @@ for (var staff in _staffList.where((s) => s['showInSchedule'] != false)) {
                                           filled: true,
                                           fillColor: context.colors.cardBg,
                                         ),
-                                        style: const TextStyle(fontSize: 14),
+                                        style: const TextStyle(fontSize: AppTextSize.bodyMd),
                                       )
                                     : const SizedBox.shrink(),
                               ),
@@ -4314,7 +4311,7 @@ for (var staff in _staffList.where((s) => s['showInSchedule'] != false)) {
                         children: [
                           Icon(Icons.event_busy, size: 18, color: context.colors.textSecondary),
                           const SizedBox(width: 8),
-                          Text('この日を休みにする', style: TextStyle(fontSize: 13, color: context.colors.textSecondary)),
+                          Text('この日を休みにする', style: TextStyle(fontSize: AppTextSize.body, color: context.colors.textSecondary)),
                           const Spacer(),
                           Transform.scale(
                             scale: 0.8,
@@ -4330,8 +4327,8 @@ for (var staff in _staffList.where((s) => s['showInSchedule'] != false)) {
                                   }
                                 });
                               },
-                              activeColor: Colors.red.shade400,
-                              activeTrackColor: Colors.red.shade200,
+                              activeColor: AppColors.errorBorder,
+                              activeTrackColor: AppColors.errorBg,
                             ),
                           ),
                         ],
@@ -4446,7 +4443,7 @@ final memoCommentController = TextEditingController();
       barrierColor: Colors.black26,
       builder: (dialogContext) => StatefulBuilder(
         builder: (dialogContext, setDialogState) {
-          final currentColor = _courseColors[selectedCourse] ?? Colors.blue;
+          final currentColor = _courseColors[selectedCourse] ?? AppColors.info;
           final date = _weekStart.add(Duration(days: dayIndex));
           final studentName = selectedStudent?['name'] as String? ?? '';
 
@@ -4501,7 +4498,7 @@ final memoCommentController = TextEditingController();
                         Text(
                           '${['月', '火', '水', '木', '金', '土'][dayIndex]}曜日 ${_timeSlots[slotIndex]} に追加',
                           style: const TextStyle(
-                            fontSize: 18,
+                            fontSize: AppTextSize.titleLg,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
@@ -4517,7 +4514,7 @@ final memoCommentController = TextEditingController();
                     padding: const EdgeInsets.symmetric(horizontal: 20),
                     child: Text(
                       DateFormat('M月d日 (E)', 'ja').format(date),
-                      style: TextStyle(fontSize: 14, color: context.colors.textSecondary),
+                      style: TextStyle(fontSize: AppTextSize.bodyMd, color: context.colors.textSecondary),
                     ),
                   ),
                   const SizedBox(height: 16),
@@ -4552,7 +4549,7 @@ final memoCommentController = TextEditingController();
                 color: inputMode == 'student' ? AppColors.primary : context.colors.textSecondary),
               const SizedBox(width: 4),
               Text('生徒', style: TextStyle(
-                fontSize: 12,
+                fontSize: AppTextSize.small,
                 fontWeight: inputMode == 'student' ? FontWeight.bold : FontWeight.normal,
                 color: inputMode == 'student' ? AppColors.primary : context.colors.textSecondary,
               )),
@@ -4581,7 +4578,7 @@ final memoCommentController = TextEditingController();
                 color: inputMode == 'custom' ? AppColors.primary : context.colors.textSecondary),
               const SizedBox(width: 4),
               Text('イベント', style: TextStyle(
-                fontSize: 12,
+                fontSize: AppTextSize.small,
                 fontWeight: inputMode == 'custom' ? FontWeight.bold : FontWeight.normal,
                 color: inputMode == 'custom' ? AppColors.primary : context.colors.textSecondary,
               )),
@@ -4613,7 +4610,7 @@ final memoCommentController = TextEditingController();
 ),
               const SizedBox(width: 4),
               Text('メモ', style: TextStyle(
-                fontSize: 12,
+                fontSize: AppTextSize.small,
                 fontWeight: inputMode == 'memo' ? FontWeight.bold : FontWeight.normal,
                 color: inputMode == 'memo' ? AppColors.primary : context.colors.textSecondary,
               )),
@@ -4659,7 +4656,7 @@ final memoCommentController = TextEditingController();
                                             ? '生徒を選択'
                                             : selectedStudent!['name'] as String,
                                         style: TextStyle(
-                                          fontSize: 15,
+                                          fontSize: AppTextSize.bodyLarge,
                                           color: selectedStudent == null ? context.colors.textSecondary : context.colors.textPrimary,
                                         ),
                                       ),
@@ -4751,7 +4748,7 @@ if (inputMode != 'memo') ...[
                                               ? '全員'
                                               : selectedTeachers.join('、'),
                                       style: TextStyle(
-                                        fontSize: 15,
+                                        fontSize: AppTextSize.bodyLarge,
                                         color: selectedTeachers.isEmpty ? context.colors.textSecondary : context.colors.textPrimary,
                                       ),
                                     ),
@@ -4790,7 +4787,7 @@ if (inputMode != 'memo') ...[
                                     child: Text(
                                       selectedRoom.isEmpty ? '部屋を選択' : selectedRoom,
                                       style: TextStyle(
-                                        fontSize: 15,
+                                        fontSize: AppTextSize.bodyLarge,
                                         color: selectedRoom.isEmpty ? context.colors.textSecondary : context.colors.textPrimary,
                                       ),
                                     ),
@@ -4833,7 +4830,7 @@ if (inputMode != 'memo') ...[
                                     ),
                                   ),
                                   const SizedBox(width: 8),
-                                  Expanded(child: Text(selectedCourse, style: const TextStyle(fontSize: 15))),
+                                  Expanded(child: Text(selectedCourse, style: const TextStyle(fontSize: AppTextSize.bodyLarge))),
                                   Icon(Icons.arrow_drop_down, color: context.colors.textSecondary),
                                 ],
                               ),
@@ -4852,7 +4849,7 @@ if (inputMode != 'memo') ...[
                               children: [
                                 const Icon(Icons.task_alt, size: 18, color: AppColors.accent),
                                 const SizedBox(width: 8),
-                                const Text('タスク', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                                const Text('タスク', style: TextStyle(fontWeight: FontWeight.bold, fontSize: AppTextSize.bodyMd)),
                               ],
                             ),
                             const SizedBox(height: 12),
@@ -4876,11 +4873,11 @@ if (inputMode != 'memo') ...[
                                         child: Column(
                                           crossAxisAlignment: CrossAxisAlignment.start,
                                           children: [
-                                            Text(task['title'] ?? '', style: const TextStyle(fontSize: 13)),
+                                            Text(task['title'] ?? '', style: const TextStyle(fontSize: AppTextSize.body)),
                                             if (task['dueDate'] != null)
                                               Text(
                                                 '期限: ${DateFormat('M/d').format((task['dueDate'] as Timestamp).toDate())}',
-                                                style: TextStyle(fontSize: 11, color: context.colors.textSecondary),
+                                                style: TextStyle(fontSize: AppTextSize.caption, color: context.colors.textSecondary),
                                               ),
                                           ],
                                         ),
@@ -4893,7 +4890,7 @@ if (inputMode != 'memo') ...[
                                           });
                                         },
                                         icon: const Icon(Icons.check_circle_outline, size: 20),
-                                        color: Colors.green,
+                                        color: AppColors.success,
                                         padding: EdgeInsets.zero,
                                         constraints: const BoxConstraints(),
                                         tooltip: '完了',
@@ -4915,7 +4912,7 @@ if (inputMode != 'memo') ...[
                                       contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                                       isDense: true,
                                     ),
-                                    style: const TextStyle(fontSize: 13),
+                                    style: const TextStyle(fontSize: AppTextSize.body),
                                     onChanged: (_) => setDialogState(() {}),
                                   ),
                                 ),
@@ -4947,7 +4944,7 @@ InkWell(
           const SizedBox(width: 4),
           Text(
             DateFormat('M/d').format(newTaskDueDate!),
-            style: const TextStyle(fontSize: 12),
+            style: const TextStyle(fontSize: AppTextSize.small),
           ),
           const SizedBox(width: 4),
           GestureDetector(
@@ -5002,7 +4999,7 @@ InkWell(
                               children: [
                                 const Icon(Icons.psychology, size: 18, color: AppColors.primary),
                                 const SizedBox(width: 8),
-                                const Text('療育プラン', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                                const Text('療育プラン', style: TextStyle(fontWeight: FontWeight.bold, fontSize: AppTextSize.bodyMd)),
                               ],
                             ),
                             const SizedBox(height: 8),
@@ -5015,16 +5012,16 @@ InkWell(
                               ),
                               maxLines: 3,
                               minLines: 2,
-                              style: const TextStyle(fontSize: 13),
+                              style: const TextStyle(fontSize: AppTextSize.body),
                             ),
                             
                             const SizedBox(height: 16),
                             // 園訪問
                             Row(
                               children: [
-                                Icon(Icons.school, size: 18, color: Colors.teal.shade600),
+                                Icon(Icons.school, size: 18, color: AppColors.secondary),
                                 const SizedBox(width: 8),
-                                const Text('園訪問', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                                const Text('園訪問', style: TextStyle(fontWeight: FontWeight.bold, fontSize: AppTextSize.bodyMd)),
                               ],
                             ),
                             const SizedBox(height: 8),
@@ -5037,16 +5034,16 @@ InkWell(
                               ),
                               maxLines: 3,
                               minLines: 2,
-                              style: const TextStyle(fontSize: 13),
+                              style: const TextStyle(fontSize: AppTextSize.body),
                             ),
                             
                             const SizedBox(height: 16),
                             // 就学相談
                             Row(
                               children: [
-                                Icon(Icons.celebration, size: 18, color: Colors.indigo.shade600),
+                                Icon(Icons.celebration, size: 18, color: AppColors.secondary),
                                 const SizedBox(width: 8),
-                                const Text('就学相談', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                                const Text('就学相談', style: TextStyle(fontWeight: FontWeight.bold, fontSize: AppTextSize.bodyMd)),
                               ],
                             ),
                             const SizedBox(height: 8),
@@ -5059,16 +5056,16 @@ InkWell(
                               ),
                               maxLines: 3,
                               minLines: 2,
-                              style: const TextStyle(fontSize: 13),
+                              style: const TextStyle(fontSize: AppTextSize.body),
                             ),
                             
                             const SizedBox(height: 16),
                             // 移動希望
                             Row(
                               children: [
-                                Icon(Icons.swap_horiz, size: 18, color: Colors.purple.shade600),
+                                Icon(Icons.swap_horiz, size: 18, color: AppColors.aiAccent),
                                 const SizedBox(width: 8),
-                                const Text('移動希望', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                                const Text('移動希望', style: TextStyle(fontWeight: FontWeight.bold, fontSize: AppTextSize.bodyMd)),
                               ],
                             ),
                             const SizedBox(height: 8),
@@ -5081,7 +5078,7 @@ InkWell(
                               ),
                               maxLines: 3,
                               minLines: 2,
-                              style: const TextStyle(fontSize: 13),
+                              style: const TextStyle(fontSize: AppTextSize.body),
                             ),
                           ],
                           const SizedBox(height: 16),
@@ -5188,7 +5185,7 @@ await _loadLessonsForWeek(showLoading: false);
       : title.isEmpty
           ? (inputMode == 'student' ? '生徒を選択してください' : 'タイトルを入力してください')
           : '$titleを追加',
-  style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+  style: const TextStyle(fontSize: AppTextSize.bodyLarge, fontWeight: FontWeight.bold),
 ),
                       ),
                    ),
@@ -5247,7 +5244,7 @@ await _loadLessonsForWeek(showLoading: false);
           return AlertDialog(
             backgroundColor: context.colors.cardBg,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            title: const Text('生徒を選択', style: TextStyle(fontSize: 18)),
+            title: const Text('生徒を選択', style: TextStyle(fontSize: AppTextSize.titleLg)),
             content: SizedBox(
               width: 350,
               height: 400,
@@ -5286,7 +5283,7 @@ await _loadLessonsForWeek(showLoading: false);
                                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                                     color: context.colors.chipBg,
                                     child: Text(group, style: TextStyle(
-                                      fontSize: 13, fontWeight: FontWeight.bold, color: context.colors.textSecondary,
+                                      fontSize: AppTextSize.body, fontWeight: FontWeight.bold, color: context.colors.textSecondary,
                                     )),
                                   ),
                                   ...studentsInGroup.map((student) {
@@ -5335,7 +5332,7 @@ await _loadLessonsForWeek(showLoading: false);
           return AlertDialog(
             backgroundColor: context.colors.cardBg,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            title: const Text('講師を選択', style: TextStyle(fontSize: 18)),
+            title: const Text('講師を選択', style: TextStyle(fontSize: AppTextSize.titleLg)),
             content: SizedBox(
               width: 300,
               child: SingleChildScrollView(
@@ -5420,7 +5417,7 @@ await _loadLessonsForWeek(showLoading: false);
         return AlertDialog(
           backgroundColor: context.colors.cardBg,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          title: const Text('部屋を選択', style: TextStyle(fontSize: 18)),
+          title: const Text('部屋を選択', style: TextStyle(fontSize: AppTextSize.titleLg)),
           content: SizedBox(
             width: 300,
             child: SingleChildScrollView(
@@ -5553,7 +5550,7 @@ await _loadLessonsForWeek(showLoading: false);
             });
           }
           
-          final currentColor = _courseColors[selectedCourse] ?? Colors.blue;
+          final currentColor = _courseColors[selectedCourse] ?? AppColors.info;
           
           // セル位置が指定されている場合はPositionedで配置
           Widget dialogContent = Material(
@@ -5612,7 +5609,7 @@ await _loadLessonsForWeek(showLoading: false);
                                   controller: titleController,
                                   autofocus: true,
                                   style: TextStyle(
-                                    fontSize: 22,
+                                    fontSize: AppTextSize.display,
                                     fontWeight: FontWeight.w400,
                                     color: context.colors.textPrimary,
                                   ),
@@ -5644,7 +5641,7 @@ await _loadLessonsForWeek(showLoading: false);
                                           child: Text(
                                             titleController.text.isEmpty ? 'イベント名を入力' : titleController.text,
                                             style: TextStyle(
-                                              fontSize: 22,
+                                              fontSize: AppTextSize.display,
                                               fontWeight: FontWeight.w400,
                                               color: titleController.text.isEmpty ? context.colors.textSecondary : context.colors.textPrimary,
                                             ),
@@ -5675,11 +5672,11 @@ await _loadLessonsForWeek(showLoading: false);
                               child: Text(
                                 studentName,
                                 style: const TextStyle(
-                                  fontSize: 22,
+                                  fontSize: AppTextSize.display,
                                   fontWeight: FontWeight.w400,
-                                  color: Colors.blue,
+                                  color: AppColors.info,
                                   decoration: TextDecoration.underline,
-                                  decorationColor: Colors.blue,
+                                  decorationColor: AppColors.info,
                                 ),
                               ),
                             ),
@@ -5703,7 +5700,7 @@ await _loadLessonsForWeek(showLoading: false);
                                   studentName: studentName,
                                 ),
                                 style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.teal,
+                                  backgroundColor: AppColors.secondary,
                                   foregroundColor: context.colors.textOnPrimary,
                                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -5745,7 +5742,7 @@ await _loadLessonsForWeek(showLoading: false);
                               },
                               child: const Text('AIに相談'),
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.purple.shade600,
+                                backgroundColor: AppColors.aiAccent,
                                 foregroundColor: context.colors.textOnPrimary,
                                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -5761,7 +5758,7 @@ await _loadLessonsForWeek(showLoading: false);
                     padding: const EdgeInsets.symmetric(horizontal: 20),
                     child: Text(
                       '${DateFormat('M月d日 (E)', 'ja').format(date)}　${_timeSlots[slotIndex]}',
-                      style: TextStyle(fontSize: 14, color: context.colors.textSecondary),
+                      style: TextStyle(fontSize: AppTextSize.bodyMd, color: context.colors.textSecondary),
                     ),
                   ),
                   const SizedBox(height: 16),
@@ -5798,7 +5795,7 @@ await _loadLessonsForWeek(showLoading: false);
                                               ? '全員'
                                               : selectedTeachers.join('、'),
                                       style: TextStyle(
-                                        fontSize: 15,
+                                        fontSize: AppTextSize.bodyLarge,
                                         color: selectedTeachers.isEmpty ? context.colors.textSecondary : context.colors.textPrimary,
                                       ),
                                     ),
@@ -5837,7 +5834,7 @@ await _loadLessonsForWeek(showLoading: false);
                                     child: Text(
                                       selectedRoom.isEmpty ? '部屋を選択' : selectedRoom,
                                       style: TextStyle(
-                                        fontSize: 15,
+                                        fontSize: AppTextSize.bodyLarge,
                                         color: selectedRoom.isEmpty ? context.colors.textSecondary : context.colors.textPrimary,
                                       ),
                                     ),
@@ -5880,7 +5877,7 @@ await _loadLessonsForWeek(showLoading: false);
                                     ),
                                   ),
                                   const SizedBox(width: 8),
-                                  Expanded(child: Text(selectedCourse, style: const TextStyle(fontSize: 15))),
+                                  Expanded(child: Text(selectedCourse, style: const TextStyle(fontSize: AppTextSize.bodyLarge))),
                                   Icon(Icons.arrow_drop_down, color: context.colors.textSecondary),
                                 ],
                               ),
@@ -5898,7 +5895,7 @@ await _loadLessonsForWeek(showLoading: false);
                               children: [
                                 const Icon(Icons.task_alt, size: 18, color: AppColors.accent),
                                 const SizedBox(width: 8),
-                                const Text('タスク', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                                const Text('タスク', style: TextStyle(fontWeight: FontWeight.bold, fontSize: AppTextSize.bodyMd)),
                               ],
                             ),
                             const SizedBox(height: 12),
@@ -5922,11 +5919,11 @@ await _loadLessonsForWeek(showLoading: false);
                                         child: Column(
                                           crossAxisAlignment: CrossAxisAlignment.start,
                                           children: [
-                                            Text(task['title'] ?? '', style: const TextStyle(fontSize: 13)),
+                                            Text(task['title'] ?? '', style: const TextStyle(fontSize: AppTextSize.body)),
                                             if (task['dueDate'] != null)
                                               Text(
                                                 '期限: ${DateFormat('M/d').format((task['dueDate'] as Timestamp).toDate())}',
-                                                style: TextStyle(fontSize: 11, color: context.colors.textSecondary),
+                                                style: TextStyle(fontSize: AppTextSize.caption, color: context.colors.textSecondary),
                                               ),
                                           ],
                                         ),
@@ -5939,7 +5936,7 @@ await _loadLessonsForWeek(showLoading: false);
                                           });
                                         },
                                         icon: const Icon(Icons.check_circle_outline, size: 20),
-                                        color: Colors.green,
+                                        color: AppColors.success,
                                         padding: EdgeInsets.zero,
                                         constraints: const BoxConstraints(),
                                         tooltip: '完了',
@@ -5961,7 +5958,7 @@ await _loadLessonsForWeek(showLoading: false);
                                       contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                                       isDense: true,
                                     ),
-                                    style: const TextStyle(fontSize: 13),
+                                    style: const TextStyle(fontSize: AppTextSize.body),
                                     onChanged: (_) => setDialogState(() {}),
                                   ),
                                 ),
@@ -5993,7 +5990,7 @@ InkWell(
           const SizedBox(width: 4),
           Text(
             DateFormat('M/d').format(newTaskDueDate!),
-            style: const TextStyle(fontSize: 12),
+            style: const TextStyle(fontSize: AppTextSize.small),
           ),
           const SizedBox(width: 4),
           GestureDetector(
@@ -6048,7 +6045,7 @@ InkWell(
                               children: [
                                 const Icon(Icons.psychology, size: 18, color: AppColors.primary),
                                 const SizedBox(width: 8),
-                                const Text('療育プラン', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                                const Text('療育プラン', style: TextStyle(fontWeight: FontWeight.bold, fontSize: AppTextSize.bodyMd)),
                               ],
                             ),
                             const SizedBox(height: 8),
@@ -6061,16 +6058,16 @@ InkWell(
                               ),
                               maxLines: 3,
                               minLines: 2,
-                              style: const TextStyle(fontSize: 13),
+                              style: const TextStyle(fontSize: AppTextSize.body),
                             ),
                             
                             const SizedBox(height: 16),
                             // 園訪問
                             Row(
                               children: [
-                                Icon(Icons.school, size: 18, color: Colors.teal.shade600),
+                                Icon(Icons.school, size: 18, color: AppColors.secondary),
                                 const SizedBox(width: 8),
-                                const Text('園訪問', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                                const Text('園訪問', style: TextStyle(fontWeight: FontWeight.bold, fontSize: AppTextSize.bodyMd)),
                               ],
                             ),
                             const SizedBox(height: 8),
@@ -6083,16 +6080,16 @@ InkWell(
                               ),
                               maxLines: 3,
                               minLines: 2,
-                              style: const TextStyle(fontSize: 13),
+                              style: const TextStyle(fontSize: AppTextSize.body),
                             ),
                             
                             const SizedBox(height: 16),
                             // 就学相談
                             Row(
                               children: [
-                                Icon(Icons.celebration, size: 18, color: Colors.indigo.shade600),
+                                Icon(Icons.celebration, size: 18, color: AppColors.secondary),
                                 const SizedBox(width: 8),
-                                const Text('就学相談', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                                const Text('就学相談', style: TextStyle(fontWeight: FontWeight.bold, fontSize: AppTextSize.bodyMd)),
                               ],
                             ),
                             const SizedBox(height: 8),
@@ -6105,16 +6102,16 @@ InkWell(
                               ),
                               maxLines: 3,
                               minLines: 2,
-                              style: const TextStyle(fontSize: 13),
+                              style: const TextStyle(fontSize: AppTextSize.body),
                             ),
                             
                             const SizedBox(height: 16),
                             // 移動希望
                             Row(
                               children: [
-                                Icon(Icons.swap_horiz, size: 18, color: Colors.purple.shade600),
+                                Icon(Icons.swap_horiz, size: 18, color: AppColors.aiAccent),
                                 const SizedBox(width: 8),
-                                const Text('移動希望', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                                const Text('移動希望', style: TextStyle(fontWeight: FontWeight.bold, fontSize: AppTextSize.bodyMd)),
                               ],
                             ),
                             const SizedBox(height: 8),
@@ -6127,7 +6124,7 @@ InkWell(
                               ),
                               maxLines: 3,
                               minLines: 2,
-                              style: const TextStyle(fontSize: 13),
+                              style: const TextStyle(fontSize: AppTextSize.body),
                             ),
                           ],
                         ],
@@ -6282,7 +6279,7 @@ await _loadLessonsForWeek(showLoading: false);
           return AlertDialog(
             backgroundColor: context.colors.cardBg,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            title: const Text('内容を選択', style: TextStyle(fontSize: 18)),
+            title: const Text('内容を選択', style: TextStyle(fontSize: AppTextSize.titleLg)),
             content: SizedBox(
               width: 380,
               child: Column(
@@ -6334,7 +6331,7 @@ await _loadLessonsForWeek(showLoading: false);
                   ),
                   // 通常コース
                   ...mainCourses.map((course) {
-                    final color = _courseColors[course] ?? Colors.blue;
+                    final color = _courseColors[course] ?? AppColors.info;
                     return ListTile(
                       leading: GestureDetector(
                         onTap: () {
@@ -6402,12 +6399,12 @@ await _loadLessonsForWeek(showLoading: false);
           padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
           decoration: BoxDecoration(
             color: isCurrent
-                ? Colors.red.withValues(alpha: 0.10)
+                ? AppColors.error.withValues(alpha: 0.10)
                 : context.colors.cardBg,
             borderRadius: BorderRadius.circular(10),
             border: Border.all(
               color: isCurrent
-                  ? Colors.red.shade400
+                  ? AppColors.errorBorder
                   : context.colors.borderMedium,
               width: isCurrent ? 1.4 : 0.6,
             ),
@@ -6424,7 +6421,7 @@ await _loadLessonsForWeek(showLoading: false);
                     width: 32,
                     height: 32,
                     decoration: BoxDecoration(
-                      color: Colors.red.shade400,
+                      color: AppColors.errorBorder,
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: const Icon(Icons.event_busy,
@@ -6451,7 +6448,7 @@ await _loadLessonsForWeek(showLoading: false);
                 title,
                 textAlign: TextAlign.center,
                 style: TextStyle(
-                  fontSize: 12,
+                  fontSize: AppTextSize.small,
                   fontWeight: FontWeight.w700,
                   color: context.colors.textPrimary,
                 ),
@@ -6528,11 +6525,11 @@ await _loadLessonsForWeek(showLoading: false);
       builder: (ctx) => AlertDialog(
         backgroundColor: context.colors.cardBg,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        title: const Text('欠席（HUG登録なし）として登録', style: TextStyle(fontSize: 16)),
+        title: const Text('欠席（HUG登録なし）として登録', style: TextStyle(fontSize: AppTextSize.titleSm)),
         content: Text(
           '$studentName さんを ${df.format(date)} の欠席として登録します。\n\n'
           '※ HUGには登録されません。HUG側は別途手動で対応してください。',
-          style: const TextStyle(fontSize: 13),
+          style: const TextStyle(fontSize: AppTextSize.body),
         ),
         actions: [
           TextButton(
@@ -6542,7 +6539,7 @@ await _loadLessonsForWeek(showLoading: false);
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red.shade400,
+              backgroundColor: AppColors.errorBorder,
               foregroundColor: Colors.white,
             ),
             child: const Text('登録'),
@@ -6560,10 +6557,10 @@ await _loadLessonsForWeek(showLoading: false);
       builder: (ctx) => AlertDialog(
         backgroundColor: context.colors.cardBg,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        title: const Text('欠席（加算なし）として登録', style: TextStyle(fontSize: 16)),
+        title: const Text('欠席（加算なし）として登録', style: TextStyle(fontSize: AppTextSize.titleSm)),
         content: Text(
           '$studentName さんを ${df.format(date)} の欠席（欠席時対応加算を取らない）としてHUGに登録します。\nよろしいですか？',
-          style: const TextStyle(fontSize: 13),
+          style: const TextStyle(fontSize: AppTextSize.body),
         ),
         actions: [
           TextButton(
@@ -6573,7 +6570,7 @@ await _loadLessonsForWeek(showLoading: false);
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red.shade400,
+              backgroundColor: AppColors.errorBorder,
               foregroundColor: Colors.white,
             ),
             child: const Text('保存'),
@@ -6639,7 +6636,7 @@ await _loadLessonsForWeek(showLoading: false);
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text('$studentName さんの$categoryをHUGに送信しました'),
-              backgroundColor: Colors.green,
+              backgroundColor: AppColors.success,
               duration: const Duration(seconds: 2),
             ),
           );
@@ -6677,7 +6674,7 @@ await _loadLessonsForWeek(showLoading: false);
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text('HUG送信に失敗しました: $error'),
-        backgroundColor: Colors.red,
+        backgroundColor: AppColors.error,
         duration: const Duration(seconds: 3),
       ),
     );
@@ -6706,17 +6703,17 @@ await _loadLessonsForWeek(showLoading: false);
     final c = context.colors;
     return Container(
       width: double.infinity,
-      color: Colors.red.withValues(alpha: 0.10),
+      color: AppColors.error.withValues(alpha: 0.10),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Icon(Icons.warning_amber_rounded, size: 16, color: Colors.red.shade400),
+              Icon(Icons.warning_amber_rounded, size: 16, color: AppColors.errorBorder),
               const SizedBox(width: 8),
               Text('HUG送信失敗 (${_failedAbsenceSends.length}件)',
-                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.red.shade400)),
+                  style: TextStyle(fontSize: AppTextSize.small, fontWeight: FontWeight.w600, color: AppColors.errorBorder)),
             ],
           ),
           ..._failedAbsenceSends.asMap().entries.map((entry) {
@@ -6731,7 +6728,7 @@ await _loadLessonsForWeek(showLoading: false);
                   Expanded(
                     child: Text(
                       '$category / $student',
-                      style: TextStyle(fontSize: 11, color: c.textSecondary),
+                      style: TextStyle(fontSize: AppTextSize.caption, color: c.textSecondary),
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
@@ -6742,7 +6739,7 @@ await _loadLessonsForWeek(showLoading: false);
                       minimumSize: Size.zero,
                       tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     ),
-                    child: const Text('再送', style: TextStyle(fontSize: 11)),
+                    child: const Text('再送', style: TextStyle(fontSize: AppTextSize.caption)),
                   ),
                   TextButton(
                     onPressed: () => _discardFailedAbsence(i),
@@ -6752,7 +6749,7 @@ await _loadLessonsForWeek(showLoading: false);
                       tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                       foregroundColor: c.textTertiary,
                     ),
-                    child: const Text('破棄', style: TextStyle(fontSize: 11)),
+                    child: const Text('破棄', style: TextStyle(fontSize: AppTextSize.caption)),
                   ),
                 ],
               ),
@@ -6770,7 +6767,7 @@ void _showColorPickerDialog(String course, Color currentColor, Function(Color) o
     builder: (dialogContext) => AlertDialog(
       backgroundColor: context.colors.cardBg,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      title: Text('$courseの色を選択', style: const TextStyle(fontSize: 16)),
+      title: Text('$courseの色を選択', style: const TextStyle(fontSize: AppTextSize.titleSm)),
       content: SizedBox(
         width: 300,
         child: Wrap(
@@ -6868,7 +6865,7 @@ void _showColorPickerDialog(String course, Color currentColor, Function(Color) o
                     children: [
                       const Icon(Icons.person, color: AppColors.primary, size: 20),
                       const SizedBox(width: 8),
-                      const Text('講師を変更', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                      const Text('講師を変更', style: TextStyle(fontSize: AppTextSize.titleSm, fontWeight: FontWeight.bold)),
                       const Spacer(),
                       IconButton(
                         icon: const Icon(Icons.close, size: 20),
@@ -6884,7 +6881,7 @@ void _showColorPickerDialog(String course, Color currentColor, Function(Color) o
                     final name = staff['name'] as String;
                     final isSelected = selectedTeachers.contains(name);
                     return CheckboxListTile(
-                      title: Text(name, style: const TextStyle(fontSize: 14)),
+                      title: Text(name, style: const TextStyle(fontSize: AppTextSize.bodyMd)),
                       value: isSelected,
                       dense: true,
                       visualDensity: VisualDensity.compact,
@@ -6905,7 +6902,7 @@ void _showColorPickerDialog(String course, Color currentColor, Function(Color) o
                   const Divider(height: 16),
                   // 「全員」オプション
                   CheckboxListTile(
-                    title: const Text('全員', style: TextStyle(fontSize: 14)),
+                    title: const Text('全員', style: TextStyle(fontSize: AppTextSize.bodyMd)),
                     value: isAllSelected,
                     dense: true,
                     visualDensity: VisualDensity.compact,
@@ -7045,7 +7042,7 @@ void _showColorPickerDialog(String course, Color currentColor, Function(Color) o
                   children: [
                     const Icon(Icons.meeting_room, color: AppColors.primary, size: 20),
                     const SizedBox(width: 8),
-                    const Text('部屋を変更', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                    const Text('部屋を変更', style: TextStyle(fontSize: AppTextSize.titleSm, fontWeight: FontWeight.bold)),
                     const Spacer(),
                     IconButton(
                       icon: const Icon(Icons.close, size: 20),
@@ -7062,7 +7059,7 @@ void _showColorPickerDialog(String course, Color currentColor, Function(Color) o
                     title: Text(room, style: TextStyle(
                       fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
                       color: isSelected ? AppColors.primary : null,
-                      fontSize: 14,
+                      fontSize: AppTextSize.bodyMd,
                     )),
                     leading: Icon(
                       isSelected ? Icons.check_circle : Icons.circle_outlined,
@@ -7323,7 +7320,7 @@ class _TaskBadgeState extends State<_TaskBadge> {
               '${widget.taskCount}',
               style: TextStyle(
                 color: baseColor,
-                fontSize: 11,
+                fontSize: AppTextSize.caption,
                 fontWeight: FontWeight.w700,
                 height: 1,
               ),

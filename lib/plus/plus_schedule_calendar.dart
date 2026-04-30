@@ -88,7 +88,7 @@ extension PlusScheduleCalendar on _PlusScheduleContentState {
                       days[index],
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
-                        fontSize: 13,
+                        fontSize: AppTextSize.body,
                         color: isSaturday ? AppColors.primary : context.colors.textPrimary,
                       ),
                     ),
@@ -214,7 +214,7 @@ extension PlusScheduleCalendar on _PlusScheduleContentState {
                       Text(
                         DateFormat('M月d日 (E)', 'ja').format(date),
                         style: const TextStyle(
-                          fontSize: 16,
+                          fontSize: AppTextSize.titleSm,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
@@ -233,7 +233,7 @@ extension PlusScheduleCalendar on _PlusScheduleContentState {
                             Text(
                               slotLabel,
                               style: TextStyle(
-                                fontSize: 11,
+                                fontSize: AppTextSize.caption,
                                 fontWeight: FontWeight.bold,
                                 color: context.colors.textSecondary,
                               ),
@@ -268,7 +268,7 @@ extension PlusScheduleCalendar on _PlusScheduleContentState {
                                       child: Text(
                                         lesson['studentName'] ?? '',
                                         style: const TextStyle(
-                                          fontSize: 13,
+                                          fontSize: AppTextSize.body,
                                           fontWeight: FontWeight.w500,
                                         ),
                                         overflow: TextOverflow.ellipsis,
@@ -279,7 +279,7 @@ extension PlusScheduleCalendar on _PlusScheduleContentState {
                                       Text(
                                         teacherNames,
                                         style: TextStyle(
-                                          fontSize: 11,
+                                          fontSize: AppTextSize.caption,
                                           color: context.colors.textSecondary,
                                         ),
                                       ),
@@ -289,7 +289,7 @@ extension PlusScheduleCalendar on _PlusScheduleContentState {
                                       Text(
                                         room,
                                         style: TextStyle(
-                                          fontSize: 11,
+                                          fontSize: AppTextSize.caption,
                                           color: context.colors.textTertiary,
                                         ),
                                       ),
@@ -370,7 +370,7 @@ extension PlusScheduleCalendar on _PlusScheduleContentState {
                     child: Text(
                       '$dayNumber',
                       style: TextStyle(
-                        fontSize: 13,
+                        fontSize: AppTextSize.body,
                         fontWeight: isToday ? FontWeight.bold : FontWeight.normal,
                         color: isToday
                             ? Colors.white
@@ -401,7 +401,7 @@ extension PlusScheduleCalendar on _PlusScheduleContentState {
                                   child: Text(
                                     timeLabels[slotIndex],
                                     style: TextStyle(
-                                      fontSize: 12,
+                                      fontSize: AppTextSize.small,
                                       color: context.colors.textTertiary,
                                     ),
                                   ),
@@ -447,13 +447,13 @@ extension PlusScheduleCalendar on _PlusScheduleContentState {
                                                           children: [
                                                             TextSpan(
                                                               text: firstName,
-                                                              style: const TextStyle(fontSize: 11),
+                                                              style: const TextStyle(fontSize: AppTextSize.caption),
                                                             ),
                                                             if (teacherInitials.isNotEmpty)
                                                               TextSpan(
                                                                 text: ' $teacherInitials',
                                                                 style: TextStyle(
-                                                                  fontSize: 11,
+                                                                  fontSize: AppTextSize.caption,
                                                                   color: context.colors.textTertiary,
                                                                 ),
                                                               ),
