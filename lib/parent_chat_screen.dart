@@ -190,7 +190,8 @@ class _ParentChatScreenState extends State<ParentChatScreen> {
       builder: (context, snapshot) {
         Map<String, dynamic> names = {};
         List<String> members = [];
-        if (snapshot.hasData && snapshot.data!.exists) {
+        final roomReady = snapshot.hasData && snapshot.data!.exists;
+        if (roomReady) {
           final room = snapshot.data!.data() as Map<String, dynamic>;
           names = Map<String, dynamic>.from(room['names'] ?? {});
           members = List<String>.from(room['members'] ?? []);
@@ -203,12 +204,17 @@ class _ParentChatScreenState extends State<ParentChatScreen> {
             children: [
               _buildHeader('チャット'),
               Expanded(
-                child: _ChatMessageList(
-                  roomId: familyRoomId,
-                  myUid: currentUser!.uid,
-                  isGroup: isGroup,
-                  memberNames: names,
-                ),
+                child: roomReady
+                    ? _ChatMessageList(
+                        roomId: familyRoomId,
+                        myUid: currentUser!.uid,
+                        isGroup: isGroup,
+                        memberNames: names,
+                      )
+                    : Container(
+                        color: context.colors.scaffoldBgAlt,
+                        child: const Center(child: CircularProgressIndicator()),
+                      ),
               ),
               _ChatInputArea(
                 roomId: familyRoomId,

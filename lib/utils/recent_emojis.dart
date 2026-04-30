@@ -29,17 +29,33 @@ class RecentEmojis {
   }
 }
 
+bool _isEmojiCodePoint(int code) {
+  // Variation selector / ZWJ / keycap などの修飾子は許容
+  if (code == 0x200D || code == 0xFE0F || code == 0x20E3) return true;
+  // Regional indicator（国旗）
+  if (code >= 0x1F1E6 && code <= 0x1F1FF) return true;
+  // Misc symbols / Dingbats / Supplemental arrows など
+  if (code >= 0x2600 && code <= 0x27BF) return true;
+  // Misc Symbols and Pictographs ～ Symbols and Pictographs Extended-A
+  if (code >= 0x1F300 && code <= 0x1FAFF) return true;
+  // Emoticons など追加面の記号類
+  if (code >= 0x1F000 && code <= 0x1F2FF) return true;
+  return false;
+}
+
 bool isEmojiOnlyMessage(String text) {
   final trimmed = text.trim();
   if (trimmed.isEmpty) return false;
   final chars = trimmed.characters.toList();
   if (chars.length > 3) return false;
-  final asciiAlnum = RegExp(r'[A-Za-z0-9]');
+  var hasEmoji = false;
   for (final c in chars) {
     if (c.trim().isEmpty) continue;
-    if (asciiAlnum.hasMatch(c)) return false;
-    final code = c.runes.first;
-    if (code < 0x2000) return false;
+    // 文字（grapheme cluster）内のいずれかの code point が絵文字なら可
+    final runes = c.runes.toList();
+    final allEmoji = runes.every(_isEmojiCodePoint);
+    if (!allEmoji) return false;
+    if (runes.any(_isEmojiCodePoint)) hasEmoji = true;
   }
-  return true;
+  return hasEmoji;
 }
