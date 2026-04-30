@@ -1683,7 +1683,6 @@ class _ChatDetailViewState extends State<ChatDetailView> {
     final stamps = Map<String, dynamic>.from(msg['stamps'] ?? {});
     final readBy = List<String>.from(msg['readBy'] ?? []);
     final readCount = readBy.where((uid) => uid != currentUser!.uid).length;
-    final isRead = isMe && readCount > 0;
     final totalMembers = widget.memberNames.length - 1;
     String timeStr = '';
     if (msg['createdAt'] != null) { final ts = msg['createdAt'] as Timestamp; timeStr = DateFormat('HH:mm').format(ts.toDate()); }
@@ -1822,9 +1821,18 @@ class _ChatDetailViewState extends State<ChatDetailView> {
     } else { content = SelectionArea(child: Text.rich(TextSpan(children: _buildTextSpansWithLinks(text, ctx: context)))); }
 
     String readText = '';
-    if (isMe && isRead) {
-      if (widget.isGroup && totalMembers > 1) { readText = readCount >= totalMembers ? '全員既読' : '既読 $readCount'; }
-      else { readText = '既読'; }
+    if (isMe) {
+      // 家族チャット(roomIdが family_<保護者UID>)では保護者の既読を最優先表示
+      final isFamilyRoom = widget.roomId.startsWith('family_');
+      if (isFamilyRoom) {
+        final parentUid = widget.roomId.substring('family_'.length);
+        if (readBy.contains(parentUid)) readText = '保護者既読';
+      } else if (widget.isGroup && totalMembers > 1) {
+        if (readCount >= totalMembers) readText = '全員既読';
+        else if (readCount > 0) readText = '既読 $readCount';
+      } else if (readCount > 0) {
+        readText = '既読';
+      }
     }
 
     final isDesktop = kIsWeb && MediaQuery.of(context).size.width >= AppBreakpoints.desktop;
