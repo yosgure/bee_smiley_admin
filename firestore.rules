@@ -174,9 +174,10 @@ service cloud.firestore {
       allow read: if isStaff();
       allow create, update, delete: if isStaff();
     }
+    // crm_leads は CRM一体化により plus_families.children[] に統合済み（2026-05-01 削除）。
+    // 新規書き込みを禁止し、誤って参照されないよう read もロック。
     match /crm_leads/{leadId} {
-      allow read: if isStaff();
-      allow create, update, delete: if isStaff();
+      allow read, write: if false;
     }
     match /hiyari_reports/{reportId} {
       function hiyariValid(d) {
