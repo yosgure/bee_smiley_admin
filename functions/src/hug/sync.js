@@ -28,6 +28,14 @@ async function getChildRecordIds(cookies, date) {
 
   const childMap = {};
 
+  // HUG が返したレコードの実 cal_date を onclick/href から抽出。
+  // 指定日に記録が無いと HUG が直近の別日付の記録を返してくる場合があるため、
+  // 後段で厳密に日付一致を検証して誤上書きを防ぐ。
+  const parseCalDate = (s) => {
+    const m = (s || '').match(/cal_date=(\d{4}-\d{2}-\d{2})/);
+    return m ? m[1] : null;
+  };
+
   $('button').each((_, el) => {
     const onclick = $(el).attr('onclick') || '';
     const idMatch = onclick.match(/id=(\d+)/);
@@ -35,13 +43,14 @@ async function getChildRecordIds(cookies, date) {
     if (idMatch && cidMatch && onclick.includes('mode=edit')) {
       const rId = idMatch[1];
       const cId = cidMatch[1];
+      const realCalDate = parseCalDate(onclick) || date;
 
       const row = $(el).closest('tr');
       const nameCell = row.find('td').eq(1).text().trim();
       const name = nameCell.replace(/さん.*$/, '').trim();
 
       if (name && cId) {
-        childMap[name] = { rId, cId, calDate: date };
+        childMap[name] = { rId, cId, calDate: realCalDate };
       }
     }
   });
@@ -53,13 +62,14 @@ async function getChildRecordIds(cookies, date) {
     if (idMatch && cidMatch) {
       const rId = idMatch[1];
       const cId = cidMatch[1];
+      const realCalDate = parseCalDate(href) || date;
 
       const row = $(el).closest('tr');
       const nameCell = row.find('td').eq(1).text().trim();
       const name = nameCell.replace(/さん.*$/, '').trim();
 
       if (name && cId && !childMap[name]) {
-        childMap[name] = { rId, cId, calDate: date };
+        childMap[name] = { rId, cId, calDate: realCalDate };
       }
     }
   });
@@ -627,6 +637,19 @@ async function syncToHugCore(contentIds = null) {
         continue;
       }
 
+      // ここに到達 = 欠席系・子育てサポート系のいずれにも該当しない場合のみ。
+      // 既知のケア記録系ラベル以外を silent fallback でケア記録に流さない（既存記録の誤上書き防止）。
+      const normalizedCategory = normalizeName(category);
+      const isCareRecordCategory = normalizedCategory.includes('ケア記録') ||
+        normalizedCategory.includes('ケア') ||
+        normalizedCategory === '記録';
+      if (!isCareRecordCategory) {
+        throw new Error(
+          `カテゴリ「${category}」のHUG送信先が判定できません。` +
+          `欠席系 / 子育てサポート / ケア記録 のいずれかのカテゴリで送信してください。`
+        );
+      }
+
       if (!dateRecordCache[dateStr]) {
         dateRecordCache[dateStr] = await getChildRecordIds(cookies, dateStr);
       }
@@ -659,6 +682,16 @@ async function syncToHugCore(contentIds = null) {
         throw new Error(
           `${dateStr} に ${studentName}さんの HUG 療育記録が見つかりません。` +
           `HUG 上で該当日に療育記録が作成されていることを確認してから再試行してください。`
+        );
+      }
+
+      // 安全装置: HUG が指定日のレコードではなく直近の別日付のレコードを返してきた場合、
+      // 既存記録（過去日・公開済みの可能性あり）を上書きする事故を防ぐため拒否する。
+      if (recordInfo.calDate && recordInfo.calDate !== dateStr) {
+        throw new Error(
+          `${dateStr} に ${studentName}さんの HUG 療育記録が存在しません` +
+          `（HUG が直近の ${recordInfo.calDate} の記録を返してきましたが、別日付の記録の上書きは安全のため拒否しました）。` +
+          `HUG 上で ${dateStr} の療育記録を作成してから再試行してください。`
         );
       }
 

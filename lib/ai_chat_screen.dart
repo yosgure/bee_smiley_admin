@@ -99,6 +99,12 @@ class _AiChatScreenState extends State<AiChatScreen> {
   List<Map<String, dynamic>>? _lastElicitationQuestions;
   List<String> _lastElicitationAnswers = [];
 
+  // 現在の会話コンテキスト（カテゴリ）。スラッシュコマンドで設定され、
+  // バッジ表示・HUG送信時の初期カテゴリ・送信先ルーティングに使われる。
+  // 履歴ロード時のみ自動初期化し、それ以外はユーザーの明示的操作（スラッシュ実行 / バッジ✕）で更新する。
+  String? _activeCommandLabel;
+  bool _activeCommandInitialized = false;
+
   // ドラッグ&ドロップ用
   StreamSubscription? _dragOverSub;
   StreamSubscription? _dragLeaveSub;
@@ -252,6 +258,13 @@ class _AiChatScreenState extends State<AiChatScreen> {
   void _selectSlashCommand(Map<String, dynamic> cmd) {
     final questions = cmd['questions'] as List<dynamic>? ?? [];
     final isFreeform = cmd['freeform'] == true;
+
+    // 会話コンテキストを更新（バッジ表示・HUG送信先ルーティングに使う）
+    final cmdLabel = (cmd['label'] as String?)?.trim();
+    if (cmdLabel != null && cmdLabel.isNotEmpty) {
+      _activeCommandLabel = cmdLabel;
+      _activeCommandInitialized = true;
+    }
 
     if (isFreeform) {
       // フリーフォーム（自由記述）モード開始
@@ -1419,10 +1432,11 @@ class _AiChatScreenState extends State<AiChatScreen> {
       commandLabels.add('その他');
     }
 
-    // デフォルト選択: スラッシュコマンドで使ったラベル、なければ先頭
-    String selectedCategory = defaultCommandLabel ?? (commandLabels.isNotEmpty ? commandLabels.first : 'その他');
-    if (!commandLabels.contains(selectedCategory)) {
-      selectedCategory = commandLabels.isNotEmpty ? commandLabels.first : 'その他';
+    // デフォルト選択: 会話コンテキストのカテゴリ。一致しない場合は「未選択」に倒し、
+    // ユーザーに明示選択を強制する（silent fallback でケア記録に流れる事故を防止）。
+    String? selectedCategory;
+    if (defaultCommandLabel != null && commandLabels.contains(defaultCommandLabel)) {
+      selectedCategory = defaultCommandLabel;
     }
 
     final result = await showDialog<bool>(
@@ -1514,6 +1528,8 @@ class _AiChatScreenState extends State<AiChatScreen> {
                                       isExpanded: true,
                                       borderRadius: BorderRadius.circular(10),
                                       style: TextStyle(fontSize: AppTextSize.body, color: c.textPrimary),
+                                      hint: Text('カテゴリを選択してください',
+                                          style: TextStyle(fontSize: AppTextSize.body, color: AppColors.error)),
                                       items: commandLabels.map((label) {
                                         return DropdownMenuItem(value: label, child: Text(label));
                                       }).toList(),
@@ -1614,10 +1630,14 @@ class _AiChatScreenState extends State<AiChatScreen> {
                           ),
                           const SizedBox(width: 8),
                           ElevatedButton.icon(
-                            onPressed: () => Navigator.pop(ctx, true),
+                            onPressed: selectedCategory == null
+                                ? null
+                                : () => Navigator.pop(ctx, true),
                             style: ElevatedButton.styleFrom(
                               backgroundColor: c.aiAccent,
                               foregroundColor: Colors.white,
+                              disabledBackgroundColor: c.borderLight,
+                              disabledForegroundColor: c.textTertiary,
                               padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                               elevation: 0,
@@ -1637,7 +1657,14 @@ class _AiChatScreenState extends State<AiChatScreen> {
       },
     );
 
-    if (result == true && mounted) {
+    if (result == true && mounted && selectedCategory != null) {
+      // ダイアログで選んだカテゴリを会話コンテキストにも反映（バッジを同期）
+      if (_activeCommandLabel != selectedCategory) {
+        setState(() {
+          _activeCommandLabel = selectedCategory;
+          _activeCommandInitialized = true;
+        });
+      }
       final payload = <String, dynamic>{
         'category': selectedCategory,
         'studentId': widget.studentId,
@@ -1844,6 +1871,101 @@ class _AiChatScreenState extends State<AiChatScreen> {
                   _buildInputArea(),
               ],
             ),
+    );
+  }
+
+  /// 入力欄ツールバー右側に表示するモードチップ。
+  /// 設定済み: アクセント色のピル＋✕ / 未設定: 警告色のピル（タップでカテゴリ選択）。
+  /// HUG送信先がどのカテゴリになるかを送信操作の直前で明示する。
+  Widget _buildActiveCommandChip() {
+    final c = context.colors;
+    final hasContext = _activeCommandLabel != null && _activeCommandLabel!.isNotEmpty;
+    final allLabels = _commands.map((cmd) => (cmd['label'] as String? ?? '').trim()).where((l) => l.isNotEmpty).toList();
+    if (!allLabels.contains('その他')) allLabels.add('その他');
+
+    Future<void> openPicker() async {
+      final picked = await showDialog<String>(
+        context: context,
+        builder: (ctx) {
+          return SimpleDialog(
+            title: const Text('モード（カテゴリ）を選択'),
+            children: [
+              ...allLabels.map((l) => SimpleDialogOption(
+                    onPressed: () => Navigator.pop(ctx, l),
+                    child: Text(l),
+                  )),
+            ],
+          );
+        },
+      );
+      if (picked != null && mounted) {
+        setState(() {
+          _activeCommandLabel = picked;
+          _activeCommandInitialized = true;
+        });
+      }
+    }
+
+    final pillColor = hasContext ? c.aiAccent : AppColors.warning;
+    final bgColor = hasContext ? c.aiAccent.withOpacity(0.12) : AppColors.warning.withOpacity(0.14);
+    final label = hasContext ? _activeCommandLabel! : 'モード未設定';
+
+    return Tooltip(
+      message: hasContext ? 'タップで切替 / ✕で解除' : 'タップしてモードを選択',
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(20),
+          onTap: openPicker,
+          child: Container(
+            padding: EdgeInsets.fromLTRB(10, 6, hasContext ? 4 : 10, 6),
+            decoration: BoxDecoration(
+              color: bgColor,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: pillColor.withOpacity(0.4), width: 1),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  hasContext ? Icons.bookmark_rounded : Icons.warning_amber_rounded,
+                  size: 14,
+                  color: pillColor,
+                ),
+                const SizedBox(width: 6),
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 160),
+                  child: Text(
+                    label,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: AppTextSize.caption,
+                      fontWeight: FontWeight.w600,
+                      color: pillColor,
+                    ),
+                  ),
+                ),
+                if (hasContext) ...[
+                  const SizedBox(width: 2),
+                  InkWell(
+                    borderRadius: BorderRadius.circular(12),
+                    onTap: () {
+                      setState(() {
+                        _activeCommandLabel = null;
+                        _activeCommandInitialized = true;
+                      });
+                    },
+                    child: Padding(
+                      padding: const EdgeInsets.all(4),
+                      child: Icon(Icons.close_rounded, size: 12, color: pillColor),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 
@@ -2069,6 +2191,26 @@ class _AiChatScreenState extends State<AiChatScreen> {
           }
         }
 
+        // 履歴ロード後の初回のみ、会話内最後のスラッシュコマンドから _activeCommandLabel を初期化
+        if (!_activeCommandInitialized && allMessages.isNotEmpty) {
+          String? lastLabel;
+          for (final m in allMessages) {
+            if (m['role'] != 'user') continue;
+            final content = (m['content'] as String?) ?? '';
+            if (!content.startsWith('/')) continue;
+            final firstLine = content.split('\n').first;
+            final label = firstLine.substring(1).trim();
+            if (label.isNotEmpty) lastLabel = label;
+          }
+          _activeCommandInitialized = true;
+          if (lastLabel != null && lastLabel != _activeCommandLabel) {
+            // ビルド完了後に setState
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) setState(() => _activeCommandLabel = lastLabel);
+            });
+          }
+        }
+
         // 空の場合はウェルカム画面
         if (allMessages.isEmpty && !_isSending) {
           return _buildWelcomeView();
@@ -2124,19 +2266,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
                 if (index == allMessages.length) {
                   return _buildTypingIndicator();
                 }
-                // AIメッセージの直前のユーザーメッセージからコマンドを検出
-                String? usedCommandLabel;
-                if (allMessages[index]['role'] == 'assistant' && index > 0) {
-                  final prevMsg = allMessages[index - 1];
-                  if (prevMsg['role'] == 'user') {
-                    final prevContent = prevMsg['content'] as String? ?? '';
-                    if (prevContent.startsWith('/')) {
-                      final firstLine = prevContent.split('\n').first;
-                      usedCommandLabel = firstLine.substring(1).trim();
-                    }
-                  }
-                }
-                return _buildMessageItem(allMessages[index], usedCommandLabel: usedCommandLabel);
+                return _buildMessageItem(allMessages[index]);
               },
             ),
           ),
@@ -2185,7 +2315,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
     );
   }
 
-  Widget _buildMessageItem(Map<String, dynamic> msg, {String? usedCommandLabel}) {
+  Widget _buildMessageItem(Map<String, dynamic> msg) {
     final isUser = msg['role'] == 'user';
     var content = msg['content'] ?? '';
     // フリーフォームの出力指示部分を表示から除外
@@ -2209,7 +2339,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
       return _buildUserMessage(content, timeStr, isSending,
           attachments: attachments, pendingAttachments: pendingAttachments);
     } else {
-      return _buildAiMessage(content, timeStr, usedCommandLabel: usedCommandLabel);
+      return _buildAiMessage(content, timeStr);
     }
   }
 
@@ -2353,7 +2483,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
     );
   }
 
-  Widget _buildAiMessage(String content, String timeStr, {String? usedCommandLabel}) {
+  Widget _buildAiMessage(String content, String timeStr) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 20),
       child: Row(
@@ -2405,7 +2535,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
                     _AiMessageActionButton(
                       icon: Icons.cloud_upload_outlined,
                       tooltip: 'HUG連携',
-                      onTap: () => _showSaveContentDialog(content, defaultCommandLabel: usedCommandLabel),
+                      onTap: () => _showSaveContentDialog(content, defaultCommandLabel: _activeCommandLabel),
                     ),
                   ],
                 ),
@@ -3287,6 +3417,9 @@ class _AiChatScreenState extends State<AiChatScreen> {
                               },
                             ),
                           const Spacer(),
+                          // 現在のモード（HUG送信先カテゴリ）チップ
+                          _buildActiveCommandChip(),
+                          const SizedBox(width: 8),
                           // 送信ボタン（常に表示、入力があればアクティブ）
                           GestureDetector(
                             onTap: (_hasText || _attachedFiles.isNotEmpty) && !_isSending
