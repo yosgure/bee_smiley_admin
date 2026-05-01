@@ -143,7 +143,8 @@ class CrmLeadScreen extends StatefulWidget {
 }
 
 class _CrmLeadScreenState extends State<CrmLeadScreen> {
-  // 0: ホーム, 1: 督促, 2: パイプライン, 3: 入会済み, 4: 離脱, 5: 分析
+  // 0: 今やること（旧ホーム+督促を統合）、1: リード一覧（旧パイプラインカンバン）、2: 分析
+  // 入会済み・離脱タブは削除（入会後は BSP 管理画面に任せる）
   int _viewMode = 0;
   String _sourceFilter = 'all';
   String _stageFilter = 'all'; // 未使用（旧テーブル互換用に残置）
@@ -183,8 +184,8 @@ class _CrmLeadScreenState extends State<CrmLeadScreen> {
           ),
         ],
       ),
-      // ホームタブ（_viewMode==0）では右サイドパネルや記録フォームと
-      // 操作競合するため FAB を非表示にする。新規登録は他タブから。
+      // 「今やること」タブ（_viewMode==0）では右サイドパネルや記録フォームと
+      // 操作競合するため FAB を非表示にする。新規登録は「リード一覧」タブから。
       floatingActionButton: _viewMode == 0
           ? null
           : FloatingActionButton.extended(
@@ -215,12 +216,9 @@ class _CrmLeadScreenState extends State<CrmLeadScreen> {
             SegmentedButton<int>(
               showSelectedIcon: false,
               segments: const [
-                ButtonSegment(value: 0, label: Text('ホーム'), icon: Icon(Icons.home_outlined, size: 16)),
-                ButtonSegment(value: 1, label: Text('督促'), icon: Icon(Icons.campaign_outlined, size: 16)),
-                ButtonSegment(value: 2, label: Text('パイプライン'), icon: Icon(Icons.timeline, size: 16)),
-                ButtonSegment(value: 3, label: Text('入会済み'), icon: Icon(Icons.check_circle_outline, size: 16)),
-                ButtonSegment(value: 4, label: Text('離脱'), icon: Icon(Icons.logout, size: 16)),
-                ButtonSegment(value: 5, label: Text('分析'), icon: Icon(Icons.bar_chart, size: 16)),
+                ButtonSegment(value: 0, label: Text('今やること'), icon: Icon(Icons.checklist, size: 16)),
+                ButtonSegment(value: 1, label: Text('リード一覧'), icon: Icon(Icons.view_kanban_outlined, size: 16)),
+                ButtonSegment(value: 2, label: Text('分析'), icon: Icon(Icons.bar_chart, size: 16)),
               ],
               selected: {_viewMode},
               onSelectionChanged: (s) => setState(() => _viewMode = s.first),
@@ -300,14 +298,8 @@ class _CrmLeadScreenState extends State<CrmLeadScreen> {
           case 0:
             return CrmHomeScreen(docs: docs);
           case 1:
-            return _CrmDunningView(docs: docs);
-          case 2:
             return _CrmPipelineView(docs: docs);
-          case 3:
-            return _CrmEnrolledView(docs: docs);
-          case 4:
-            return _CrmChurnView(docs: docs);
-          case 5:
+          case 2:
           default:
             return _CrmDashboardView(docs: docs);
         }
@@ -879,6 +871,11 @@ class _LeadTableRow extends StatelessWidget {
                         color: overdue ? context.alerts.urgent.icon : context.alerts.info.icon),
                 ],
               ),
+              // 入会手続中はHUG必須項目の進捗バーを表示（契約完了までの埋まり具合）
+              if (stage == 'onboarding') ...[
+                const SizedBox(height: 8),
+                _HugProgressBar(data: d),
+              ],
             ],
           ),
         ),
@@ -895,6 +892,77 @@ class _LeadTableRow extends StatelessWidget {
         Icon(icon, size: 12, color: c),
         const SizedBox(width: 4),
         Text(text, style: TextStyle(fontSize: AppTextSize.caption, color: c)),
+      ],
+    );
+  }
+}
+
+/// HUG連携必須13項目の入力率を進捗バーで可視化。
+/// 100% で「契約完了」可能を示す。CRM lead 互換のフラットマップを受け取る。
+class _HugProgressBar extends StatelessWidget {
+  final Map<String, dynamic> data;
+  const _HugProgressBar({required this.data});
+
+  static (int filled, int total) _count(Map<String, dynamic> d) {
+    bool s(String k) => (d[k] as String? ?? '').trim().isNotEmpty;
+    final rc = d['recipientCertificate'];
+    final rcMap = rc is Map ? Map<String, dynamic>.from(rc) : <String, dynamic>{};
+    bool rs(String k) => (rcMap[k] as String? ?? '').trim().isNotEmpty;
+    int hits = 0;
+    if (s('parentLastName')) hits++;
+    if (s('parentFirstName')) hits++;
+    if (s('parentKana')) hits++;
+    if (s('postalCode')) hits++;
+    if (s('prefecture')) hits++;
+    if (s('city')) hits++;
+    if (s('parentTel')) hits++;
+    if (s('childFirstName')) hits++;
+    if (s('childKana')) hits++;
+    if (d['childBirthDate'] != null) hits++;
+    if (s('childGender')) hits++;
+    if (s('allergy')) hits++;
+    // 受給者証4項目（startAt は Timestamp か Map）
+    if (rcMap['startAt'] != null) hits++;
+    if (rs('number')) hits++;
+    if (rs('service')) hits++;
+    if (rcMap['monthlyLimit'] != null) hits++;
+    return (hits, 16);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final (filled, total) = _count(data);
+    final ratio = filled / total;
+    final isComplete = filled == total;
+    final color = isComplete ? AppColors.success : AppColors.info;
+    return Row(
+      children: [
+        Icon(
+          isComplete ? Icons.check_circle : Icons.assignment_outlined,
+          size: 14,
+          color: color,
+        ),
+        const SizedBox(width: 6),
+        Expanded(
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: LinearProgressIndicator(
+              value: ratio,
+              minHeight: 6,
+              backgroundColor: context.colors.borderLight,
+              valueColor: AlwaysStoppedAnimation(color),
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Text(
+          isComplete ? '契約OK' : 'HUG項目 $filled/$total',
+          style: TextStyle(
+            fontSize: AppTextSize.caption,
+            color: color,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
       ],
     );
   }
@@ -2612,16 +2680,40 @@ class _CrmLeadEditScreenState extends State<CrmLeadEditScreen> {
             children: [
               if (_isEdit && _stage != 'won')
                 Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: _convertToFamily,
-                    icon: const Icon(Icons.how_to_reg, size: 18),
-                    label: const Text('入会処理'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: AppColors.success,
-                      side: BorderSide(color: AppColors.successBorder),
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                    ),
-                  ),
+                  child: () {
+                    // HUG必須項目が全部埋まっていれば「契約完了」緑塗りボタンで目立たせる、
+                    // 不足があれば「入会処理」グレー枠（押すとダイアログで不足項目列挙）
+                    final missing = _validateEnrollmentRequirements();
+                    final ready = missing.isEmpty;
+                    if (ready) {
+                      return ElevatedButton.icon(
+                        onPressed: _convertToFamily,
+                        icon: const Icon(Icons.check_circle, size: 20),
+                        label: const Text('契約完了',
+                            style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: AppTextSize.bodyMd)),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.success,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10)),
+                          elevation: 2,
+                        ),
+                      );
+                    }
+                    return OutlinedButton.icon(
+                      onPressed: _convertToFamily,
+                      icon: const Icon(Icons.how_to_reg, size: 18),
+                      label: Text('契約完了 (HUG項目: ${16 - missing.length}/16)'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppColors.successDark,
+                        side: BorderSide(color: AppColors.successBorder),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                      ),
+                    );
+                  }(),
                 ),
               if (_isEdit && _stage != 'won')
                 const SizedBox(width: 8),
