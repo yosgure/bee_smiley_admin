@@ -543,219 +543,6 @@ class _CrmLeadScreenState extends State<CrmLeadScreen> {
   }
 }
 
-// ============================================================
-// CRM-02: カンバンビュー
-// ============================================================
-class _CrmKanbanView extends StatelessWidget {
-  final List<LeadView> docs;
-  const _CrmKanbanView({required this.docs});
-
-  @override
-  Widget build(BuildContext context) {
-    final byStage = <String, List<LeadView>>{};
-    for (final id in CrmOptions.kanbanStages) {
-      byStage[id] = [];
-    }
-    byStage['won'] = [];
-    byStage['lost'] = [];
-    for (final d in docs) {
-      final stage = d.data()['stage'] as String? ?? 'considering';
-      (byStage[stage] ??= []).add(d);
-    }
-
-    final stages = [
-      ...CrmOptions.kanbanStages,
-      'won',
-      'lost',
-    ];
-
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      padding: const EdgeInsets.fromLTRB(8, 8, 8, 88),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: stages
-            .map((id) => _KanbanColumn(
-                  stageId: id,
-                  docs: byStage[id] ?? const [],
-                ))
-            .toList(),
-      ),
-    );
-  }
-}
-
-class _KanbanColumn extends StatelessWidget {
-  final String stageId;
-  final List<LeadView> docs;
-  const _KanbanColumn({required this.stageId, required this.docs});
-
-  @override
-  Widget build(BuildContext context) {
-    final color = CrmOptions.stageColor(stageId);
-    final label = CrmOptions.stageLabel(stageId);
-    return Container(
-      width: 260,
-      margin: const EdgeInsets.symmetric(horizontal: 4),
-      decoration: BoxDecoration(
-        color: context.colors.scaffoldBg,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: context.colors.borderLight),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.12),
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(10)),
-              border: Border(bottom: BorderSide(color: color, width: 2)),
-            ),
-            child: Row(
-              children: [
-                Container(
-                    width: 8,
-                    height: 8,
-                    decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
-                const SizedBox(width: 8),
-                Text(label,
-                    style: TextStyle(
-                        fontSize: AppTextSize.body,
-                        fontWeight: FontWeight.bold,
-                        color: context.colors.textPrimary)),
-                const Spacer(),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                  decoration: BoxDecoration(
-                      color: color, borderRadius: BorderRadius.circular(10)),
-                  child: Text('${docs.length}',
-                      style: const TextStyle(
-                          fontSize: AppTextSize.caption,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white)),
-                ),
-              ],
-            ),
-          ),
-          ConstrainedBox(
-            constraints: BoxConstraints(
-                maxHeight: MediaQuery.of(context).size.height - 220),
-            child: ListView.builder(
-              shrinkWrap: true,
-              padding: const EdgeInsets.all(6),
-              itemCount: docs.length,
-              itemBuilder: (c, i) => _LeadKanbanCard(doc: docs[i]),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _LeadKanbanCard extends StatelessWidget {
-  final LeadView doc;
-  const _LeadKanbanCard({required this.doc});
-
-  @override
-  Widget build(BuildContext context) {
-    final d = doc.data();
-    final childName = _childFullName(d);
-    final source = d['source'] as String? ?? '';
-    final inquiredAt = (d['inquiredAt'] as Timestamp?)?.toDate();
-    final nextAt = (d['nextActionAt'] as Timestamp?)?.toDate();
-    final nextNote = d['nextActionNote'] as String? ?? '';
-    final overdue = nextAt != null && nextAt.isBefore(DateTime.now());
-    final alerts = context.alerts;
-    final alertStyle = overdue ? alerts.urgent : alerts.info;
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      decoration: BoxDecoration(
-        color: context.colors.cardBg,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(
-          color: overdue ? alerts.urgent.border : context.colors.borderLight,
-          width: overdue ? 1.2 : 1,
-        ),
-      ),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(10),
-        onTap: () => Navigator.push(context,
-            MaterialPageRoute(builder: (_) => CrmLeadEditScreen(doc: doc))),
-        child: Padding(
-          padding: const EdgeInsets.all(10),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                childName.isEmpty ? '(児童名未入力)' : childName,
-                style: TextStyle(
-                    fontSize: 13.5,
-                    fontWeight: FontWeight.w700,
-                    color: context.colors.textPrimary),
-                overflow: TextOverflow.ellipsis,
-              ),
-              const SizedBox(height: 6),
-              Wrap(
-                spacing: 4,
-                runSpacing: 4,
-                children: [
-                  if (source.isNotEmpty)
-                    _miniChip(context, CrmOptions.labelOf(CrmOptions.sources, source)),
-                  if (inquiredAt != null)
-                    _miniChip(context,
-                        '問:${DateFormat('M/d').format(inquiredAt)}'),
-                ],
-              ),
-              if (nextAt != null) ...[
-                const SizedBox(height: 6),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: alertStyle.background,
-                    border: Border.all(color: alertStyle.border, width: 0.8),
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(
-                        overdue ? Icons.warning_amber : Icons.schedule,
-                        size: 11,
-                        color: alertStyle.icon,
-                      ),
-                      const SizedBox(width: 4),
-                      Expanded(
-                        child: Text(
-                          '${DateFormat('M/d').format(nextAt)} $nextNote',
-                          style: TextStyle(fontSize: AppTextSize.xs, color: alertStyle.text),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _miniChip(BuildContext context, String text) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(
-          color: context.colors.chipBg,
-          borderRadius: BorderRadius.circular(4)),
-      child: Text(text,
-          style: TextStyle(fontSize: AppTextSize.xs, color: context.colors.textSecondary)),
-    );
-  }
-}
-
 String _childFullName(Map<String, dynamic> d) {
   final cl = (d['childLastName'] as String? ?? '').trim();
   final cf = (d['childFirstName'] as String? ?? '').trim();
@@ -991,262 +778,6 @@ class _BucketedLead {
   });
 }
 
-class _CrmDunningView extends StatelessWidget {
-  final List<LeadView> docs;
-  const _CrmDunningView({required this.docs});
-
-  @override
-  Widget build(BuildContext context) {
-    final now = DateTime.now();
-    final todayStart = DateTime(now.year, now.month, now.day);
-    final todayEnd = todayStart.add(const Duration(days: 1));
-    final threeDaysLater = todayStart.add(const Duration(days: 4));
-
-    final buckets = <_DunningBucket, List<_BucketedLead>>{
-      _DunningBucket.urgent: [],
-      _DunningBucket.warning: [],
-      _DunningBucket.today: [],
-      _DunningBucket.upcoming: [],
-    };
-
-    for (final d in docs) {
-      final data = d.data();
-      final stage = data['stage'] as String? ?? 'considering';
-      if (stage != 'considering' && stage != 'onboarding') continue;
-      final lastActivityAt = (data['lastActivityAt'] as Timestamp?)?.toDate() ??
-          (data['updatedAt'] as Timestamp?)?.toDate() ??
-          (data['inquiredAt'] as Timestamp?)?.toDate();
-      final nextActionAt = (data['nextActionAt'] as Timestamp?)?.toDate();
-      final daysIdle = lastActivityAt == null
-          ? null
-          : now.difference(lastActivityAt).inDays;
-
-      if (stage == 'onboarding' &&
-          daysIdle != null &&
-          daysIdle >= _staleProcessingDays) {
-        buckets[_DunningBucket.urgent]!.add(_BucketedLead(
-            doc: d,
-            bucket: _DunningBucket.urgent,
-            reasonText: '入会手続中・$daysIdle日放置',
-            daysIdle: daysIdle));
-        continue;
-      }
-      if (stage == 'considering' &&
-          daysIdle != null &&
-          daysIdle >= _staleConsideringDays) {
-        buckets[_DunningBucket.warning]!.add(_BucketedLead(
-            doc: d,
-            bucket: _DunningBucket.warning,
-            reasonText: '検討中・$daysIdle日放置',
-            daysIdle: daysIdle));
-        continue;
-      }
-      if (nextActionAt != null &&
-          !nextActionAt.isBefore(todayStart) &&
-          nextActionAt.isBefore(todayEnd)) {
-        buckets[_DunningBucket.today]!.add(_BucketedLead(
-            doc: d,
-            bucket: _DunningBucket.today,
-            reasonText: '今日の予定',
-            daysIdle: daysIdle));
-        continue;
-      }
-      if (nextActionAt != null &&
-          nextActionAt.isBefore(threeDaysLater)) {
-        buckets[_DunningBucket.upcoming]!.add(_BucketedLead(
-            doc: d,
-            bucket: _DunningBucket.upcoming,
-            reasonText: '${DateFormat('M/d').format(nextActionAt)} 予定',
-            daysIdle: daysIdle));
-        continue;
-      }
-    }
-
-    // 各バケット内で放置日数の多い順/予定日の近い順に並べる
-    for (final b in buckets.values) {
-      b.sort((a, c) {
-        if (a.daysIdle != null && c.daysIdle != null) {
-          return c.daysIdle!.compareTo(a.daysIdle!);
-        }
-        return 0;
-      });
-    }
-
-    final totalCount = buckets.values.fold<int>(0, (s, l) => s + l.length);
-    if (totalCount == 0) {
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.check_circle_outline,
-                size: 56, color: context.colors.textTertiary),
-            const SizedBox(height: 12),
-            Text('今日の対応タスクはありません 🎉',
-                style: TextStyle(
-                    color: context.colors.textSecondary, fontSize: AppTextSize.bodyMd)),
-          ],
-        ),
-      );
-    }
-
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(12, 8, 12, 88),
-      children: [
-        if (buckets[_DunningBucket.urgent]!.isNotEmpty)
-          _section(context, '🔴 緊急放置', buckets[_DunningBucket.urgent]!,
-              context.alerts.urgent),
-        if (buckets[_DunningBucket.warning]!.isNotEmpty)
-          _section(context, '🟠 要対応', buckets[_DunningBucket.warning]!,
-              context.alerts.warning),
-        if (buckets[_DunningBucket.today]!.isNotEmpty)
-          _section(context, '🟡 今日の予定', buckets[_DunningBucket.today]!,
-              context.alerts.warning),
-        if (buckets[_DunningBucket.upcoming]!.isNotEmpty)
-          _section(context, '🔵 明日以降（3日以内）', buckets[_DunningBucket.upcoming]!,
-              context.alerts.info),
-      ],
-    );
-  }
-
-  Widget _section(BuildContext context, String title,
-      List<_BucketedLead> items, AlertStyle style) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
-            child: Row(
-              children: [
-                Text(title,
-                    style: TextStyle(
-                        fontSize: AppTextSize.body,
-                        fontWeight: FontWeight.bold,
-                        color: context.colors.textPrimary)),
-                const SizedBox(width: 6),
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: style.background,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: style.border, width: 0.6),
-                  ),
-                  child: Text('${items.length}',
-                      style: TextStyle(
-                          fontSize: AppTextSize.xs,
-                          color: style.text,
-                          fontWeight: FontWeight.bold)),
-                ),
-              ],
-            ),
-          ),
-          ...items.map((b) => _DunningLeadRow(item: b, style: style)),
-        ],
-      ),
-    );
-  }
-}
-
-class _DunningLeadRow extends StatelessWidget {
-  final _BucketedLead item;
-  final AlertStyle style;
-  const _DunningLeadRow({required this.item, required this.style});
-
-  @override
-  Widget build(BuildContext context) {
-    final data = item.doc.data();
-    final childName = _childFullName(data);
-    final stage = data['stage'] as String? ?? '';
-    final nextAt = (data['nextActionAt'] as Timestamp?)?.toDate();
-    final nextNote = data['nextActionNote'] as String? ?? '';
-    final tel = data['parentTel'] as String? ?? '';
-    final stageColor = CrmOptions.stageColor(stage);
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 6),
-      decoration: BoxDecoration(
-        color: context.colors.cardBg,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: style.border, width: 0.8),
-      ),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(10),
-        onTap: () => Navigator.push(context,
-            MaterialPageRoute(builder: (_) => CrmLeadEditScreen(doc: item.doc))),
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: stageColor.withValues(alpha: 0.18),
-                            borderRadius: BorderRadius.circular(4),
-                            border:
-                                Border.all(color: stageColor, width: 0.5),
-                          ),
-                          child: Text(CrmOptions.stageLabel(stage),
-                              style: TextStyle(
-                                  fontSize: AppTextSize.xs,
-                                  color: stageColor,
-                                  fontWeight: FontWeight.bold)),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            childName.isEmpty ? '(児童名未入力)' : childName,
-                            style: TextStyle(
-                                fontSize: AppTextSize.bodyMd,
-                                fontWeight: FontWeight.bold,
-                                color: context.colors.textPrimary),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 4),
-                    Text(item.reasonText,
-                        style: TextStyle(fontSize: AppTextSize.caption, color: style.text)),
-                    if (nextAt != null) ...[
-                      const SizedBox(height: 2),
-                      Text(
-                          '次回: ${DateFormat('M/d').format(nextAt)} $nextNote',
-                          style: TextStyle(
-                              fontSize: AppTextSize.caption,
-                              color: context.colors.textSecondary)),
-                    ],
-                  ],
-                ),
-              ),
-              if (tel.isNotEmpty)
-                IconButton(
-                  icon: Icon(Icons.phone, size: 18, color: style.icon),
-                  tooltip: '電話: $tel',
-                  onPressed: () {
-                    // 電話URI起動は url_launcher 経由、ここでは詳細画面誘導のみ
-                    Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                            builder: (_) => CrmLeadEditScreen(doc: item.doc)));
-                  },
-                ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 /// パイプライン: 検討中 + 入会手続中 を次回対応期日昇順で並べる
 class _CrmPipelineView extends StatelessWidget {
   final List<LeadView> docs;
@@ -1276,184 +807,6 @@ class _CrmPipelineView extends StatelessWidget {
   }
 }
 
-/// 入会済み: won を入会日降順で
-class _CrmEnrolledView extends StatelessWidget {
-  final List<LeadView> docs;
-  const _CrmEnrolledView({required this.docs});
-
-  @override
-  Widget build(BuildContext context) {
-    final filtered = docs.where((d) => (d.data()['stage'] ?? '') == 'won').toList()
-      ..sort((a, b) {
-        final aDate = (a.data()['enrolledAt'] as Timestamp?)?.toDate();
-        final bDate = (b.data()['enrolledAt'] as Timestamp?)?.toDate();
-        if (aDate == null && bDate == null) return 0;
-        if (aDate == null) return 1;
-        if (bDate == null) return -1;
-        return bDate.compareTo(aDate);
-      });
-    if (filtered.isEmpty) {
-      return Center(
-        child: Text('入会済みリードはまだありません',
-            style: TextStyle(color: context.colors.textSecondary)),
-      );
-    }
-    return _CrmTableView(docs: filtered);
-  }
-}
-
-/// 離脱: lost + withdrawn。理由別件数バーを上に表示。
-class _CrmChurnView extends StatelessWidget {
-  final List<LeadView> docs;
-  const _CrmChurnView({required this.docs});
-
-  @override
-  Widget build(BuildContext context) {
-    final churned = docs.where((d) {
-      final s = d.data()['stage'] ?? '';
-      return s == 'lost' || s == 'withdrawn';
-    }).toList();
-
-    final lossCounts = <String, int>{};
-    final withdrawCounts = <String, int>{};
-    for (final d in churned) {
-      final data = d.data();
-      final stage = data['stage'];
-      if (stage == 'lost') {
-        final r = (data['lossReason'] as String?) ?? 'other';
-        lossCounts[r] = (lossCounts[r] ?? 0) + 1;
-      } else if (stage == 'withdrawn') {
-        final r = (data['withdrawReason'] as String?) ?? 'other';
-        withdrawCounts[r] = (withdrawCounts[r] ?? 0) + 1;
-      }
-    }
-
-    if (churned.isEmpty) {
-      return Center(
-        child: Text('離脱リードはありません',
-            style: TextStyle(color: context.colors.textSecondary)),
-      );
-    }
-
-    churned.sort((a, b) {
-      final aDate = (a.data()['updatedAt'] as Timestamp?)?.toDate();
-      final bDate = (b.data()['updatedAt'] as Timestamp?)?.toDate();
-      if (aDate == null && bDate == null) return 0;
-      if (aDate == null) return 1;
-      if (bDate == null) return -1;
-      return bDate.compareTo(aDate);
-    });
-
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(12, 8, 12, 88),
-      children: [
-        if (lossCounts.isNotEmpty)
-          _reasonBlock(context, '失注理由',
-              CrmOptions.lossReasons, lossCounts, context.alerts.urgent),
-        if (withdrawCounts.isNotEmpty)
-          _reasonBlock(context, '退会理由',
-              CrmOptions.withdrawalReasons, withdrawCounts, context.alerts.warning),
-        const SizedBox(height: 12),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
-          child: Text('全離脱リード（${churned.length}件）',
-              style: TextStyle(
-                  fontSize: AppTextSize.small,
-                  fontWeight: FontWeight.bold,
-                  color: context.colors.textPrimary)),
-        ),
-        ...churned.map((d) => _LeadTableRow(doc: d)),
-      ],
-    );
-  }
-
-  Widget _reasonBlock(
-      BuildContext context,
-      String title,
-      List<({String id, String label})> reasons,
-      Map<String, int> counts,
-      AlertStyle style) {
-    final total = counts.values.fold<int>(0, (s, n) => s + n);
-    final sorted = counts.entries.toList()
-      ..sort((a, b) => b.value.compareTo(a.value));
-    final topCompetitor = counts['competitor'] ?? 0;
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: context.colors.cardBg,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: style.border, width: 0.6),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Text('$title（$total件）',
-                  style: TextStyle(
-                      fontSize: AppTextSize.body,
-                      fontWeight: FontWeight.bold,
-                      color: context.colors.textPrimary)),
-              if (title == '失注理由' && topCompetitor >= 3) ...[
-                const SizedBox(width: 8),
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: context.alerts.urgent.background,
-                    borderRadius: BorderRadius.circular(4),
-                    border: Border.all(
-                        color: context.alerts.urgent.border, width: 0.6),
-                  ),
-                  child: Text('競合分析推奨',
-                      style: TextStyle(
-                          fontSize: AppTextSize.xs,
-                          color: context.alerts.urgent.text,
-                          fontWeight: FontWeight.bold)),
-                ),
-              ],
-            ],
-          ),
-          const SizedBox(height: 8),
-          ...sorted.map((e) {
-            final label = CrmOptions.labelOf(reasons, e.key);
-            final ratio = total == 0 ? 0.0 : e.value / total;
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 4),
-              child: Row(
-                children: [
-                  SizedBox(
-                      width: 140,
-                      child: Text(label,
-                          style: TextStyle(
-                              fontSize: AppTextSize.caption,
-                              color: context.colors.textSecondary),
-                          overflow: TextOverflow.ellipsis)),
-                  Expanded(
-                    child: LinearProgressIndicator(
-                      value: ratio,
-                      backgroundColor:
-                          context.colors.borderLight.withValues(alpha: 0.4),
-                      valueColor: AlwaysStoppedAnimation(style.icon),
-                      minHeight: 6,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Text('${e.value}',
-                      style: TextStyle(
-                          fontSize: AppTextSize.caption,
-                          color: context.colors.textPrimary,
-                          fontWeight: FontWeight.bold)),
-                ],
-              ),
-            );
-          }),
-        ],
-      ),
-    );
-  }
-}
 
 // ============================================================
 // CRM-04: 分析ビュー（経営者向けダッシュボード）
@@ -2790,13 +2143,24 @@ class _CrmLeadEditScreenState extends State<CrmLeadEditScreen> {
             ),
           _section('ステージ'),
           _stageSelector(),
+          const SizedBox(height: 8),
+          _PhaseStepper(
+            stage: _stage,
+            hugFilled: 16 - _validateEnrollmentRequirements().length,
+            hugTotal: 16,
+          ),
           const SizedBox(height: 16),
+
+          // ============================================================
+          // ① 体験前（リード受付） — 連絡を取って体験まで持っていく
+          // ============================================================
+          _phaseHeader('① 体験前', '連絡を取って体験まで持っていく',
+              icon: Icons.phone_in_talk_outlined, color: AppColors.info),
           _section('問い合わせ情報'),
           Row(
             children: [
               Expanded(
-                  child: _dateField(
-                      '問い合わせ日', _inquiredAt,
+                  child: _dateField('問い合わせ日', _inquiredAt,
                       (d) => setState(() => _inquiredAt = d),
                       required: true)),
               const SizedBox(width: 8),
@@ -2806,7 +2170,7 @@ class _CrmLeadEditScreenState extends State<CrmLeadEditScreen> {
           const SizedBox(height: 8),
           _textField('紹介者・媒体詳細', _sourceDetailCtrl,
               hint: '紹介者名・広告キーワードなど'),
-          const SizedBox(height: 16),
+          const SizedBox(height: 12),
           _section('児童'),
           Row(
             children: [
@@ -2821,9 +2185,7 @@ class _CrmLeadEditScreenState extends State<CrmLeadEditScreen> {
           Row(
             children: [
               Expanded(
-                  child: _dateField(
-                      '生年月日',
-                      _childBirthDate,
+                  child: _dateField('生年月日', _childBirthDate,
                       (d) => setState(() => _childBirthDate = d),
                       nullable: true)),
               const SizedBox(width: 8),
@@ -2832,11 +2194,7 @@ class _CrmLeadEditScreenState extends State<CrmLeadEditScreen> {
           ),
           const SizedBox(height: 8),
           _textField('保育園・幼稚園・学校', _kindergartenCtrl),
-          const SizedBox(height: 8),
-          _textField('アレルギー（HUG必須・無ければ「なし」）', _allergyCtrl),
-          const SizedBox(height: 8),
-          _permitSelector(),
-          const SizedBox(height: 16),
+          const SizedBox(height: 12),
           _section('保護者・連絡先'),
           Row(
             children: [
@@ -2850,18 +2208,67 @@ class _CrmLeadEditScreenState extends State<CrmLeadEditScreen> {
           const SizedBox(height: 8),
           _textField('電話番号', _telCtrl, keyboardType: TextInputType.phone),
           const SizedBox(height: 8),
-          _textField('メール', _emailCtrl, keyboardType: TextInputType.emailAddress),
+          _textField('メール', _emailCtrl,
+              keyboardType: TextInputType.emailAddress),
           const SizedBox(height: 8),
           _textField('LINE ID', _lineCtrl),
           const SizedBox(height: 8),
           _channelSelector(),
+          const SizedBox(height: 12),
+          _section('希望条件・確度'),
+          _textField('希望曜日', _preferredDaysCtrl, hint: '例：月・水・金'),
           const SizedBox(height: 8),
-          // 住所はHUG連携のため郵便番号 / 都道府県 / 市町村に分離
+          _textField('希望時間帯', _preferredTimeCtrl, hint: '例：放課後 16:00〜'),
+          const SizedBox(height: 8),
+          _textField('希望開始時期', _preferredStartCtrl, hint: '例：4月〜'),
+          const SizedBox(height: 8),
+          _confidenceSelector(),
+          const SizedBox(height: 24),
+
+          // ============================================================
+          // ② 体験後（個別対応）— 体験で得た情報をもとに次の一手を決める
+          // ============================================================
+          _phaseHeader('② 体験後', '体験で得た情報を残し、次の一手を決める',
+              icon: Icons.psychology_outlined, color: AppColors.accent),
+          _section('体験'),
+          _dateField('体験日', _trialAt, (d) => setState(() => _trialAt = d),
+              nullable: true),
+          const SizedBox(height: 8),
+          _textField('体験で分かったこと', _trialNotesCtrl, maxLines: 4),
+          const SizedBox(height: 12),
+          _section('主訴・特性'),
+          _textField('主訴', _mainConcernCtrl, maxLines: 3),
+          const SizedBox(height: 8),
+          _textField('好きなこと', _likesCtrl, maxLines: 2),
+          const SizedBox(height: 8),
+          _textField('苦手なこと', _dislikesCtrl, maxLines: 2),
+          const SizedBox(height: 12),
+          _section('ネクストアクション'),
+          Row(
+            children: [
+              Expanded(
+                  child: _dateField('次回対応期日', _nextActionAt,
+                      (d) => setState(() => _nextActionAt = d),
+                      nullable: true)),
+            ],
+          ),
+          const SizedBox(height: 8),
+          _textField('次回内容', _nextActionNoteCtrl,
+              maxLines: 2, hint: '例：受給者証取得後に再連絡'),
+          const SizedBox(height: 24),
+
+          // ============================================================
+          // ③ 入会前（HUG連携必須）— HUGに登録できる状態に整える
+          // ============================================================
+          _phaseHeader('③ 入会前', 'HUGに登録できる状態に必須項目を整える',
+              icon: Icons.assignment_turned_in_outlined,
+              color: AppColors.success),
+          _section('住所（HUG必須）'),
           Row(
             children: [
               SizedBox(
                 width: 140,
-                child: _textField('郵便番号 (HUG必須)', _postalCodeCtrl,
+                child: _textField('郵便番号', _postalCodeCtrl,
                     keyboardType: TextInputType.number, hint: '例: 251-0042'),
               ),
               const SizedBox(width: 8),
@@ -2869,17 +2276,21 @@ class _CrmLeadEditScreenState extends State<CrmLeadEditScreen> {
             ],
           ),
           const SizedBox(height: 8),
-          _textField('市町村・番地 (HUG必須)', _cityCtrl, hint: '例: 藤沢市鵠沼桜が岡4-19-3'),
+          _textField('市町村・番地', _cityCtrl,
+              hint: '例: 藤沢市鵠沼桜が岡4-19-3'),
           const SizedBox(height: 8),
-          _textField('住所（旧データ用、表示専用）', _addressCtrl),
-          const SizedBox(height: 16),
-          _section('受給者証情報（HUG連携必須）'),
+          _textField('住所（旧データ・表示専用）', _addressCtrl),
+          const SizedBox(height: 12),
+          _section('児童（HUG必須）'),
+          _textField('アレルギー（無ければ「なし」）', _allergyCtrl),
+          const SizedBox(height: 8),
+          _permitSelector(),
+          const SizedBox(height: 12),
+          _section('受給者証情報（HUG必須）'),
           Row(
             children: [
               Expanded(
-                child: _dateField(
-                    '利用開始日',
-                    _recipientStartAt,
+                child: _dateField('利用開始日', _recipientStartAt,
                     (d) => setState(() => _recipientStartAt = d),
                     nullable: true),
               ),
@@ -2901,43 +2312,6 @@ class _CrmLeadEditScreenState extends State<CrmLeadEditScreen> {
               ),
             ],
           ),
-          const SizedBox(height: 16),
-          _section('希望条件'),
-          _textField('希望曜日', _preferredDaysCtrl, hint: '例：月・水・金'),
-          const SizedBox(height: 8),
-          _textField('希望時間帯', _preferredTimeCtrl, hint: '例：放課後 16:00〜'),
-          const SizedBox(height: 8),
-          _textField('希望開始時期', _preferredStartCtrl, hint: '例：4月〜'),
-          const SizedBox(height: 8),
-          _confidenceSelector(),
-          const SizedBox(height: 16),
-          _section('主訴・特性'),
-          _textField('主訴', _mainConcernCtrl, maxLines: 3),
-          const SizedBox(height: 8),
-          _textField('好きなこと', _likesCtrl, maxLines: 2),
-          const SizedBox(height: 8),
-          _textField('苦手なこと', _dislikesCtrl, maxLines: 2),
-          const SizedBox(height: 16),
-          _section('体験'),
-          _dateField('体験日', _trialAt, (d) => setState(() => _trialAt = d),
-              nullable: true),
-          const SizedBox(height: 8),
-          _textField('体験で分かったこと', _trialNotesCtrl, maxLines: 4),
-          const SizedBox(height: 16),
-          _section('ネクストアクション'),
-          Row(
-            children: [
-              Expanded(
-                  child: _dateField(
-                      '次回対応期日',
-                      _nextActionAt,
-                      (d) => setState(() => _nextActionAt = d),
-                      nullable: true)),
-            ],
-          ),
-          const SizedBox(height: 8),
-          _textField('次回内容', _nextActionNoteCtrl, maxLines: 2,
-              hint: '例：受給者証取得後に再連絡'),
           if (_stage == 'lost') ...[
             const SizedBox(height: 16),
             _section('失注情報（理由は必須）'),
@@ -3338,6 +2712,43 @@ class _CrmLeadEditScreenState extends State<CrmLeadEditScreen> {
     );
   }
 
+  /// フェーズの見出し（① 体験前 / ② 体験後 / ③ 入会前 など）。
+  /// 視覚的に縦長フォームを意味のある塊に分ける。
+  Widget _phaseHeader(String label, String subtitle,
+      {required IconData icon, required Color color}) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: color, size: 20),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(label,
+                    style: TextStyle(
+                        fontSize: AppTextSize.bodyMd,
+                        fontWeight: FontWeight.bold,
+                        color: color)),
+                Text(subtitle,
+                    style: TextStyle(
+                        fontSize: AppTextSize.caption,
+                        color: context.colors.textSecondary)),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   static const List<String> _prefectures = [
     '北海道', '青森県', '岩手県', '宮城県', '秋田県', '山形県', '福島県',
     '茨城県', '栃木県', '群馬県', '埼玉県', '千葉県', '東京都', '神奈川県',
@@ -3623,6 +3034,105 @@ class _AddActivityDialogState extends State<_AddActivityDialog> {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// 4 phase の進捗を上部に表示するステッパー。
+/// 体験前 → 体験後 → 入会前 → 入会済 の流れを示し、現在のステージをハイライト。
+class _PhaseStepper extends StatelessWidget {
+  final String stage;
+  final int hugFilled;
+  final int hugTotal;
+  const _PhaseStepper({
+    required this.stage,
+    required this.hugFilled,
+    required this.hugTotal,
+  });
+
+  int get _activeIdx {
+    switch (stage) {
+      case 'considering':
+        return 0;
+      case 'onboarding':
+        return 2; // ② 体験後 と ③ 入会前 の間（HUG埋まり次第で前後）
+      case 'won':
+        return 3;
+      default:
+        return 0;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    const labels = ['体験前', '体験後', '入会前', '入会済'];
+    final active = _activeIdx;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+      decoration: BoxDecoration(
+        color: context.colors.cardBg,
+        border: Border.all(color: context.colors.borderLight),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        children: List.generate(labels.length * 2 - 1, (i) {
+          if (i.isOdd) {
+            // 区切り線
+            final left = i ~/ 2;
+            final isPast = left < active;
+            return Expanded(
+              child: Container(
+                height: 2,
+                color: isPast ? AppColors.success : context.colors.borderLight,
+              ),
+            );
+          }
+          final idx = i ~/ 2;
+          final isActive = idx == active;
+          final isPast = idx < active;
+          final color = isPast
+              ? AppColors.success
+              : isActive
+                  ? AppColors.primary
+                  : context.colors.textTertiary;
+          return Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 24,
+                height: 24,
+                decoration: BoxDecoration(
+                  color: isActive || isPast ? color : Colors.transparent,
+                  border: Border.all(color: color, width: 2),
+                  shape: BoxShape.circle,
+                ),
+                alignment: Alignment.center,
+                child: isPast
+                    ? const Icon(Icons.check, size: 14, color: Colors.white)
+                    : Text('${idx + 1}',
+                        style: TextStyle(
+                            fontSize: AppTextSize.caption,
+                            fontWeight: FontWeight.bold,
+                            color: isActive ? Colors.white : color)),
+              ),
+              const SizedBox(height: 2),
+              Text(labels[idx],
+                  style: TextStyle(
+                      fontSize: AppTextSize.caption,
+                      fontWeight:
+                          isActive ? FontWeight.bold : FontWeight.normal,
+                      color: color)),
+              if (idx == 2) // 入会前 にHUG進捗
+                Text('$hugFilled/$hugTotal',
+                    style: TextStyle(
+                        fontSize: AppTextSize.caption - 1,
+                        color: hugFilled == hugTotal
+                            ? AppColors.success
+                            : context.colors.textTertiary)),
+            ],
+          );
+        }),
       ),
     );
   }
