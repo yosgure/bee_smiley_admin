@@ -543,7 +543,7 @@ class _ChatMessageListState extends State<_ChatMessageList> {
       content = Text(
         text,
         style: TextStyle(
-          fontSize: isEmojiOnly ? 38 : 15,
+          fontSize: isEmojiOnly ? 64 : 15,
           height: 1.5,
           fontFamily: 'NotoSansJP',
           fontFamilyFallback: const ['Hiragino Sans', 'Roboto', 'sans-serif'],
@@ -703,7 +703,7 @@ class _ChatMessageListState extends State<_ChatMessageList> {
           mainAxisSize: MainAxisSize.min,
           children: List.generate(c, (_) => Padding(
             padding: const EdgeInsets.only(right: 2),
-            child: _stampWidget(emoji, size: 16),
+            child: _stampWidget(emoji, size: 22),
           )),
         ),
       ),
