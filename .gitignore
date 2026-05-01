@@ -60,3 +60,4 @@ android/fastlane/README.md
 android/fastlane/metadata
 **/*.p8
 **/playstore_service.json
+backups/
