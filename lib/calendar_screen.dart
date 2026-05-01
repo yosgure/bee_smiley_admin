@@ -59,6 +59,8 @@ class _CalendarScreenState extends State<CalendarScreen> {
       FirebaseFirestore.instance.collection('tasks');
   final CollectionReference _familiesRef =
       FirebaseFirestore.instance.collection('families');
+  final CollectionReference _plusFamiliesRef =
+      FirebaseFirestore.instance.collection('plus_families');
 
   static const String _pendingTasksId = 'PENDING_TASKS_SUMMARY';
   static const String _taskNoteMarker = 'TASK';
@@ -603,7 +605,14 @@ Future<void> _saveDisplayDate(DateTime date) async {
             builder: (context, taskSnapshot) {
               return StreamBuilder<QuerySnapshot>(
                 stream: _familiesRef.snapshots(),
-                builder: (context, familySnapshot) {
+                builder: (context, familySnapshotRegular) {
+              return StreamBuilder<QuerySnapshot>(
+                stream: _plusFamiliesRef.snapshots(),
+                builder: (context, familySnapshotPlus) {
+                  // 通常 families と plus_families を結合した擬似スナップショット。
+                  // 既存の familySnapshot.data!.docs 参照を維持するため、ラッパーを噛ませる。
+                  final familySnapshot = _CombinedFamilySnapshot(
+                    [familySnapshotRegular, familySnapshotPlus]);
                   List<Appointment> appointments = [];
                   _birthdayRenderedThisFrame.clear();
 
@@ -1116,6 +1125,8 @@ Future<void> _saveDisplayDate(DateTime date) async {
                   );
                 },
               );
+              }, // plus_families inner StreamBuilder builder
+              ); // plus_families inner StreamBuilder
             },
           );
         },
@@ -2414,4 +2425,27 @@ class _DataSource extends CalendarDataSource {
   _DataSource(List<Appointment> source) {
     appointments = source;
   }
+}
+/// 複数の Firestore Snapshot をまとめて 1 つの「擬似スナップショット」として扱うラッパー。
+/// families と plus_families を 1 つの StreamBuilder のように扱うために使用。
+class _CombinedFamilySnapshot {
+  final List<AsyncSnapshot<QuerySnapshot>> _snaps;
+  _CombinedFamilySnapshot(this._snaps);
+
+  bool get hasData => _snaps.any((s) => s.hasData);
+  bool get hasError => _snaps.any((s) => s.hasError);
+
+  _CombinedQuery? get data {
+    if (!hasData) return null;
+    final allDocs = <QueryDocumentSnapshot>[];
+    for (final s in _snaps) {
+      if (s.data != null) allDocs.addAll(s.data!.docs);
+    }
+    return _CombinedQuery(allDocs);
+  }
+}
+
+class _CombinedQuery {
+  final List<QueryDocumentSnapshot> docs;
+  _CombinedQuery(this.docs);
 }
