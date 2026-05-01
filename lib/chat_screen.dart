@@ -1810,11 +1810,12 @@ class _ChatDetailViewState extends State<ChatDetailView> {
         ),
       );
     } else if (isEmojiOnly) {
+      // 絵文字のみのメッセージは LINE 風のスタンプとして大きめに描画
       content = Text(
         text,
         style: const TextStyle(
-          fontSize: AppTextSize.heroXl,
-          height: 1.5,
+          fontSize: 64,
+          height: 1.2,
           fontFamily: 'NotoSansJP',
           fontFamilyFallback: ['Hiragino Sans', 'Roboto', 'sans-serif'],
         ),
@@ -2233,7 +2234,7 @@ class _ChatDetailViewState extends State<ChatDetailView> {
           mainAxisSize: MainAxisSize.min,
           children: List.generate(count, (_) => Padding(
             padding: const EdgeInsets.only(right: 2),
-            child: _stampWidget(emoji, size: 16),
+            child: _stampWidget(emoji, size: 22),
           )),
         ),
       ),
