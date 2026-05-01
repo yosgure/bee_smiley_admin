@@ -2084,6 +2084,7 @@ class _CrmLeadEditScreenState extends State<CrmLeadEditScreen> {
   String _childGender = '';
   DateTime? _childBirthDate;
   final _kindergartenCtrl = TextEditingController();
+  final _allergyCtrl = TextEditingController(); // HUG必須
   String _permitStatus = 'none';
 
   // 保護者
@@ -2094,7 +2095,17 @@ class _CrmLeadEditScreenState extends State<CrmLeadEditScreen> {
   final _emailCtrl = TextEditingController();
   final _lineCtrl = TextEditingController();
   String _preferredChannel = 'tel';
-  final _addressCtrl = TextEditingController();
+  // 住所はHUG連携のため郵便番号 + 都道府県 + 市町村・番地に分離
+  final _postalCodeCtrl = TextEditingController();
+  String _prefecture = '';
+  final _cityCtrl = TextEditingController();
+  final _addressCtrl = TextEditingController(); // 旧フィールド（移行用に残置）
+
+  // 受給者証情報（HUG必須一式）
+  DateTime? _recipientStartAt;
+  final _recipientNumberCtrl = TextEditingController();
+  String _recipientService = 'after_school'; // after_school | child_dev
+  final _recipientMonthlyLimitCtrl = TextEditingController();
 
   // 案件
   String _stage = 'considering';
@@ -2159,6 +2170,20 @@ class _CrmLeadEditScreenState extends State<CrmLeadEditScreen> {
       _lineCtrl.text = d['parentLine'] ?? '';
       _preferredChannel = d['preferredChannel'] ?? 'tel';
       _addressCtrl.text = d['address'] ?? '';
+      _postalCodeCtrl.text = d['postalCode'] ?? '';
+      _prefecture = d['prefecture'] ?? '';
+      _cityCtrl.text = d['city'] ?? '';
+      _allergyCtrl.text = d['allergy'] ?? '';
+      // 受給者証情報（ネスト構造）
+      final rc = d['recipientCertificate'];
+      if (rc is Map) {
+        final m = Map<String, dynamic>.from(rc);
+        _recipientStartAt = (m['startAt'] as Timestamp?)?.toDate();
+        _recipientNumberCtrl.text = (m['number'] ?? '').toString();
+        _recipientService = (m['service'] ?? 'after_school').toString();
+        final lim = m['monthlyLimit'];
+        _recipientMonthlyLimitCtrl.text = lim == null ? '' : lim.toString();
+      }
       _stage = d['stage'] ?? 'considering';
       _confidence = d['confidence'] ?? 'B';
       _source = d['source'] ?? 'instagram';
@@ -2203,6 +2228,11 @@ class _CrmLeadEditScreenState extends State<CrmLeadEditScreen> {
       _emailCtrl,
       _lineCtrl,
       _addressCtrl,
+      _postalCodeCtrl,
+      _cityCtrl,
+      _allergyCtrl,
+      _recipientNumberCtrl,
+      _recipientMonthlyLimitCtrl,
       _sourceDetailCtrl,
       _preferredDaysCtrl,
       _preferredTimeCtrl,
@@ -2295,6 +2325,11 @@ class _CrmLeadEditScreenState extends State<CrmLeadEditScreen> {
       'withdrawDetail': _withdrawDetailCtrl.text.trim(),
       'withdrawnAt': _withdrawnAt == null ? null : Timestamp.fromDate(_withdrawnAt!),
       'memo': _memoCtrl.text.trim(),
+      'postalCode': _postalCodeCtrl.text.trim(),
+      'prefecture': _prefecture,
+      'city': _cityCtrl.text.trim(),
+      'allergy': _allergyCtrl.text.trim(),
+      'recipientCertificate': _buildRecipientCertificate(),
       'updatedAt': now,
       'updatedBy': user?.uid ?? '',
     };
@@ -2426,9 +2461,95 @@ class _CrmLeadEditScreenState extends State<CrmLeadEditScreen> {
     }
   }
 
+  /// 受給者証情報のネスト Map を構築（空ならnull）。
+  Map<String, dynamic>? _buildRecipientCertificate() {
+    final m = <String, dynamic>{};
+    if (_recipientStartAt != null) {
+      m['startAt'] = Timestamp.fromDate(_recipientStartAt!);
+    }
+    final num_ = _recipientNumberCtrl.text.trim();
+    if (num_.isNotEmpty) m['number'] = num_;
+    if (_recipientService.isNotEmpty) m['service'] = _recipientService;
+    final lim = int.tryParse(_recipientMonthlyLimitCtrl.text.trim());
+    if (lim != null) m['monthlyLimit'] = lim;
+    return m.isEmpty ? null : m;
+  }
+
+  /// 入会処理 = HUGに登録できる状態にする。HUG画面で必須マークが付いている全項目を要求。
+  /// 確認ソース: hug-beesmiley.link/hug/wm/profile_parent.php?mode=edit と
+  ///             hug-beesmiley.link/hug/wm/profile_children.php?mode=edit
+  List<String> _validateEnrollmentRequirements() {
+    final missing = <String>[];
+    // 保護者（HUG必須6項目）
+    if (_parentLastNameCtrl.text.trim().isEmpty) missing.add('保護者の姓');
+    if (_parentFirstNameCtrl.text.trim().isEmpty) missing.add('保護者の名');
+    if (_parentKanaCtrl.text.trim().isEmpty) missing.add('保護者のふりがな');
+    if (_postalCodeCtrl.text.trim().isEmpty) missing.add('郵便番号');
+    if (_prefecture.isEmpty) missing.add('都道府県');
+    if (_cityCtrl.text.trim().isEmpty) missing.add('市町村・番地');
+    if (_telCtrl.text.trim().isEmpty) missing.add('保護者の電話番号');
+    // 児童（HUG必須5項目 + 保護者紐付けは family があればOK）
+    if (_childFirstNameCtrl.text.trim().isEmpty) missing.add('児童の名前');
+    if (_childKanaCtrl.text.trim().isEmpty) missing.add('児童のふりがな');
+    if (_childBirthDate == null) missing.add('児童の生年月日');
+    if (_childGender.isEmpty) missing.add('児童の性別');
+    if (_allergyCtrl.text.trim().isEmpty) missing.add('アレルギー（無ければ「なし」と入力）');
+    // 受給者証（HUG必須4項目）
+    if (_recipientStartAt == null) missing.add('受給者証の利用開始日');
+    if (_recipientNumberCtrl.text.trim().isEmpty) missing.add('受給者証番号');
+    if (_recipientService.isEmpty) missing.add('利用サービス（放デイ/児童発達支援）');
+    if (int.tryParse(_recipientMonthlyLimitCtrl.text.trim()) == null) {
+      missing.add('負担上限月額');
+    }
+    return missing;
+  }
+
   Future<void> _convertToFamily() async {
     if (!_isEdit) {
       AppFeedback.warning(context, '先にリードを保存してください');
+      return;
+    }
+    // HUG連携・保護者児童管理に必要な必須項目チェック
+    final missing = _validateEnrollmentRequirements();
+    if (missing.isNotEmpty) {
+      if (mounted) {
+        await showDialog<void>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('入会処理に必要な情報が不足しています'),
+            content: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text('以下の項目を入力してから再度お試しください。'),
+                  const SizedBox(height: 8),
+                  const Text('（HUG への登録に必要な情報です）',
+                      style: TextStyle(fontSize: AppTextSize.small)),
+                  const SizedBox(height: 12),
+                  ...missing.map((m) => Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 2),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.error_outline,
+                                size: 16, color: AppColors.error),
+                            const SizedBox(width: 8),
+                            Expanded(child: Text('・$m')),
+                          ],
+                        ),
+                      )),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('閉じる'),
+              ),
+            ],
+          ),
+        );
+      }
       return;
     }
     final ok = await AppFeedback.confirm(
@@ -2620,6 +2741,8 @@ class _CrmLeadEditScreenState extends State<CrmLeadEditScreen> {
           const SizedBox(height: 8),
           _textField('保育園・幼稚園・学校', _kindergartenCtrl),
           const SizedBox(height: 8),
+          _textField('アレルギー（HUG必須・無ければ「なし」）', _allergyCtrl),
+          const SizedBox(height: 8),
           _permitSelector(),
           const SizedBox(height: 16),
           _section('保護者・連絡先'),
@@ -2641,7 +2764,51 @@ class _CrmLeadEditScreenState extends State<CrmLeadEditScreen> {
           const SizedBox(height: 8),
           _channelSelector(),
           const SizedBox(height: 8),
-          _textField('住所', _addressCtrl),
+          // 住所はHUG連携のため郵便番号 / 都道府県 / 市町村に分離
+          Row(
+            children: [
+              SizedBox(
+                width: 140,
+                child: _textField('郵便番号 (HUG必須)', _postalCodeCtrl,
+                    keyboardType: TextInputType.number, hint: '例: 251-0042'),
+              ),
+              const SizedBox(width: 8),
+              Expanded(child: _prefectureSelector()),
+            ],
+          ),
+          const SizedBox(height: 8),
+          _textField('市町村・番地 (HUG必須)', _cityCtrl, hint: '例: 藤沢市鵠沼桜が岡4-19-3'),
+          const SizedBox(height: 8),
+          _textField('住所（旧データ用、表示専用）', _addressCtrl),
+          const SizedBox(height: 16),
+          _section('受給者証情報（HUG連携必須）'),
+          Row(
+            children: [
+              Expanded(
+                child: _dateField(
+                    '利用開始日',
+                    _recipientStartAt,
+                    (d) => setState(() => _recipientStartAt = d),
+                    nullable: true),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _textField('受給者証番号', _recipientNumberCtrl),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(child: _recipientServiceSelector()),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _textField('負担上限月額（円）',
+                    _recipientMonthlyLimitCtrl,
+                    keyboardType: TextInputType.number, hint: '例: 4600'),
+              ),
+            ],
+          ),
           const SizedBox(height: 16),
           _section('希望条件'),
           _textField('希望曜日', _preferredDaysCtrl, hint: '例：月・水・金'),
@@ -3076,6 +3243,67 @@ class _CrmLeadEditScreenState extends State<CrmLeadEditScreen> {
           );
         }),
       ],
+    );
+  }
+
+  static const List<String> _prefectures = [
+    '北海道', '青森県', '岩手県', '宮城県', '秋田県', '山形県', '福島県',
+    '茨城県', '栃木県', '群馬県', '埼玉県', '千葉県', '東京都', '神奈川県',
+    '新潟県', '富山県', '石川県', '福井県', '山梨県', '長野県',
+    '岐阜県', '静岡県', '愛知県', '三重県',
+    '滋賀県', '京都府', '大阪府', '兵庫県', '奈良県', '和歌山県',
+    '鳥取県', '島根県', '岡山県', '広島県', '山口県',
+    '徳島県', '香川県', '愛媛県', '高知県',
+    '福岡県', '佐賀県', '長崎県', '熊本県', '大分県', '宮崎県', '鹿児島県', '沖縄県',
+  ];
+
+  Widget _prefectureSelector() {
+    return InputDecorator(
+      decoration: InputDecoration(
+        labelText: '都道府県 (HUG必須)',
+        labelStyle: TextStyle(fontSize: AppTextSize.small),
+        border: const OutlineInputBorder(),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String>(
+          isDense: true,
+          isExpanded: true,
+          value: _prefecture.isEmpty ? null : _prefecture,
+          hint: const Text('選択'),
+          items: _prefectures
+              .map((p) => DropdownMenuItem(value: p, child: Text(p)))
+              .toList(),
+          onChanged: (v) => setState(() => _prefecture = v ?? ''),
+        ),
+      ),
+    );
+  }
+
+  Widget _recipientServiceSelector() {
+    const services = [
+      ('after_school', '放課後等デイサービス'),
+      ('child_dev', '児童発達支援'),
+    ];
+    return InputDecorator(
+      decoration: InputDecoration(
+        labelText: '利用サービス',
+        labelStyle: TextStyle(fontSize: AppTextSize.small),
+        border: const OutlineInputBorder(),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String>(
+          isDense: true,
+          isExpanded: true,
+          value: _recipientService,
+          items: services
+              .map((s) =>
+                  DropdownMenuItem(value: s.$1, child: Text(s.$2)))
+              .toList(),
+          onChanged: (v) => setState(() => _recipientService = v ?? 'after_school'),
+        ),
+      ),
     );
   }
 

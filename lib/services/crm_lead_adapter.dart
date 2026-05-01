@@ -156,12 +156,27 @@ const Map<String, _KeyMap> _flatKeyMapping = {
   'parentEmail': _KeyMap(_Target.family, 'email'),
   'parentLine': _KeyMap(_Target.family, 'lineId'),
   'address': _KeyMap(_Target.family, 'address'),
+  // 住所（HUG連携用に分割）
+  'postalCode': _KeyMap(_Target.family, 'postalCode'),
+  'prefecture': _KeyMap(_Target.family, 'prefecture'),
+  'city': _KeyMap(_Target.family, 'city'),
   // family レベルの更新メタ
   'updatedAt': _KeyMap(_Target.family, 'updatedAt'),
   'updatedBy': _KeyMap(_Target.family, 'updatedBy'),
   'createdAt': _KeyMap(_Target.family, 'createdAt'),
   'createdBy': _KeyMap(_Target.family, 'createdBy'),
 };
+
+/// 与えられた値リストから最初の非空文字列を返す。?? 演算子は空文字列で fall through
+/// しないため、空文字列を「未設定」とみなす場合に使う。
+String _firstNonEmpty(List<dynamic> values) {
+  for (final v in values) {
+    if (v == null) continue;
+    final s = v.toString();
+    if (s.isNotEmpty) return s;
+  }
+  return '';
+}
 
 /// 'YYYY/MM/DD' 形式の文字列を Timestamp に変換。families は文字列スキーマ、
 /// crm_leads は Timestamp スキーマだったため、フラット化時に変換が必要。
@@ -189,7 +204,7 @@ Map<String, dynamic> flattenChildToLeadShape(
     // 児童
     'childLastName': child['lastName'] ?? '',
     'childFirstName': child['firstName'] ?? '',
-    'childKana': child['firstNameKana'] ?? child['kana'] ?? '',
+    'childKana': _firstNonEmpty([child['firstNameKana'], child['kana']]),
     'childGender': child['gender'],
     'childBirthDate': _birthDateToTimestamp(child['birthDate']),
     // 保護者（family レベル）
@@ -200,6 +215,13 @@ Map<String, dynamic> flattenChildToLeadShape(
     'parentEmail': family['email'] ?? '',
     'parentLine': family['lineId'] ?? '',
     'address': family['address'] ?? '',
+    'postalCode': family['postalCode'] ?? '',
+    'prefecture': family['prefecture'] ?? '',
+    'city': family['city'] ?? '',
+    // 児童側 HUG必須項目（recipientCertificate はネスト）
+    'allergy': child['allergy'] ?? '',
+    'recipientCertificate': child['recipientCertificate'],
+    'hugChildId': child['hugChildId'],
     // 児童側に持つCRM項目
     'stage': child['stage'],
     'status': child['status'],
@@ -239,7 +261,6 @@ Map<String, dynamic> flattenChildToLeadShape(
     'sourceLeadId': child['sourceLeadId'],
     // 自分自身が family なので convertedFamilyId = familyId（互換のため）
     'convertedFamilyId': familyId,
-    'hugChildId': child['hugChildId'],
   };
   // pre-existing 入会児童で stage が無い場合は status から派生
   if (flat['stage'] == null) {
