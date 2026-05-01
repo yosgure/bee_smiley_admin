@@ -257,9 +257,7 @@ Future<void> _saveDisplayDate(DateTime date) async {
           final data = snapshot.docs.first.data();
           if (mounted) {
             setState(() {
-              _myClassrooms = List<String>.from(data['classrooms'] ?? [])
-                  .where((room) => !room.contains('プラス'))
-                  .toList();
+              _myClassrooms = List<String>.from(data['classrooms'] ?? []);
               for (var room in _myClassrooms) {
                 // 既存の値（SharedPreferences から読み込み済み）があれば尊重する
                 _classroomFilters.putIfAbsent(room, () => true);
@@ -610,8 +608,6 @@ Future<void> _saveDisplayDate(DateTime date) async {
                       try {
                         final data = doc.data() as Map<String, dynamic>;
                         final String? eventClassroom = data['classroom'];
-                        // プラス教室のイベントは表示しない
-                        if (eventClassroom != null && eventClassroom.contains('プラス')) continue;
                         final List<dynamic> staffIds = data['staffIds'] ?? [];
 
                         bool isVisible = false;
