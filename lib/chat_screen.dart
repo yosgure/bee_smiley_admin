@@ -1391,7 +1391,7 @@ class _ChatDetailViewState extends State<ChatDetailView> {
                     child: Focus(
                         onKeyEvent: (node, event) {
                           if (_textController.value.composing.isValid) return KeyEventResult.ignored;
-                          if (event is KeyDownEvent && event.logicalKey == LogicalKeyboardKey.enter && !HardwareKeyboard.instance.isShiftPressed) { _sendMessage(); return KeyEventResult.handled; }
+                          if (event is KeyDownEvent && event.logicalKey == LogicalKeyboardKey.enter && HardwareKeyboard.instance.isShiftPressed) { _sendMessage(); return KeyEventResult.handled; }
                           return KeyEventResult.ignored;
                         },
                         child: TextField(
@@ -1399,7 +1399,7 @@ class _ChatDetailViewState extends State<ChatDetailView> {
                           maxLines: null, minLines: 3, keyboardType: TextInputType.multiline,
                           style: TextStyle(fontSize: AppTextSize.bodyLarge, height: 1.5, fontFamily: 'NotoSansJP', fontFamilyFallback: ['Hiragino Sans', 'Roboto', 'sans-serif']),
                           decoration: InputDecoration(
-                            hintText: 'メッセージを入力してください。(Enterで送信 / Shift + Enterで改行)',
+                            hintText: 'メッセージを入力してください。(Enterで改行 / Shift + Enterで送信)',
                             hintStyle: TextStyle(fontSize: AppTextSize.bodyMd, color: context.colors.iconMuted),
                             border: InputBorder.none,
                             filled: true,
