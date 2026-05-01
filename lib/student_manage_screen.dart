@@ -756,10 +756,15 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
     
     final postalCodeCtrl = TextEditingController(text: data['postalCode'] ?? '');
     final addressCtrl = TextEditingController(text: data['address'] ?? '');
-    
+    // プラス（HUG連携）用に分割: 都道府県 / 市町村・番地
+    final cityCtrl = TextEditingController(text: data['city'] ?? '');
+    String prefecture = data['prefecture'] ?? '';
+
     final emNameCtrl = TextEditingController(text: data['emergencyName'] ?? '');
     final emRelCtrl = TextEditingController(text: data['emergencyRelation'] ?? '');
     final emPhoneCtrl = TextEditingController(text: data['emergencyPhone'] ?? '');
+
+    final isPlus = widget.collectionName == 'plus_families';
 
     List<Map<String, dynamic>> children = [];
     if (data['children'] != null) {
@@ -848,16 +853,34 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             SizedBox(
-                              width: 120, 
-                              child: _buildTextField(postalCodeCtrl, '郵便番号', icon: Icons.markunread_mailbox, type: TextInputType.number),
+                              width: 120,
+                              child: _buildTextField(postalCodeCtrl, isPlus ? '郵便番号(HUG必須)' : '郵便番号', icon: Icons.markunread_mailbox, type: TextInputType.number),
                             ),
                             const SizedBox(width: 8),
                             Expanded(
-                              child: _buildTextField(addressCtrl, '住所', icon: Icons.home),
+                              child: _buildTextField(addressCtrl, '住所(旧)', icon: Icons.home),
                             ),
                           ],
                         ),
-                        
+                        if (isPlus) ...[
+                          const SizedBox(height: 8),
+                          Row(
+                            children: [
+                              SizedBox(
+                                width: 180,
+                                child: _PrefectureDropdown(
+                                  value: prefecture,
+                                  onChanged: (v) => setStateDialog(() => prefecture = v),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: _buildTextField(cityCtrl, '市町村・番地(HUG必須)', icon: Icons.location_city),
+                              ),
+                            ],
+                          ),
+                        ],
+
                         const SizedBox(height: 24),
                         
                         _buildDialogSectionTitle('緊急連絡先'),
@@ -1135,6 +1158,8 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
                           'email': emailCtrl.text,
                           'postalCode': postalCodeCtrl.text,
                           'address': addressCtrl.text,
+                          if (isPlus) 'prefecture': prefecture,
+                          if (isPlus) 'city': cityCtrl.text,
                           'emergencyName': emNameCtrl.text,
                           'emergencyRelation': emRelCtrl.text,
                           'emergencyPhone': emPhoneCtrl.text,
@@ -1153,6 +1178,8 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
                           'email': emailCtrl.text,
                           'postalCode': postalCodeCtrl.text,
                           'address': addressCtrl.text,
+                          if (isPlus) 'prefecture': prefecture,
+                          if (isPlus) 'city': cityCtrl.text,
                           'emergencyName': emNameCtrl.text,
                           'emergencyRelation': emRelCtrl.text,
                           'emergencyPhone': emPhoneCtrl.text,
@@ -1221,6 +1248,48 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
         fillColor: enabled ? context.colors.cardBg : context.colors.borderLight,
         contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
         isDense: true,
+      ),
+    );
+  }
+}
+
+/// HUG連携用 都道府県セレクト。プラス保護者・児童管理画面で使用。
+class _PrefectureDropdown extends StatelessWidget {
+  final String value;
+  final ValueChanged<String> onChanged;
+  const _PrefectureDropdown({required this.value, required this.onChanged});
+
+  static const List<String> _prefectures = [
+    "北海道", "青森県", "岩手県", "宮城県", "秋田県", "山形県", "福島県",
+    "茨城県", "栃木県", "群馬県", "埼玉県", "千葉県", "東京都", "神奈川県",
+    "新潟県", "富山県", "石川県", "福井県", "山梨県", "長野県",
+    "岐阜県", "静岡県", "愛知県", "三重県",
+    "滋賀県", "京都府", "大阪府", "兵庫県", "奈良県", "和歌山県",
+    "鳥取県", "島根県", "岡山県", "広島県", "山口県",
+    "徳島県", "香川県", "愛媛県", "高知県",
+    "福岡県", "佐賀県", "長崎県", "熊本県", "大分県", "宮崎県", "鹿児島県", "沖縄県",
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return InputDecorator(
+      decoration: InputDecoration(
+        labelText: "都道府県(HUG必須)",
+        labelStyle: TextStyle(fontSize: AppTextSize.small),
+        border: const OutlineInputBorder(),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String>(
+          isDense: true,
+          isExpanded: true,
+          value: value.isEmpty ? null : value,
+          hint: const Text("選択"),
+          items: _prefectures
+              .map((p) => DropdownMenuItem(value: p, child: Text(p)))
+              .toList(),
+          onChanged: (v) => onChanged(v ?? ""),
+        ),
       ),
     );
   }
