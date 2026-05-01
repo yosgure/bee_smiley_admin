@@ -1,20 +1,23 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../services/crm_lead_adapter.dart';
 
 /// CRM リードの読み取り専用ラッパー。
-/// 既存 `crm_leads` コレクションの Map をそのまま受け取り、型付きで参照できるようにする。
-/// Phase 1 ではスキーマ変更をせず、読み取り側のヘルパーのみを提供する。
+/// データソースは plus_families.children[] をフラット化した LeadView。
 class CrmLead {
   final String id;
-  final DocumentReference<Map<String, dynamic>>? ref;
+  final LeadViewReference? ref;
   final Map<String, dynamic> raw;
 
   CrmLead({required this.id, required this.raw, this.ref});
 
-  factory CrmLead.fromDoc(QueryDocumentSnapshot<Map<String, dynamic>> doc) =>
+  factory CrmLead.fromLeadView(LeadView lv) =>
+      CrmLead(id: lv.id, raw: lv.data(), ref: lv.reference);
+
+  factory CrmLead.fromDoc(LeadView doc) =>
       CrmLead(id: doc.id, raw: doc.data(), ref: doc.reference);
 
   factory CrmLead.fromSnapshot(DocumentSnapshot<Map<String, dynamic>> snap) =>
-      CrmLead(id: snap.id, raw: snap.data() ?? const {}, ref: snap.reference);
+      CrmLead(id: snap.id, raw: snap.data() ?? const {}, ref: null);
 
   // 児童
   String get childLastName => (raw['childLastName'] as String?) ?? '';

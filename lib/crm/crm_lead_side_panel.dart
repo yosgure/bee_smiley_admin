@@ -127,12 +127,10 @@ class _Body extends StatelessWidget {
                 Align(
                   alignment: Alignment.centerLeft,
                   child: OutlinedButton.icon(
-                    onPressed: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                            builder: (_) => CrmLeadEditScreen(
-                                doc: lead.ref as QueryDocumentSnapshot<
-                                    Map<String, dynamic>>?))),
+                    // C-crm-1 でこのサイドパネル経路は一時的に無効化中
+                    // （DocumentReference→LeadView ブリッジが未実装）。
+                    // CRM画面側で _openLeadInPanel を Navigator.push に切替済み。
+                    onPressed: null,
                     icon: const Icon(Icons.edit_outlined, size: 16),
                     label: const Text('詳細を編集'),
                     style: OutlinedButton.styleFrom(

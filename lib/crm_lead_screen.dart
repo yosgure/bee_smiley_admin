@@ -11,6 +11,7 @@ import 'crm/crm_home_screen.dart';
 import 'main.dart';
 import 'services/undo_service.dart';
 import 'services/crm_family_sync.dart';
+import 'services/crm_lead_adapter.dart';
 
 // ============================================================
 // CRM-00: 選択肢マスタ
@@ -279,14 +280,8 @@ class _CrmLeadScreenState extends State<CrmLeadScreen> {
   }
 
   Widget _buildBody() {
-    final stream = FirebaseFirestore.instance
-        .collection('crm_leads')
-        .orderBy('inquiredAt', descending: true)
-        .limit(500)
-        .snapshots();
-
-    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-      stream: stream,
+    return StreamBuilder<List<LeadView>>(
+      stream: watchLeadsFromPlusFamilies(),
       builder: (context, snap) {
         if (snap.connectionState == ConnectionState.waiting) {
           return Center(child: CircularProgressIndicator(color: AppColors.primary));
@@ -296,7 +291,7 @@ class _CrmLeadScreenState extends State<CrmLeadScreen> {
               child: Text('読み込みエラー: ${snap.error}',
                   style: TextStyle(color: context.colors.textSecondary)));
         }
-        var docs = snap.data?.docs ?? [];
+        var docs = snap.data ?? [];
         if (_sourceFilter != 'all') {
           docs = docs.where((d) => (d.data()['source'] ?? '') == _sourceFilter).toList();
         }
@@ -430,14 +425,10 @@ class _CrmLeadScreenState extends State<CrmLeadScreen> {
     }
 
     final user = FirebaseAuth.instance.currentUser;
-    final fs = FirebaseFirestore.instance;
-    final col = fs.collection('crm_leads');
 
     int ok = 0;
     int skipped = 0;
-    WriteBatch batch = fs.batch();
-    int inBatch = 0;
-    // Undo 用: 作成したリード doc ID を追跡
+    // Undo 用: 作成した plus_families ドキュメントID を追跡
     final createdIds = <String>[];
 
     // 進捗スナックバー
@@ -528,40 +519,21 @@ class _CrmLeadScreenState extends State<CrmLeadScreen> {
           'updatedAt': FieldValue.serverTimestamp(),
           'createdBy': 'import:notion:${user?.uid ?? ''}',
         };
-        final docRef = col.doc();
-        batch.set(docRef, data);
-        createdIds.add(docRef.id);
-        inBatch++;
+        // plus_families に upsert（保護者一致なら家族マージ、無ければ新規作成）
+        final newLeadId = 'notion_${DateTime.now().millisecondsSinceEpoch}_$r';
+        final familyId = await CrmFamilySync.upsertLead(
+          leadId: newLeadId,
+          leadData: data,
+        );
+        createdIds.add(familyId);
         ok++;
-        if (inBatch >= 400) {
-          await batch.commit();
-          batch = fs.batch();
-          inBatch = 0;
-        }
       }
-      if (inBatch > 0) await batch.commit();
       messenger.hideCurrentSnackBar();
       if (mounted) setState(() {});
       if (createdIds.isNotEmpty && mounted) {
-        await UndoService.run<List<String>>(
-          context: context,
-          label: 'リード $ok 件をインポート',
-          doneMessage: 'インポート完了: $ok件（スキップ $skipped）',
-          window: const Duration(seconds: 60),
-          captureSnapshot: () async => createdIds,
-          execute: () async {},
-          undo: (snap) async {
-            // 400件ずつバッチ削除
-            for (int i = 0; i < snap.length; i += 400) {
-              final end = (i + 400).clamp(0, snap.length);
-              final b = fs.batch();
-              for (final id in snap.sublist(i, end)) {
-                b.delete(col.doc(id));
-              }
-              await b.commit();
-            }
-          },
-        );
+        // インポート結果のUndoはスキップ（plus_families は他データと統合されているため
+        // 単純に doc 削除で復元できない）。手動で個別削除を依頼する。
+        _snack('インポート完了: $ok件（スキップ $skipped）。Undo はサポート外', AppColors.success);
       } else {
         _snack('インポート完了: $ok件（スキップ $skipped）', AppColors.success);
       }
@@ -583,12 +555,12 @@ class _CrmLeadScreenState extends State<CrmLeadScreen> {
 // CRM-02: カンバンビュー
 // ============================================================
 class _CrmKanbanView extends StatelessWidget {
-  final List<QueryDocumentSnapshot<Map<String, dynamic>>> docs;
+  final List<LeadView> docs;
   const _CrmKanbanView({required this.docs});
 
   @override
   Widget build(BuildContext context) {
-    final byStage = <String, List<QueryDocumentSnapshot<Map<String, dynamic>>>>{};
+    final byStage = <String, List<LeadView>>{};
     for (final id in CrmOptions.kanbanStages) {
       byStage[id] = [];
     }
@@ -623,7 +595,7 @@ class _CrmKanbanView extends StatelessWidget {
 
 class _KanbanColumn extends StatelessWidget {
   final String stageId;
-  final List<QueryDocumentSnapshot<Map<String, dynamic>>> docs;
+  final List<LeadView> docs;
   const _KanbanColumn({required this.stageId, required this.docs});
 
   @override
@@ -691,7 +663,7 @@ class _KanbanColumn extends StatelessWidget {
 }
 
 class _LeadKanbanCard extends StatelessWidget {
-  final QueryDocumentSnapshot<Map<String, dynamic>> doc;
+  final LeadView doc;
   const _LeadKanbanCard({required this.doc});
 
   @override
@@ -804,7 +776,7 @@ String _childFullName(Map<String, dynamic> d) {
 // CRM-03: テーブルビュー
 // ============================================================
 class _CrmTableView extends StatelessWidget {
-  final List<QueryDocumentSnapshot<Map<String, dynamic>>> docs;
+  final List<LeadView> docs;
   const _CrmTableView({required this.docs});
 
   @override
@@ -818,7 +790,7 @@ class _CrmTableView extends StatelessWidget {
 }
 
 class _LeadTableRow extends StatelessWidget {
-  final QueryDocumentSnapshot<Map<String, dynamic>> doc;
+  final LeadView doc;
   const _LeadTableRow({required this.doc});
 
   @override
@@ -939,7 +911,7 @@ const int _staleProcessingDays = 7;
 enum _DunningBucket { urgent, warning, today, upcoming }
 
 class _BucketedLead {
-  final QueryDocumentSnapshot<Map<String, dynamic>> doc;
+  final LeadView doc;
   final _DunningBucket bucket;
   final String reasonText;
   final int? daysIdle;
@@ -952,7 +924,7 @@ class _BucketedLead {
 }
 
 class _CrmDunningView extends StatelessWidget {
-  final List<QueryDocumentSnapshot<Map<String, dynamic>>> docs;
+  final List<LeadView> docs;
   const _CrmDunningView({required this.docs});
 
   @override
@@ -1209,7 +1181,7 @@ class _DunningLeadRow extends StatelessWidget {
 
 /// パイプライン: 検討中 + 入会手続中 を次回対応期日昇順で並べる
 class _CrmPipelineView extends StatelessWidget {
-  final List<QueryDocumentSnapshot<Map<String, dynamic>>> docs;
+  final List<LeadView> docs;
   const _CrmPipelineView({required this.docs});
 
   @override
@@ -1238,7 +1210,7 @@ class _CrmPipelineView extends StatelessWidget {
 
 /// 入会済み: won を入会日降順で
 class _CrmEnrolledView extends StatelessWidget {
-  final List<QueryDocumentSnapshot<Map<String, dynamic>>> docs;
+  final List<LeadView> docs;
   const _CrmEnrolledView({required this.docs});
 
   @override
@@ -1264,7 +1236,7 @@ class _CrmEnrolledView extends StatelessWidget {
 
 /// 離脱: lost + withdrawn。理由別件数バーを上に表示。
 class _CrmChurnView extends StatelessWidget {
-  final List<QueryDocumentSnapshot<Map<String, dynamic>>> docs;
+  final List<LeadView> docs;
   const _CrmChurnView({required this.docs});
 
   @override
@@ -1419,7 +1391,7 @@ class _CrmChurnView extends StatelessWidget {
 // CRM-04: 分析ビュー（経営者向けダッシュボード）
 // ============================================================
 class _CrmDashboardView extends StatefulWidget {
-  final List<QueryDocumentSnapshot<Map<String, dynamic>>> docs;
+  final List<LeadView> docs;
   const _CrmDashboardView({required this.docs});
 
   @override
@@ -2097,7 +2069,7 @@ class _CrmDashboardViewState extends State<_CrmDashboardView> {
 // CRM-05: 詳細・編集画面
 // ============================================================
 class CrmLeadEditScreen extends StatefulWidget {
-  final QueryDocumentSnapshot<Map<String, dynamic>>? doc;
+  final LeadView? doc;
   const CrmLeadEditScreen({super.key, this.doc});
 
   @override
@@ -2327,39 +2299,21 @@ class _CrmLeadEditScreenState extends State<CrmLeadEditScreen> {
       'updatedBy': user?.uid ?? '',
     };
     try {
-      String leadId;
       if (_isEdit) {
+        // LeadView.update() がフラット形式を plus_families.children[index] と
+        // family レベルに振り分けて適用する。
         await widget.doc!.reference.update(data);
-        leadId = widget.doc!.id;
       } else {
+        // 新規リードは plus_families に新 family + child[0] として作成。
+        // 一意な leadId をローカル生成し、children[].sourceLeadId に記録する。
         data['createdAt'] = now;
         data['createdBy'] = user?.uid ?? '';
         data['activities'] = <Map<String, dynamic>>[];
-        final ref =
-            await FirebaseFirestore.instance.collection('crm_leads').add(data);
-        leadId = ref.id;
-      }
-      // families.children[] にも同期（CRM一体化: families が真実の源）
-      try {
-        final familyId = await CrmFamilySync.upsertLead(
-          leadId: leadId,
+        final newLeadId = 'lead_${DateTime.now().millisecondsSinceEpoch}';
+        await CrmFamilySync.upsertLead(
+          leadId: newLeadId,
           leadData: data,
-          convertedFamilyId: _convertedFamilyId,
         );
-        if (_convertedFamilyId == null || _convertedFamilyId != familyId) {
-          await FirebaseFirestore.instance
-              .collection('crm_leads')
-              .doc(leadId)
-              .update({'convertedFamilyId': familyId});
-          if (mounted) {
-            setState(() => _convertedFamilyId = familyId);
-          }
-        }
-      } catch (e) {
-        // families同期失敗はリード保存自体は成功扱いにし、警告のみ
-        if (mounted) {
-          AppFeedback.warning(context, '保護者・児童マスタ同期に失敗: $e');
-        }
       }
       if (mounted) {
         AppFeedback.success(context, _isEdit ? '更新しました' : '登録しました');
@@ -2425,13 +2379,19 @@ class _CrmLeadEditScreenState extends State<CrmLeadEditScreen> {
       'authorName': authorName,
     };
     try {
+      // plus_families.children[].activities に追記。
+      // FieldValue.arrayUnion は配列要素内で使えないため、現在のリストに append して
+      // 新しいリストとして書き込む。
+      final currentActivities = List<Map<String, dynamic>>.from(
+          (widget.doc!.data()['activities'] as List? ?? [])
+              .map((a) => Map<String, dynamic>.from(a as Map)));
+      currentActivities.add(entry);
       await widget.doc!.reference.update({
-        'activities': FieldValue.arrayUnion([entry]),
+        'activities': currentActivities,
         // 督促タブで「最終アクションからの経過日数」を算出するため最終活動日を保存
         'lastActivityAt': Timestamp.fromDate(result['at']),
-        'updatedAt': FieldValue.serverTimestamp(),
+        'updatedAt': Timestamp.now(),
       });
-      await _syncCurrentLeadToFamily();
       if (mounted) setState(() {});
     } catch (e) {
       if (mounted) {
@@ -2449,40 +2409,19 @@ class _CrmLeadEditScreenState extends State<CrmLeadEditScreen> {
     );
     if (!ok) return;
     try {
+      final currentActivities = List<Map<String, dynamic>>.from(
+          (widget.doc!.data()['activities'] as List? ?? [])
+              .map((a) => Map<String, dynamic>.from(a as Map)));
+      currentActivities.removeWhere((a) =>
+          a['id'] != null && entry['id'] != null && a['id'] == entry['id']);
       await widget.doc!.reference.update({
-        'activities': FieldValue.arrayRemove([entry]),
-        'updatedAt': FieldValue.serverTimestamp(),
+        'activities': currentActivities,
+        'updatedAt': Timestamp.now(),
       });
-      await _syncCurrentLeadToFamily();
       if (mounted) setState(() {});
     } catch (e) {
       if (mounted) {
         AppFeedback.error(context, '削除失敗: $e');
-      }
-    }
-  }
-
-  /// 現在編集中のリードを最新state で再読込し、families.children[] へ同期する。
-  /// 失敗してもリード自体の更新は成功扱いにし、警告のみ出す（lead側の更新は既に完了している前提）。
-  Future<void> _syncCurrentLeadToFamily() async {
-    if (!_isEdit) return;
-    try {
-      final fresh = await widget.doc!.reference.get();
-      final data = fresh.data();
-      if (data == null) return;
-      final familyId = await CrmFamilySync.upsertLead(
-        leadId: widget.doc!.id,
-        leadData: Map<String, dynamic>.from(data),
-        convertedFamilyId: _convertedFamilyId,
-      );
-      if (_convertedFamilyId != familyId) {
-        await widget.doc!.reference
-            .update({'convertedFamilyId': familyId});
-        if (mounted) setState(() => _convertedFamilyId = familyId);
-      }
-    } catch (e) {
-      if (mounted) {
-        AppFeedback.warning(context, '保護者・児童マスタ同期に失敗: $e');
       }
     }
   }
@@ -2495,39 +2434,24 @@ class _CrmLeadEditScreenState extends State<CrmLeadEditScreen> {
     final ok = await AppFeedback.confirm(
       context,
       title: '入会処理',
-      message: 'このリードのステージを「入会」にします。\n保護者・児童マスタの該当児童も「入会」状態に更新されます。\nよろしいですか？',
+      message: 'このリードのステージを「入会」にします。\nよろしいですか？',
       confirmLabel: '入会処理',
       cancelLabel: 'キャンセル',
     );
     if (ok != true) return;
     try {
-      final now = FieldValue.serverTimestamp();
       final enrolledAt = DateTime.now();
-      // 1) crm_leads を 入会 に更新
-      final leadData = Map<String, dynamic>.from(widget.doc!.data());
-      leadData['stage'] = 'won';
-      leadData['enrolledAt'] = Timestamp.fromDate(enrolledAt);
+      // plus_families.children[i] の stage / status / enrolledAt を更新（一発のトランザクション）
       await widget.doc!.reference.update({
         'stage': 'won',
+        'status': '入会',
         'enrolledAt': Timestamp.fromDate(enrolledAt),
-        'convertedAt': now,
-        'updatedAt': now,
+        'updatedAt': Timestamp.now(),
       });
-      // 2) families.children[] の該当 child を status='入会' に更新（無ければ作成）
-      final familyId = await CrmFamilySync.markAsEnrolled(
-        leadId: widget.doc!.id,
-        leadData: leadData,
-        convertedFamilyId: _convertedFamilyId,
-        enrolledAt: enrolledAt,
-      );
-      if (_convertedFamilyId != familyId) {
-        await widget.doc!.reference.update({'convertedFamilyId': familyId});
-      }
       if (mounted) {
         setState(() {
           _stage = 'won';
           _enrolledAt = enrolledAt;
-          _convertedFamilyId = familyId;
         });
         AppFeedback.success(context, '入会処理が完了しました');
       }

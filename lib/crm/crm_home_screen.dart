@@ -4,10 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../app_theme.dart';
-import '../crm_lead_screen.dart' show CrmOptions;
+import '../crm_lead_screen.dart' show CrmOptions, CrmLeadEditScreen;
+import '../services/crm_lead_adapter.dart';
 import 'crm_home_utils.dart';
 import 'crm_lead_model.dart';
-import 'crm_lead_side_panel.dart';
 
 /// 「今日整えたいこと」カードで使う柔らかめのアンバー。
 /// `context.alerts.warning` より彩度を落とし、赤みを抑えたトーンにする。
@@ -47,7 +47,7 @@ class _SoftAmber {
 /// サイドパネル（リード作業パネル）は Phase 3 で追加。
 /// 行クリック時は `onOpenLead` を呼び出し、呼び出し側で詳細画面を開く。
 class CrmHomeScreen extends StatefulWidget {
-  final List<QueryDocumentSnapshot<Map<String, dynamic>>> docs;
+  final List<LeadView> docs;
 
   const CrmHomeScreen({super.key, required this.docs});
 
@@ -59,29 +59,9 @@ class _CrmHomeScreenState extends State<CrmHomeScreen> {
   /// Urgent List の絞り込み（null=全件）
   CrmUrgentReason? _filter;
 
-  /// 右サイドパネルで開いているリード（null=閉じている）
-  DocumentReference<Map<String, dynamic>>? _selectedLeadRef;
-
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(builder: (context, cons) {
-      final wide = cons.maxWidth >= 1100;
-      final home = _buildHome(context);
-      if (_selectedLeadRef == null) return home;
-      final panel = CrmLeadSidePanel(
-        leadRef: _selectedLeadRef!,
-        onClose: () => setState(() => _selectedLeadRef = null),
-      );
-      if (wide) {
-        return Row(
-          children: [
-            Expanded(child: home),
-            SizedBox(width: 560, child: panel),
-          ],
-        );
-      }
-      return panel;
-    });
+    return _buildHome(context);
   }
 
   Widget _buildHome(BuildContext context) {
@@ -184,8 +164,13 @@ class _CrmHomeScreenState extends State<CrmHomeScreen> {
     return count;
   }
 
-  void _openLeadInPanel(QueryDocumentSnapshot<Map<String, dynamic>> doc) {
-    setState(() => _selectedLeadRef = doc.reference);
+  void _openLeadInPanel(LeadView doc) {
+    // C-crm-1 の段階では plus_families 由来の LeadView と既存サイドパネル
+    // (DocumentReference 前提)を結びつけるブリッジが未実装のため、
+    // 詳細は CrmLeadEditScreen をフルスクリーンで開く。
+    Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => CrmLeadEditScreen(doc: doc),
+    ));
   }
 
   String _currentUserName() {
@@ -747,9 +732,9 @@ class _UrgentSection extends StatelessWidget {
   final int totalObservations;
   final CrmUrgentReason? activeFilter;
   final VoidCallback onClearFilter;
-  final void Function(QueryDocumentSnapshot<Map<String, dynamic>> doc)
+  final void Function(LeadView doc)
       onOpenLead;
-  final Map<String, QueryDocumentSnapshot<Map<String, dynamic>>> docById;
+  final Map<String, LeadView> docById;
 
   const _UrgentSection({
     required this.rows,
@@ -855,7 +840,7 @@ class _UrgentSection extends StatelessWidget {
 
   Widget _urgentTable(
     BuildContext context,
-    Map<String, QueryDocumentSnapshot<Map<String, dynamic>>> docById,
+    Map<String, LeadView> docById,
   ) {
     final c = context.colors;
     return Container(
@@ -880,7 +865,7 @@ class _UrgentSection extends StatelessWidget {
 
   Widget _urgentCardList(
     BuildContext context,
-    Map<String, QueryDocumentSnapshot<Map<String, dynamic>>> docById,
+    Map<String, LeadView> docById,
   ) {
     return Column(
       children: [
@@ -920,8 +905,8 @@ class _UrgentSection extends StatelessWidget {
 
 class _UrgentRowTile extends StatelessWidget {
   final CrmUrgentRow row;
-  final QueryDocumentSnapshot<Map<String, dynamic>>? doc;
-  final void Function(QueryDocumentSnapshot<Map<String, dynamic>> doc)
+  final LeadView? doc;
+  final void Function(LeadView doc)
       onOpenLead;
   const _UrgentRowTile({
     required this.row,
@@ -1109,8 +1094,8 @@ class _UrgentRowTile extends StatelessWidget {
 
 class _UrgentCard extends StatelessWidget {
   final CrmUrgentRow row;
-  final QueryDocumentSnapshot<Map<String, dynamic>>? doc;
-  final void Function(QueryDocumentSnapshot<Map<String, dynamic>> doc)
+  final LeadView? doc;
+  final void Function(LeadView doc)
       onOpenLead;
   const _UrgentCard({
     required this.row,

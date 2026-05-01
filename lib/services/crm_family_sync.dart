@@ -130,7 +130,7 @@ class CrmFamilySync {
     Map<String, dynamic>? targetData;
 
     if (convertedFamilyId != null && convertedFamilyId.isNotEmpty) {
-      final snap = await fs.collection('families').doc(convertedFamilyId).get();
+      final snap = await fs.collection('plus_families').doc(convertedFamilyId).get();
       if (snap.exists) {
         targetRef = snap.reference;
         targetData = snap.data();
@@ -139,7 +139,7 @@ class CrmFamilySync {
 
     if (targetRef == null) {
       // 親電話/メール/氏名で照合（O(N) but families <= 数百件で十分）
-      final famSnap = await fs.collection('families').get();
+      final famSnap = await fs.collection('plus_families').get();
       for (final d in famSnap.docs) {
         final data = d.data();
         // 既に sourceLeadId が一致する child を持つfamilyを優先
@@ -213,7 +213,7 @@ class CrmFamilySync {
         'createdAt': leadData['createdAt'] ?? FieldValue.serverTimestamp(),
         'createdBy': leadData['createdBy'] ?? '',
       };
-      final ref = await fs.collection('families').add(familyData);
+      final ref = await fs.collection('plus_families').add(familyData);
       return ref.id;
     }
   }
