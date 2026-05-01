@@ -8,6 +8,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:intl/intl.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:file_picker/file_picker.dart';
@@ -51,12 +52,28 @@ class _ChatListScreenState extends State<ChatListScreen> {
 
   StreamSubscription<String>? _pendingChatRoomSub;
 
+  static const _filterPrefsKey = 'chat_list_filter';
+
   @override
   void initState() {
     super.initState();
     _initStream();
     _loadStaffUids();
     _setupPendingChatRoomListener();
+    _restoreFilter();
+  }
+
+  Future<void> _restoreFilter() async {
+    final prefs = await SharedPreferences.getInstance();
+    final saved = prefs.getString(_filterPrefsKey);
+    if (saved != null && saved != _filter && mounted) {
+      setState(() => _filter = saved);
+    }
+  }
+
+  Future<void> _saveFilter(String value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_filterPrefsKey, value);
   }
 
   Future<void> _loadStaffUids() async {
@@ -412,7 +429,10 @@ class _ChatListScreenState extends State<ChatListScreen> {
       final selected = _filter == value;
       return Expanded(
         child: InkWell(
-          onTap: () => setState(() => _filter = value),
+          onTap: () {
+            setState(() => _filter = value);
+            _saveFilter(value);
+          },
           child: Container(
             margin: const EdgeInsets.all(2),
             padding: const EdgeInsets.symmetric(vertical: 6),
