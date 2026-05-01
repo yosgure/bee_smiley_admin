@@ -23,6 +23,7 @@ import 'notification_settings_screen.dart';
 import 'ai_command_manage_screen.dart';
 import 'hug_mapping_screen.dart';
 import 'crm_unify_migration_screen.dart';
+import 'plus_families_split_screen.dart';
 import 'app_theme.dart';
 import 'widgets/app_feedback.dart';
 import 'main.dart' show themeNotifier, setThemeMode;
@@ -104,6 +105,8 @@ void _navigateTo(BuildContext context, Widget screen) {
       screenWithBack = HugMappingScreen(onBack: widget.onCloseWebScreen);
     } else if (screen is CrmUnifyMigrationScreen) {
       screenWithBack = CrmUnifyMigrationScreen(onBack: widget.onCloseWebScreen);
+    } else if (screen is PlusFamiliesSplitScreen) {
+      screenWithBack = PlusFamiliesSplitScreen(onBack: widget.onCloseWebScreen);
     } else {
       screenWithBack = screen;
     }
@@ -195,6 +198,13 @@ void _navigateTo(BuildContext context, Widget screen) {
                 color: AppColors.secondary,
                 description: 'crm_leads / families / hug を一本化（一回限り）',
                 destination: const CrmUnifyMigrationScreen(),
+              ),
+              _MenuData(
+                title: 'families → plus_families 分離',
+                icon: Icons.call_split,
+                color: AppColors.secondary,
+                description: 'プラス用と通常用を別コレクションに分離（一回限り）',
+                destination: const PlusFamiliesSplitScreen(),
               ),
             ],
           ),

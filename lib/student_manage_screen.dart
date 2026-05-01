@@ -256,23 +256,12 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
                   return kanaA.compareTo(kanaB);
                 });
 
-                // ステータスフィルタ: 入会済み(または status未設定の旧データ)のみ表示。
-                // CRM一体化により families コレクションには 検討中/入会手続中/失注 のリード児童も
-                // 含まれるようになったため、保護者・児童管理画面では入会済み家族のみを表示する。
-                final statusFiltered = docs.where((doc) {
-                  final data = doc.data() as Map<String, dynamic>;
-                  final children = List<Map<String, dynamic>>.from(data['children'] ?? []);
-                  if (children.isEmpty) return true; // 児童未登録は表示
-                  return children.any((child) {
-                    final s = child['status'];
-                    return s == null || s == '入会' || s == '退会';
-                  });
-                }).toList();
-
                 // 教室フィルタリング
+                // families コレクションは plus_families 分離後、通常レッスン（湘南台/湘南藤沢）のみ。
+                // プラス利用児は plus_families に居るため、ここではステータスフィルタ不要。
                 final classroomFiltered = _selectedClassroomFilter == 'すべて'
-                    ? statusFiltered
-                    : statusFiltered.where((doc) {
+                    ? docs
+                    : docs.where((doc) {
                         final data = doc.data() as Map<String, dynamic>;
                         final children = List<Map<String, dynamic>>.from(data['children'] ?? []);
                         return children.any((child) =>

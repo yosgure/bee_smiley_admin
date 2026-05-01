@@ -27,6 +27,17 @@ service cloud.firestore {
         allow read, write: if isStaff();
       }
     }
+    // ビースマイリープラス（児童発達支援/放課後等デイサービス）専用。
+    // CRMリード〜入会済み〜HUG連携までの管理対象。
+    match /plus_families/{familyId} {
+      allow read: if isAuthenticated();
+      allow update: if isStaff()
+                    || (isParent() && resource.data.uid == uid());
+      allow create, delete: if isStaff();
+      match /support_plans/{planId} {
+        allow read, write: if isStaff();
+      }
+    }
     match /chat_rooms/{roomId} {
       allow read: if isStaff()
                   || (isAuthenticated() && uid() in resource.data.members);
