@@ -10,6 +10,7 @@ import 'widgets/app_feedback.dart';
 import 'crm/crm_home_screen.dart';
 import 'main.dart';
 import 'services/undo_service.dart';
+import 'services/crm_family_sync.dart';
 
 // ============================================================
 // CRM-00: 選択肢マスタ
@@ -2326,13 +2327,39 @@ class _CrmLeadEditScreenState extends State<CrmLeadEditScreen> {
       'updatedBy': user?.uid ?? '',
     };
     try {
+      String leadId;
       if (_isEdit) {
         await widget.doc!.reference.update(data);
+        leadId = widget.doc!.id;
       } else {
         data['createdAt'] = now;
         data['createdBy'] = user?.uid ?? '';
         data['activities'] = <Map<String, dynamic>>[];
-        await FirebaseFirestore.instance.collection('crm_leads').add(data);
+        final ref =
+            await FirebaseFirestore.instance.collection('crm_leads').add(data);
+        leadId = ref.id;
+      }
+      // families.children[] にも同期（CRM一体化: families が真実の源）
+      try {
+        final familyId = await CrmFamilySync.upsertLead(
+          leadId: leadId,
+          leadData: data,
+          convertedFamilyId: _convertedFamilyId,
+        );
+        if (_convertedFamilyId == null || _convertedFamilyId != familyId) {
+          await FirebaseFirestore.instance
+              .collection('crm_leads')
+              .doc(leadId)
+              .update({'convertedFamilyId': familyId});
+          if (mounted) {
+            setState(() => _convertedFamilyId = familyId);
+          }
+        }
+      } catch (e) {
+        // families同期失敗はリード保存自体は成功扱いにし、警告のみ
+        if (mounted) {
+          AppFeedback.warning(context, '保護者・児童マスタ同期に失敗: $e');
+        }
       }
       if (mounted) {
         AppFeedback.success(context, _isEdit ? '更新しました' : '登録しました');
@@ -2404,6 +2431,7 @@ class _CrmLeadEditScreenState extends State<CrmLeadEditScreen> {
         'lastActivityAt': Timestamp.fromDate(result['at']),
         'updatedAt': FieldValue.serverTimestamp(),
       });
+      await _syncCurrentLeadToFamily();
       if (mounted) setState(() {});
     } catch (e) {
       if (mounted) {
@@ -2425,10 +2453,36 @@ class _CrmLeadEditScreenState extends State<CrmLeadEditScreen> {
         'activities': FieldValue.arrayRemove([entry]),
         'updatedAt': FieldValue.serverTimestamp(),
       });
+      await _syncCurrentLeadToFamily();
       if (mounted) setState(() {});
     } catch (e) {
       if (mounted) {
         AppFeedback.error(context, '削除失敗: $e');
+      }
+    }
+  }
+
+  /// 現在編集中のリードを最新state で再読込し、families.children[] へ同期する。
+  /// 失敗してもリード自体の更新は成功扱いにし、警告のみ出す（lead側の更新は既に完了している前提）。
+  Future<void> _syncCurrentLeadToFamily() async {
+    if (!_isEdit) return;
+    try {
+      final fresh = await widget.doc!.reference.get();
+      final data = fresh.data();
+      if (data == null) return;
+      final familyId = await CrmFamilySync.upsertLead(
+        leadId: widget.doc!.id,
+        leadData: Map<String, dynamic>.from(data),
+        convertedFamilyId: _convertedFamilyId,
+      );
+      if (_convertedFamilyId != familyId) {
+        await widget.doc!.reference
+            .update({'convertedFamilyId': familyId});
+        if (mounted) setState(() => _convertedFamilyId = familyId);
+      }
+    } catch (e) {
+      if (mounted) {
+        AppFeedback.warning(context, '保護者・児童マスタ同期に失敗: $e');
       }
     }
   }
@@ -2438,58 +2492,42 @@ class _CrmLeadEditScreenState extends State<CrmLeadEditScreen> {
       AppFeedback.warning(context, '先にリードを保存してください');
       return;
     }
-    if (_convertedFamilyId != null) {
-      AppFeedback.warning(context, 'すでに保護者・児童マスタに登録済みです');
-      return;
-    }
-    final ok = await AppFeedback.confirm(context, title: '入会処理', message: 'このリードを保護者・児童マスタに登録し、ステージを「入会」にします。\nよろしいですか？', confirmLabel: '入会処理', cancelLabel: 'キャンセル');
+    final ok = await AppFeedback.confirm(
+      context,
+      title: '入会処理',
+      message: 'このリードのステージを「入会」にします。\n保護者・児童マスタの該当児童も「入会」状態に更新されます。\nよろしいですか？',
+      confirmLabel: '入会処理',
+      cancelLabel: 'キャンセル',
+    );
     if (ok != true) return;
     try {
-      final user = FirebaseAuth.instance.currentUser;
       final now = FieldValue.serverTimestamp();
-      final familyData = <String, dynamic>{
-        'uid': '',
-        'lastName': _parentLastNameCtrl.text.trim(),
-        'firstName': _parentFirstNameCtrl.text.trim(),
-        'lastNameKana': _parentKanaCtrl.text.trim(),
-        'tel': _telCtrl.text.trim(),
-        'email': _emailCtrl.text.trim(),
-        'address': _addressCtrl.text.trim(),
-        'children': [
-          {
-            'firstName': _childFirstNameCtrl.text.trim(),
-            'lastName': _childLastNameCtrl.text.trim(),
-            'kana': _childKanaCtrl.text.trim(),
-            'gender': _childGender,
-            'birthDate': _childBirthDate == null
-                ? null
-                : Timestamp.fromDate(_childBirthDate!),
-            'classrooms': ['ビースマイリープラス湘南藤沢'],
-            'kindergarten': _kindergartenCtrl.text.trim(),
-            'mainConcern': _mainConcernCtrl.text.trim(),
-            'likes': _likesCtrl.text.trim(),
-            'dislikes': _dislikesCtrl.text.trim(),
-          }
-        ],
-        'sourceLeadId': widget.doc!.id,
-        'createdAt': now,
-        'createdBy': user?.uid ?? '',
-      };
-      final ref =
-          await FirebaseFirestore.instance.collection('families').add(familyData);
       final enrolledAt = DateTime.now();
+      // 1) crm_leads を 入会 に更新
+      final leadData = Map<String, dynamic>.from(widget.doc!.data());
+      leadData['stage'] = 'won';
+      leadData['enrolledAt'] = Timestamp.fromDate(enrolledAt);
       await widget.doc!.reference.update({
         'stage': 'won',
         'enrolledAt': Timestamp.fromDate(enrolledAt),
-        'convertedFamilyId': ref.id,
         'convertedAt': now,
         'updatedAt': now,
       });
+      // 2) families.children[] の該当 child を status='入会' に更新（無ければ作成）
+      final familyId = await CrmFamilySync.markAsEnrolled(
+        leadId: widget.doc!.id,
+        leadData: leadData,
+        convertedFamilyId: _convertedFamilyId,
+        enrolledAt: enrolledAt,
+      );
+      if (_convertedFamilyId != familyId) {
+        await widget.doc!.reference.update({'convertedFamilyId': familyId});
+      }
       if (mounted) {
         setState(() {
           _stage = 'won';
           _enrolledAt = enrolledAt;
-          _convertedFamilyId = ref.id;
+          _convertedFamilyId = familyId;
         });
         AppFeedback.success(context, '入会処理が完了しました');
       }
@@ -2527,7 +2565,7 @@ class _CrmLeadEditScreenState extends State<CrmLeadEditScreen> {
           padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
           child: Row(
             children: [
-              if (_isEdit && _stage != 'won' && _convertedFamilyId == null)
+              if (_isEdit && _stage != 'won')
                 Expanded(
                   child: OutlinedButton.icon(
                     onPressed: _convertToFamily,
@@ -2540,7 +2578,7 @@ class _CrmLeadEditScreenState extends State<CrmLeadEditScreen> {
                     ),
                   ),
                 ),
-              if (_isEdit && _stage != 'won' && _convertedFamilyId == null)
+              if (_isEdit && _stage != 'won')
                 const SizedBox(width: 8),
               Expanded(
                 flex: 2,
@@ -2588,7 +2626,7 @@ class _CrmLeadEditScreenState extends State<CrmLeadEditScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          if (_convertedFamilyId != null)
+          if (_convertedFamilyId != null && _stage == 'won')
             Container(
               margin: const EdgeInsets.only(bottom: 12),
               padding:
@@ -2604,7 +2642,7 @@ class _CrmLeadEditScreenState extends State<CrmLeadEditScreen> {
                       color: AppColors.success, size: 18),
                   const SizedBox(width: 8),
                   Expanded(
-                    child: Text('保護者・児童マスタに登録済（ID: $_convertedFamilyId）',
+                    child: Text('保護者・児童マスタに入会済（ID: $_convertedFamilyId）',
                         style: TextStyle(
                             fontSize: AppTextSize.small,
                             color: AppColors.successDark,

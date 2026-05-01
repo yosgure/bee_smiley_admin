@@ -22,7 +22,7 @@ service cloud.firestore {
       allow read: if isAuthenticated();
       allow update: if isStaff()
                     || (isParent() && resource.data.uid == uid());
-      allow create, delete: if false;
+      allow create, delete: if isStaff();
       match /support_plans/{planId} {
         allow read, write: if isStaff();
       }

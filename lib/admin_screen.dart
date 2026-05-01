@@ -22,6 +22,7 @@ import 'csv_export_screen.dart';
 import 'notification_settings_screen.dart';
 import 'ai_command_manage_screen.dart';
 import 'hug_mapping_screen.dart';
+import 'crm_unify_migration_screen.dart';
 import 'app_theme.dart';
 import 'widgets/app_feedback.dart';
 import 'main.dart' show themeNotifier, setThemeMode;
@@ -101,6 +102,8 @@ void _navigateTo(BuildContext context, Widget screen) {
       screenWithBack = AiCommandManageScreen(onBack: widget.onCloseWebScreen);
     } else if (screen is HugMappingScreen) {
       screenWithBack = HugMappingScreen(onBack: widget.onCloseWebScreen);
+    } else if (screen is CrmUnifyMigrationScreen) {
+      screenWithBack = CrmUnifyMigrationScreen(onBack: widget.onCloseWebScreen);
     } else {
       screenWithBack = screen;
     }
@@ -185,6 +188,13 @@ void _navigateTo(BuildContext context, Widget screen) {
                 color: AppColors.secondary,
                 description: '児童・スタッフのhug IDマッピング',
                 destination: const HugMappingScreen(),
+              ),
+              _MenuData(
+                title: 'CRM一体化マイグレーション',
+                icon: Icons.merge_type,
+                color: AppColors.secondary,
+                description: 'crm_leads / families / hug を一本化（一回限り）',
+                destination: const CrmUnifyMigrationScreen(),
               ),
             ],
           ),
