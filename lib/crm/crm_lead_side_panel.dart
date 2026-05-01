@@ -7,6 +7,7 @@ import 'package:intl/intl.dart';
 import '../app_theme.dart';
 import '../widgets/app_feedback.dart';
 import '../crm_lead_screen.dart' show CrmOptions, CrmLeadEditScreen;
+import '../services/crm_lead_adapter.dart';
 import 'crm_home_utils.dart';
 import 'crm_lead_model.dart';
 import 'crm_next_action.dart';
@@ -17,14 +18,15 @@ import 'crm_next_action.dart';
 /// 引き継ぎ、管理者がホームから目を離さず「書き込める」ワークスペースを提供する。
 /// 幅は標準 560px。Esc または × で閉じる。
 ///
-/// ドキュメントは DocumentReference 経由で stream 購読し、保存後に即時再描画。
+/// ドキュメントは family doc + childIndex 経由で stream 購読し、
+/// 保存後に即時再描画。LeadView が plus_families.children[index] への参照を保持する。
 class CrmLeadSidePanel extends StatefulWidget {
-  final DocumentReference<Map<String, dynamic>> leadRef;
+  final LeadView leadView;
   final VoidCallback onClose;
 
   const CrmLeadSidePanel({
     super.key,
-    required this.leadRef,
+    required this.leadView,
     required this.onClose,
   });
 
@@ -62,7 +64,9 @@ class _CrmLeadSidePanelState extends State<CrmLeadSidePanel> {
         color: c.scaffoldBg,
         elevation: 8,
         child: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-          stream: widget.leadRef.snapshots(),
+          // plus_families の family doc を購読し、children[childIndex] を抽出して
+          // LeadView 同等の表示用データを構築する。
+          stream: widget.leadView.familyRef.snapshots(),
           builder: (context, snap) {
             if (!snap.hasData) {
               return const Center(
@@ -77,10 +81,26 @@ class _CrmLeadSidePanelState extends State<CrmLeadSidePanel> {
                       child: Text('リードが見つかりません',
                           style: TextStyle(color: c.textSecondary))));
             }
-            final lead = CrmLead.fromSnapshot(snap.data!);
+            final familyData = snap.data!.data();
+            final children = (familyData?['children'] as List? ?? []);
+            final idx = widget.leadView.childIndex;
+            if (familyData == null || idx < 0 || idx >= children.length) {
+              return Center(
+                  child: Padding(
+                      padding: const EdgeInsets.all(32),
+                      child: Text('リードが見つかりません',
+                          style: TextStyle(color: c.textSecondary))));
+            }
+            final child = Map<String, dynamic>.from(children[idx] as Map);
+            final flat = flattenChildToLeadShape(
+                widget.leadView.familyDocId, familyData, child);
+            final lead = CrmLead(
+                id: widget.leadView.id,
+                raw: flat,
+                ref: widget.leadView.reference);
             return _Body(
               lead: lead,
-              leadRef: widget.leadRef,
+              leadRef: widget.leadView.reference,
               onClose: widget.onClose,
             );
           },
@@ -92,7 +112,7 @@ class _CrmLeadSidePanelState extends State<CrmLeadSidePanel> {
 
 class _Body extends StatelessWidget {
   final CrmLead lead;
-  final DocumentReference<Map<String, dynamic>> leadRef;
+  final LeadViewReference leadRef;
   final VoidCallback onClose;
   const _Body({
     required this.lead,
@@ -126,19 +146,45 @@ class _Body extends StatelessWidget {
                 const SizedBox(height: 20),
                 Align(
                   alignment: Alignment.centerLeft,
-                  child: OutlinedButton.icon(
-                    // C-crm-1 でこのサイドパネル経路は一時的に無効化中
-                    // （DocumentReference→LeadView ブリッジが未実装）。
-                    // CRM画面側で _openLeadInPanel を Navigator.push に切替済み。
-                    onPressed: null,
-                    icon: const Icon(Icons.edit_outlined, size: 16),
-                    label: const Text('詳細を編集'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: c.textSecondary,
-                      side: BorderSide(color: c.borderMedium),
-                      textStyle: const TextStyle(fontSize: AppTextSize.small),
-                    ),
-                  ),
+                  child: Builder(builder: (ctx) {
+                    return OutlinedButton.icon(
+                      onPressed: () {
+                        // 詳細編集は CrmLeadEditScreen をフルスクリーンで開く。
+                        // sidepanel と同じ LeadView を共有して同期表示。
+                        if (lead.ref == null) return;
+                        // family doc を読み直して LeadView を再構成するのは重いので、
+                        // ref（LeadViewReference）から最低限の情報を復元する。
+                        // 実用上 CrmLeadEditScreen は data() で表示するため
+                        // LeadView の最新スナップショットがあれば十分。
+                        // ここでは ref が指す LeadView を直接呼び出し側に持たせる。
+                        // （sidepanel 起動者から渡されている）
+                        // 簡易対応: lead.id (familyId#childIndex) から LeadView を生成
+                        final parts = lead.id.split('#');
+                        if (parts.length != 2) return;
+                        final familyId = parts[0];
+                        final idx = int.tryParse(parts[1]) ?? 0;
+                        Navigator.push(
+                            ctx,
+                            MaterialPageRoute(
+                                builder: (_) => CrmLeadEditScreen(
+                                    doc: LeadView(
+                                        familyDocId: familyId,
+                                        childIndex: idx,
+                                        flatData: lead.raw,
+                                        familyRef: FirebaseFirestore.instance
+                                            .collection('plus_families')
+                                            .doc(familyId)))));
+                      },
+                      icon: const Icon(Icons.edit_outlined, size: 16),
+                      label: const Text('詳細を編集'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: c.textSecondary,
+                        side: BorderSide(color: c.borderMedium),
+                        textStyle:
+                            const TextStyle(fontSize: AppTextSize.small),
+                      ),
+                    );
+                  }),
                 ),
               ],
             ),
@@ -153,7 +199,7 @@ class _Body extends StatelessWidget {
 
 class _Header extends StatelessWidget {
   final CrmLead lead;
-  final DocumentReference<Map<String, dynamic>> leadRef;
+  final LeadViewReference leadRef;
   final VoidCallback onClose;
   const _Header(
       {required this.lead, required this.leadRef, required this.onClose});
@@ -297,7 +343,7 @@ class _UrgentContextStrip extends StatelessWidget {
 
 class _NextActionBlock extends StatelessWidget {
   final CrmLead lead;
-  final DocumentReference<Map<String, dynamic>> leadRef;
+  final LeadViewReference leadRef;
   const _NextActionBlock({required this.lead, required this.leadRef});
 
   @override
@@ -507,7 +553,7 @@ class _NextActionBlock extends StatelessWidget {
   Future<void> _editSchedule(
     BuildContext context,
     CrmLead lead,
-    DocumentReference<Map<String, dynamic>> leadRef,
+    LeadViewReference leadRef,
   ) async {
     final now = DateTime.now();
     final initial = lead.nextActionAt ?? now.add(const Duration(days: 1));
@@ -535,7 +581,7 @@ class _NextActionBlock extends StatelessWidget {
   Future<void> _quickMemo(
     BuildContext context,
     CrmLead lead,
-    DocumentReference<Map<String, dynamic>> leadRef,
+    LeadViewReference leadRef,
   ) async {
     final controller = TextEditingController();
     final ok = await showDialog<bool>(
@@ -582,7 +628,7 @@ class _NextActionBlock extends StatelessWidget {
 
 class _RecordForm extends StatefulWidget {
   final CrmLead lead;
-  final DocumentReference<Map<String, dynamic>> leadRef;
+  final LeadViewReference leadRef;
   const _RecordForm({required this.lead, required this.leadRef});
 
   @override

@@ -8,6 +8,7 @@ import '../crm_lead_screen.dart' show CrmOptions, CrmLeadEditScreen;
 import '../services/crm_lead_adapter.dart';
 import 'crm_home_utils.dart';
 import 'crm_lead_model.dart';
+import 'crm_lead_side_panel.dart';
 
 /// 「今日整えたいこと」カードで使う柔らかめのアンバー。
 /// `context.alerts.warning` より彩度を落とし、赤みを抑えたトーンにする。
@@ -59,9 +60,29 @@ class _CrmHomeScreenState extends State<CrmHomeScreen> {
   /// Urgent List の絞り込み（null=全件）
   CrmUrgentReason? _filter;
 
+  /// 右サイドパネルで開いているリード（null=閉じている）
+  LeadView? _selectedLead;
+
   @override
   Widget build(BuildContext context) {
-    return _buildHome(context);
+    return LayoutBuilder(builder: (context, cons) {
+      final wide = cons.maxWidth >= 1100;
+      final home = _buildHome(context);
+      if (_selectedLead == null) return home;
+      final panel = CrmLeadSidePanel(
+        leadView: _selectedLead!,
+        onClose: () => setState(() => _selectedLead = null),
+      );
+      if (wide) {
+        return Row(
+          children: [
+            Expanded(child: home),
+            SizedBox(width: 560, child: panel),
+          ],
+        );
+      }
+      return panel;
+    });
   }
 
   Widget _buildHome(BuildContext context) {
@@ -165,12 +186,7 @@ class _CrmHomeScreenState extends State<CrmHomeScreen> {
   }
 
   void _openLeadInPanel(LeadView doc) {
-    // C-crm-1 の段階では plus_families 由来の LeadView と既存サイドパネル
-    // (DocumentReference 前提)を結びつけるブリッジが未実装のため、
-    // 詳細は CrmLeadEditScreen をフルスクリーンで開く。
-    Navigator.of(context).push(MaterialPageRoute(
-      builder: (_) => CrmLeadEditScreen(doc: doc),
-    ));
+    setState(() => _selectedLead = doc);
   }
 
   String _currentUserName() {
