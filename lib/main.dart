@@ -181,17 +181,20 @@ class _AuthCheckWrapperState extends State<AuthCheckWrapper> with WidgetsBinding
         await FirebaseAuth.instance.currentUser?.getIdToken(true);
         return UserStatus(type: UserType.staff, isInitialPassword: data['isInitialPassword'] == true, uid: uid);
       }
-      final familySnap = await FirebaseFirestore.instance
-          .collection('families').where('uid', isEqualTo: uid).limit(1).get();
-      debugPrint('🔍 families query result: ${familySnap.docs.length} docs');
-      if (familySnap.docs.isNotEmpty) {
-        final data = familySnap.docs.first.data();
-        debugPrint('🔍 family data: $data');
-        // Custom Claims を反映するためトークンをリフレッシュ
-        await FirebaseAuth.instance.currentUser?.getIdToken(true);
-        return UserStatus(type: UserType.parent, isInitialPassword: data['isInitialPassword'] == true, uid: uid);
+      // 保護者は families（通常）と plus_families（プラス）両方を確認
+      for (final coll in const ['families', 'plus_families']) {
+        final familySnap = await FirebaseFirestore.instance
+            .collection(coll).where('uid', isEqualTo: uid).limit(1).get();
+        debugPrint('🔍 $coll query result: ${familySnap.docs.length} docs');
+        if (familySnap.docs.isNotEmpty) {
+          final data = familySnap.docs.first.data();
+          debugPrint('🔍 family data ($coll): $data');
+          // Custom Claims を反映するためトークンをリフレッシュ
+          await FirebaseAuth.instance.currentUser?.getIdToken(true);
+          return UserStatus(type: UserType.parent, isInitialPassword: data['isInitialPassword'] == true, uid: uid);
+        }
       }
-      debugPrint('⚠️ uid $uid not found in staffs or families → unknown');
+      debugPrint('⚠️ uid $uid not found in staffs / families / plus_families → unknown');
       return UserStatus.unknown;
     } catch (e) {
       debugPrint('❌ _checkUserStatus error: $e');

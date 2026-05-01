@@ -7,14 +7,28 @@ import 'classroom_utils.dart';
 
 class StudentManageScreen extends StatefulWidget {
   final VoidCallback? onBack;
-  const StudentManageScreen({super.key, this.onBack});
+
+  /// 表示・編集対象のコレクション。
+  /// 'families' = ビースマイリー通常（湘南台/湘南藤沢）
+  /// 'plus_families' = ビースマイリープラス（児童発達支援/放デイ）
+  final String collectionName;
+
+  /// AppBarに表示するタイトル（コレクション名に応じて切替えやすくするため）
+  final String? title;
+
+  const StudentManageScreen({
+    super.key,
+    this.onBack,
+    this.collectionName = 'families',
+    this.title,
+  });
   @override
   State<StudentManageScreen> createState() => _StudentManageScreenState();
 }
 
 class _StudentManageScreenState extends State<StudentManageScreen> {
-  final CollectionReference _familiesRef =
-      FirebaseFirestore.instance.collection('families');
+  late final CollectionReference _familiesRef =
+      FirebaseFirestore.instance.collection(widget.collectionName);
   final CollectionReference _classroomsRef =
       FirebaseFirestore.instance.collection('classrooms');
 
@@ -134,7 +148,7 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('保護者・児童管理'),
+        title: Text(widget.title ?? '保護者・児童管理'),
         centerTitle: true,
         backgroundColor: context.colors.cardBg,
         elevation: 0,
@@ -624,6 +638,7 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
         'targetUid': targetUid,
         'familyDocId': docId,
         'newLoginId': newId,
+        'collectionName': widget.collectionName,
       });
 
       if (mounted) {
@@ -666,6 +681,7 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
       await callable.call({
         'targetUid': targetUid,
         'familyDocId': docId,
+        'collectionName': widget.collectionName,
       });
 
       if (mounted) {
@@ -693,6 +709,7 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
       await callable.call({
         'targetUid': targetUid,
         'familyDocId': docId,
+        'collectionName': widget.collectionName,
       });
 
       if (mounted) {
@@ -1146,6 +1163,7 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
                         await callable.call({
                           'loginId': loginId,
                           'familyData': familyData,
+                          'collectionName': widget.collectionName,
                         });
                       }
 

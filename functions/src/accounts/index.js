@@ -20,13 +20,25 @@ async function assertStaffCaller(request) {
   }
 }
 
+// 保護者ドキュメントが格納されるコレクションを許可リストで制限する。
+// CRM一体化により families（通常）と plus_families（プラス）の2系統が存在。
+const PARENT_COLLECTIONS = new Set(['families', 'plus_families']);
+function resolveParentCollection(name) {
+  const c = (name || 'families').toString();
+  if (!PARENT_COLLECTIONS.has(c)) {
+    throw new HttpsError('invalid-argument', `無効なコレクション名: ${c}`);
+  }
+  return c;
+}
+
 /**
  * 保護者アカウントを作成する
  */
 exports.createParentAccount = onCall({ region: 'asia-northeast1', secrets: [initialPassword] }, async (request) => {
   await assertStaffCaller(request);
 
-  const { loginId, familyData } = request.data;
+  const { loginId, familyData, collectionName } = request.data;
+  const collection = resolveParentCollection(collectionName);
 
   if (!loginId || loginId.trim() === '') {
     throw new HttpsError('invalid-argument', 'ログインIDが必要です');
@@ -51,7 +63,7 @@ exports.createParentAccount = onCall({ region: 'asia-northeast1', secrets: [init
       createdAt: FieldValue.serverTimestamp(),
     };
 
-    const docRef = await db.collection('families').add(saveData);
+    const docRef = await db.collection(collection).add(saveData);
 
     return {
       success: true,
@@ -77,7 +89,8 @@ exports.createParentAccount = onCall({ region: 'asia-northeast1', secrets: [init
 exports.resetParentPassword = onCall({ region: 'asia-northeast1', secrets: [initialPassword] }, async (request) => {
   await assertStaffCaller(request);
 
-  const { targetUid, familyDocId } = request.data;
+  const { targetUid, familyDocId, collectionName } = request.data;
+  const collection = resolveParentCollection(collectionName);
 
   if (!targetUid) {
     throw new HttpsError('invalid-argument', '対象ユーザーIDが必要です');
@@ -89,7 +102,7 @@ exports.resetParentPassword = onCall({ region: 'asia-northeast1', secrets: [init
     });
 
     if (familyDocId) {
-      await db.collection('families').doc(familyDocId).update({
+      await db.collection(collection).doc(familyDocId).update({
         isInitialPassword: true,
       });
     }
@@ -111,7 +124,8 @@ exports.resetParentPassword = onCall({ region: 'asia-northeast1', secrets: [init
 exports.updateParentLoginId = onCall({ region: 'asia-northeast1' }, async (request) => {
   await assertStaffCaller(request);
 
-  const { targetUid, familyDocId, newLoginId } = request.data;
+  const { targetUid, familyDocId, newLoginId, collectionName } = request.data;
+  const collection = resolveParentCollection(collectionName);
 
   if (!targetUid || !familyDocId) {
     throw new HttpsError('invalid-argument', '対象ユーザーIDとファミリードキュメントIDが必要です');
@@ -122,14 +136,17 @@ exports.updateParentLoginId = onCall({ region: 'asia-northeast1' }, async (reque
     throw new HttpsError('invalid-argument', '新しいログインIDを入力してください');
   }
 
-  const existing = await db
-    .collection('families')
-    .where('loginId', '==', trimmedLoginId)
-    .limit(1)
-    .get();
-
-  if (!existing.empty && existing.docs[0].id !== familyDocId) {
-    throw new HttpsError('already-exists', 'このログインIDは既に使用されています');
+  // ログインIDの重複チェックは families と plus_families の両方を確認する
+  // （別コレクションでも auth email が重複できないため）
+  for (const c of PARENT_COLLECTIONS) {
+    const existing = await db
+      .collection(c)
+      .where('loginId', '==', trimmedLoginId)
+      .limit(1)
+      .get();
+    if (!existing.empty && (c !== collection || existing.docs[0].id !== familyDocId)) {
+      throw new HttpsError('already-exists', 'このログインIDは既に使用されています');
+    }
   }
 
   const newEmail = trimmedLoginId + FIXED_DOMAIN;
@@ -137,7 +154,7 @@ exports.updateParentLoginId = onCall({ region: 'asia-northeast1' }, async (reque
   try {
     await auth.updateUser(targetUid, { email: newEmail });
 
-    await db.collection('families').doc(familyDocId).update({
+    await db.collection(collection).doc(familyDocId).update({
       loginId: trimmedLoginId,
     });
 
@@ -163,7 +180,8 @@ exports.updateParentLoginId = onCall({ region: 'asia-northeast1' }, async (reque
 exports.deleteParentAccount = onCall({ region: 'asia-northeast1' }, async (request) => {
   await assertStaffCaller(request);
 
-  const { targetUid, familyDocId } = request.data;
+  const { targetUid, familyDocId, collectionName } = request.data;
+  const collection = resolveParentCollection(collectionName);
 
   try {
     if (targetUid) {
@@ -177,7 +195,7 @@ exports.deleteParentAccount = onCall({ region: 'asia-northeast1' }, async (reque
     }
 
     if (familyDocId) {
-      await db.collection('families').doc(familyDocId).delete();
+      await db.collection(collection).doc(familyDocId).delete();
     }
 
     return {

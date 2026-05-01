@@ -363,11 +363,14 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     debugPrint('studentIds: $studentIds');
     
     try {
-      final familiesSnapshot = await FirebaseFirestore.instance
-          .collection('families')
-          .get();
-      
-      for (var familyDoc in familiesSnapshot.docs) {
+      // families（通常）と plus_families（プラス）両方からふりがなマップを構築
+      final allFamilies = <QueryDocumentSnapshot<Map<String, dynamic>>>[];
+      for (final coll in const ['families', 'plus_families']) {
+        final s = await FirebaseFirestore.instance.collection(coll).get();
+        allFamilies.addAll(s.docs);
+      }
+
+      for (var familyDoc in allFamilies) {
         final familyData = familyDoc.data();
         final children = List<Map<String, dynamic>>.from(familyData['children'] ?? []);
         final lastNameKana = familyData['lastNameKana'] ?? '';
@@ -648,14 +651,21 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     required String lessonName,
   }) async {
     try {
-      // familiesコレクションから親のFCMトークンを取得
-      final familyDoc = await FirebaseFirestore.instance
-          .collection('families')
-          .where('uid', isEqualTo: familyUid)
-          .limit(1)
-          .get();
-      
-      if (familyDoc.docs.isEmpty) return;
+      // 親のFCMトークンを families / plus_families 両方から検索
+      QuerySnapshot<Map<String, dynamic>>? familyDoc;
+      for (final coll in const ['families', 'plus_families']) {
+        final q = await FirebaseFirestore.instance
+            .collection(coll)
+            .where('uid', isEqualTo: familyUid)
+            .limit(1)
+            .get();
+        if (q.docs.isNotEmpty) {
+          familyDoc = q;
+          break;
+        }
+      }
+
+      if (familyDoc == null || familyDoc.docs.isEmpty) return;
       
       final familyData = familyDoc.docs.first.data();
       final fcmTokens = List<String>.from(familyData['fcmTokens'] ?? []);

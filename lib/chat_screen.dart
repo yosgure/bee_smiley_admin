@@ -645,16 +645,19 @@ class _RoomListTileState extends State<_RoomListTile> {
       final d = snap.docs.first.data();
       return {'name': d['name'] ?? 'スタッフ', 'photoUrl': d['photoUrl'], 'isStaff': true};
     }
-    snap = await FirebaseFirestore.instance.collection('families').where('uid', isEqualTo: peerId).limit(1).get();
-    if (snap.docs.isNotEmpty) {
-      final d = snap.docs.first.data();
-      final lastName = (d['lastName'] ?? '').toString().trim();
-      final firstName = (d['firstName'] ?? '').toString().trim();
-      final fullName = '$lastName $firstName'.trim();
-      String? childPhotoUrl;
-      final children = List<Map<String, dynamic>>.from(d['children'] ?? []);
-      if (children.isNotEmpty) childPhotoUrl = children.first['photoUrl'] as String?;
-      return {'name': fullName.isNotEmpty ? fullName : '保護者', 'photoUrl': childPhotoUrl, 'isStaff': false};
+    // 保護者は families（通常）と plus_families（プラス）両方を確認
+    for (final coll in const ['families', 'plus_families']) {
+      snap = await FirebaseFirestore.instance.collection(coll).where('uid', isEqualTo: peerId).limit(1).get();
+      if (snap.docs.isNotEmpty) {
+        final d = snap.docs.first.data();
+        final lastName = (d['lastName'] ?? '').toString().trim();
+        final firstName = (d['firstName'] ?? '').toString().trim();
+        final fullName = '$lastName $firstName'.trim();
+        String? childPhotoUrl;
+        final children = List<Map<String, dynamic>>.from(d['children'] ?? []);
+        if (children.isNotEmpty) childPhotoUrl = children.first['photoUrl'] as String?;
+        return {'name': fullName.isNotEmpty ? fullName : '保護者', 'photoUrl': childPhotoUrl, 'isStaff': false};
+      }
     }
     return {'name': '不明', 'photoUrl': null, 'isStaff': false};
   }
@@ -826,16 +829,19 @@ class _NewChatDialogState extends State<NewChatDialog> with SingleTickerProvider
     try {
       final List<Map<String, dynamic>> tempFamilies = [];
       final List<Map<String, dynamic>> tempStaff = [];
-      final familySnap = await FirebaseFirestore.instance.collection('families').get();
-      for (var doc in familySnap.docs) {
-        final d = doc.data();
-        if (d['uid'] == widget.myUid) continue;
-        final name = '${(d['lastName'] ?? '').toString().trim()} ${(d['firstName'] ?? '').toString().trim()}'.trim();
-        final kana = '${(d['lastNameKana'] ?? '').toString().trim()} ${(d['firstNameKana'] ?? '').toString().trim()}'.trim();
-        final children = List<Map<String, dynamic>>.from(d['children'] ?? []);
-        String? classroom; String? childPhotoUrl;
-        if (children.isNotEmpty) { classroom = getChildClassrooms(children.first).join(', '); childPhotoUrl = children.first['photoUrl'] as String?; }
-        tempFamilies.add({'uid': d['uid'] ?? doc.id, 'name': name.isEmpty ? '名称未設定' : name, 'kana': kana.isEmpty ? name : kana, 'photoUrl': childPhotoUrl, 'classroom': classroom});
+      // families（通常）と plus_families（プラス）両方から保護者を取得
+      for (final coll in const ['families', 'plus_families']) {
+        final familySnap = await FirebaseFirestore.instance.collection(coll).get();
+        for (var doc in familySnap.docs) {
+          final d = doc.data();
+          if (d['uid'] == widget.myUid) continue;
+          final name = '${(d['lastName'] ?? '').toString().trim()} ${(d['firstName'] ?? '').toString().trim()}'.trim();
+          final kana = '${(d['lastNameKana'] ?? '').toString().trim()} ${(d['firstNameKana'] ?? '').toString().trim()}'.trim();
+          final children = List<Map<String, dynamic>>.from(d['children'] ?? []);
+          String? classroom; String? childPhotoUrl;
+          if (children.isNotEmpty) { classroom = getChildClassrooms(children.first).join(', '); childPhotoUrl = children.first['photoUrl'] as String?; }
+          tempFamilies.add({'uid': d['uid'] ?? doc.id, 'name': name.isEmpty ? '名称未設定' : name, 'kana': kana.isEmpty ? name : kana, 'photoUrl': childPhotoUrl, 'classroom': classroom});
+        }
       }
       final staffSnap = await FirebaseFirestore.instance.collection('staffs').get();
       for (var doc in staffSnap.docs) {

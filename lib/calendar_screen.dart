@@ -191,9 +191,14 @@ Future<void> _saveDisplayDate(DateTime date) async {
 
   Future<void> _fetchStudentCourses() async {
     try {
-      final snapshot = await FirebaseFirestore.instance.collection('families').get();
+      // families（通常）と plus_families（プラス）両方から児童コース情報を取得
+      final allDocs = <QueryDocumentSnapshot<Map<String, dynamic>>>[];
+      for (final coll in const ['families', 'plus_families']) {
+        final s = await FirebaseFirestore.instance.collection(coll).get();
+        allDocs.addAll(s.docs);
+      }
       final Map<String, String> courseMap = {};
-      for (var doc in snapshot.docs) {
+      for (var doc in allDocs) {
         final data = doc.data();
         final uid = data['uid'] as String? ?? '';
         final children = List<Map<String, dynamic>>.from(data['children'] ?? []);

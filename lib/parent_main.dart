@@ -162,16 +162,24 @@ class _ParentMainScreenState extends State<ParentMainScreen> {
       final uid = FirebaseAuth.instance.currentUser?.uid;
       if (uid == null) return;
 
-      final query = await FirebaseFirestore.instance
-          .collection('families')
-          .where('uid', isEqualTo: uid)
-          .limit(1)
-          .get();
+      // 保護者ドキュメントは families / plus_families のいずれかに存在
+      QuerySnapshot? query;
+      for (final coll in const ['families', 'plus_families']) {
+        final q = await FirebaseFirestore.instance
+            .collection(coll)
+            .where('uid', isEqualTo: uid)
+            .limit(1)
+            .get();
+        if (q.docs.isNotEmpty) {
+          query = q;
+          break;
+        }
+      }
 
-      if (query.docs.isNotEmpty) {
-        final data = query.docs.first.data();
+      if (query != null && query.docs.isNotEmpty) {
+        final data = query.docs.first.data() as Map<String, dynamic>;
         final children = List<Map<String, dynamic>>.from(data['children'] ?? []);
-        
+
         setState(() {
           _familyData = data;
           _children = children;

@@ -73,8 +73,9 @@ class _AiChatMainScreenState extends State<AiChatMainScreen> {
 
   Future<void> _loadStudents() async {
     try {
+      // プラス専用コレクションから児童一覧を取得（CRM一体化により families から分離済み）
       final snapshot = await FirebaseFirestore.instance
-          .collection('families')
+          .collection('plus_families')
           .get();
 
       final students = <Map<String, dynamic>>[];
@@ -82,7 +83,13 @@ class _AiChatMainScreenState extends State<AiChatMainScreen> {
       for (var doc in snapshot.docs) {
         final data = doc.data();
         final familyUid = data['uid'] as String? ?? doc.id;
-        final lastName = data['lastName'] as String? ?? '';
+        final rawLastName = data['lastName'] as String? ?? '';
+        final rawFirstName = data['firstName'] as String? ?? '';
+        // 旧データで lastName に親フルネームが入り firstName が空のケースを補正
+        // （例: lastName='村田千明', firstName='' → lastName='村田'）
+        final lastName = (rawFirstName.isEmpty && rawLastName.length >= 4 && !rawLastName.contains(' '))
+            ? rawLastName.substring(0, 2)
+            : rawLastName;
         final lastNameKana = data['lastNameKana'] as String? ?? '';
         final children = List<Map<String, dynamic>>.from(data['children'] ?? []);
 
@@ -91,7 +98,10 @@ class _AiChatMainScreenState extends State<AiChatMainScreen> {
           final classrooms = getChildClassrooms(child);
           final classroom = classrooms.join(', ');
 
-          if (firstName.isNotEmpty && classrooms.any((c) => c.contains('プラス'))) {
+          // 入会済みのみ表示（リード/失注/退会は除外）
+          final status = child['status'] as String?;
+          final isEnrolled = status == null || status == '入会';
+          if (firstName.isNotEmpty && isEnrolled) {
             final studentId = child['studentId'] ?? '${familyUid}_$firstName';
             students.add({
               'name': '$lastName $firstName'.trim(),

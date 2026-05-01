@@ -78,7 +78,11 @@ void _navigateTo(BuildContext context, Widget screen) {
     if (screen is StaffManageScreen) {
       screenWithBack = StaffManageScreen(onBack: widget.onCloseWebScreen);
     } else if (screen is StudentManageScreen) {
-      screenWithBack = StudentManageScreen(onBack: widget.onCloseWebScreen);
+      screenWithBack = StudentManageScreen(
+        onBack: widget.onCloseWebScreen,
+        collectionName: screen.collectionName,
+        title: screen.title,
+      );
     } else if (screen is ToolMasterScreen) {
       screenWithBack = ToolMasterScreen(onBack: widget.onCloseWebScreen);
     } else if (screen is NonCognitiveSkillMasterScreen) {
@@ -151,11 +155,24 @@ void _navigateTo(BuildContext context, Widget screen) {
                 destination: const StaffManageScreen(),
               ),
               _MenuData(
-                title: '保護者・児童',
+                title: '保護者・児童（通常）',
                 icon: Icons.family_restroom,
                 color: AppColors.info,
-                description: '児童情報と連絡先の管理',
-                destination: const StudentManageScreen(),
+                description: 'ビースマイリー湘南台/湘南藤沢 通常レッスン',
+                destination: const StudentManageScreen(
+                  collectionName: 'families',
+                  title: '保護者・児童管理（通常）',
+                ),
+              ),
+              _MenuData(
+                title: '保護者・児童（プラス）',
+                icon: Icons.family_restroom,
+                color: AppColors.accent,
+                description: 'ビースマイリープラス（児童発達支援/放デイ）',
+                destination: const StudentManageScreen(
+                  collectionName: 'plus_families',
+                  title: '保護者・児童管理（プラス）',
+                ),
               ),
             ],
           ),

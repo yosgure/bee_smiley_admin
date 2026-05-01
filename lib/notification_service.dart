@@ -264,25 +264,28 @@ class NotificationService {
       return;
     }
 
-    final familySnap = await firestore
-        .collection('families')
-        .where('uid', isEqualTo: uid)
-        .limit(1)
-        .get();
+    // families（通常）と plus_families（プラス）両方を確認して FCM トークンを更新
+    for (final coll in const ['families', 'plus_families']) {
+      final familySnap = await firestore
+          .collection(coll)
+          .where('uid', isEqualTo: uid)
+          .limit(1)
+          .get();
 
-    if (familySnap.docs.isNotEmpty) {
-      final updates = <String, dynamic>{
-        'fcmTokens': FieldValue.arrayUnion([token]),
-        'lastTokenUpdate': FieldValue.serverTimestamp(),
-      };
-      if (oldToken != null && oldToken != token) {
-        await familySnap.docs.first.reference.update({
-          'fcmTokens': FieldValue.arrayRemove([oldToken]),
-        });
+      if (familySnap.docs.isNotEmpty) {
+        final updates = <String, dynamic>{
+          'fcmTokens': FieldValue.arrayUnion([token]),
+          'lastTokenUpdate': FieldValue.serverTimestamp(),
+        };
+        if (oldToken != null && oldToken != token) {
+          await familySnap.docs.first.reference.update({
+            'fcmTokens': FieldValue.arrayRemove([oldToken]),
+          });
+        }
+        await familySnap.docs.first.reference.update(updates);
+        await prefs.setString('fcm_token', token);
+        return;
       }
-      await familySnap.docs.first.reference.update(updates);
-      await prefs.setString('fcm_token', token);
-      return;
     }
   }
 
@@ -306,18 +309,20 @@ class NotificationService {
         }
       }
 
-      // familiesコレクションから削除
-      final familySnap = await firestore
-          .collection('families')
-          .where('fcmTokens', arrayContains: token)
-          .get();
+      // families と plus_families から該当トークンを削除
+      for (final coll in const ['families', 'plus_families']) {
+        final familySnap = await firestore
+            .collection(coll)
+            .where('fcmTokens', arrayContains: token)
+            .get();
 
-      for (final doc in familySnap.docs) {
-        final docUid = doc.data()['uid'] as String?;
-        if (docUid != null && docUid != currentUid) {
-          await doc.reference.update({
-            'fcmTokens': FieldValue.arrayRemove([token]),
-          });
+        for (final doc in familySnap.docs) {
+          final docUid = doc.data()['uid'] as String?;
+          if (docUid != null && docUid != currentUid) {
+            await doc.reference.update({
+              'fcmTokens': FieldValue.arrayRemove([token]),
+            });
+          }
         }
       }
     } catch (e) {
@@ -353,18 +358,21 @@ class NotificationService {
         });
       }
       
-      final familySnap = await firestore
-          .collection('families')
-          .where('uid', isEqualTo: user.uid)
-          .limit(1)
-          .get();
-      
-      if (familySnap.docs.isNotEmpty) {
-        await familySnap.docs.first.reference.update({
-          'fcmTokens': FieldValue.arrayRemove([token]),
-        });
+      for (final coll in const ['families', 'plus_families']) {
+        final familySnap = await firestore
+            .collection(coll)
+            .where('uid', isEqualTo: user.uid)
+            .limit(1)
+            .get();
+
+        if (familySnap.docs.isNotEmpty) {
+          await familySnap.docs.first.reference.update({
+            'fcmTokens': FieldValue.arrayRemove([token]),
+          });
+          break;
+        }
       }
-      
+
       // バッジもクリア
       await clearBadge();
 
@@ -398,20 +406,22 @@ class NotificationService {
         };
       }
       
-      final familySnap = await firestore
-          .collection('families')
-          .where('uid', isEqualTo: uid)
-          .limit(1)
-          .get();
-      
-      if (familySnap.docs.isNotEmpty) {
-        final data = familySnap.docs.first.data();
-        return {
-          'chat': data['notifyChat'] ?? true,
-          'announcement': data['notifyAnnouncement'] ?? true,
-          'event': data['notifyEvent'] ?? true,
-          'assessment': data['notifyAssessment'] ?? true,
-        };
+      for (final coll in const ['families', 'plus_families']) {
+        final familySnap = await firestore
+            .collection(coll)
+            .where('uid', isEqualTo: uid)
+            .limit(1)
+            .get();
+
+        if (familySnap.docs.isNotEmpty) {
+          final data = familySnap.docs.first.data();
+          return {
+            'chat': data['notifyChat'] ?? true,
+            'announcement': data['notifyAnnouncement'] ?? true,
+            'event': data['notifyEvent'] ?? true,
+            'assessment': data['notifyAssessment'] ?? true,
+          };
+        }
       }
     } catch (e) {
       // エラー時はデフォルト値を返す
@@ -448,15 +458,17 @@ class NotificationService {
         return;
       }
       
-      final familySnap = await firestore
-          .collection('families')
-          .where('uid', isEqualTo: uid)
-          .limit(1)
-          .get();
-      
-      if (familySnap.docs.isNotEmpty) {
-        await familySnap.docs.first.reference.update(updateData);
-        return;
+      for (final coll in const ['families', 'plus_families']) {
+        final familySnap = await firestore
+            .collection(coll)
+            .where('uid', isEqualTo: uid)
+            .limit(1)
+            .get();
+
+        if (familySnap.docs.isNotEmpty) {
+          await familySnap.docs.first.reference.update(updateData);
+          return;
+        }
       }
     } catch (e) {
       // エラー時は何もしない

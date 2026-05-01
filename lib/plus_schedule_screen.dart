@@ -914,19 +914,23 @@ Map<String, dynamic>? _getCellMemo(DateTime date, int slotIndex) {
     }
   }
 
-  // familiesコレクションから全児童リストを取得（プラスのみ）
+  // plus_families コレクションから全児童リストを取得（プラス専用コレクション）
   Future<void> _loadStudentsFromFirestore() async {
     try {
       final snapshot = await FirebaseFirestore.instance
-          .collection('families')
+          .collection('plus_families')
           .get();
 
       final students = <Map<String, dynamic>>[];
-      
+
       for (var doc in snapshot.docs) {
         final data = doc.data();
         final familyUid = data['uid'] as String? ?? doc.id;
-        final lastName = data['lastName'] as String? ?? '';
+        final rawLastName = data['lastName'] as String? ?? '';
+        final rawFirstName = data['firstName'] as String? ?? '';
+        final lastName = (rawFirstName.isEmpty && rawLastName.length >= 4 && !rawLastName.contains(' '))
+            ? rawLastName.substring(0, 2)
+            : rawLastName;
         final lastNameKana = data['lastNameKana'] as String? ?? '';
         final children = List<Map<String, dynamic>>.from(data['children'] ?? []);
 
@@ -935,8 +939,10 @@ Map<String, dynamic>? _getCellMemo(DateTime date, int slotIndex) {
           final classrooms = getChildClassrooms(child);
           final classroom = classrooms.join(', ');
 
-          // プラスの教室のみ
-          if (firstName.isNotEmpty && classrooms.any((c) => c.contains('プラス'))) {
+          // 入会済みのみ表示（リード/失注/退会は除外）
+          final status = child['status'] as String?;
+          final isEnrolled = status == null || status == '入会';
+          if (firstName.isNotEmpty && isEnrolled) {
             // studentIdを生成（childにstudentIdがあればそれを使用）
             final studentId = child['studentId'] ?? '${familyUid}_$firstName';
             students.add({

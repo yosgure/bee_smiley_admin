@@ -54,15 +54,18 @@ class _ForceChangePasswordScreenState extends State<ForceChangePasswordScreen> {
           'isInitialPassword': false,
         });
       } else {
-        // 保護者の場合など (念のため families もチェックするか、要件次第)
-        final famSnapshot = await FirebaseFirestore.instance
-            .collection('families')
-            .where('uid', isEqualTo: user.uid)
-            .get();
-        if (famSnapshot.docs.isNotEmpty) {
-          await famSnapshot.docs.first.reference.update({
-            'isInitialPassword': false,
-          });
+        // 保護者の場合: families（通常）と plus_families（プラス）両方を確認
+        for (final coll in const ['families', 'plus_families']) {
+          final famSnapshot = await FirebaseFirestore.instance
+              .collection(coll)
+              .where('uid', isEqualTo: user.uid)
+              .get();
+          if (famSnapshot.docs.isNotEmpty) {
+            await famSnapshot.docs.first.reference.update({
+              'isInitialPassword': false,
+            });
+            break;
+          }
         }
       }
 
