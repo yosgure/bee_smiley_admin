@@ -149,15 +149,48 @@ async function loginToHug() {
 
 /**
  * Firestoreのhugマッピング設定を取得
+ *
+ * 児童マッピングは2系統をマージ:
+ *   1. plus_families.children[].hugChildId（CRM一体化後の真実の源）
+ *   2. hug_settings/child_mapping（旧データ、フォールバック用）
+ *
+ * 同名キーが両方に存在する場合は plus_families 側を優先する。
  */
 async function getHugMappings() {
+  // 1. 旧 hug_settings ドキュメントから読み込み（フォールバック）
   const childDoc = await db.collection('hug_settings').doc('child_mapping').get();
   const staffDoc = await db.collection('hug_settings').doc('staff_mapping').get();
+  const legacyChildMapping = childDoc.exists ? childDoc.data() : {};
+  const staffMapping = staffDoc.exists ? staffDoc.data() : {};
 
-  return {
-    childMapping: childDoc.exists ? childDoc.data() : {},
-    staffMapping: staffDoc.exists ? staffDoc.data() : {},
-  };
+  // 2. plus_families から各児童の hugChildId を抽出
+  const plusChildMapping = {};
+  try {
+    const plusSnap = await db.collection('plus_families').get();
+    for (const famDoc of plusSnap.docs) {
+      const data = famDoc.data();
+      const familyLastName = (data.lastName || '').toString().trim();
+      const children = Array.isArray(data.children) ? data.children : [];
+      for (const child of children) {
+        if (!child || typeof child !== 'object') continue;
+        const hugId = child.hugChildId;
+        if (!hugId) continue;
+        const firstName = (child.firstName || '').toString().trim();
+        if (!firstName) continue;
+        // 「姓+名」「名のみ」の両キーで登録（findMapping が空白除去で照合）
+        plusChildMapping[`${familyLastName}${firstName}`] = String(hugId);
+        plusChildMapping[`${familyLastName} ${firstName}`] = String(hugId);
+        plusChildMapping[firstName] = String(hugId);
+      }
+    }
+  } catch (e) {
+    console.warn('[getHugMappings] plus_families read failed, falling back to hug_settings only:', e.message);
+  }
+
+  // 3. plus_families 側を優先してマージ
+  const childMapping = { ...legacyChildMapping, ...plusChildMapping };
+
+  return { childMapping, staffMapping };
 }
 
 /**
