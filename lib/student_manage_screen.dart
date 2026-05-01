@@ -81,20 +81,90 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
   Future<void> _fetchClassrooms() async {
     try {
       final snapshot = await _classroomsRef.get();
+      final isPlus = widget.collectionName == 'plus_families';
       setState(() {
         _classroomList = snapshot.docs
             .map((doc) => (doc.data() as Map<String, dynamic>)['name'] as String? ?? '')
             .where((name) => name.isNotEmpty)
+            // 通常画面ではプラス教室を除外、プラス画面では通常教室を除外
+            .where((name) =>
+                isPlus ? name.contains('プラス') : !name.contains('プラス'))
             .toList();
       });
     } catch (e) {
       setState(() {
-        _classroomList = [
-          'ビースマイリー湘南藤沢教室',
-          'ビースマイリー湘南台教室',
-        ];
+        _classroomList = widget.collectionName == 'plus_families'
+            ? ['ビースマイリープラス湘南藤沢']
+            : [
+                'ビースマイリー湘南藤沢',
+                'ビースマイリー湘南台',
+              ];
       });
     }
+  }
+
+  /// _getKanaRow を呼ぶ前に、漢字の場合は代表的な姓のヨミから行を推定する。
+  /// 万能ではないが「他」行に大量に流れ込むのを抑える。各漢字は1行のみ割当。
+  static const Map<String, String> _kanjiToRow = {
+    // あ行
+    '赤': 'あ', '秋': 'あ', '浅': 'あ', '荒': 'あ', '相': 'あ', '阿': 'あ',
+    '青': 'あ', '東': 'あ', '安': 'あ',
+    '池': 'い', '石': 'い', '伊': 'い', '岩': 'い', '市': 'い', '稲': 'い', '今': 'い',
+    '上': 'う', '内': 'う', '海': 'う', '宇': 'う', '梅': 'う', '浦': 'う',
+    '江': 'え', '榎': 'え',
+    '大': 'お', '岡': 'お', '小': 'お', '尾': 'お', '奥': 'お', '織': 'お',
+    // か行
+    '加': 'か', '柿': 'か', '河': 'か', '川': 'か', '梶': 'か', '神': 'か',
+    '兼': 'か', '金': 'か', '亀': 'か', '門': 'か', '勝': 'か',
+    '北': 'き', '木': 'き', '岸': 'き', '吉': 'き',
+    '工': 'く', '久': 'く', '熊': 'く', '楠': 'く', '黒': 'く', '栗': 'く', '國': 'く',
+    '甲': 'こ', '駒': 'こ', '近': 'こ', '後': 'こ',
+    // さ行
+    '佐': 'さ', '酒': 'さ', '坂': 'さ', '齋': 'さ', '斎': 'さ',
+    '塩': 'し', '島': 'し', '清': 'し', '柴': 'し', '渋': 'し', '澁': 'し', '篠': 'し', '下': 'し',
+    '杉': 'す', '鈴': 'す', '砂': 'す',
+    '関': 'せ', '瀬': 'せ', '仙': 'せ', '千': 'せ',
+    '園': 'そ', '惣': 'そ', '曽': 'そ', '草': 'そ',
+    // た行
+    '高': 'た', '髙': 'た', '田': 'た', '武': 'た', '竹': 'た', '玉': 'た', '田中': 'た', '滝': 'た', '達': 'た',
+    '中': 'な', '中丸': 'な',
+    '都': 'つ', '土': 'つ', '津': 'つ',
+    'ティ': 'て', '寺': 'て',
+    '十': 'と',
+    // な行
+    '永': 'な', '長': 'な', '成': 'な', '夏': 'な', '南': 'な', '名': 'な',
+    '西': 'に', '新': 'に', '二': 'に',
+    '布': 'ぬ',
+    '根': 'ね',
+    '野': 'の', '能': 'の',
+    // は行
+    '橋': 'は', '林': 'は', '原': 'は', '羽': 'は', '長谷': 'は', '濱': 'は', '浜': 'は', '萩': 'は', '花': 'は', '畑': 'は', '服': 'は', '春': 'は', '半': 'は', '花島': 'は',
+    '日': 'ひ', '樋': 'ひ', '平': 'ひ', '広': 'ひ', '廣': 'ひ',
+    '深': 'ふ', '福': 'ふ', '藤': 'ふ', '古': 'ふ', '舩': 'ふ', '船': 'ふ',
+    '本': 'ほ', '保': 'ほ', '堀': 'ほ', '細': 'ほ', '北条': 'ほ',
+    // ま行
+    '前': 'ま', '松': 'ま', '丸': 'ま', '増': 'ま', '町': 'ま', '間': 'ま',
+    '三': 'み', '宮': 'み', '水': 'み', '溝': 'み', '道': 'み', '三浦': 'み',
+    '村': 'む', '武藤': 'む', '宗': 'む',
+    '目': 'め',
+    '森': 'も', '元': 'も',
+    // や行
+    '八': 'や', '矢': 'や', '山': 'や', '柳': 'や',
+    '由': 'ゆ', '湯': 'ゆ',
+    '横': 'よ', '余': 'よ',
+    // ら行
+    '陸': 'り',
+    '若': 'わ', '渡': 'わ', '和': 'わ', '脇': 'わ',
+  };
+
+  String _getKanaRowFallback(String? text) {
+    if (text == null || text.isEmpty) return '他';
+    // 既存のひらがな・カタカナ判定を試す
+    final kanaResult = _getKanaRow(text);
+    if (kanaResult != '他') return kanaResult;
+    // 漢字なら最初の文字で行を推定
+    final ch = text.substring(0, 1);
+    return _kanjiToRow[ch] ?? '他';
   }
 
   // 五十音の行を判定するヘルパーメソッド
@@ -261,12 +331,14 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
                   );
                 }
 
-                // ふりがな順に並び替え（姓のふりがな）
+                // ふりがな順に並び替え（姓のふりがな、無ければ姓そのものでフォールバック）
                 docs.sort((a, b) {
                   final dataA = a.data() as Map<String, dynamic>;
                   final dataB = b.data() as Map<String, dynamic>;
-                  final kanaA = (dataA['lastNameKana'] ?? '').toString();
-                  final kanaB = (dataB['lastNameKana'] ?? '').toString();
+                  String kanaA = (dataA['lastNameKana'] ?? '').toString();
+                  String kanaB = (dataB['lastNameKana'] ?? '').toString();
+                  if (kanaA.isEmpty) kanaA = (dataA['lastName'] ?? '').toString();
+                  if (kanaB.isEmpty) kanaB = (dataB['lastName'] ?? '').toString();
                   return kanaA.compareTo(kanaB);
                 });
 
@@ -330,8 +402,12 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
 
                 for (var familyDoc in filteredDocs) {
                   final data = familyDoc.data() as Map<String, dynamic>;
-                  final lastNameKana = data['lastNameKana'] ?? '';
-                  final header = _getKanaRow(lastNameKana);
+                  // ふりがなが無ければ漢字の姓を試す（_getKanaRow は漢字も先頭文字で判定）
+                  String headerSource = (data['lastNameKana'] ?? '').toString();
+                  if (headerSource.isEmpty) {
+                    headerSource = (data['lastName'] ?? '').toString();
+                  }
+                  final header = _getKanaRowFallback(headerSource);
 
                   // 行が変わったらヘッダーを挿入
                   if (header != currentHeader) {
@@ -1073,6 +1149,17 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
                                   ),
                                   onChanged: (val) => child['profileUrl'] = val,
                                 ),
+                                // 受給者証情報（プラス専用、HUG連携必須）
+                                if (isPlus) ...[
+                                  const SizedBox(height: 16),
+                                  const Text('受給者証情報（HUG必須）',
+                                      style: TextStyle(fontSize: AppTextSize.bodyMd, fontWeight: FontWeight.bold)),
+                                  const SizedBox(height: 8),
+                                  _RecipientCertificateEditor(
+                                    child: child,
+                                    onChanged: () => setStateDialog(() {}),
+                                  ),
+                                ],
                                 // 策定会議URL（プラス湘南藤沢の生徒のみ）
                                 if (getChildClassrooms(child).any((c) => c.contains('プラス'))) ...[
                                   const SizedBox(height: 16),
@@ -1291,6 +1378,119 @@ class _PrefectureDropdown extends StatelessWidget {
           onChanged: (v) => onChanged(v ?? ""),
         ),
       ),
+    );
+  }
+}
+
+/// 受給者証情報の入力 widget。子要素の `recipientCertificate` (Map)を直接編集する。
+/// HUG連携必須の 利用開始日 / 受給者証番号 / 利用サービス / 負担上限月額 を入力。
+class _RecipientCertificateEditor extends StatelessWidget {
+  final Map<String, dynamic> child;
+  final VoidCallback onChanged;
+  const _RecipientCertificateEditor({required this.child, required this.onChanged});
+
+  Map<String, dynamic> get _rc {
+    final v = child['recipientCertificate'];
+    if (v is Map) return Map<String, dynamic>.from(v);
+    final fresh = <String, dynamic>{};
+    child['recipientCertificate'] = fresh;
+    return fresh;
+  }
+
+  void _set(String k, dynamic v) {
+    final m = _rc;
+    if (v == null) {
+      m.remove(k);
+    } else {
+      m[k] = v;
+    }
+    child['recipientCertificate'] = m;
+    onChanged();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final rc = _rc;
+    final startAt = rc['startAt'];
+    DateTime? startDate;
+    if (startAt is Timestamp) startDate = startAt.toDate();
+    if (startAt is String && startAt.isNotEmpty) {
+      try {
+        final p = startAt.split('/');
+        if (p.length == 3) startDate = DateTime(int.parse(p[0]), int.parse(p[1]), int.parse(p[2]));
+      } catch (_) {}
+    }
+    return Column(
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: InkWell(
+                onTap: () async {
+                  final picked = await showDatePicker(
+                    context: context,
+                    initialDate: startDate ?? DateTime.now(),
+                    firstDate: DateTime(2010),
+                    lastDate: DateTime.now().add(const Duration(days: 365 * 3)),
+                  );
+                  if (picked != null) {
+                    _set('startAt', Timestamp.fromDate(picked));
+                  }
+                },
+                child: InputDecorator(
+                  decoration: const InputDecoration(
+                      labelText: '利用開始日', isDense: true, border: OutlineInputBorder()),
+                  child: Text(startDate == null
+                      ? 'YYYY/MM/DD'
+                      : '${startDate.year}/${startDate.month.toString().padLeft(2, '0')}/${startDate.day.toString().padLeft(2, '0')}'),
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: TextFormField(
+                initialValue: (rc['number'] ?? '').toString(),
+                decoration: const InputDecoration(
+                    labelText: '受給者証番号', isDense: true, border: OutlineInputBorder()),
+                onChanged: (v) => _set('number', v.trim().isEmpty ? null : v.trim()),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Expanded(
+              child: DropdownButtonFormField<String>(
+                value: (rc['service'] is String && (rc['service'] as String).isNotEmpty) ? rc['service'] as String : 'after_school',
+                decoration: const InputDecoration(
+                    labelText: '利用サービス', isDense: true, border: OutlineInputBorder()),
+                items: const [
+                  DropdownMenuItem(value: 'after_school', child: Text('放課後等デイサービス')),
+                  DropdownMenuItem(value: 'child_dev', child: Text('児童発達支援')),
+                ],
+                onChanged: (v) => _set('service', v),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: TextFormField(
+                initialValue: rc['monthlyLimit']?.toString() ?? '',
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                    labelText: '負担上限月額(円)',
+                    hintText: '例: 4600',
+                    isDense: true,
+                    border: OutlineInputBorder()),
+                onChanged: (v) {
+                  final n = int.tryParse(v.trim());
+                  _set('monthlyLimit', n);
+                },
+              ),
+            ),
+          ],
+        ),
+      ],
     );
   }
 }

@@ -117,8 +117,11 @@ class _AiChatMainScreenState extends State<AiChatMainScreen> {
       }
 
       students.sort((a, b) {
-        final kanaA = (a['lastNameKana'] as String?) ?? '';
-        final kanaB = (b['lastNameKana'] as String?) ?? '';
+        // ふりがなが無ければ姓そのものでフォールバック（"他"行流入を抑える）
+        String kanaA = (a['lastNameKana'] as String?) ?? '';
+        String kanaB = (b['lastNameKana'] as String?) ?? '';
+        if (kanaA.isEmpty) kanaA = (a['lastName'] as String?) ?? '';
+        if (kanaB.isEmpty) kanaB = (b['lastName'] as String?) ?? '';
         return kanaA.compareTo(kanaB);
       });
 
@@ -425,8 +428,10 @@ class _AiChatMainScreenState extends State<AiChatMainScreen> {
     final items = <Widget>[];
     String lastHeader = '';
     for (final student in students) {
-      final kana = (student['lastNameKana'] as String? ?? '');
-      final header = _getKanaHeader(kana);
+      // ふりがなが無ければ姓そのものから行を判定
+      String src = (student['lastNameKana'] as String? ?? '');
+      if (src.isEmpty) src = (student['lastName'] as String? ?? '');
+      final header = _getKanaHeader(src);
       if (header != lastHeader) {
         items.add(Padding(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),

@@ -22,8 +22,6 @@ import 'csv_export_screen.dart';
 import 'notification_settings_screen.dart';
 import 'ai_command_manage_screen.dart';
 import 'hug_mapping_screen.dart';
-import 'crm_unify_migration_screen.dart';
-import 'plus_families_split_screen.dart';
 import 'app_theme.dart';
 import 'widgets/app_feedback.dart';
 import 'main.dart' show themeNotifier, setThemeMode;
@@ -107,10 +105,6 @@ void _navigateTo(BuildContext context, Widget screen) {
       screenWithBack = AiCommandManageScreen(onBack: widget.onCloseWebScreen);
     } else if (screen is HugMappingScreen) {
       screenWithBack = HugMappingScreen(onBack: widget.onCloseWebScreen);
-    } else if (screen is CrmUnifyMigrationScreen) {
-      screenWithBack = CrmUnifyMigrationScreen(onBack: widget.onCloseWebScreen);
-    } else if (screen is PlusFamiliesSplitScreen) {
-      screenWithBack = PlusFamiliesSplitScreen(onBack: widget.onCloseWebScreen);
     } else {
       screenWithBack = screen;
     }
@@ -155,23 +149,23 @@ void _navigateTo(BuildContext context, Widget screen) {
                 destination: const StaffManageScreen(),
               ),
               _MenuData(
-                title: '保護者・児童（通常）',
+                title: '保護者・児童（BS）',
                 icon: Icons.family_restroom,
                 color: AppColors.info,
                 description: 'ビースマイリー湘南台/湘南藤沢 通常レッスン',
                 destination: const StudentManageScreen(
                   collectionName: 'families',
-                  title: '保護者・児童管理（通常）',
+                  title: '保護者・児童管理（BS）',
                 ),
               ),
               _MenuData(
-                title: '保護者・児童（プラス）',
+                title: '保護者・児童（BSP）',
                 icon: Icons.family_restroom,
                 color: AppColors.accent,
                 description: 'ビースマイリープラス（児童発達支援/放デイ）',
                 destination: const StudentManageScreen(
                   collectionName: 'plus_families',
-                  title: '保護者・児童管理（プラス）',
+                  title: '保護者・児童管理（BSP）',
                 ),
               ),
             ],
@@ -208,20 +202,6 @@ void _navigateTo(BuildContext context, Widget screen) {
                 color: AppColors.secondary,
                 description: '児童・スタッフのhug IDマッピング',
                 destination: const HugMappingScreen(),
-              ),
-              _MenuData(
-                title: 'CRM一体化マイグレーション（実行済）',
-                icon: Icons.merge_type,
-                color: AppColors.secondary,
-                description: '完了済。緊急時の復元用にUIは残置。',
-                destination: const CrmUnifyMigrationScreen(),
-              ),
-              _MenuData(
-                title: 'families → plus_families 分離（実行済）',
-                icon: Icons.call_split,
-                color: AppColors.secondary,
-                description: '完了済。緊急時の復元用にUIは残置。',
-                destination: const PlusFamiliesSplitScreen(),
               ),
             ],
           ),
