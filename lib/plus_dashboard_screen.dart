@@ -1932,7 +1932,7 @@ class _PlusDashboardContentState extends State<PlusDashboardContent> {
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             child: Container(
               width: 500,
-              constraints: const BoxConstraints(maxHeight: 700),
+              constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.95),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -2622,6 +2622,8 @@ void _showStudentSelectionDialog(Function(Map<String, dynamic>) onSelect) {
   void _showEditStudentDialog(String day, String timeSlot, int index, Map<String, dynamic> student) {
     String selectedCourse = student['course'] as String? ?? '通常';
     final studentName = student['name'] as String;
+    DateTime? enrolledFrom = (student['enrolledFrom'] as Timestamp?)?.toDate();
+    DateTime? enrolledTo = (student['enrolledTo'] as Timestamp?)?.toDate();
     
     // 生徒メモ用コントローラー
     final therapyController = TextEditingController();
@@ -2666,7 +2668,7 @@ void _showStudentSelectionDialog(Function(Map<String, dynamic>) onSelect) {
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             child: Container(
               width: 500,
-              constraints: const BoxConstraints(maxHeight: 700),
+              constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.95),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -3046,6 +3048,92 @@ InkWell(
                             maxLines: 3,
                             minLines: 2,
                           ),
+
+                          const SizedBox(height: 16),
+                          // 在籍期間
+                          Row(
+                            children: [
+                              const Icon(Icons.event_available, size: 18, color: AppColors.primary),
+                              const SizedBox(width: 8),
+                              const Text('在籍期間', style: TextStyle(fontWeight: FontWeight.bold, fontSize: AppTextSize.bodyMd)),
+                              const SizedBox(width: 8),
+                              Text(
+                                '（カレンダー反映に使用）',
+                                style: TextStyle(fontSize: AppTextSize.small, color: context.colors.textTertiary),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: OutlinedButton.icon(
+                                  icon: const Icon(Icons.calendar_today, size: 16),
+                                  label: Text(
+                                    enrolledFrom == null
+                                        ? '開始日（未設定）'
+                                        : '開始: ${DateFormat('yyyy/M/d').format(enrolledFrom!)}',
+                                    style: TextStyle(fontSize: AppTextSize.body),
+                                  ),
+                                  onPressed: () async {
+                                    final picked = await showDatePicker(
+                                      context: dialogContext,
+                                      initialDate: enrolledFrom ?? DateTime(2026, 6, 1),
+                                      firstDate: DateTime(2026, 1, 1),
+                                      lastDate: DateTime(2028, 3, 31),
+                                    );
+                                    if (picked != null) {
+                                      setDialogState(() => enrolledFrom = picked);
+                                    }
+                                  },
+                                ),
+                              ),
+                              if (enrolledFrom != null)
+                                IconButton(
+                                  icon: const Icon(Icons.clear, size: 18),
+                                  tooltip: '開始日をクリア',
+                                  onPressed: () => setDialogState(() => enrolledFrom = null),
+                                ),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: OutlinedButton.icon(
+                                  icon: const Icon(Icons.event_busy, size: 16),
+                                  label: Text(
+                                    enrolledTo == null
+                                        ? '退会日（未設定）'
+                                        : '退会: ${DateFormat('yyyy/M/d').format(enrolledTo!)}',
+                                    style: TextStyle(fontSize: AppTextSize.body),
+                                  ),
+                                  onPressed: () async {
+                                    final picked = await showDatePicker(
+                                      context: dialogContext,
+                                      initialDate: enrolledTo ?? DateTime.now(),
+                                      firstDate: DateTime(2026, 1, 1),
+                                      lastDate: DateTime(2028, 3, 31),
+                                    );
+                                    if (picked != null) {
+                                      setDialogState(() => enrolledTo = picked);
+                                    }
+                                  },
+                                ),
+                              ),
+                              if (enrolledTo != null)
+                                IconButton(
+                                  icon: const Icon(Icons.clear, size: 18),
+                                  tooltip: '退会日をクリア',
+                                  onPressed: () => setDialogState(() => enrolledTo = null),
+                                ),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            '※ 設定後「定期スケジュール展開」で未来分を再生成',
+                            style: TextStyle(fontSize: AppTextSize.small, color: context.colors.textTertiary),
+                          ),
                         ],
                       ),
                     ),
@@ -3072,12 +3160,14 @@ InkWell(
       await _addTask(taskText, '', false, studentName: studentName, dueDate: newTaskDueDate);
     }
     
-    // レギュラースケジュール保存
+    // レギュラースケジュール保存（在籍期間を含む）
     setState(() {
       _regularSchedule[day]?[timeSlot]?[index] = {
         'name': studentName,
         'course': selectedCourse,
         'note': '',
+        if (enrolledFrom != null) 'enrolledFrom': Timestamp.fromDate(enrolledFrom!),
+        if (enrolledTo != null) 'enrolledTo': Timestamp.fromDate(enrolledTo!),
       };
     });
     await _saveScheduleToFirestore();

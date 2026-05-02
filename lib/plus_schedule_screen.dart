@@ -1163,7 +1163,375 @@ Map<String, dynamic>? _getCellMemo(DateTime date, int slotIndex) {
       }
     }
   }
-  
+
+  // ダッシュボードの定期スケジュールを 2026-06-01 〜 2027-03-31 の plus_lessons に一括展開する。
+  // 冪等。同じ (date, slotIndex, studentName) が既に存在する日はスキップして手動入力を保護する。
+  Future<void> _deployRegularScheduleToLessons() async {
+    final start = DateTime(2026, 6, 1);
+    final end = DateTime(2027, 3, 31);
+    final endInclusive = DateTime(end.year, end.month, end.day, 23, 59, 59);
+    const weekDayNames = ['月', '火', '水', '木', '金', '土'];
+    const slotKeys = ['9:30〜', '11:00〜', '14:00〜', '15:30〜'];
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('スケジュール一括展開'),
+        content: const Text(
+          '2026年6月1日 〜 2027年3月31日 の期間に、ダッシュボードの定期スケジュールを反映します。\n\n'
+          '・既に同じ生徒・時間帯のレッスンがある日はスキップします（手動入力は保護）\n'
+          '・退会済み・在籍期間外の自動展開レッスンは削除します（手動編集は保護）\n'
+          '・休業日設定がある日はスキップします（日曜は自動でスキップ）\n'
+          '・2026年6月1日より前の予定は一切変更しません',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('キャンセル'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('展開する'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    if (!mounted) return;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const AlertDialog(
+        content: Row(
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(width: 16),
+            Text('展開中...'),
+          ],
+        ),
+      ),
+    );
+
+    try {
+      final scheduleDoc = await FirebaseFirestore.instance
+          .collection('plus_regular_schedule')
+          .doc('data')
+          .get();
+      final scheduleData =
+          (scheduleDoc.data()?['schedule'] as Map<String, dynamic>?) ?? {};
+
+      // 期間内の plus_shifts から休業日（日番号）を月別に取得
+      final holidayDates = <String>{};
+      var monthCursor = DateTime(start.year, start.month, 1);
+      while (!monthCursor.isAfter(end)) {
+        final monthKey = DateFormat('yyyy-MM').format(monthCursor);
+        final shiftDoc = await FirebaseFirestore.instance
+            .collection('plus_shifts')
+            .doc(monthKey)
+            .get();
+        if (shiftDoc.exists) {
+          final hList = (shiftDoc.data()?['holidays'] as List<dynamic>?) ?? [];
+          for (final raw in hList) {
+            final day = int.tryParse(raw.toString()) ?? 0;
+            if (day > 0) {
+              holidayDates.add(DateFormat('yyyy-MM-dd').format(
+                DateTime(monthCursor.year, monthCursor.month, day),
+              ));
+            }
+          }
+        }
+        monthCursor = DateTime(monthCursor.year, monthCursor.month + 1, 1);
+      }
+
+      // ダッシュボードから「あるべきレッスン」のキー集合を構築（在籍期間・休業日・日曜を反映）
+      final validKeys = <String>{};
+      {
+        var d = start;
+        while (!d.isAfter(end)) {
+          final dateKey = DateFormat('yyyy-MM-dd').format(d);
+          if (d.weekday != DateTime.sunday && !holidayDates.contains(dateKey)) {
+            final dayName = weekDayNames[d.weekday - 1];
+            final dayData =
+                scheduleData[dayName] as Map<String, dynamic>? ?? {};
+            for (int slotIdx = 0; slotIdx < slotKeys.length; slotIdx++) {
+              final entries =
+                  (dayData[slotKeys[slotIdx]] as List<dynamic>?) ?? [];
+              for (final entry in entries) {
+                if (entry is! Map) continue;
+                final m = Map<String, dynamic>.from(entry);
+                if (m['isCustomEvent'] == true) continue;
+                final name = ((m['name'] as String?) ?? '').trim();
+                if (name.isEmpty) continue;
+                final fromTs = m['enrolledFrom'];
+                if (fromTs is Timestamp) {
+                  final f = fromTs.toDate();
+                  if (d.isBefore(DateTime(f.year, f.month, f.day))) continue;
+                }
+                final toTs = m['enrolledTo'];
+                if (toTs is Timestamp) {
+                  final t = toTs.toDate();
+                  if (d.isAfter(DateTime(t.year, t.month, t.day))) continue;
+                }
+                validKeys.add('${dateKey}_${slotIdx}_$name');
+              }
+            }
+          }
+          d = d.add(const Duration(days: 1));
+        }
+      }
+
+      // 期間内の既存 plus_lessons を取得
+      final existingSnap = await FirebaseFirestore.instance
+          .collection('plus_lessons')
+          .where('date', isGreaterThanOrEqualTo: Timestamp.fromDate(start))
+          .where('date', isLessThanOrEqualTo: Timestamp.fromDate(endInclusive))
+          .get();
+
+      int created = 0;
+      int deleted = 0;
+      int skippedConflict = 0;
+      int skippedHoliday = 0;
+      int skippedSunday = 0;
+      var batch = FirebaseFirestore.instance.batch();
+      int batchOps = 0;
+
+      // 既存レッスンを走査:
+      //  - autoDeployed:true で validKeys に無い → 削除（退会・在籍期間外）
+      //  - それ以外（手動入力 or 在籍中の自動展開分） → existingKeys に登録して再生成スキップ
+      final existingKeys = <String>{};
+      for (final doc in existingSnap.docs) {
+        final data = doc.data();
+        final ts = data['date'];
+        if (ts is! Timestamp) continue;
+        final dt = ts.toDate();
+        final dk = DateFormat('yyyy-MM-dd').format(dt);
+        final sIdx = data['slotIndex'] ?? 0;
+        final sName = data['studentName'] ?? '';
+        final key = '${dk}_${sIdx}_$sName';
+
+        if (data['autoDeployed'] == true && !validKeys.contains(key)) {
+          batch.delete(doc.reference);
+          batchOps++;
+          deleted++;
+          if (batchOps >= 450) {
+            await batch.commit();
+            batch = FirebaseFirestore.instance.batch();
+            batchOps = 0;
+          }
+          continue;
+        }
+        existingKeys.add(key);
+      }
+
+      var d = start;
+      while (!d.isAfter(end)) {
+        final dateKey = DateFormat('yyyy-MM-dd').format(d);
+
+        if (d.weekday == DateTime.sunday) {
+          skippedSunday++;
+          d = d.add(const Duration(days: 1));
+          continue;
+        }
+        if (holidayDates.contains(dateKey)) {
+          skippedHoliday++;
+          d = d.add(const Duration(days: 1));
+          continue;
+        }
+
+        final dayName = weekDayNames[d.weekday - 1];
+        final dayData = scheduleData[dayName] as Map<String, dynamic>? ?? {};
+
+        for (int slotIdx = 0; slotIdx < slotKeys.length; slotIdx++) {
+          final entries = (dayData[slotKeys[slotIdx]] as List<dynamic>?) ?? [];
+          for (int entryIdx = 0; entryIdx < entries.length; entryIdx++) {
+            final entry = entries[entryIdx];
+            if (entry is! Map) continue;
+            final m = Map<String, dynamic>.from(entry);
+            if (m['isCustomEvent'] == true) continue;
+
+            final name = ((m['name'] as String?) ?? '').trim();
+            if (name.isEmpty) continue;
+
+            // 在籍期間（オプショナル）
+            final fromTs = m['enrolledFrom'];
+            if (fromTs is Timestamp) {
+              final f = fromTs.toDate();
+              if (d.isBefore(DateTime(f.year, f.month, f.day))) continue;
+            }
+            final toTs = m['enrolledTo'];
+            if (toTs is Timestamp) {
+              final t = toTs.toDate();
+              if (d.isAfter(DateTime(t.year, t.month, t.day))) continue;
+            }
+
+            final key = '${dateKey}_${slotIdx}_$name';
+            if (existingKeys.contains(key)) {
+              skippedConflict++;
+              continue;
+            }
+
+            final ref = FirebaseFirestore.instance.collection('plus_lessons').doc();
+            batch.set(ref, {
+              'date': Timestamp.fromDate(DateTime(d.year, d.month, d.day)),
+              'slotIndex': slotIdx,
+              'studentName': name,
+              'teachers': <String>[],
+              'room': '',
+              'course': m['course'] ?? '通常',
+              'note': m['note'] ?? '',
+              'link': '',
+              'isCustomEvent': false,
+              'isEvent': false,
+              'title': '',
+              'order': entryIdx,
+              'createdAt': FieldValue.serverTimestamp(),
+              'autoDeployed': true,
+            });
+            existingKeys.add(key);
+            batchOps++;
+            created++;
+
+            if (batchOps >= 450) {
+              await batch.commit();
+              batch = FirebaseFirestore.instance.batch();
+              batchOps = 0;
+            }
+          }
+        }
+
+        d = d.add(const Duration(days: 1));
+      }
+
+      if (batchOps > 0) await batch.commit();
+
+      if (mounted) Navigator.pop(context); // 進捗ダイアログ
+
+      if (mounted) {
+        await showDialog(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('展開完了'),
+            content: Text(
+              '作成: $created件\n'
+              '削除(在籍期間外): $deleted件\n'
+              'スキップ(衝突): $skippedConflict件\n'
+              'スキップ(休業日): $skippedHoliday件\n'
+              'スキップ(日曜): $skippedSunday件',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('OK'),
+              ),
+            ],
+          ),
+        );
+      }
+
+      await _loadLessonsForWeek(showLoading: false);
+      if (_viewMode == 2) await _loadLessonsForMonth();
+    } catch (e) {
+      debugPrint('Deploy error: $e');
+      if (mounted) Navigator.pop(context);
+      if (mounted) AppFeedback.info(context, '展開失敗: $e');
+    }
+  }
+
+  // 自動展開で生成された plus_lessons (autoDeployed:true) を 2026-06-01 〜 2027-03-31 から削除する。
+  // 手動編集レッスン（autoDeployed フラグなし）は一切触らない。
+  Future<void> _resetAutoDeployedLessons() async {
+    final start = DateTime(2026, 6, 1);
+    final end = DateTime(2027, 3, 31);
+    final endInclusive = DateTime(end.year, end.month, end.day, 23, 59, 59);
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('自動展開分のリセット'),
+        content: const Text(
+          '2026年6月1日 〜 2027年3月31日 の自動展開レッスン（autoDeployed:true）を削除します。\n\n'
+          '・手動で追加・編集したレッスンは削除されません\n'
+          '・削除後、再度「定期スケジュール展開」を押すと最新のダッシュボードで作り直せます',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('キャンセル'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('削除する'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    if (!mounted) return;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const AlertDialog(
+        content: Row(
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(width: 16),
+            Text('削除中...'),
+          ],
+        ),
+      ),
+    );
+
+    try {
+      final snap = await FirebaseFirestore.instance
+          .collection('plus_lessons')
+          .where('date', isGreaterThanOrEqualTo: Timestamp.fromDate(start))
+          .where('date', isLessThanOrEqualTo: Timestamp.fromDate(endInclusive))
+          .get();
+
+      var batch = FirebaseFirestore.instance.batch();
+      int batchOps = 0;
+      int deleted = 0;
+      for (final doc in snap.docs) {
+        if (doc.data()['autoDeployed'] != true) continue;
+        batch.delete(doc.reference);
+        batchOps++;
+        deleted++;
+        if (batchOps >= 450) {
+          await batch.commit();
+          batch = FirebaseFirestore.instance.batch();
+          batchOps = 0;
+        }
+      }
+      if (batchOps > 0) await batch.commit();
+
+      if (mounted) Navigator.pop(context);
+      if (mounted) {
+        await showDialog(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('リセット完了'),
+            content: Text('削除: $deleted件'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('OK'),
+              ),
+            ],
+          ),
+        );
+      }
+      await _loadLessonsForWeek(showLoading: false);
+      if (_viewMode == 2) await _loadLessonsForMonth();
+    } catch (e) {
+      debugPrint('Reset error: $e');
+      if (mounted) Navigator.pop(context);
+      if (mounted) AppFeedback.info(context, 'リセット失敗: $e');
+    }
+  }
+
   // 特定の日付のレッスンを取得
   List<Map<String, dynamic>> _getLessonsForDate(DateTime date) {
     final dateOnly = DateTime(date.year, date.month, date.day);
@@ -4489,7 +4857,7 @@ final memoCommentController = TextEditingController();
             elevation: 24,
             child: Container(
               width: 500,
-              constraints: const BoxConstraints(maxHeight: 700),
+              constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.95),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -5564,7 +5932,7 @@ await _loadLessonsForWeek(showLoading: false);
                 elevation: 24,
                 child: Container(
                   width: 500,
-                  constraints: const BoxConstraints(maxHeight: 700),
+                  constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.95),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -7161,10 +7529,14 @@ void _showColorPickerDialog(String course, Color currentColor, Function(Color) o
                       .collection('plus_lessons')
                       .doc(lessonId),
                   postDelete: () async {
-                    if (mounted) await _loadLessonsForWeek(showLoading: false);
+                    if (!mounted) return;
+                    await _loadLessonsForWeek(showLoading: false);
+                    if (_viewMode == 2) await _loadLessonsForMonth();
                   },
                   postRestore: () async {
-                    if (mounted) await _loadLessonsForWeek(showLoading: false);
+                    if (!mounted) return;
+                    await _loadLessonsForWeek(showLoading: false);
+                    if (_viewMode == 2) await _loadLessonsForMonth();
                   },
                 );
               } catch (e) {

@@ -292,7 +292,7 @@ extension PlusScheduleSideMenu on _PlusScheduleContentState {
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Column(
         children: [
-          if (_viewMode == 0)
+          if (_viewMode == 0) ...[
             ListTile(
               leading: Icon(Icons.schedule, color: context.colors.textSecondary),
               title: Text('スケジュール管理'),
@@ -300,6 +300,29 @@ extension PlusScheduleSideMenu on _PlusScheduleContentState {
                 _showShiftManagementDialog();
               },
             ),
+            ListTile(
+              leading: Icon(Icons.event_repeat, color: context.colors.textSecondary),
+              title: Text('定期スケジュール展開'),
+              subtitle: Text(
+                '6/1〜3/31',
+                style: TextStyle(fontSize: AppTextSize.small, color: context.colors.textTertiary),
+              ),
+              onTap: () {
+                _deployRegularScheduleToLessons();
+              },
+            ),
+            ListTile(
+              leading: Icon(Icons.delete_sweep, color: context.colors.textSecondary),
+              title: Text('自動展開分リセット'),
+              subtitle: Text(
+                '6/1〜3/31',
+                style: TextStyle(fontSize: AppTextSize.small, color: context.colors.textTertiary),
+              ),
+              onTap: () {
+                _resetAutoDeployedLessons();
+              },
+            ),
+          ],
         ],
       ),
     );

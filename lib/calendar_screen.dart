@@ -40,6 +40,11 @@ class _CalendarScreenState extends State<CalendarScreen> {
   bool _isLocaleInitialized = false;
   bool _isLoadingStaffInfo = true;
 
+  // タブ切り替え時のチラつき防止用キャッシュ。
+  // 直近に算出した appointments を保持して、StreamBuilder の初回エミット待ちの間も
+  // 既存のイベントバーを描画し続ける（Google カレンダー的な体感に寄せる）。
+  static List<Appointment>? _appointmentsCache;
+
   bool _showPlusSchedule = false;
   bool _showDashboard = false;
 
@@ -442,19 +447,12 @@ Future<void> _saveDisplayDate(DateTime date) async {
 
   @override
   Widget build(BuildContext context) {
-    if (!_isLocaleInitialized || _isLoadingStaffInfo) {
+    // ローカル/スタッフ情報の初回ロード中も画面は描画する。
+    // キャッシュされた appointments があればそれを表示し、揃った時点で差し替わる。
+    if (!_isLocaleInitialized) {
       return Scaffold(
         backgroundColor: context.colors.scaffoldBg,
-        body: Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const CircularProgressIndicator(),
-              SizedBox(height: 16),
-              Text('データを読み込んでいます...', style: TextStyle(color: context.colors.textSecondary)),
-            ],
-          ),
-        ),
+        body: const SizedBox.shrink(),
       );
     }
 
@@ -835,6 +833,18 @@ Future<void> _saveDisplayDate(DateTime date) async {
                     if (aIsBirthday != bIsBirthday) return aIsBirthday.compareTo(bIsBirthday);
                     return a.startTime.compareTo(b.startTime);
                   });
+
+                  // チラつき防止: 4 つの Stream すべてが揃っていれば最新結果でキャッシュ更新、
+                  // 揃っていなければ前回のキャッシュ値を採用してイベントバーを描画し続ける。
+                  final bool _allStreamsLoaded = eventSnapshot.hasData &&
+                      taskSnapshot.hasData &&
+                      familySnapshotRegular.hasData &&
+                      familySnapshotPlus.hasData;
+                  if (_allStreamsLoaded) {
+                    _appointmentsCache = List<Appointment>.from(appointments);
+                  } else if (_appointmentsCache != null) {
+                    appointments = List<Appointment>.from(_appointmentsCache!);
+                  }
 
                   return Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
