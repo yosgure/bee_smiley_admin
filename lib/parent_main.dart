@@ -21,12 +21,21 @@ class ParentMainScreen extends StatefulWidget {
 
 class _ParentMainScreenState extends State<ParentMainScreen> {
   int _selectedIndex = 0;
-  
+
   // バッジ用フラグ
   bool _hasUnreadRecord = false;
   bool _hasUnreadChat = false;
   bool _hasUnreadInfo = false;
   bool _hasUnreadEvent = false;
+
+  // アプリアイコンバッジ：いずれかの種類で未読があれば 1（運用案A）
+  void _updateAppBadge() {
+    final hasAny = _hasUnreadChat ||
+        _hasUnreadRecord ||
+        _hasUnreadInfo ||
+        _hasUnreadEvent;
+    NotificationService().setBadge(hasAny ? 1 : 0);
+  }
 
   // 家族情報
   Map<String, dynamic>? _familyData;
@@ -84,8 +93,8 @@ class _ParentMainScreenState extends State<ParentMainScreen> {
       if (mounted) {
         setState(() => _hasUnreadChat = hasUnread);
       }
-      // アプリアイコンのバッジを未読状態で更新
-      NotificationService().setBadge(hasUnread ? 1 : 0);
+      // アプリアイコンバッジは全種類合算（運用案A）
+      _updateAppBadge();
     });
   }
 
@@ -110,6 +119,7 @@ class _ParentMainScreenState extends State<ParentMainScreen> {
             break;
         }
       });
+      _updateAppBadge();
     });
   }
 
@@ -155,6 +165,7 @@ class _ParentMainScreenState extends State<ParentMainScreen> {
       if (type == 'info' || type == 'notification' || type == 'announcement') _hasUnreadInfo = false;
       if (type == 'event') _hasUnreadEvent = false;
     });
+    _updateAppBadge();
   }
 
   Future<void> _fetchFamilyData() async {
@@ -301,6 +312,7 @@ class _ParentMainScreenState extends State<ParentMainScreen> {
               if (index == 2) _hasUnreadInfo = false;
               if (index == 3) _hasUnreadEvent = false;
             });
+            _updateAppBadge();
           },
           selectedItemColor: AppColors.primary,
           unselectedItemColor: context.colors.textSecondary,

@@ -287,7 +287,69 @@ class _AdminShellState extends State<AdminShell> {
   int _selectedIndex = 0;
   bool _hasUnreadSchedule = false;
   bool _hasUnreadChat = false;
+  bool _hasUnreadInfo = false;
+  bool _hasUnreadEvent = false;
+  bool _hasUnreadRecord = false;
   StaffType _staffType = StaffType.loading;
+
+  // アプリアイコンバッジ：いずれかの種類で未読があれば 1、無ければ 0（運用案A）
+  void _updateAppBadge() {
+    final hasAny = _hasUnreadChat ||
+        _hasUnreadSchedule ||
+        _hasUnreadInfo ||
+        _hasUnreadEvent ||
+        _hasUnreadRecord;
+    NotificationService().setBadge(hasAny ? 1 : 0);
+  }
+
+  // タブ index → 種類文字列。タップ時に該当バッジをクリアするのに使う。
+  String? _navTypeForIndex(int i) {
+    switch (_staffType) {
+      case StaffType.plusOnly:
+        // 0:予定, 1:プラス, 2:AI相談, 3:チャット, 4:お知らせ, 5:管理
+        if (i == 0) return 'schedule';
+        if (i == 4) return 'info';
+        return null;
+      case StaffType.beesmiley:
+        // 0:予定, 1:記録, 2:AI相談, 3:チャット, 4:お知らせ, 5:イベント, 6:管理
+        if (i == 0) return 'schedule';
+        if (i == 1) return 'record';
+        if (i == 4) return 'info';
+        if (i == 5) return 'event';
+        return null;
+      case StaffType.both:
+      case StaffType.loading:
+      default:
+        // 0:予定, 1:プラス, 2:記録, 3:AI相談, 4:チャット, 5:お知らせ, 6:イベント, 7:管理
+        if (i == 0) return 'schedule';
+        if (i == 2) return 'record';
+        if (i == 5) return 'info';
+        if (i == 6) return 'event';
+        return null;
+    }
+  }
+
+  void _clearUnreadOnTap(int index) {
+    final type = _navTypeForIndex(index);
+    if (type == null) return;
+    setState(() {
+      switch (type) {
+        case 'schedule':
+          _hasUnreadSchedule = false;
+          break;
+        case 'record':
+          _hasUnreadRecord = false;
+          break;
+        case 'info':
+          _hasUnreadInfo = false;
+          break;
+        case 'event':
+          _hasUnreadEvent = false;
+          break;
+      }
+    });
+    _updateAppBadge();
+  }
   
   // Web版で右側に表示する管理詳細画面を保持する変数
   Widget? _adminDetailScreen;
@@ -367,7 +429,7 @@ class _AdminShellState extends State<AdminShell> {
 
     if (roomDocs.isEmpty) {
       if (mounted) setState(() => _hasUnreadChat = false);
-      NotificationService().setBadge(0);
+      _updateAppBadge();
       return;
     }
 
@@ -396,13 +458,12 @@ class _AdminShellState extends State<AdminShell> {
 
         roomUnreadStatus[roomId] = hasUnread;
         final totalHasUnread = roomUnreadStatus.values.any((v) => v);
-        final unreadCount = roomUnreadStatus.values.where((v) => v).length;
 
         if (mounted) {
           setState(() => _hasUnreadChat = totalHasUnread);
         }
-        // アプリアイコンのバッジを未読チャットルーム数で更新
-        NotificationService().setBadge(unreadCount);
+        // アプリアイコンバッジは全種類合算（運用案A：未読の有無のみ）
+        _updateAppBadge();
       });
 
       _messageSubscriptions[roomId] = sub;
@@ -524,17 +585,17 @@ class _AdminShellState extends State<AdminShell> {
           const NavigationRailDestination(icon: Icon(Icons.grid_view), label: Text('プラス')),
           const NavigationRailDestination(icon: Icon(Icons.psychology), label: Text('AI相談')),
           NavigationRailDestination(icon: _buildBadgedIcon(Icons.chat, _hasUnreadChat), label: const Text('チャット')),
-          const NavigationRailDestination(icon: Icon(Icons.notifications), label: Text('お知らせ')),
+          NavigationRailDestination(icon: _buildBadgedIcon(Icons.notifications, _hasUnreadInfo), label: const Text('お知らせ')),
           const NavigationRailDestination(icon: Icon(Icons.manage_accounts), label: Text('管理')),
         ];
       case StaffType.beesmiley:
         return [
           NavigationRailDestination(icon: _buildBadgedIcon(Icons.calendar_month, _hasUnreadSchedule), label: const Text('予定')),
-          const NavigationRailDestination(icon: Icon(Icons.edit_note), label: Text('記録')),
+          NavigationRailDestination(icon: _buildBadgedIcon(Icons.edit_note, _hasUnreadRecord), label: const Text('記録')),
           const NavigationRailDestination(icon: Icon(Icons.psychology), label: Text('AI相談')),
           NavigationRailDestination(icon: _buildBadgedIcon(Icons.chat, _hasUnreadChat), label: const Text('チャット')),
-          const NavigationRailDestination(icon: Icon(Icons.notifications), label: Text('お知らせ')),
-          const NavigationRailDestination(icon: Icon(Icons.event), label: Text('イベント')),
+          NavigationRailDestination(icon: _buildBadgedIcon(Icons.notifications, _hasUnreadInfo), label: const Text('お知らせ')),
+          NavigationRailDestination(icon: _buildBadgedIcon(Icons.event, _hasUnreadEvent), label: const Text('イベント')),
           const NavigationRailDestination(icon: Icon(Icons.manage_accounts), label: Text('管理')),
         ];
       case StaffType.both:
@@ -543,11 +604,11 @@ class _AdminShellState extends State<AdminShell> {
         return [
           NavigationRailDestination(icon: _buildBadgedIcon(Icons.calendar_month, _hasUnreadSchedule), label: const Text('予定')),
           const NavigationRailDestination(icon: Icon(Icons.grid_view), label: Text('プラス')),
-          const NavigationRailDestination(icon: Icon(Icons.edit_note), label: Text('記録')),
+          NavigationRailDestination(icon: _buildBadgedIcon(Icons.edit_note, _hasUnreadRecord), label: const Text('記録')),
           const NavigationRailDestination(icon: Icon(Icons.psychology), label: Text('AI相談')),
           NavigationRailDestination(icon: _buildBadgedIcon(Icons.chat, _hasUnreadChat), label: const Text('チャット')),
-          const NavigationRailDestination(icon: Icon(Icons.notifications), label: Text('お知らせ')),
-          const NavigationRailDestination(icon: Icon(Icons.event), label: Text('イベント')),
+          NavigationRailDestination(icon: _buildBadgedIcon(Icons.notifications, _hasUnreadInfo), label: const Text('お知らせ')),
+          NavigationRailDestination(icon: _buildBadgedIcon(Icons.event, _hasUnreadEvent), label: const Text('イベント')),
           const NavigationRailDestination(icon: Icon(Icons.manage_accounts), label: Text('管理')),
         ];
     }
@@ -561,17 +622,17 @@ class _AdminShellState extends State<AdminShell> {
           const BottomNavigationBarItem(icon: Icon(Icons.grid_view), label: 'プラス'),
           const BottomNavigationBarItem(icon: Icon(Icons.psychology), label: 'AI相談'),
           BottomNavigationBarItem(icon: _buildBadgedIcon(Icons.chat, _hasUnreadChat), label: 'チャット'),
-          const BottomNavigationBarItem(icon: Icon(Icons.notifications), label: 'お知らせ'),
+          BottomNavigationBarItem(icon: _buildBadgedIcon(Icons.notifications, _hasUnreadInfo), label: 'お知らせ'),
           const BottomNavigationBarItem(icon: Icon(Icons.manage_accounts), label: '管理'),
         ];
       case StaffType.beesmiley:
         return [
           BottomNavigationBarItem(icon: _buildBadgedIcon(Icons.calendar_month, _hasUnreadSchedule), label: '予定'),
-          const BottomNavigationBarItem(icon: Icon(Icons.edit_note), label: '記録'),
+          BottomNavigationBarItem(icon: _buildBadgedIcon(Icons.edit_note, _hasUnreadRecord), label: '記録'),
           const BottomNavigationBarItem(icon: Icon(Icons.psychology), label: 'AI相談'),
           BottomNavigationBarItem(icon: _buildBadgedIcon(Icons.chat, _hasUnreadChat), label: 'チャット'),
-          const BottomNavigationBarItem(icon: Icon(Icons.notifications), label: 'お知らせ'),
-          const BottomNavigationBarItem(icon: Icon(Icons.event), label: 'イベント'),
+          BottomNavigationBarItem(icon: _buildBadgedIcon(Icons.notifications, _hasUnreadInfo), label: 'お知らせ'),
+          BottomNavigationBarItem(icon: _buildBadgedIcon(Icons.event, _hasUnreadEvent), label: 'イベント'),
           const BottomNavigationBarItem(icon: Icon(Icons.manage_accounts), label: '管理'),
         ];
       case StaffType.both:
@@ -580,11 +641,11 @@ class _AdminShellState extends State<AdminShell> {
         return [
           BottomNavigationBarItem(icon: _buildBadgedIcon(Icons.calendar_month, _hasUnreadSchedule), label: '予定'),
           const BottomNavigationBarItem(icon: Icon(Icons.grid_view), label: 'プラス'),
-          const BottomNavigationBarItem(icon: Icon(Icons.edit_note), label: '記録'),
+          BottomNavigationBarItem(icon: _buildBadgedIcon(Icons.edit_note, _hasUnreadRecord), label: '記録'),
           const BottomNavigationBarItem(icon: Icon(Icons.psychology), label: 'AI相談'),
           BottomNavigationBarItem(icon: _buildBadgedIcon(Icons.chat, _hasUnreadChat), label: 'チャット'),
-          const BottomNavigationBarItem(icon: Icon(Icons.notifications), label: 'お知らせ'),
-          const BottomNavigationBarItem(icon: Icon(Icons.event), label: 'イベント'),
+          BottomNavigationBarItem(icon: _buildBadgedIcon(Icons.notifications, _hasUnreadInfo), label: 'お知らせ'),
+          BottomNavigationBarItem(icon: _buildBadgedIcon(Icons.event, _hasUnreadEvent), label: 'イベント'),
           const BottomNavigationBarItem(icon: Icon(Icons.manage_accounts), label: '管理'),
         ];
     }
@@ -595,10 +656,25 @@ class _AdminShellState extends State<AdminShell> {
       final type = message.data['type'];
       if (!mounted) return;
       setState(() {
-        if (type == 'schedule') {
-          _hasUnreadSchedule = true;
+        switch (type) {
+          case 'schedule':
+            _hasUnreadSchedule = true;
+            break;
+          case 'record':
+          case 'assessment':
+            _hasUnreadRecord = true;
+            break;
+          case 'info':
+          case 'notification':
+          case 'announcement':
+            _hasUnreadInfo = true;
+            break;
+          case 'event':
+            _hasUnreadEvent = true;
+            break;
         }
       });
+      _updateAppBadge();
     });
   }
 
@@ -658,8 +734,25 @@ class _AdminShellState extends State<AdminShell> {
         _selectedIndex = newIndex;
         // 画面遷移時は詳細画面を閉じる
         _adminDetailScreen = null;
-        if (type == 'schedule') _hasUnreadSchedule = false;
+        switch (type) {
+          case 'schedule':
+            _hasUnreadSchedule = false;
+            break;
+          case 'record':
+          case 'assessment':
+            _hasUnreadRecord = false;
+            break;
+          case 'info':
+          case 'notification':
+          case 'announcement':
+            _hasUnreadInfo = false;
+            break;
+          case 'event':
+            _hasUnreadEvent = false;
+            break;
+        }
       });
+      _updateAppBadge();
       _saveIndex(newIndex); // 保存
     }
   }
@@ -729,8 +822,8 @@ class _AdminShellState extends State<AdminShell> {
                 _selectedIndex = i;
                 _adminDetailScreen = null;
                 _contentOverlay = null;
-                if (i == 0) _hasUnreadSchedule = false;
               });
+              _clearUnreadOnTap(i);
               _saveIndex(i); // 保存
             },
             labelType: NavigationRailLabelType.all,
@@ -784,8 +877,8 @@ class _AdminShellState extends State<AdminShell> {
           setState(() {
             _selectedIndex = i;
             _adminDetailScreen = null;
-            if (i == 0) _hasUnreadSchedule = false;
           });
+          _clearUnreadOnTap(i);
           _saveIndex(i); // 保存
         },
         type: BottomNavigationBarType.fixed,
