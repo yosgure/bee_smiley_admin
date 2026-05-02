@@ -1324,12 +1324,10 @@ void _goToThisWeek() {
 
   String _dateKey(DateTime date) => DateFormat('yyyy-MM-dd').format(date);
 
-  // 指定日が休みかどうか判定（月曜日 or 手動設定）
+  // 指定日が休みかどうか判定（手動設定のみ）
+  // 2026-06 から月曜営業開始のため月曜の自動休み判定は撤廃。
+  // 営業しない日は「この日を休みにする」スイッチで個別に設定する。
   bool _isHoliday(DateTime date) {
-    // 月曜日は自動的に休み
-    if (date.weekday == DateTime.monday) return true;
-
-    // 手動設定の休み
     return _holidays.contains(_dateKey(date));
   }
 
@@ -2268,7 +2266,8 @@ void _goToPage(int page) {
     }
 
     bool _isWorkingDay(DateTime date) {
-      if (date.weekday == DateTime.sunday || date.weekday == DateTime.monday) return false;
+      // 日曜のみ自動的に営業外。月曜は2026-06より営業開始。
+      if (date.weekday == DateTime.sunday) return false;
       if (_isHoliday(date)) return false;
       return true;
     }
@@ -4033,7 +4032,7 @@ Widget _buildStatusSegment({
 
 void _showShiftDialog(DateTime date) {
     final dateKey = _dateKey(date);
-    final isMonday = date.weekday == DateTime.monday;
+    // 月曜営業開始により isMonday の特別扱いは撤廃。
     final isHolidayDate = _holidays.contains(dateKey);
 
     // 全スタッフのシフト状態を管理
@@ -4074,7 +4073,7 @@ for (var staff in _staffList.where((s) => s['showInSchedule'] != false)) {
             'start': staff['defaultShiftStart'] ?? '9:00',
             'end': staff['defaultShiftEnd'] ?? '18:00',
             'note': '',
-            'shiftStatus': (!isMonday && !isHolidayDate) ? 'full' : 'off',
+            'shiftStatus': !isHolidayDate ? 'full' : 'off',
           };
         } else {
           staffShifts[staffId] = {
@@ -4133,7 +4132,7 @@ for (var staff in _staffList.where((s) => s['showInSchedule'] != false)) {
                   DateFormat('M月d日 (E)', 'ja').format(date),
                   style: const TextStyle(fontSize: AppTextSize.titleLg),
                 ),
-                if (isMonday || isHolidayLocal) ...[
+                if (isHolidayLocal) ...[
                   const SizedBox(width: 8),
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
@@ -4304,8 +4303,8 @@ for (var staff in _staffList.where((s) => s['showInSchedule'] != false)) {
                       },
                     ),
                   ),
-                  // 「この日を休みにする」を下部に配置（月曜以外）
-                  if (!isMonday) ...[
+                  // 「この日を休みにする」を下部に配置
+                  ...[
                     const SizedBox(height: 12),
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
