@@ -372,6 +372,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
 
       for (var familyDoc in allFamilies) {
         final familyData = familyDoc.data();
+        if (familyData['_compat'] == true) continue;
         final children = List<Map<String, dynamic>>.from(familyData['children'] ?? []);
         final lastNameKana = familyData['lastNameKana'] ?? '';
         final familyUid = familyData['uid'] ?? familyDoc.id;

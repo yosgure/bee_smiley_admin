@@ -202,6 +202,7 @@ Future<void> _saveDisplayDate(DateTime date) async {
       final Map<String, String> courseMap = {};
       for (var doc in allDocs) {
         final data = doc.data();
+        if (data['_compat'] == true) continue;
         final uid = data['uid'] as String? ?? '';
         final children = List<Map<String, dynamic>>.from(data['children'] ?? []);
         for (var child in children) {
@@ -774,6 +775,8 @@ Future<void> _saveDisplayDate(DateTime date) async {
 
                     for (var doc in familySnapshot.data!.docs) {
                       final data = doc.data() as Map<String, dynamic>;
+                      // _compat コピーは plus_families 側で本物を表示するので重複回避
+                      if (data['_compat'] == true) continue;
                       final children = List<Map<String, dynamic>>.from(data['children'] ?? []);
                       final parentLastName = data['lastName'] ?? '';
 

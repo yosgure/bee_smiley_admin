@@ -323,7 +323,12 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
                   return const Center(child: Text('エラーが発生しました'));
                 }
 
-                final docs = List<QueryDocumentSnapshot>.from(snapshot.data!.docs);
+                // 旧モバイルアプリ互換用に families に複製した plus_families コピーは除外
+                final docs = List<QueryDocumentSnapshot>.from(snapshot.data!.docs)
+                  .where((d) {
+                    final data = d.data() as Map<String, dynamic>?;
+                    return data?['_compat'] != true;
+                  }).toList();
 
                 if (docs.isEmpty) {
                   return Center(

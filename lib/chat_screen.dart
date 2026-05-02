@@ -854,6 +854,8 @@ class _NewChatDialogState extends State<NewChatDialog> with SingleTickerProvider
         final familySnap = await FirebaseFirestore.instance.collection(coll).get();
         for (var doc in familySnap.docs) {
           final d = doc.data();
+          // 旧モバイルアプリ互換用 _compat コピーは Web 一覧では除外
+          if (d['_compat'] == true) continue;
           if (d['uid'] == widget.myUid) continue;
           final name = '${(d['lastName'] ?? '').toString().trim()} ${(d['firstName'] ?? '').toString().trim()}'.trim();
           final kana = '${(d['lastNameKana'] ?? '').toString().trim()} ${(d['firstNameKana'] ?? '').toString().trim()}'.trim();
