@@ -64,7 +64,9 @@ class _CrmLeadSidePanelState extends State<CrmLeadSidePanel> {
         }
       },
       child: Material(
-        color: c.scaffoldBg,
+        // v3 改善 4b: 各セクションの「島感」を出すため背景を scaffoldBgAlt に
+        // （ライト: #F2F2F7、ダーク: #1A1A1A）。各 section は cardBg + border で浮く。
+        color: c.scaffoldBgAlt,
         elevation: 8,
         child: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
           // plus_families の family doc を購読し、children[childIndex] を抽出して
@@ -207,28 +209,31 @@ class _Header extends StatelessWidget {
                 Row(
                   children: [
                     Flexible(
-                      child: Text(
-                        lead.childFullName.isEmpty
-                            ? '（名前未登録）'
-                            : lead.childFullName,
-                        style: TextStyle(
-                            fontSize: AppTextSize.title,
-                            fontWeight: FontWeight.w700,
-                            color: c.textPrimary),
-                        overflow: TextOverflow.ellipsis,
-                      ),
+                      child: Builder(builder: (_) {
+                        // v3 改善 2: 名前 fallback (compact card と同等)。
+                        final lastName = lead.childLastName.isNotEmpty
+                            ? lead.childLastName
+                            : lead.parentLastName;
+                        final fullName =
+                            lastName.isEmpty && lead.childFirstName.isEmpty
+                                ? '（名前未登録）'
+                                : '$lastName ${lead.childFirstName}'.trim();
+                        return Text(
+                          fullName,
+                          style: TextStyle(
+                              fontSize: AppTextSize.title,
+                              fontWeight: FontWeight.w700,
+                              color: c.textPrimary),
+                          overflow: TextOverflow.ellipsis,
+                        );
+                      }),
                     ),
                     const SizedBox(width: 8),
                     _stagePill(context, lead.stage),
                   ],
                 ),
-                const SizedBox(height: 2),
-                Text(
-                  '${CrmOptions.labelOf(CrmOptions.sources, lead.source)}'
-                  ' ・ 担当 ${lead.assigneeName ?? "未設定"}',
-                  style:
-                      TextStyle(fontSize: AppTextSize.caption, color: c.textTertiary),
-                ),
+                // v3 改善 3: サブタイトル「Instagram ・ 担当 未設定」を削除。
+                // 中央リストカードに同情報あり、Header から重複削除。
               ],
             ),
           ),

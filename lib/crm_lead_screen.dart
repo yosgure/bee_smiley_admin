@@ -161,15 +161,16 @@ class _CrmLeadScreenState extends State<CrmLeadScreen> {
     return Scaffold(
       backgroundColor: context.colors.scaffoldBg,
       appBar: AppBar(
-        // F_today_tab_polish_v2 改善 D: 独立タブ行を廃止し、AppBar 内に統合。
-        // タイトル「CRM」+ タブ + アクション を 1 行で表示。AppBar 高さ -45px。
+        // v2 改善 D + v3 改善 5: タブを中央寄せ。
+        // [CRM タイトル, Spacer, タブ, Spacer] 構造で AppBar の中央領域に
+        // SegmentedButton を配置。アクションは AppBar.actions プロパティに。
         title: Row(
           children: [
             const Text('CRM',
                 style: TextStyle(
                     fontSize: AppTextSize.title,
                     fontWeight: FontWeight.w600)),
-            const SizedBox(width: 16),
+            const Spacer(),
             SegmentedButton<int>(
               showSelectedIcon: false,
               segments: const [
@@ -196,6 +197,7 @@ class _CrmLeadScreenState extends State<CrmLeadScreen> {
                     const EdgeInsets.symmetric(horizontal: 10, vertical: 4)),
               ),
             ),
+            const Spacer(),
           ],
         ),
         // Step 4: ダークモード時に AppBar が真っ黒になるよう scaffoldBg を使う。

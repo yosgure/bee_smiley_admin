@@ -45,22 +45,29 @@ class CrmLeadCardCompact extends StatelessWidget {
     final lastContact =
         crmRelativeTime(lead.lastContactAt ?? lead.inquiredAt);
 
+    // v3 改善 4a: カード自体に cardBg + 8px borderRadius + 薄 border で
+    // 個別カードとして視認可能に。リストの margin は親側で 4px gap を生む。
     return MouseRegion(
       cursor: SystemMouseCursors.click,
-      child: Material(
-        color: selected ? c.scaffoldBgAlt : Colors.transparent,
-        child: InkWell(
-          onTap: onTap,
-          hoverColor: c.scaffoldBgAlt.withValues(alpha: 0.7),
-          child: Container(
+      child: Container(
+        margin: const EdgeInsets.symmetric(vertical: 2),
+        decoration: BoxDecoration(
+          color: selected ? c.scaffoldBgAlt : c.cardBg,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: c.borderLight),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: onTap,
+            hoverColor: c.scaffoldBgAlt.withValues(alpha: 0.7),
+            child: Container(
           decoration: BoxDecoration(
             border: Border(
               left: BorderSide(
                 color: selected ? AppColors.primary : Colors.transparent,
                 width: 3,
-              ),
-              bottom: BorderSide(
-                color: c.borderLight.withValues(alpha: 0.5),
               ),
             ),
           ),
@@ -137,6 +144,7 @@ class CrmLeadCardCompact extends StatelessWidget {
                 ],
               ),
             ],
+          ),
           ),
           ),
         ),

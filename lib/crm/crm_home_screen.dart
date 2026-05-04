@@ -305,19 +305,8 @@ class _TodaySummaryStrip extends StatelessWidget {
             const SizedBox(width: 16),
             _separator(c),
             const SizedBox(width: 12),
-            // 今日の確認ポイント — タップで filter
-            _reasonCount(context, '期限切れ', summary.overdueCount,
-                CrmUrgentReason.overdue),
-            const SizedBox(width: 8),
-            _reasonCount(context, 'フォロー漏れ',
-                summary.trialFollowupMissing,
-                CrmUrgentReason.trialFollowupMissing),
-            const SizedBox(width: 8),
-            _reasonCount(context, '停滞', summary.contractStalled,
-                CrmUrgentReason.contractStalled),
-            const SizedBox(width: 8),
-            _reasonCount(context, '次の手', summary.noNextAction,
-                CrmUrgentReason.noNextAction),
+            // v3 改善 1: 4 chip をプルダウンに統合。0 件の項目はメニューに出さない。
+            _filterPulldown(context, summary),
             const SizedBox(width: 12),
             _separator(c),
             const SizedBox(width: 12),
@@ -339,36 +328,74 @@ class _TodaySummaryStrip extends StatelessWidget {
   Widget _separator(AppColorScheme c) =>
       Container(width: 1, height: 22, color: c.borderLight);
 
-  Widget _reasonCount(BuildContext context, String label, int count,
-      CrmUrgentReason reason) {
+  /// v3 改善 1: 4 つの確認ポイントを 1 つのプルダウンに統合。
+  /// メニュー項目: 「すべて表示 (合計)」+ 件数 > 0 の項目のみ。
+  Widget _filterPulldown(BuildContext context, CrmHomeSummary summary) {
     final c = context.colors;
-    final selected = activeFilter == reason;
-    final base = c.scaffoldBgAlt;
-    return Material(
-      color: selected ? AppColors.primary.withValues(alpha: 0.15) : base,
-      borderRadius: BorderRadius.circular(6),
-      child: InkWell(
-        onTap: () => onTapFilter(reason),
-        borderRadius: BorderRadius.circular(6),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(label,
-                  style: TextStyle(
-                      fontSize: AppTextSize.caption,
-                      color: c.textSecondary)),
-              const SizedBox(width: 4),
-              Text('$count',
-                  style: TextStyle(
-                      fontSize: AppTextSize.body,
-                      fontWeight: FontWeight.bold,
-                      color: selected
-                          ? AppColors.primary
-                          : c.textPrimary)),
-            ],
-          ),
+    final selected = activeFilter;
+    final byReason = <CrmUrgentReason, int>{
+      CrmUrgentReason.overdue: summary.overdueCount,
+      CrmUrgentReason.trialFollowupMissing: summary.trialFollowupMissing,
+      CrmUrgentReason.contractStalled: summary.contractStalled,
+      CrmUrgentReason.noNextAction: summary.noNextAction,
+    };
+    final total = byReason.values.fold(0, (a, b) => a + b);
+    final isAll = selected == null;
+    final label = isAll
+        ? 'すべて表示 ($total)'
+        : '${crmUrgentReasonLabel(selected)} (${byReason[selected] ?? 0})';
+
+    return PopupMenuButton<CrmUrgentReason?>(
+      tooltip: 'フィルタ',
+      position: PopupMenuPosition.under,
+      onSelected: (value) {
+        // null = すべて表示（フィルタ解除）。それ以外は既存トグルに準拠。
+        if (value == null) {
+          if (activeFilter != null) onTapFilter(activeFilter!);
+        } else {
+          // 同じ項目を再選択しても意味的に「選び直し」なので、
+          // 現在 selected と一致しなければ単に切り替え。
+          if (activeFilter != value) onTapFilter(value);
+        }
+      },
+      itemBuilder: (_) => <PopupMenuEntry<CrmUrgentReason?>>[
+        PopupMenuItem<CrmUrgentReason?>(
+          value: null,
+          child: Text('すべて表示 ($total)'),
+        ),
+        const PopupMenuDivider(),
+        for (final entry in byReason.entries)
+          if (entry.value > 0)
+            PopupMenuItem<CrmUrgentReason?>(
+              value: entry.key,
+              child: Text(
+                  '${crmUrgentReasonLabel(entry.key)} (${entry.value})'),
+            ),
+      ],
+      child: Container(
+        height: 32,
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+        decoration: BoxDecoration(
+          color: !isAll
+              ? AppColors.primary.withValues(alpha: 0.15)
+              : c.scaffoldBgAlt,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: c.borderLight),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(label,
+                style: TextStyle(
+                    fontSize: AppTextSize.small,
+                    fontWeight: FontWeight.w600,
+                    color: !isAll
+                        ? AppColors.primary
+                        : c.textPrimary)),
+            const SizedBox(width: 4),
+            Icon(Icons.arrow_drop_down,
+                size: 18, color: c.textSecondary),
+          ],
         ),
       ),
     );
@@ -446,31 +473,23 @@ class _UrgentSection extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 8),
-        // Step 1 (F_today_tab_polish): リストだけ独立スクロール。
-        // 親 (_buildHome) で Expanded > _UrgentSection の構成のため、
-        // 内部の Expanded > ListView.builder で残り高さを使い切る。
+        // v3 改善 4a: 外周コンテナのボーダー・背景を撤去。
+        // カード自体に cardBg + border を持たせ、各カードが独立した「島」として
+        // 視認できるようにする（特にライトモードで効果大）。
         Expanded(
           child: rows.isEmpty
               ? _emptyState(context)
-              : Container(
-                  decoration: BoxDecoration(
-                    color: c.cardBg,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: c.borderLight),
-                  ),
-                  clipBehavior: Clip.antiAlias,
-                  child: ListView.builder(
-                    padding: EdgeInsets.zero,
-                    itemCount: rows.length,
-                    itemBuilder: (_, i) {
-                      final r = rows[i];
-                      return CrmLeadCardCompact(
-                        row: r,
-                        selected: r.lead.id == selectedLeadId,
-                        onTap: () => onSelectLead(r.lead.id),
-                      );
-                    },
-                  ),
+              : ListView.builder(
+                  padding: const EdgeInsets.symmetric(vertical: 2),
+                  itemCount: rows.length,
+                  itemBuilder: (_, i) {
+                    final r = rows[i];
+                    return CrmLeadCardCompact(
+                      row: r,
+                      selected: r.lead.id == selectedLeadId,
+                      onTap: () => onSelectLead(r.lead.id),
+                    );
+                  },
                 ),
         ),
       ],
