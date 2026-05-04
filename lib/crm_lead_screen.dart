@@ -222,9 +222,9 @@ class _CrmLeadScreenState extends State<CrmLeadScreen> {
           ),
         ],
       ),
-      // 「今やること」タブ（_viewMode==0）では右サイドパネルや記録フォームと
-      // 操作競合するため FAB を非表示にする。新規登録は「リード一覧」タブから。
-      floatingActionButton: _viewMode == 0
+      // v4 改善 2: FAB は今日 + データベースタブで表示。分析タブのみ非表示。
+      // 分析画面では新規 Lead 追加の必然性が薄いため。
+      floatingActionButton: _viewMode == 2
           ? null
           : FloatingActionButton.extended(
               onPressed: _openNewLead,

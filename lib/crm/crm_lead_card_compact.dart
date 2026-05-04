@@ -33,15 +33,11 @@ class CrmLeadCardCompact extends StatelessWidget {
     final name = lastName.isEmpty && firstName.isEmpty
         ? '（名前未登録）'
         : '$lastName $firstName'.trim();
-    final assignee = lead.assigneeName?.isNotEmpty == true
-        ? lead.assigneeName!
-        : '担当未設定';
-    final source = CrmOptions.sources
-        .firstWhere(
-          (s) => s.id == lead.source,
-          orElse: () => (id: 'other', label: 'その他'),
-        )
-        .label;
+    // v4 改善 1: 媒体・担当を撤去し、次の一手を表示する。
+    // 媒体は分析タブで参照、担当機能は未稼働のため triage 中は不要。
+    final nextAction = lead.nextActionNote.isNotEmpty
+        ? lead.nextActionNote
+        : '次の一手を決める';
     final lastContact =
         crmRelativeTime(lead.lastContactAt ?? lead.inquiredAt);
 
@@ -134,7 +130,7 @@ class CrmLeadCardCompact extends StatelessWidget {
                     ),
                   ),
                   Text(
-                    '$source ・ $assignee',
+                    nextAction,
                     style: TextStyle(
                       fontSize: AppTextSize.caption,
                       color: c.textSecondary,
