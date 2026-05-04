@@ -24,8 +24,15 @@ class CrmLeadCardCompact extends StatelessWidget {
     final c = context.colors;
     final lead = row.lead;
     final age = lead.childAge;
-    final name =
-        lead.childFullName.isEmpty ? '（名前未登録）' : lead.childFullName;
+    // 名前 fallback (F_today_tab_polish_v2 Step 3d): childLastName が空なら
+    // parentLastName を使う。兄弟は同じ姓という一般的仮定を活用。
+    final lastName = lead.childLastName.isNotEmpty
+        ? lead.childLastName
+        : lead.parentLastName;
+    final firstName = lead.childFirstName;
+    final name = lastName.isEmpty && firstName.isEmpty
+        ? '（名前未登録）'
+        : '$lastName $firstName'.trim();
     final assignee = lead.assigneeName?.isNotEmpty == true
         ? lead.assigneeName!
         : '担当未設定';
@@ -38,11 +45,14 @@ class CrmLeadCardCompact extends StatelessWidget {
     final lastContact =
         crmRelativeTime(lead.lastContactAt ?? lead.inquiredAt);
 
-    return Material(
-      color: selected ? c.scaffoldBgAlt : Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        child: Container(
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: Material(
+        color: selected ? c.scaffoldBgAlt : Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          hoverColor: c.scaffoldBgAlt.withValues(alpha: 0.7),
+          child: Container(
           decoration: BoxDecoration(
             border: Border(
               left: BorderSide(
@@ -127,6 +137,7 @@ class CrmLeadCardCompact extends StatelessWidget {
                 ],
               ),
             ],
+          ),
           ),
         ),
       ),

@@ -125,7 +125,6 @@ class _Body extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final c = context.colors;
     return Column(
       children: [
         _Header(lead: lead, onClose: onClose, leadRef: leadRef),
@@ -146,49 +145,6 @@ class _Body extends StatelessWidget {
                 _ChildInfoSection(lead: lead),
                 const SizedBox(height: 12),
                 _ParentInfoSection(lead: lead),
-                const SizedBox(height: 20),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: Builder(builder: (ctx) {
-                    return OutlinedButton.icon(
-                      onPressed: () {
-                        // 詳細編集は CrmLeadEditScreen をフルスクリーンで開く。
-                        // sidepanel と同じ LeadView を共有して同期表示。
-                        if (lead.ref == null) return;
-                        // family doc を読み直して LeadView を再構成するのは重いので、
-                        // ref（LeadViewReference）から最低限の情報を復元する。
-                        // 実用上 CrmLeadEditScreen は data() で表示するため
-                        // LeadView の最新スナップショットがあれば十分。
-                        // ここでは ref が指す LeadView を直接呼び出し側に持たせる。
-                        // （sidepanel 起動者から渡されている）
-                        // 簡易対応: lead.id (familyId#childIndex) から LeadView を生成
-                        final parts = lead.id.split('#');
-                        if (parts.length != 2) return;
-                        final familyId = parts[0];
-                        final idx = int.tryParse(parts[1]) ?? 0;
-                        Navigator.push(
-                            ctx,
-                            MaterialPageRoute(
-                                builder: (_) => CrmLeadEditScreen(
-                                    doc: LeadView(
-                                        familyDocId: familyId,
-                                        childIndex: idx,
-                                        flatData: lead.raw,
-                                        familyRef: FirebaseFirestore.instance
-                                            .collection('plus_families')
-                                            .doc(familyId)))));
-                      },
-                      icon: const Icon(Icons.edit_outlined, size: 16),
-                      label: const Text('詳細を編集'),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: c.textSecondary,
-                        side: BorderSide(color: c.borderMedium),
-                        textStyle:
-                            const TextStyle(fontSize: AppTextSize.small),
-                      ),
-                    );
-                  }),
-                ),
               ],
             ),
           ),
@@ -196,6 +152,31 @@ class _Body extends StatelessWidget {
       ],
     );
   }
+}
+
+/// F_today_tab_polish_v2 Step 3c: 「編集」ボタン Header 配置用ヘルパー。
+/// 今日タブ (onClose=null) では Header 右側のメインアクション、
+/// データベースタブ (onClose != null) では × ボタンと並べて表示。
+void _openLeadEditScreen(BuildContext context, CrmLead lead) {
+  final parts = lead.id.split('#');
+  if (parts.length != 2) return;
+  final familyId = parts[0];
+  final idx = int.tryParse(parts[1]) ?? 0;
+  Navigator.push(
+    context,
+    MaterialPageRoute(
+      builder: (_) => CrmLeadEditScreen(
+        doc: LeadView(
+          familyDocId: familyId,
+          childIndex: idx,
+          flatData: lead.raw,
+          familyRef: FirebaseFirestore.instance
+              .collection('plus_families')
+              .doc(familyId),
+        ),
+      ),
+    ),
+  );
 }
 
 // ---------------------------------------------------------- Header
@@ -251,13 +232,26 @@ class _Header extends StatelessWidget {
               ],
             ),
           ),
-          if (onClose != null)
+          // F_today_tab_polish_v2 Step 3c: 編集ボタンを Header 右側に常時表示。
+          FilledButton.tonalIcon(
+            onPressed: () => _openLeadEditScreen(context, lead),
+            icon: const Icon(Icons.edit_outlined, size: 16),
+            label: const Text('編集'),
+            style: FilledButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              textStyle: const TextStyle(fontSize: AppTextSize.small),
+              visualDensity: VisualDensity.compact,
+            ),
+          ),
+          if (onClose != null) ...[
+            const SizedBox(width: 4),
             IconButton(
               icon: const Icon(Icons.close, size: 20),
               color: c.textSecondary,
               tooltip: '閉じる (Esc)',
               onPressed: onClose,
             ),
+          ],
         ],
       ),
     );
@@ -682,6 +676,7 @@ class _RecordFormState extends State<_RecordForm> {
           InkWell(
             onTap: () => setState(() => _expanded = !_expanded),
             borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+            hoverColor: c.scaffoldBgAlt.withValues(alpha: 0.7),
             child: Padding(
               padding: const EdgeInsets.all(14),
               child: Row(
@@ -696,6 +691,7 @@ class _RecordFormState extends State<_RecordForm> {
                   const Spacer(),
                   Icon(
                     _expanded ? Icons.expand_less : Icons.expand_more,
+                    size: 24,
                     color: c.textSecondary,
                   ),
                 ],

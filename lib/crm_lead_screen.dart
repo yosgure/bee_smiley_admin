@@ -161,9 +161,46 @@ class _CrmLeadScreenState extends State<CrmLeadScreen> {
     return Scaffold(
       backgroundColor: context.colors.scaffoldBg,
       appBar: AppBar(
-        title: const Text('CRM',
-            style: TextStyle(fontSize: AppTextSize.title, fontWeight: FontWeight.w600)),
-        backgroundColor: context.colors.cardBg,
+        // F_today_tab_polish_v2 改善 D: 独立タブ行を廃止し、AppBar 内に統合。
+        // タイトル「CRM」+ タブ + アクション を 1 行で表示。AppBar 高さ -45px。
+        title: Row(
+          children: [
+            const Text('CRM',
+                style: TextStyle(
+                    fontSize: AppTextSize.title,
+                    fontWeight: FontWeight.w600)),
+            const SizedBox(width: 16),
+            SegmentedButton<int>(
+              showSelectedIcon: false,
+              segments: const [
+                ButtonSegment(
+                    value: 0,
+                    label: Text('今日'),
+                    icon: Icon(Icons.checklist, size: 16)),
+                ButtonSegment(
+                    value: 1,
+                    label: Text('データベース'),
+                    icon: Icon(Icons.view_kanban_outlined, size: 16)),
+                ButtonSegment(
+                    value: 2,
+                    label: Text('分析'),
+                    icon: Icon(Icons.bar_chart, size: 16)),
+              ],
+              selected: {_viewMode},
+              onSelectionChanged: (s) =>
+                  setState(() => _viewMode = s.first),
+              style: ButtonStyle(
+                textStyle: WidgetStateProperty.all(
+                    const TextStyle(fontSize: AppTextSize.small)),
+                padding: WidgetStateProperty.all(
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4)),
+              ),
+            ),
+          ],
+        ),
+        // Step 4: ダークモード時に AppBar が真っ黒になるよう scaffoldBg を使う。
+        // ライトモードは cardBg=scaffoldBg=white で同色なので影響なし。
+        backgroundColor: context.colors.scaffoldBg,
         elevation: 0,
         foregroundColor: context.colors.textPrimary,
         leading: IconButton(
@@ -195,41 +232,7 @@ class _CrmLeadScreenState extends State<CrmLeadScreen> {
                   style: TextStyle(
                       color: Colors.white, fontWeight: FontWeight.bold)),
             ),
-      body: Column(
-        children: [
-          _buildToolbar(),
-          Expanded(child: _buildBody()),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildToolbar() {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
-      color: context.colors.cardBg,
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Row(
-          children: [
-            SegmentedButton<int>(
-              showSelectedIcon: false,
-              segments: const [
-                ButtonSegment(value: 0, label: Text('今日'), icon: Icon(Icons.checklist, size: 16)),
-                ButtonSegment(value: 1, label: Text('データベース'), icon: Icon(Icons.view_kanban_outlined, size: 16)),
-                ButtonSegment(value: 2, label: Text('分析'), icon: Icon(Icons.bar_chart, size: 16)),
-              ],
-              selected: {_viewMode},
-              onSelectionChanged: (s) => setState(() => _viewMode = s.first),
-              style: ButtonStyle(
-                textStyle: WidgetStateProperty.all(const TextStyle(fontSize: AppTextSize.small)),
-                padding: WidgetStateProperty.all(
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4)),
-              ),
-            ),
-          ],
-        ),
-      ),
+      body: _buildBody(),
     );
   }
 
