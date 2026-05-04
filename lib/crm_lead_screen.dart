@@ -7,6 +7,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:csv/csv.dart';
 import 'app_theme.dart';
 import 'widgets/app_feedback.dart';
+import 'crm/campaign_section.dart';
 import 'crm/crm_home_screen.dart';
 import 'main.dart';
 import 'services/undo_service.dart';
@@ -146,8 +147,6 @@ class _CrmLeadScreenState extends State<CrmLeadScreen> {
   // 0: 今やること（旧ホーム+督促を統合）、1: リード一覧（旧パイプラインカンバン）、2: 分析
   // 入会済み・離脱タブは削除（入会後は BSP 管理画面に任せる）
   int _viewMode = 0;
-  String _sourceFilter = 'all';
-  String _stageFilter = 'all'; // 未使用（旧テーブル互換用に残置）
 
   void _close() {
     if (Navigator.canPop(context)) {
@@ -216,8 +215,8 @@ class _CrmLeadScreenState extends State<CrmLeadScreen> {
             SegmentedButton<int>(
               showSelectedIcon: false,
               segments: const [
-                ButtonSegment(value: 0, label: Text('今やること'), icon: Icon(Icons.checklist, size: 16)),
-                ButtonSegment(value: 1, label: Text('リード一覧'), icon: Icon(Icons.view_kanban_outlined, size: 16)),
+                ButtonSegment(value: 0, label: Text('今日'), icon: Icon(Icons.checklist, size: 16)),
+                ButtonSegment(value: 1, label: Text('データベース'), icon: Icon(Icons.view_kanban_outlined, size: 16)),
                 ButtonSegment(value: 2, label: Text('分析'), icon: Icon(Icons.bar_chart, size: 16)),
               ],
               selected: {_viewMode},
@@ -228,51 +227,8 @@ class _CrmLeadScreenState extends State<CrmLeadScreen> {
                     const EdgeInsets.symmetric(horizontal: 10, vertical: 4)),
               ),
             ),
-            const SizedBox(width: 12),
-            _filterDropdown(
-              label: '媒体',
-              value: _sourceFilter,
-              items: [
-                const DropdownMenuItem(value: 'all', child: Text('すべて')),
-                ...CrmOptions.sources.map(
-                    (s) => DropdownMenuItem(value: s.id, child: Text(s.label))),
-              ],
-              onChanged: (v) => setState(() => _sourceFilter = v ?? 'all'),
-            ),
           ],
         ),
-      ),
-    );
-  }
-
-  Widget _filterDropdown({
-    required String label,
-    required String value,
-    required List<DropdownMenuItem<String>> items,
-    required ValueChanged<String?> onChanged,
-  }) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
-      decoration: BoxDecoration(
-        border: Border.all(color: context.colors.borderMedium),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text('$label:',
-              style: TextStyle(fontSize: AppTextSize.caption, color: context.colors.textSecondary)),
-          const SizedBox(width: 4),
-          DropdownButtonHideUnderline(
-            child: DropdownButton<String>(
-              value: value,
-              items: items,
-              onChanged: onChanged,
-              style: TextStyle(fontSize: AppTextSize.small, color: context.colors.textPrimary),
-              isDense: true,
-            ),
-          ),
-        ],
       ),
     );
   }
@@ -289,10 +245,7 @@ class _CrmLeadScreenState extends State<CrmLeadScreen> {
               child: Text('読み込みエラー: ${snap.error}',
                   style: TextStyle(color: context.colors.textSecondary)));
         }
-        var docs = snap.data ?? [];
-        if (_sourceFilter != 'all') {
-          docs = docs.where((d) => (d.data()['source'] ?? '') == _sourceFilter).toList();
-        }
+        final docs = snap.data ?? [];
         if (docs.isEmpty) return _emptyState();
         switch (_viewMode) {
           case 0:
@@ -502,7 +455,10 @@ class _CrmLeadScreenState extends State<CrmLeadScreen> {
           'lostAt': stage == 'lost' && inquired != null
               ? Timestamp.fromDate(inquired)
               : null,
-          'lossReason': stage == 'lost' ? 'other' : null,
+          // CSV に lossReason 列が無いため、自由記述（lossDetail）のみ取り込み、
+          // lossReason は null（未分類）として残す。後でデータベースタブの
+          // 「未分類失注」フィルタから手動で再分類する想定。
+          'lossReason': null,
           'lossDetail': stage == 'lost' ? get(row, iLoss) : '',
           'reapproachOk': true,
           'memo': get(row, iMemo),
@@ -779,15 +735,38 @@ class _BucketedLead {
 }
 
 /// パイプライン: 検討中 + 入会手続中 を次回対応期日昇順で並べる
-class _CrmPipelineView extends StatelessWidget {
+class _CrmPipelineView extends StatefulWidget {
   final List<LeadView> docs;
   const _CrmPipelineView({required this.docs});
 
   @override
+  State<_CrmPipelineView> createState() => _CrmPipelineViewState();
+}
+
+enum _DbViewFilter { active, unclassifiedLost }
+
+class _CrmPipelineViewState extends State<_CrmPipelineView> {
+  _DbViewFilter _filter = _DbViewFilter.active;
+
+  @override
   Widget build(BuildContext context) {
-    final filtered = docs.where((d) {
-      final stage = d.data()['stage'] as String? ?? '';
-      return stage == 'considering' || stage == 'onboarding';
+    final unclassifiedLostCount = widget.docs.where((d) {
+      final m = d.data();
+      final stage = m['stage'] as String? ?? '';
+      final reason = m['lossReason'] as String?;
+      return stage == 'lost' && (reason == null || reason.isEmpty);
+    }).length;
+
+    final filtered = widget.docs.where((d) {
+      final m = d.data();
+      final stage = m['stage'] as String? ?? '';
+      switch (_filter) {
+        case _DbViewFilter.active:
+          return stage == 'considering' || stage == 'onboarding';
+        case _DbViewFilter.unclassifiedLost:
+          final reason = m['lossReason'] as String?;
+          return stage == 'lost' && (reason == null || reason.isEmpty);
+      }
     }).toList()
       ..sort((a, b) {
         final aNext = (a.data()['nextActionAt'] as Timestamp?)?.toDate();
@@ -797,13 +776,44 @@ class _CrmPipelineView extends StatelessWidget {
         if (bNext == null) return -1;
         return aNext.compareTo(bNext);
       });
-    if (filtered.isEmpty) {
-      return Center(
-        child: Text('パイプライン対象のリードはありません',
-            style: TextStyle(color: context.colors.textSecondary)),
-      );
-    }
-    return _CrmTableView(docs: filtered);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(8, 4, 8, 8),
+          child: Wrap(
+            spacing: 8,
+            children: [
+              ChoiceChip(
+                label: const Text('進行中'),
+                selected: _filter == _DbViewFilter.active,
+                onSelected: (_) =>
+                    setState(() => _filter = _DbViewFilter.active),
+              ),
+              ChoiceChip(
+                label: Text('未分類失注 ($unclassifiedLostCount)'),
+                selected: _filter == _DbViewFilter.unclassifiedLost,
+                onSelected: (_) => setState(
+                    () => _filter = _DbViewFilter.unclassifiedLost),
+              ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: filtered.isEmpty
+              ? Center(
+                  child: Text(
+                      _filter == _DbViewFilter.unclassifiedLost
+                          ? '未分類の失注はありません'
+                          : 'パイプライン対象のリードはありません',
+                      style:
+                          TextStyle(color: context.colors.textSecondary)),
+                )
+              : _CrmTableView(docs: filtered),
+        ),
+      ],
+    );
   }
 }
 
@@ -1007,6 +1017,10 @@ class _CrmDashboardViewState extends State<_CrmDashboardView> {
           _sectionTitle(context, '媒体別KPI'),
           const SizedBox(height: 8),
           _sourceKpiTable(sourceTotal, sourceTrial, sourceWon),
+
+          const SizedBox(height: 16),
+          // F2: Campaign カンバン。クライアント集計、Cloud Functions 自動集計は F6 で導入予定。
+          CampaignSection(docs: widget.docs),
 
           const SizedBox(height: 16),
           _sectionTitle(context, 'ステージ滞留日数'),
@@ -1533,6 +1547,8 @@ class _CrmLeadEditScreenState extends State<CrmLeadEditScreen> {
   String _confidence = 'B';
   String _source = 'instagram';
   final _sourceDetailCtrl = TextEditingController();
+  // F2: 紐付け施策（任意）。null = 未紐付け。実行中(running)の Campaign のみ選択可。
+  String? _sourceCampaignId;
   final _preferredDaysCtrl = TextEditingController();
   final _preferredTimeCtrl = TextEditingController();
   final _preferredStartCtrl = TextEditingController();
@@ -1609,6 +1625,7 @@ class _CrmLeadEditScreenState extends State<CrmLeadEditScreen> {
       _confidence = d['confidence'] ?? 'B';
       _source = d['source'] ?? 'instagram';
       _sourceDetailCtrl.text = d['sourceDetail'] ?? '';
+      _sourceCampaignId = d['sourceCampaignId'] as String?;
       _preferredDaysCtrl.text = d['preferredDays'] ?? '';
       _preferredTimeCtrl.text = d['preferredTimeSlots'] ?? '';
       _preferredStartCtrl.text = d['preferredStart'] ?? '';
@@ -1684,9 +1701,21 @@ class _CrmLeadEditScreenState extends State<CrmLeadEditScreen> {
       AppFeedback.warning(context, '失注理由を選択してください');
       return;
     }
+    if (_stage == 'lost' &&
+        _lossReason == 'other' &&
+        _lossDetailCtrl.text.trim().isEmpty) {
+      AppFeedback.warning(context, '失注理由「その他」の詳細を入力してください');
+      return;
+    }
     if (_stage == 'withdrawn' &&
         (_withdrawReason == null || _withdrawReason!.isEmpty)) {
       AppFeedback.warning(context, '退会理由を選択してください');
+      return;
+    }
+    if (_stage == 'withdrawn' &&
+        _withdrawReason == 'other' &&
+        _withdrawDetailCtrl.text.trim().isEmpty) {
+      AppFeedback.warning(context, '退会理由「その他」の詳細を入力してください');
       return;
     }
     // 旧ステージからの遷移ルール検証（新規作成時は検証不要）
@@ -1696,6 +1725,13 @@ class _CrmLeadEditScreenState extends State<CrmLeadEditScreen> {
         AppFeedback.warning(context, '「${CrmOptions.stageLabel(prevStage)}」→「${CrmOptions.stageLabel(_stage)}」への遷移は許可されていません');
         return;
       }
+    }
+    // 念のため、保存時点で 'lost' / 'withdrawn' なら日付を補完する
+    if (_stage == 'lost' && _lostAt == null) {
+      _lostAt = DateTime.now();
+    }
+    if (_stage == 'withdrawn' && _withdrawnAt == null) {
+      _withdrawnAt = DateTime.now();
     }
     setState(() => _saving = true);
     final user = FirebaseAuth.instance.currentUser;
@@ -1721,6 +1757,7 @@ class _CrmLeadEditScreenState extends State<CrmLeadEditScreen> {
       'confidence': _confidence,
       'source': _source,
       'sourceDetail': _sourceDetailCtrl.text.trim(),
+      'sourceCampaignId': _sourceCampaignId,
       'preferredDays': _preferredDaysCtrl.text.trim(),
       'preferredTimeSlots': _preferredTimeCtrl.text.trim(),
       'preferredStart': _preferredStartCtrl.text.trim(),
@@ -2170,6 +2207,8 @@ class _CrmLeadEditScreenState extends State<CrmLeadEditScreen> {
           const SizedBox(height: 8),
           _textField('紹介者・媒体詳細', _sourceDetailCtrl,
               hint: '紹介者名・広告キーワードなど'),
+          const SizedBox(height: 8),
+          _campaignSelector(),
           const SizedBox(height: 12),
           _section('児童'),
           Row(
@@ -2605,6 +2644,9 @@ class _CrmLeadEditScreenState extends State<CrmLeadEditScreen> {
               if (s.id == 'lost' && _lostAt == null) {
                 _lostAt = DateTime.now();
               }
+              if (s.id == 'withdrawn' && _withdrawnAt == null) {
+                _withdrawnAt = DateTime.now();
+              }
             });
           },
           child: Container(
@@ -2651,6 +2693,64 @@ class _CrmLeadEditScreenState extends State<CrmLeadEditScreen> {
               child: Text(s.label, style: const TextStyle(fontSize: AppTextSize.body))))
           .toList(),
       onChanged: (v) => setState(() => _source = v ?? 'other'),
+    );
+  }
+
+  // F2: 紐付け施策セレクタ。実行中(running)の Campaign のみリストに含める。
+  // 既存 Lead の互換性: sourceCampaignId が null なら「（紐付けなし）」、
+  // 値があるが該当 campaign が見つからない場合（例: archived 化）は値を保持して表示する。
+  Widget _campaignSelector() {
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      // composite index 不要にするため、businessId のみでサーバー側フィルタし、
+      // status='running' はクライアント側で絞り込む。
+      stream: FirebaseFirestore.instance
+          .collection('campaigns')
+          .where('businessId', isEqualTo: 'Plus')
+          .snapshots(),
+      builder: (context, snap) {
+        final docs = (snap.data?.docs ?? [])
+            .where((d) => (d.data()['status'] as String?) == 'running')
+            .toList();
+        final items = <DropdownMenuItem<String?>>[
+          const DropdownMenuItem(value: null, child: Text('（紐付けなし）')),
+          ...docs.map((d) {
+            final name = (d.data()['name'] as String?) ?? d.id;
+            return DropdownMenuItem(value: d.id, child: Text(name));
+          }),
+        ];
+        // 現在の値が running 一覧に無い場合（archived など）はその id をプレースホルダで追加。
+        final ids = docs.map((d) => d.id).toSet();
+        if (_sourceCampaignId != null &&
+            !ids.contains(_sourceCampaignId)) {
+          items.insert(
+            1,
+            DropdownMenuItem(
+                value: _sourceCampaignId,
+                child: Text('（過去の施策: $_sourceCampaignId）')),
+          );
+        }
+        return DropdownButtonFormField<String?>(
+          initialValue: _sourceCampaignId,
+          isDense: true,
+          decoration: InputDecoration(
+            labelText: '紐付け施策（任意）',
+            labelStyle: TextStyle(
+                fontSize: AppTextSize.small,
+                color: context.colors.textSecondary),
+            isDense: true,
+            filled: true,
+            fillColor: context.colors.cardBg,
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: BorderSide(color: context.colors.borderLight),
+            ),
+          ),
+          items: items,
+          onChanged: (v) => setState(() => _sourceCampaignId = v),
+        );
+      },
     );
   }
 

@@ -47,3 +47,14 @@
 - アラート色は `context.alerts.{warning|urgent|info|success}` を必ず経由する（`Colors.red` / `Colors.blue` の直接指定禁止）
 - 全テキストは WCAG AA コントラスト（4.5:1）を満たすこと
 - 定義は `lib/app_theme.dart` の `AlertPalette`
+
+## 既知のデータ品質問題
+
+### plus_families.children[] の status フィールド整合性
+旧 families コレクションから plus_families への移行時、status フィールドが未更新のまま残っているレコードが多数。実態は「入会」だが status='検討中'/'入会手続中' のまま、または status=null の子供が多い。
+
+### 暫定対応
+予定/ダッシュボード画面のフィルタは「lost/withdrawn 除外」のブラックリスト方式で運用中（`plus_schedule_screen.dart:953`, `plus_dashboard_screen.dart:124`, `ai_chat_main_screen.dart:101`）。
+
+### 本来の解決
+CRM の Lead ステージ管理が安定したら、status フィールドをステージから自動同期する仕組みを入れる（Cloud Functions の onUpdate トリガー）。それまでは現フィルタ維持。

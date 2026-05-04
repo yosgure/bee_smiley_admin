@@ -228,6 +228,8 @@ Map<String, dynamic> flattenChildToLeadShape(
     'confidence': child['confidence'],
     'source': child['source'],
     'sourceDetail': child['sourceDetail'],
+    // F2: Campaign 紐付け（任意）。null = 媒体（source）のみで管理。
+    'sourceCampaignId': child['sourceCampaignId'],
     'preferredChannel': child['preferredChannel'],
     'preferredDays': child['preferredDays'],
     'preferredTimeSlots': child['preferredTimeSlots'],
