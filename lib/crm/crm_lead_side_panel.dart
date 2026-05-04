@@ -22,12 +22,14 @@ import 'crm_next_action.dart';
 /// 保存後に即時再描画。LeadView が plus_families.children[index] への参照を保持する。
 class CrmLeadSidePanel extends StatefulWidget {
   final LeadView leadView;
-  final VoidCallback onClose;
+  /// null = 閉じるボタン非表示・Esc 無効。
+  /// 今日タブで常時表示する場合は null を渡す。
+  final VoidCallback? onClose;
 
   const CrmLeadSidePanel({
     super.key,
     required this.leadView,
-    required this.onClose,
+    this.onClose,
   });
 
   @override
@@ -55,9 +57,10 @@ class _CrmLeadSidePanelState extends State<CrmLeadSidePanel> {
     return KeyboardListener(
       focusNode: _focus,
       onKeyEvent: (event) {
-        if (event is KeyDownEvent &&
+        if (widget.onClose != null &&
+            event is KeyDownEvent &&
             event.logicalKey == LogicalKeyboardKey.escape) {
-          widget.onClose();
+          widget.onClose!();
         }
       },
       child: Material(
@@ -113,7 +116,7 @@ class _CrmLeadSidePanelState extends State<CrmLeadSidePanel> {
 class _Body extends StatelessWidget {
   final CrmLead lead;
   final LeadViewReference leadRef;
-  final VoidCallback onClose;
+  final VoidCallback? onClose;
   const _Body({
     required this.lead,
     required this.leadRef,
@@ -200,7 +203,7 @@ class _Body extends StatelessWidget {
 class _Header extends StatelessWidget {
   final CrmLead lead;
   final LeadViewReference leadRef;
-  final VoidCallback onClose;
+  final VoidCallback? onClose;
   const _Header(
       {required this.lead, required this.leadRef, required this.onClose});
 
@@ -248,12 +251,13 @@ class _Header extends StatelessWidget {
               ],
             ),
           ),
-          IconButton(
-            icon: const Icon(Icons.close, size: 20),
-            color: c.textSecondary,
-            tooltip: '閉じる (Esc)',
-            onPressed: onClose,
-          ),
+          if (onClose != null)
+            IconButton(
+              icon: const Icon(Icons.close, size: 20),
+              color: c.textSecondary,
+              tooltip: '閉じる (Esc)',
+              onPressed: onClose,
+            ),
         ],
       ),
     );
