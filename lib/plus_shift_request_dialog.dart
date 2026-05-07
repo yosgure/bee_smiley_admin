@@ -925,7 +925,11 @@ class _PlusShiftDecisionDialogState extends State<PlusShiftDecisionDialog> {
         });
       }
 
-      // 3. 既存 plus_shifts（範囲に跨る月すべて）
+      // 3. 既存 plus_shifts は「保存時に他フィールドを温存するため」読み込むが、
+      //    決定ビューの表示 (_offDates) には反映しない。
+      //    過去の確定済みシフトを含めると、希望に出していない staff が
+      //    決定画面に紛れる原因になる（実機バグ報告あり）。
+      //    希望ベースのみで決定画面を作る。
       for (final mk in _involvedMonthKeys) {
         final shiftDoc = await FirebaseFirestore.instance
             .collection('plus_shifts')
@@ -935,23 +939,7 @@ class _PlusShiftDecisionDialogState extends State<PlusShiftDecisionDialog> {
         _existingShiftDocs.add(mk);
         final days = Map<String, dynamic>.from(shiftDoc.data()?['days'] ?? {});
         _originalDaysByMonth[mk] = days;
-        final parts = mk.split('-');
-        final y = int.parse(parts[0]);
-        final m = int.parse(parts[1]);
-        days.forEach((dayKey, slots) {
-          final day = int.tryParse(dayKey);
-          if (day == null || slots is! List) return;
-          final date = DateTime(y, m, day);
-          if (date.isBefore(_rangeStart) || date.isAfter(_rangeEnd)) return;
-          for (final slot in slots) {
-            if (slot is Map && slot['isWorking'] == false) {
-              final staffId = slot['staffId'] as String?;
-              if (staffId != null) {
-                _offDates.putIfAbsent(date, () => <String>{}).add(staffId);
-              }
-            }
-          }
-        });
+        // 旧実装: ここで days.slots[].isWorking==false を _offDates に追加していたが廃止。
       }
     } catch (e) {
       debugPrint('シフト決定ビューの読み込み失敗: $e');
