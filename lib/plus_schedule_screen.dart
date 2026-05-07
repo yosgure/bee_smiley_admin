@@ -326,12 +326,22 @@ void dispose() {
     _loadStudentsFromFirestore(),
     _loadAllTasks(),
   ]);
-  
+
   // viewModeに応じてレッスンを読み込む
   if (_viewMode == 2) {
     await _loadLessonsForMonth();
   } else {
     await _loadLessonsForWeek();
+  }
+
+  // 初期viewが月の場合、_loadLessonsForWeek を経由しないため _isLoadingLessons が
+  // 初期値の true のまま残ってしまう。後で週ビューに切り替えた際に
+  // 古いフラグでスピナーが表示され続ける（特に「次の一手を決める」前のデータが
+  // 無い週で目立つ）ため、初期データロード完了時に確実に false に揃える。
+  if (mounted && _isLoadingLessons) {
+    setState(() {
+      _isLoadingLessons = false;
+    });
   }
 }
 
@@ -939,10 +949,15 @@ Map<String, dynamic>? _getCellMemo(DateTime date, int slotIndex) {
           final classrooms = getChildClassrooms(child);
           final classroom = classrooms.join(', ');
 
-          // 入会済みのみ表示（リード/失注/退会は除外）
-          final status = child['status'] as String?;
-          final isEnrolled = status == null || status == '入会';
-          if (firstName.isNotEmpty && isEnrolled) {
+          // 失注/退会のみ除外（在籍 + 検討中・手続中 = スケジュールに出る可能性がある児童は表示）
+          // 旧データは status 未設定が多いので null も含める。
+          final status = (child['status'] as String?) ?? '';
+          final stage = (child['stage'] as String?) ?? '';
+          final excluded = status == '失注' ||
+              status == '退会' ||
+              stage == 'lost' ||
+              stage == 'withdrawn';
+          if (firstName.isNotEmpty && !excluded) {
             // studentIdを生成（childにstudentIdがあればそれを使用）
             final studentId = child['studentId'] ?? '${familyUid}_$firstName';
             students.add({

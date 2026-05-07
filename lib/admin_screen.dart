@@ -258,6 +258,8 @@ Container(
           const SizedBox(height: 24),
           _buildCsvSection(context),
           const SizedBox(height: 24),
+          _buildDataMaintenanceSection(context),
+          const SizedBox(height: 24),
           _buildThemeSection(context),
           const SizedBox(height: 24),
           _buildAccountSection(context),
@@ -651,6 +653,132 @@ Container(
         ),
       ],
     );
+  }
+
+  Widget _buildDataMaintenanceSection(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(left: 12, bottom: 8),
+          child: Text(
+            'データメンテナンス',
+            style: TextStyle(
+              color: context.colors.textSecondary,
+              fontWeight: FontWeight.bold,
+              fontSize: AppTextSize.body,
+            ),
+          ),
+        ),
+        Container(
+          decoration: BoxDecoration(
+            color: context.colors.cardBg,
+            borderRadius: BorderRadius.circular(10),
+            boxShadow: [
+              BoxShadow(
+                color: context.colors.shadow,
+                blurRadius: 2,
+                offset: const Offset(0, 1),
+              ),
+            ],
+          ),
+          child: ListTile(
+            leading: Container(
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                color: AppColors.warning.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(Icons.refresh,
+                  color: AppColors.warning, size: 24),
+            ),
+            title: const Text(
+              '未分類失注の再構築',
+              style: TextStyle(
+                  fontSize: AppTextSize.titleSm, fontWeight: FontWeight.bold),
+            ),
+            subtitle: Text(
+              "lossReason='other' かつ lossDetail 空のリードを未分類に戻す",
+              style: TextStyle(
+                  fontSize: AppTextSize.small,
+                  color: context.colors.textSecondary),
+            ),
+            trailing: Icon(Icons.arrow_forward_ios,
+                size: 16, color: context.colors.iconMuted),
+            onTap: () => _runUnclassifiedLostRebuild(context),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _runUnclassifiedLostRebuild(BuildContext context) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('未分類失注の再構築'),
+        content: const Text(
+            "stage='lost' かつ lossReason='other' かつ lossDetail が空のリードを\n"
+            'lossReason=null（未分類）に戻します。\n\n'
+            '既存の lossDetail があるレコードは情報損失防止のため触りません。\n\n'
+            '実行しますか？'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('キャンセル')),
+          FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('実行')),
+        ],
+      ),
+    );
+    if (confirm != true) return;
+
+    try {
+      final fs = FirebaseFirestore.instance;
+      final snap = await fs.collection('plus_families').get();
+      var updatedLeads = 0;
+      var updatedDocs = 0;
+      WriteBatch batch = fs.batch();
+      var batchOps = 0;
+      for (final doc in snap.docs) {
+        final data = doc.data();
+        final children = (data['children'] as List?)
+                ?.map((c) => Map<String, dynamic>.from(c as Map))
+                .toList() ??
+            [];
+        var dirty = false;
+        for (final child in children) {
+          final stage = child['stage'] as String?;
+          final reason = child['lossReason'] as String?;
+          final detail = (child['lossDetail'] as String?)?.trim() ?? '';
+          if (stage == 'lost' && reason == 'other' && detail.isEmpty) {
+            child['lossReason'] = null;
+            updatedLeads++;
+            dirty = true;
+          }
+        }
+        if (dirty) {
+          batch.update(doc.reference, {'children': children});
+          updatedDocs++;
+          batchOps++;
+          if (batchOps >= 400) {
+            await batch.commit();
+            batch = fs.batch();
+            batchOps = 0;
+          }
+        }
+      }
+      if (batchOps > 0) {
+        await batch.commit();
+      }
+      if (!context.mounted) return;
+      AppFeedback.success(context,
+          '$updatedLeads 件をクリアしました（$updatedDocs 家族ドキュメント更新）');
+    } catch (e) {
+      if (!context.mounted) return;
+      AppFeedback.error(context, 'エラー: $e');
+    }
   }
 
   Widget _buildAccountSection(BuildContext context) {

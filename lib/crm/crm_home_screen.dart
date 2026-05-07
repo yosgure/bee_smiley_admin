@@ -1,52 +1,13 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 
 import '../app_theme.dart';
-import '../crm_lead_screen.dart' show CrmOptions, CrmLeadEditScreen;
 import '../services/crm_lead_adapter.dart';
 import 'crm_home_utils.dart';
+import 'crm_lead_card_compact.dart';
 import 'crm_lead_model.dart';
 import 'crm_lead_side_panel.dart';
 
-/// 「今日整えたいこと」カードで使う柔らかめのアンバー。
-/// `context.alerts.warning` より彩度を落とし、赤みを抑えたトーンにする。
-/// 責める UI を避けるため、主要カードは専用トーンを使う。
-class _SoftAmber {
-  final Color background;
-  final Color border;
-  final Color text;
-  final Color icon;
-  const _SoftAmber({
-    required this.background,
-    required this.border,
-    required this.text,
-    required this.icon,
-  });
-
-  static _SoftAmber of(BuildContext context) {
-    final dark = Theme.of(context).brightness == Brightness.dark;
-    return dark
-        ? const _SoftAmber(
-            background: Color(0xFF2C2519),
-            border: Color(0xFFFFCC80),
-            text: Color(0xFFFFE0B2),
-            icon: Color(0xFFFFB74D),
-          )
-        : const _SoftAmber(
-            background: Color(0xFFFFF6E5),
-            border: Color(0xFFFFCC80),
-            text: Color(0xFF5D4037),
-            icon: Color(0xFFF57C00),
-          );
-  }
-}
-
-/// 新 CRM ホーム（入会グロース司令塔）。
-/// Phase 2: Greeting / Top Cards / Urgent List / Closing の骨格を提供する。
-/// サイドパネル（リード作業パネル）は Phase 3 で追加。
-/// 行クリック時は `onOpenLead` を呼び出し、呼び出し側で詳細画面を開く。
+/// CRM「今日」タブのトップレベル画面。
 class CrmHomeScreen extends StatefulWidget {
   final List<LeadView> docs;
 
@@ -57,92 +18,204 @@ class CrmHomeScreen extends StatefulWidget {
 }
 
 class _CrmHomeScreenState extends State<CrmHomeScreen> {
+  /// 3 ペイン化の breakpoint。spec 準拠（旧 1100 から引き上げ）。
+  static const double _kThreePaneBreakpoint = 1280;
+
   /// Urgent List の絞り込み（null=全件）
   CrmUrgentReason? _filter;
 
-  /// 右サイドパネルで開いているリード（null=閉じている）
-  LeadView? _selectedLead;
+  /// ステージタブ。F_today_tab_polish_v2 改善 C で追加。
+  /// 'all' / 'considering' / 'onboarding'。デフォルト 'all'。
+  String _stageTab = 'all';
+
+  /// 右サイドパネルで開いているリードの id。
+  /// 2 ペイン常時表示モードでは初期表示時にリスト先頭を自動選択する。
+  /// session 内のみ保持（リロードで先頭に戻る）。
+  String? _selectedLeadId;
 
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(builder: (context, cons) {
-      final wide = cons.maxWidth >= 1100;
-      final home = _buildHome(context);
-      if (_selectedLead == null) return home;
-      final panel = CrmLeadSidePanel(
-        leadView: _selectedLead!,
-        onClose: () => setState(() => _selectedLead = null),
+      final wide = cons.maxWidth >= _kThreePaneBreakpoint;
+
+      // urgentRows / filteredRows をここで先に計算し、自動選択判定に使う。
+      final now = DateTime.now();
+      final docById = {for (final d in widget.docs) d.id: d};
+      final leads = widget.docs.map(CrmLead.fromDoc).toList();
+      // 表示対象: 検討中 + 入会手続中（won/lost/withdrawn は除外）。
+      // 旧実装は urgent reason 必須だったが、次の一手を設定すると即座にリストから
+      // 消えるバグになっていたため、active な全 Lead を表示対象にする。
+      final activeLeads = leads
+          .where((l) =>
+              l.stage == 'considering' || l.stage == 'onboarding')
+          .toList();
+      final urgentRows = buildUrgentRows(activeLeads, now: now);
+      final urgentById = {for (final r in urgentRows) r.lead.id: r};
+      // 全 active を CrmUrgentRow に変換（reasons 無しは空配列）
+      final allRows = activeLeads
+          .map((l) => urgentById[l.id] ?? CrmUrgentRow(lead: l, reasons: const []))
+          .toList();
+      // ステージタブのみフィルタ。督促理由カテゴリのフィルタ・ソートは廃止
+      // （体験フォロー漏れ・契約停滞・次の一手未設定 は実質「次の一手未設定」と同義
+      //  であり、絞り込む必要なし。期日昇順ソートで自然に上に来る）。
+      final filteredRows = allRows.where((r) {
+        if (_stageTab != 'all' && r.lead.stage != _stageTab) return false;
+        return true;
+      }).toList()
+        // 期日昇順（期限超過 → 直近 → 未設定 の順）。
+        ..sort((a, b) {
+          final aNa = a.lead.nextActionAt;
+          final bNa = b.lead.nextActionAt;
+          if (aNa == null && bNa == null) return 0;
+          if (aNa == null) return 1;
+          if (bNa == null) return -1;
+          return aNa.compareTo(bNa);
+        });
+      // バッジ件数: ステージ別の active 全件
+      final consideringCount =
+          activeLeads.where((l) => l.stage == 'considering').length;
+      final onboardingCount =
+          activeLeads.where((l) => l.stage == 'onboarding').length;
+
+      // 自動選択ロジック: 選択中 Lead が現在のフィルタ済みリストに無ければ
+      // 先頭を自動選択（フィルタ chip タップ時 / 初期表示時 / 削除後）。
+      String? effectiveSelectedId = _selectedLeadId;
+      if (filteredRows.isNotEmpty) {
+        final ids = filteredRows.map((r) => r.lead.id).toSet();
+        if (effectiveSelectedId == null ||
+            !ids.contains(effectiveSelectedId)) {
+          effectiveSelectedId = filteredRows.first.lead.id;
+          // build 中の setState は禁止のため次フレームで反映。
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!mounted) return;
+            if (_selectedLeadId != effectiveSelectedId) {
+              setState(() => _selectedLeadId = effectiveSelectedId);
+            }
+          });
+        }
+      }
+
+      final selectedDoc = effectiveSelectedId == null
+          ? null
+          : docById[effectiveSelectedId];
+
+      final home = _buildHome(
+        context,
+        leads: leads,
+        urgentRows: urgentRows,
+        filteredRows: filteredRows,
+        activeLeadCount: activeLeads.length,
+        consideringCount: consideringCount,
+        onboardingCount: onboardingCount,
+        now: now,
+        selectedLeadId: effectiveSelectedId,
+        onSelectLead: (id) => setState(() => _selectedLeadId = id),
       );
-      if (wide) {
-        return Row(
-          children: [
-            Expanded(child: home),
-            SizedBox(width: 560, child: panel),
-          ],
+
+      if (!wide) {
+        // 1280px 未満は従来のスライドオーバー方式（ホームのみ表示、
+        // 詳細はカードタップ時にフルスクリーンで開く）。
+        if (selectedDoc == null || _selectedLeadId == null) return home;
+        return CrmLeadSidePanel(
+          leadView: selectedDoc,
+          onClose: () => setState(() => _selectedLeadId = null),
         );
       }
-      return panel;
+
+      // 2 ペイン常時表示。中央 45% / 右 55%（Flexible で伸縮可）。
+      return Row(
+        children: [
+          Flexible(flex: 45, child: home),
+          Flexible(
+            flex: 55,
+            child: selectedDoc == null
+                ? _emptyDetailPlaceholder(context)
+                : CrmLeadSidePanel(
+                    // 常時表示なので閉じるボタン非表示（onClose=null）。
+                    leadView: selectedDoc,
+                  ),
+          ),
+        ],
+      );
     });
   }
 
-  Widget _buildHome(BuildContext context) {
-    final now = DateTime.now();
+  Widget _emptyDetailPlaceholder(BuildContext context) {
+    final c = context.colors;
+    return Material(
+      color: c.scaffoldBg,
+      child: Center(
+        child: Text(
+          '今日整えたいリードはありません',
+          style: TextStyle(color: c.textSecondary, fontSize: AppTextSize.body),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHome(
+    BuildContext context, {
+    required List<CrmLead> leads,
+    required List<CrmUrgentRow> urgentRows,
+    required List<CrmUrgentRow> filteredRows,
+    required int activeLeadCount,
+    required int consideringCount,
+    required int onboardingCount,
+    required DateTime now,
+    required String? selectedLeadId,
+    required ValueChanged<String> onSelectLead,
+  }) {
     final tod = crmTimeOfDay(now);
-
-    final docById = {for (final d in widget.docs) d.id: d};
-    final leads = widget.docs.map(CrmLead.fromDoc).toList();
     final summary = summarizeForHome(leads, now: now);
-    final urgentRows = buildUrgentRows(leads, now: now);
-    final filteredRows = _filter == null
-        ? urgentRows
-        : urgentRows.where((r) => r.reasons.contains(_filter)).toList();
-    final uniqueLeadCount = urgentRows.length;
-    // 理由件数の合計は重複（1リードに複数理由）を含むため、ユニーク数より大きくなりうる。
-
+    // ストリップの「全て (N)」バッジは active 全件を表示。
+    final uniqueLeadCount = activeLeadCount;
     final monthly = _calcMonthly(leads, now);
-    final userName = _currentUserName();
 
+    // F_today_tab_polish_v2: 改善 A (挨拶削除) + B (4 カード→1 行) + C (タブ統合)。
     return Container(
       color: context.colors.scaffoldBg,
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 48),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            _Greeting(
-              userName: userName,
-              urgentLeadCount: uniqueLeadCount,
-              almostContractCount: summary.todayAlmostContract,
-              tod: tod,
-            ),
-            const SizedBox(height: 16),
-            _TopCardsRow(
-              summary: summary,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+            child: _TodaySummaryStrip(
               uniqueLeadCount: uniqueLeadCount,
-              monthly: monthly,
+              consideringCount: consideringCount,
+              onboardingCount: onboardingCount,
+              activeStageTab: _stageTab,
+              onStageTabChanged: (v) => setState(() => _stageTab = v),
               activeFilter: _filter,
               onTapFilter: (f) => setState(() {
                 _filter = _filter == f ? null : f;
               }),
+              summary: summary,
+              monthly: monthly,
             ),
-            const SizedBox(height: 24),
-            _UrgentSection(
-              rows: filteredRows,
-              totalLeadCount: urgentRows.length,
-              totalObservations: summary.urgentTotal,
-              activeFilter: _filter,
-              onClearFilter: () => setState(() => _filter = null),
-              onOpenLead: _openLeadInPanel,
-              docById: docById,
+          ),
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: _UrgentSection(
+                rows: filteredRows,
+                totalLeadCount: urgentRows.length,
+                totalObservations: summary.urgentTotal,
+                activeFilter: _filter,
+                onClearFilter: () => setState(() => _filter = null),
+                selectedLeadId: selectedLeadId,
+                onSelectLead: onSelectLead,
+              ),
             ),
-            const SizedBox(height: 32),
-            _ClosingBanner(
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+            child: _ClosingBanner(
               remainingUrgent: summary.urgentTotal,
               tomorrowCount: _calcTomorrow(leads, now),
               tod: tod,
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -185,559 +258,83 @@ class _CrmHomeScreenState extends State<CrmHomeScreen> {
     return count;
   }
 
-  void _openLeadInPanel(LeadView doc) {
-    setState(() => _selectedLead = doc);
-  }
-
-  String _currentUserName() {
-    final u = FirebaseAuth.instance.currentUser;
-    final n = u?.displayName;
-    if (n != null && n.trim().isNotEmpty) return n;
-    final e = u?.email;
-    if (e != null && e.contains('@')) return e.split('@').first;
-    return '管理者';
-  }
 }
 
-// ---------------------------------------------------------- Greeting
+// ---------------------------------------------------------- Today Summary Strip
 
-class _Greeting extends StatelessWidget {
-  final String userName;
-  final int urgentLeadCount;
-  final int almostContractCount;
-  final CrmTimeOfDay tod;
-  const _Greeting({
-    required this.userName,
-    required this.urgentLeadCount,
-    required this.almostContractCount,
-    required this.tod,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.colors;
-    final hello = crmHelloPrefix(tod);
-    final suffix = crmGreetingSuffix(tod);
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: c.cardBg,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: c.borderLight),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            '$hello、$userNameさん。',
-            style: TextStyle(
-              fontSize: AppTextSize.titleLg,
-              fontWeight: FontWeight.w600,
-              color: c.textPrimary,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            '今日整えたいのは $urgentLeadCount 人、契約あと一歩は $almostContractCount 人です。$suffix。',
-            style: TextStyle(fontSize: AppTextSize.body, color: c.textSecondary, height: 1.5),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ---------------------------------------------------------- Top Cards
-
-class _TopCardsRow extends StatelessWidget {
-  final CrmHomeSummary summary;
+/// F_today_tab_polish_v2 改善 B+C: 旧 4 カードを 1 行のストリップに統合。
+/// 左: ステージタブ（検討中/入会手続中/全て）
+/// 中央: 今日の確認ポイント（期限切れ/フォロー漏れ/停滞/次の手）— タップで filter chip と同じ挙動
+/// 右: 今月入会 + 気づき件数（読み取り専用）
+class _TodaySummaryStrip extends StatelessWidget {
   final int uniqueLeadCount;
+  final int consideringCount;
+  final int onboardingCount;
+  final String activeStageTab;
+  final ValueChanged<String> onStageTabChanged;
+  final CrmUrgentReason? activeFilter;
+  final ValueChanged<CrmUrgentReason> onTapFilter;
+  final CrmHomeSummary summary;
   final ({int enrolled, int goal, int inquired, int trial}) monthly;
-  final CrmUrgentReason? activeFilter;
-  final ValueChanged<CrmUrgentReason> onTapFilter;
 
-  const _TopCardsRow({
-    required this.summary,
+  const _TodaySummaryStrip({
     required this.uniqueLeadCount,
+    required this.consideringCount,
+    required this.onboardingCount,
+    required this.activeStageTab,
+    required this.onStageTabChanged,
+    required this.activeFilter,
+    required this.onTapFilter,
+    required this.summary,
     required this.monthly,
-    required this.activeFilter,
-    required this.onTapFilter,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return LayoutBuilder(builder: (context, cons) {
-      final isWide = cons.maxWidth >= 900;
-      final urgent = _UrgentMainCard(
-        summary: summary,
-        uniqueLeadCount: uniqueLeadCount,
-        activeFilter: activeFilter,
-        onTapFilter: onTapFilter,
-      );
-      final today = _TodayCard(summary: summary);
-      final monthlyCard = _MonthlyCard(
-        enrolled: monthly.enrolled,
-        goal: monthly.goal,
-        inquired: monthly.inquired,
-        trial: monthly.trial,
-      );
-      final insight = _InsightCard(summary: summary);
-
-      if (!isWide) {
-        return Column(
-          children: [
-            urgent,
-            const SizedBox(height: 12),
-            Row(children: [
-              Expanded(child: today),
-              const SizedBox(width: 12),
-              Expanded(child: monthlyCard),
-            ]),
-            const SizedBox(height: 12),
-            insight,
-          ],
-        );
-      }
-
-      // 6 : 2 : 2 : 2 比率
-      return IntrinsicHeight(
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Expanded(flex: 6, child: urgent),
-            const SizedBox(width: 12),
-            Expanded(flex: 2, child: today),
-            const SizedBox(width: 12),
-            Expanded(flex: 2, child: monthlyCard),
-            const SizedBox(width: 12),
-            Expanded(flex: 2, child: insight),
-          ],
-        ),
-      );
-    });
-  }
-}
-
-class _UrgentMainCard extends StatelessWidget {
-  final CrmHomeSummary summary;
-  final int uniqueLeadCount;
-  final CrmUrgentReason? activeFilter;
-  final ValueChanged<CrmUrgentReason> onTapFilter;
-
-  const _UrgentMainCard({
-    required this.summary,
-    required this.uniqueLeadCount,
-    required this.activeFilter,
-    required this.onTapFilter,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    if (summary.isAllClear) {
-      final s = context.alerts.success;
-      return Container(
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          color: s.background,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: s.border.withValues(alpha: 0.4)),
-        ),
-        child: Row(
-          children: [
-            Icon(Icons.spa, color: s.icon, size: 28),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('本日のやること完了 🌱',
-                      style: TextStyle(
-                          fontSize: AppTextSize.titleLg,
-                          fontWeight: FontWeight.w700,
-                          color: s.text)),
-                  const SizedBox(height: 4),
-                  Text('新しい気づきがあれば、ここに浮上します',
-                      style: TextStyle(fontSize: AppTextSize.small, color: s.text)),
-                ],
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-
-    final a = _SoftAmber.of(context);
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: a.background,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: a.border.withValues(alpha: 0.5)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Icon(Icons.wb_twilight, color: a.icon, size: 22),
-              const SizedBox(width: 8),
-              Text('今日整えたいこと',
-                  style: TextStyle(
-                      fontSize: AppTextSize.bodyMd,
-                      fontWeight: FontWeight.w700,
-                      color: a.text)),
-              const Spacer(),
-              Text('$uniqueLeadCount',
-                  style: TextStyle(
-                      fontSize: AppTextSize.heroLg2,
-                      fontWeight: FontWeight.w800,
-                      color: a.icon,
-                      height: 1.0)),
-              const SizedBox(width: 4),
-              Padding(
-                padding: const EdgeInsets.only(top: 14),
-                child: Text('人',
-                    style: TextStyle(fontSize: AppTextSize.small, color: a.text)),
-              ),
-            ],
-          ),
-          const SizedBox(height: 4),
-          Text(
-            '確認ポイントは合計 ${summary.urgentTotal} 件（同じリードで複数該当する場合があります）',
-            style: TextStyle(
-                fontSize: AppTextSize.caption,
-                color: a.text.withValues(alpha: 0.75),
-                height: 1.4),
-          ),
-          const SizedBox(height: 10),
-          _breakdownRow(
-            context,
-            icon: Icons.schedule,
-            label: '期限切れ',
-            count: summary.overdueCount,
-            reason: CrmUrgentReason.overdue,
-            textColor: a.text,
-          ),
-          _breakdownRow(
-            context,
-            icon: Icons.assignment_late_outlined,
-            label: '体験後のフォローがまだ',
-            count: summary.trialFollowupMissing,
-            reason: CrmUrgentReason.trialFollowupMissing,
-            textColor: a.text,
-          ),
-          _breakdownRow(
-            context,
-            icon: Icons.hourglass_bottom,
-            label: '契約が少し止まっている',
-            count: summary.contractStalled,
-            reason: CrmUrgentReason.contractStalled,
-            textColor: a.text,
-          ),
-          _breakdownRow(
-            context,
-            icon: Icons.more_horiz,
-            label: '次の一手を決める',
-            count: summary.noNextAction,
-            reason: CrmUrgentReason.noNextAction,
-            textColor: a.text,
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _breakdownRow(
-    BuildContext context, {
-    required IconData icon,
-    required String label,
-    required int count,
-    required CrmUrgentReason reason,
-    required Color textColor,
-  }) {
-    final active = activeFilter == reason;
-    return InkWell(
-      onTap: count == 0 ? null : () => onTapFilter(reason),
-      borderRadius: BorderRadius.circular(6),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
-        child: Row(
-          children: [
-            Icon(icon, size: 18, color: textColor.withValues(alpha: 0.7)),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                label,
-                style: TextStyle(
-                  fontSize: AppTextSize.body,
-                  color: textColor,
-                  fontWeight: active ? FontWeight.w700 : FontWeight.w500,
-                ),
-              ),
-            ),
-            Text('$count',
-                style: TextStyle(
-                  fontSize: AppTextSize.titleSm,
-                  fontWeight: FontWeight.w700,
-                  color: textColor,
-                )),
-            const SizedBox(width: 2),
-            Text('件',
-                style: TextStyle(fontSize: AppTextSize.caption, color: textColor.withValues(alpha: 0.7))),
-            const SizedBox(width: 6),
-            Icon(active ? Icons.filter_alt : Icons.chevron_right,
-                size: 16, color: textColor.withValues(alpha: 0.6)),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _TodayCard extends StatelessWidget {
-  final CrmHomeSummary summary;
-  const _TodayCard({required this.summary});
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.colors;
-    final s = context.alerts.info;
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: c.cardBg,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: c.borderLight),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(Icons.wb_sunny_outlined, size: 18, color: s.icon),
-              const SizedBox(width: 6),
-              Text('今日進めると良い',
-                  style: TextStyle(
-                      fontSize: AppTextSize.body,
-                      fontWeight: FontWeight.w700,
-                      color: c.textPrimary)),
-            ],
-          ),
-          const SizedBox(height: 10),
-          _row(context, '返信待ち', summary.todayReplyDue),
-          _row(context, '見学日程調整', summary.todayTrialScheduling),
-          _row(context, '契約あと一歩', summary.todayAlmostContract),
-          _row(context, '担当を決める', summary.todayAssigneeMissing),
-        ],
-      ),
-    );
-  }
-
-  Widget _row(BuildContext context, String label, int count) {
-    final c = context.colors;
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        children: [
-          Expanded(
-              child: Text(label,
-                  style: TextStyle(fontSize: AppTextSize.small, color: c.textSecondary))),
-          Text('$count',
-              style: TextStyle(
-                  fontSize: AppTextSize.titleSm,
-                  fontWeight: FontWeight.w700,
-                  color: c.textPrimary)),
-          const SizedBox(width: 2),
-          Text('人',
-              style: TextStyle(fontSize: AppTextSize.xs, color: c.textTertiary)),
-        ],
-      ),
-    );
-  }
-}
-
-class _MonthlyCard extends StatelessWidget {
-  final int enrolled;
-  final int goal;
-  final int inquired;
-  final int trial;
-  const _MonthlyCard({
-    required this.enrolled,
-    required this.goal,
-    required this.inquired,
-    required this.trial,
   });
 
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
-    final ratio = goal == 0 ? 0.0 : (enrolled / goal).clamp(0.0, 1.2);
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
         color: c.cardBg,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(10),
         border: Border.all(color: c.borderLight),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Text('🌸', style: TextStyle(fontSize: AppTextSize.titleSm)),
-              const SizedBox(width: 6),
-              Text('今月の歩み',
-                  style: TextStyle(
-                      fontSize: AppTextSize.body,
-                      fontWeight: FontWeight.w700,
-                      color: c.textPrimary)),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text('$enrolled',
-                  style: TextStyle(
-                      fontSize: AppTextSize.hero,
-                      fontWeight: FontWeight.w800,
-                      color: c.textPrimary,
-                      height: 1.0)),
-              const SizedBox(width: 4),
-              Padding(
-                padding: const EdgeInsets.only(bottom: 4),
-                child: Text('/ $goal 人 入会',
-                    style:
-                        TextStyle(fontSize: AppTextSize.small, color: c.textSecondary)),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: [
+            // ステージタブ
+            SegmentedButton<String>(
+              showSelectedIcon: false,
+              segments: [
+                ButtonSegment(
+                    value: 'considering',
+                    label: Text('検討中 ($consideringCount)')),
+                ButtonSegment(
+                    value: 'onboarding',
+                    label: Text('入会手続中 ($onboardingCount)')),
+                ButtonSegment(
+                    value: 'all',
+                    label: Text('全て ($uniqueLeadCount)')),
+              ],
+              selected: {activeStageTab},
+              onSelectionChanged: (s) => onStageTabChanged(s.first),
+              style: ButtonStyle(
+                textStyle: WidgetStateProperty.all(
+                    const TextStyle(fontSize: AppTextSize.small)),
+                padding: WidgetStateProperty.all(
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4)),
+                visualDensity: VisualDensity.compact,
               ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(4),
-            child: LinearProgressIndicator(
-              value: ratio.clamp(0.0, 1.0),
-              minHeight: 6,
-              backgroundColor: c.borderLight,
-              valueColor: const AlwaysStoppedAnimation<Color>(
-                  Color(0xFFFF9A8B)),
             ),
-          ),
-          const SizedBox(height: 10),
-          _subRow(context, '問い合わせ', inquired),
-          _subRow(context, '体験実施', trial),
-        ],
-      ),
-    );
-  }
-
-  Widget _subRow(BuildContext context, String label, int count) {
-    final c = context.colors;
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
-      child: Row(
-        children: [
-          Expanded(
-              child: Text(label,
-                  style: TextStyle(fontSize: AppTextSize.caption, color: c.textTertiary))),
-          Text('$count',
-              style: TextStyle(
-                  fontSize: AppTextSize.body,
-                  fontWeight: FontWeight.w700,
-                  color: c.textSecondary)),
-          const SizedBox(width: 2),
-          Text('人',
-              style: TextStyle(fontSize: AppTextSize.xs, color: c.textTertiary)),
-        ],
-      ),
-    );
-  }
-}
-
-class _InsightCard extends StatelessWidget {
-  final CrmHomeSummary summary;
-  const _InsightCard({required this.summary});
-
-  /// 優先度順に気づき候補を並べ、最初の1本を表示する。
-  /// ルールベース検知（Phase 4 の insights コレクション連携）の前段として、
-  /// 手元サマリから即座に出せる気づきを返す。
-  ({String text, String? action})? _pickInsight() {
-    if (summary.todayAssigneeMissing >= 5) {
-      return (
-        text: '担当未設定のリードが ${summary.todayAssigneeMissing} 人います。'
-            '誰が持つかを決めると、対応が動きやすくなります。',
-        action: '担当を決める'
-      );
-    }
-    if (summary.contractStalled >= 3) {
-      return (
-        text: '入会手続き中で止まっているリードが ${summary.contractStalled} 件あります。'
-            '停滞理由の確認がおすすめです。',
-        action: null,
-      );
-    }
-    if (summary.trialFollowupMissing >= 3) {
-      return (
-        text: '体験後のフォローがまだのリードが ${summary.trialFollowupMissing} 件。'
-            '温度感が下がる前に接触したい時期です。',
-        action: null,
-      );
-    }
-    if (summary.noNextAction >= 5) {
-      return (
-        text: '次の一手が未設定のリードが ${summary.noNextAction} 件。'
-            '先の動きが見えると、対応が迷わなくなります。',
-        action: null,
-      );
-    }
-    return null;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.colors;
-    final insight = _pickInsight();
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: c.cardBg,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: c.borderLight),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(Icons.lightbulb_outline,
-                  size: 18, color: context.alerts.info.icon),
-              const SizedBox(width: 6),
-              Text('気づき',
-                  style: TextStyle(
-                      fontSize: AppTextSize.body,
-                      fontWeight: FontWeight.w700,
-                      color: c.textPrimary)),
-            ],
-          ),
-          const SizedBox(height: 10),
-          if (insight == null)
-            Text(
-              '今日の気づきは特にありません',
-              style:
-                  TextStyle(fontSize: AppTextSize.small, color: c.textTertiary, height: 1.5),
-            )
-          else ...[
-            Text(
-              insight.text,
-              style: TextStyle(
-                  fontSize: AppTextSize.small, color: c.textPrimary, height: 1.5),
-            ),
+            // 督促理由フィルタ・「今月入会」「気づき」は廃止。
+            // 期日昇順ソートで自然と期限超過が先頭に来るため、フィルタは不要。
           ],
-        ],
+        ),
       ),
     );
   }
+
 }
 
 // ---------------------------------------------------------- Urgent List
@@ -748,9 +345,8 @@ class _UrgentSection extends StatelessWidget {
   final int totalObservations;
   final CrmUrgentReason? activeFilter;
   final VoidCallback onClearFilter;
-  final void Function(LeadView doc)
-      onOpenLead;
-  final Map<String, LeadView> docById;
+  final String? selectedLeadId;
+  final ValueChanged<String> onSelectLead;
 
   const _UrgentSection({
     required this.rows,
@@ -758,8 +354,8 @@ class _UrgentSection extends StatelessWidget {
     required this.totalObservations,
     required this.activeFilter,
     required this.onClearFilter,
-    required this.onOpenLead,
-    required this.docById,
+    required this.selectedLeadId,
+    required this.onSelectLead,
   });
 
   @override
@@ -788,20 +384,31 @@ class _UrgentSection extends StatelessWidget {
               activeFilter == null
                   ? '$totalLeadCount人 / $totalObservations件の確認ポイント'
                   : '絞り込み中 ${rows.length}人 / 全 $totalLeadCount人',
-              style: TextStyle(fontSize: AppTextSize.small, color: c.textSecondary),
+              style:
+                  TextStyle(fontSize: AppTextSize.small, color: c.textSecondary),
             ),
           ],
         ),
         const SizedBox(height: 8),
-        if (rows.isEmpty)
-          _emptyState(context)
-        else
-          LayoutBuilder(builder: (context, cons) {
-            final narrow = cons.maxWidth < 720;
-            return narrow
-                ? _urgentCardList(context, docById)
-                : _urgentTable(context, docById);
-          }),
+        // v3 改善 4a: 外周コンテナのボーダー・背景を撤去。
+        // カード自体に cardBg + border を持たせ、各カードが独立した「島」として
+        // 視認できるようにする（特にライトモードで効果大）。
+        Expanded(
+          child: rows.isEmpty
+              ? _emptyState(context)
+              : ListView.builder(
+                  padding: const EdgeInsets.symmetric(vertical: 2),
+                  itemCount: rows.length,
+                  itemBuilder: (_, i) {
+                    final r = rows[i];
+                    return CrmLeadCardCompact(
+                      row: r,
+                      selected: r.lead.id == selectedLeadId,
+                      onTap: () => onSelectLead(r.lead.id),
+                    );
+                  },
+                ),
+        ),
       ],
     );
   }
@@ -824,7 +431,9 @@ class _UrgentSection extends StatelessWidget {
           children: [
             Text(label,
                 style: TextStyle(
-                    fontSize: AppTextSize.caption, color: s.text, fontWeight: FontWeight.w600)),
+                    fontSize: AppTextSize.caption,
+                    color: s.text,
+                    fontWeight: FontWeight.w600)),
             const SizedBox(width: 4),
             Icon(Icons.close, size: 12, color: s.icon),
           ],
@@ -840,8 +449,7 @@ class _UrgentSection extends StatelessWidget {
       alignment: Alignment.center,
       child: Column(
         children: [
-          Icon(Icons.check_circle_outline,
-              size: 40, color: c.textTertiary),
+          Icon(Icons.check_circle_outline, size: 40, color: c.textTertiary),
           const SizedBox(height: 8),
           Text(
             activeFilter != null
@@ -850,345 +458,6 @@ class _UrgentSection extends StatelessWidget {
             style: TextStyle(fontSize: AppTextSize.body, color: c.textSecondary),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _urgentTable(
-    BuildContext context,
-    Map<String, LeadView> docById,
-  ) {
-    final c = context.colors;
-    return Container(
-      decoration: BoxDecoration(
-        color: c.cardBg,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: c.borderLight),
-      ),
-      child: Column(
-        children: [
-          _headerRow(context),
-          for (final r in rows)
-            _UrgentRowTile(
-              row: r,
-              doc: docById[r.lead.id],
-              onOpenLead: onOpenLead,
-            ),
-        ],
-      ),
-    );
-  }
-
-  Widget _urgentCardList(
-    BuildContext context,
-    Map<String, LeadView> docById,
-  ) {
-    return Column(
-      children: [
-        for (final r in rows)
-          _UrgentCard(
-            row: r,
-            doc: docById[r.lead.id],
-            onOpenLead: onOpenLead,
-          ),
-      ],
-    );
-  }
-
-  Widget _headerRow(BuildContext context) {
-    final c = context.colors;
-    TextStyle hs() =>
-        TextStyle(fontSize: AppTextSize.caption, color: c.textTertiary, fontWeight: FontWeight.w600);
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        border: Border(
-            bottom: BorderSide(color: c.borderLight)),
-      ),
-      child: Row(
-        children: [
-          Expanded(flex: 22, child: Text('名前', style: hs())),
-          Expanded(flex: 9, child: Text('状態', style: hs())),
-          Expanded(flex: 18, child: Text('理由', style: hs())),
-          Expanded(flex: 27, child: Text('次の一手', style: hs())),
-          Expanded(flex: 14, child: Text('最終接触', style: hs())),
-          Expanded(flex: 10, child: Text('担当', style: hs())),
-        ],
-      ),
-    );
-  }
-}
-
-class _UrgentRowTile extends StatelessWidget {
-  final CrmUrgentRow row;
-  final LeadView? doc;
-  final void Function(LeadView doc)
-      onOpenLead;
-  const _UrgentRowTile({
-    required this.row,
-    required this.doc,
-    required this.onOpenLead,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.colors;
-    final lead = row.lead;
-    return InkWell(
-      onTap: doc == null ? null : () => onOpenLead(doc!),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        decoration: BoxDecoration(
-          border: Border(
-              bottom: BorderSide(color: c.borderLight.withValues(alpha: 0.5))),
-        ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            Expanded(flex: 22, child: _nameCell(context, lead)),
-            Expanded(flex: 9, child: _stageBadge(context, lead.stage)),
-            Expanded(flex: 18, child: _reasonTag(context, row.topReason)),
-            Expanded(flex: 27, child: _nextActionCell(context, lead)),
-            Expanded(
-                flex: 14,
-                child: Text(
-                  crmRelativeTime(lead.lastContactAt ?? lead.inquiredAt),
-                  style: TextStyle(fontSize: AppTextSize.small, color: c.textSecondary),
-                )),
-            Expanded(
-                flex: 10,
-                child: Text(
-                  lead.assigneeName ?? '—',
-                  style: TextStyle(fontSize: AppTextSize.small, color: c.textSecondary),
-                  overflow: TextOverflow.ellipsis,
-                )),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _nameCell(BuildContext context, CrmLead lead) {
-    final c = context.colors;
-    final age = lead.childAge;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          lead.childFullName.isEmpty ? '（名前未登録）' : lead.childFullName,
-          style: TextStyle(
-              fontSize: AppTextSize.body,
-              fontWeight: FontWeight.w600,
-              color: c.textPrimary),
-          overflow: TextOverflow.ellipsis,
-        ),
-        if (age != null)
-          Text('$age歳',
-              style: TextStyle(fontSize: AppTextSize.caption, color: c.textTertiary)),
-      ],
-    );
-  }
-
-  Widget _stageBadge(BuildContext context, String stage) {
-    final color = CrmOptions.stageColor(stage);
-    final label = CrmOptions.stageLabel(stage);
-    return Container(
-      margin: const EdgeInsets.only(right: 8),
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(4),
-      ),
-      child: Text(label,
-          style: TextStyle(
-              fontSize: AppTextSize.xs, fontWeight: FontWeight.bold, color: color)),
-    );
-  }
-
-  Widget _reasonTag(BuildContext context, CrmUrgentReason r) {
-    final a = _SoftAmber.of(context);
-    final s = _reasonStyle(context, r, a);
-    return Container(
-      margin: const EdgeInsets.only(right: 8),
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(
-        color: s.background,
-        borderRadius: BorderRadius.circular(4),
-        border: Border.all(color: s.border.withValues(alpha: 0.4)),
-      ),
-      child: Text(
-        crmUrgentReasonLabel(r),
-        style: TextStyle(
-            fontSize: AppTextSize.xs, fontWeight: FontWeight.w700, color: s.text),
-        overflow: TextOverflow.ellipsis,
-      ),
-    );
-  }
-
-  Widget _nextActionCell(BuildContext context, CrmLead lead) {
-    final c = context.colors;
-    final at = lead.nextActionAt;
-    final note = lead.nextActionNote;
-    if (at == null && note.isEmpty) {
-      return Text('次の一手を決める',
-          style: TextStyle(fontSize: AppTextSize.small, color: c.textTertiary));
-    }
-    final isOverdue = at != null && at.isBefore(DateTime.now());
-    final dateStr =
-        at == null ? '' : DateFormat('M/d HH:mm', 'ja').format(at);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            if (dateStr.isNotEmpty)
-              Flexible(
-                child: Text(dateStr,
-                    style: TextStyle(
-                        fontSize: AppTextSize.small,
-                        fontWeight: FontWeight.w600,
-                        color: c.textPrimary),
-                    overflow: TextOverflow.ellipsis),
-              ),
-            if (isOverdue) ...[
-              const SizedBox(width: 4),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFE67E22).withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(3),
-                ),
-                child: const Text('期限超過',
-                    style: TextStyle(
-                        fontSize: AppTextSize.xxs,
-                        fontWeight: FontWeight.w700,
-                        color: Color(0xFFD35400))),
-              ),
-            ] else if (at != null) ...[
-              const SizedBox(width: 4),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF1976D2).withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(3),
-                ),
-                child: const Text('次回予定',
-                    style: TextStyle(
-                        fontSize: AppTextSize.xxs,
-                        fontWeight: FontWeight.w700,
-                        color: Color(0xFF1565C0))),
-              ),
-            ],
-          ],
-        ),
-        if (note.isNotEmpty)
-          Text(note,
-              style: TextStyle(fontSize: AppTextSize.caption, color: c.textSecondary),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis),
-      ],
-    );
-  }
-}
-
-/// reason ごとの配色（責めない UI のため softer amber / info を使い分け）
-({Color background, Color border, Color text}) _reasonStyle(
-  BuildContext context,
-  CrmUrgentReason r,
-  _SoftAmber a,
-) {
-  switch (r) {
-    case CrmUrgentReason.overdue:
-    case CrmUrgentReason.trialFollowupMissing:
-      return (background: a.background, border: a.border, text: a.text);
-    case CrmUrgentReason.contractStalled:
-    case CrmUrgentReason.noNextAction:
-      final i = context.alerts.info;
-      return (background: i.background, border: i.border, text: i.text);
-  }
-}
-
-class _UrgentCard extends StatelessWidget {
-  final CrmUrgentRow row;
-  final LeadView? doc;
-  final void Function(LeadView doc)
-      onOpenLead;
-  const _UrgentCard({
-    required this.row,
-    required this.doc,
-    required this.onOpenLead,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.colors;
-    final lead = row.lead;
-    final style = _reasonStyle(context, row.topReason, _SoftAmber.of(context));
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      decoration: BoxDecoration(
-        color: c.cardBg,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: c.borderLight),
-      ),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(10),
-        onTap: doc == null ? null : () => onOpenLead(doc!),
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      lead.childFullName.isEmpty
-                          ? '（名前未登録）'
-                          : lead.childFullName,
-                      style: TextStyle(
-                          fontSize: AppTextSize.bodyMd,
-                          fontWeight: FontWeight.w700,
-                          color: c.textPrimary),
-                    ),
-                  ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 6, vertical: 2),
-                    decoration: BoxDecoration(
-                        color: style.background,
-                        borderRadius: BorderRadius.circular(4),
-                        border: Border.all(
-                            color: style.border.withValues(alpha: 0.4))),
-                    child: Text(crmUrgentReasonLabel(row.topReason),
-                        style: TextStyle(
-                            fontSize: AppTextSize.xs,
-                            fontWeight: FontWeight.w700,
-                            color: style.text)),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 6),
-              Text(
-                '${CrmOptions.stageLabel(lead.stage)} ・ 最終接触 ${crmRelativeTime(lead.lastContactAt ?? lead.inquiredAt)}',
-                style: TextStyle(fontSize: AppTextSize.caption, color: c.textSecondary),
-              ),
-              if (lead.hasNextAction) ...[
-                const SizedBox(height: 6),
-                Text(
-                  '次: ${lead.nextActionAt != null ? DateFormat('M/d HH:mm', 'ja').format(lead.nextActionAt!) : ''} ${lead.nextActionNote}',
-                  style: TextStyle(fontSize: AppTextSize.small, color: c.textPrimary),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ] else ...[
-                const SizedBox(height: 6),
-                Text('次の一手を決める',
-                    style: TextStyle(fontSize: AppTextSize.small, color: c.textTertiary)),
-              ],
-            ],
-          ),
-        ),
       ),
     );
   }

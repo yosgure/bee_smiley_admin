@@ -19,6 +19,7 @@ import 'admin_screen.dart';
 import 'login_screen.dart';
 import 'force_change_password_screen.dart';
 import 'plus_schedule_screen.dart';
+import 'crm_lead_screen.dart';
 import 'parent_main.dart';
 import 'ai_chat_main_screen.dart';
 
@@ -532,52 +533,60 @@ class _AdminShellState extends State<AdminShell> {
 
     switch (_staffType) {
       case StaffType.plusOnly:
+        // 0:予定 1:プラス 2:AI相談 3:チャット 4:CRM 5:お知らせ 6:管理
         switch (index) {
           case 0: return const CalendarScreen();
           case 1: return const PlusScheduleScreen();
           case 2: return _buildAiChatScreen();
           case 3: return const ChatListScreen();
-          case 4: return const NotificationScreen();
-          case 5: return buildAdminScreen();
+          case 4: return const CrmLeadScreen();
+          case 5: return const NotificationScreen();
+          case 6: return buildAdminScreen();
           default: return const CalendarScreen();
         }
       case StaffType.beesmiley:
+        // 0:予定 1:記録 2:AI相談 3:チャット 4:CRM 5:お知らせ 6:イベント 7:管理
         switch (index) {
           case 0: return const CalendarScreen();
           case 1: return const AssessmentScreen();
           case 2: return _buildAiChatScreen();
           case 3: return const ChatListScreen();
-          case 4: return const NotificationScreen();
-          case 5: return const EventScreen();
-          case 6: return buildAdminScreen();
+          case 4: return const CrmLeadScreen();
+          case 5: return const NotificationScreen();
+          case 6: return const EventScreen();
+          case 7: return buildAdminScreen();
           default: return const CalendarScreen();
         }
       case StaffType.both:
       case StaffType.loading:
       default:
+        // 0:予定 1:プラス 2:記録 3:AI相談 4:チャット 5:CRM 6:お知らせ 7:イベント 8:管理
         switch (index) {
           case 0: return const CalendarScreen();
           case 1: return const PlusScheduleScreen();
           case 2: return const AssessmentScreen();
           case 3: return _buildAiChatScreen();
           case 4: return const ChatListScreen();
-          case 5: return const NotificationScreen();
-          case 6: return const EventScreen();
-          case 7: return buildAdminScreen();
+          case 5: return const CrmLeadScreen();
+          case 6: return const NotificationScreen();
+          case 7: return const EventScreen();
+          case 8: return buildAdminScreen();
           default: return const CalendarScreen();
         }
     }
   }
-  
+
   int get _screenCount {
     switch (_staffType) {
-      case StaffType.plusOnly: return 6;
-      case StaffType.beesmiley: return 7;
-      default: return 8;
+      case StaffType.plusOnly: return 7;
+      case StaffType.beesmiley: return 8;
+      default: return 9;
     }
   }
   
   List<NavigationRailDestination> get _railDestinations {
+    const crmRail = NavigationRailDestination(
+        icon: Icon(Icons.support_agent), label: Text('CRM'));
     switch (_staffType) {
       case StaffType.plusOnly:
         return [
@@ -585,6 +594,7 @@ class _AdminShellState extends State<AdminShell> {
           const NavigationRailDestination(icon: Icon(Icons.grid_view), label: Text('プラス')),
           const NavigationRailDestination(icon: Icon(Icons.psychology), label: Text('AI相談')),
           NavigationRailDestination(icon: _buildBadgedIcon(Icons.chat, _hasUnreadChat), label: const Text('チャット')),
+          crmRail,
           NavigationRailDestination(icon: _buildBadgedIcon(Icons.notifications, _hasUnreadInfo), label: const Text('お知らせ')),
           const NavigationRailDestination(icon: Icon(Icons.manage_accounts), label: Text('管理')),
         ];
@@ -594,6 +604,7 @@ class _AdminShellState extends State<AdminShell> {
           NavigationRailDestination(icon: _buildBadgedIcon(Icons.edit_note, _hasUnreadRecord), label: const Text('記録')),
           const NavigationRailDestination(icon: Icon(Icons.psychology), label: Text('AI相談')),
           NavigationRailDestination(icon: _buildBadgedIcon(Icons.chat, _hasUnreadChat), label: const Text('チャット')),
+          crmRail,
           NavigationRailDestination(icon: _buildBadgedIcon(Icons.notifications, _hasUnreadInfo), label: const Text('お知らせ')),
           NavigationRailDestination(icon: _buildBadgedIcon(Icons.event, _hasUnreadEvent), label: const Text('イベント')),
           const NavigationRailDestination(icon: Icon(Icons.manage_accounts), label: Text('管理')),
@@ -607,6 +618,7 @@ class _AdminShellState extends State<AdminShell> {
           NavigationRailDestination(icon: _buildBadgedIcon(Icons.edit_note, _hasUnreadRecord), label: const Text('記録')),
           const NavigationRailDestination(icon: Icon(Icons.psychology), label: Text('AI相談')),
           NavigationRailDestination(icon: _buildBadgedIcon(Icons.chat, _hasUnreadChat), label: const Text('チャット')),
+          crmRail,
           NavigationRailDestination(icon: _buildBadgedIcon(Icons.notifications, _hasUnreadInfo), label: const Text('お知らせ')),
           NavigationRailDestination(icon: _buildBadgedIcon(Icons.event, _hasUnreadEvent), label: const Text('イベント')),
           const NavigationRailDestination(icon: Icon(Icons.manage_accounts), label: Text('管理')),
@@ -614,40 +626,100 @@ class _AdminShellState extends State<AdminShell> {
     }
   }
   
-  List<BottomNavigationBarItem> get _bottomNavItems {
+  /// モバイル: 直接表示する index 数（残りは「…」メニュー内）。
+  /// プラス/記録/AI相談/チャット までを表に出し、CRM/お知らせ/イベント/管理 は ... に格納。
+  int get _visibleBottomCount {
+    switch (_staffType) {
+      case StaffType.plusOnly: return 4;  // 予定/プラス/AI相談/チャット
+      case StaffType.beesmiley: return 4; // 予定/記録/AI相談/チャット
+      default: return 5;                  // 予定/プラス/記録/AI相談/チャット
+    }
+  }
+
+  /// 「…」内に出す index 範囲（visible 以降すべて）
+  List<({int index, IconData icon, String label})> get _moreMenuItems {
+    final items = <({int index, IconData icon, String label})>[];
     switch (_staffType) {
       case StaffType.plusOnly:
-        return [
-          BottomNavigationBarItem(icon: _buildBadgedIcon(Icons.calendar_month, _hasUnreadSchedule), label: '予定'),
-          const BottomNavigationBarItem(icon: Icon(Icons.grid_view), label: 'プラス'),
-          const BottomNavigationBarItem(icon: Icon(Icons.psychology), label: 'AI相談'),
-          BottomNavigationBarItem(icon: _buildBadgedIcon(Icons.chat, _hasUnreadChat), label: 'チャット'),
-          BottomNavigationBarItem(icon: _buildBadgedIcon(Icons.notifications, _hasUnreadInfo), label: 'お知らせ'),
-          const BottomNavigationBarItem(icon: Icon(Icons.manage_accounts), label: '管理'),
-        ];
+        // 4:CRM 5:お知らせ 6:管理
+        items.add((index: 4, icon: Icons.support_agent, label: 'CRM'));
+        items.add((index: 5, icon: Icons.notifications, label: 'お知らせ'));
+        items.add((index: 6, icon: Icons.manage_accounts, label: '管理'));
       case StaffType.beesmiley:
-        return [
-          BottomNavigationBarItem(icon: _buildBadgedIcon(Icons.calendar_month, _hasUnreadSchedule), label: '予定'),
-          BottomNavigationBarItem(icon: _buildBadgedIcon(Icons.edit_note, _hasUnreadRecord), label: '記録'),
-          const BottomNavigationBarItem(icon: Icon(Icons.psychology), label: 'AI相談'),
-          BottomNavigationBarItem(icon: _buildBadgedIcon(Icons.chat, _hasUnreadChat), label: 'チャット'),
-          BottomNavigationBarItem(icon: _buildBadgedIcon(Icons.notifications, _hasUnreadInfo), label: 'お知らせ'),
-          BottomNavigationBarItem(icon: _buildBadgedIcon(Icons.event, _hasUnreadEvent), label: 'イベント'),
-          const BottomNavigationBarItem(icon: Icon(Icons.manage_accounts), label: '管理'),
-        ];
+        // 4:CRM 5:お知らせ 6:イベント 7:管理
+        items.add((index: 4, icon: Icons.support_agent, label: 'CRM'));
+        items.add((index: 5, icon: Icons.notifications, label: 'お知らせ'));
+        items.add((index: 6, icon: Icons.event, label: 'イベント'));
+        items.add((index: 7, icon: Icons.manage_accounts, label: '管理'));
       case StaffType.both:
       case StaffType.loading:
-      default:
-        return [
+        // 5:CRM 6:お知らせ 7:イベント 8:管理
+        items.add((index: 5, icon: Icons.support_agent, label: 'CRM'));
+        items.add((index: 6, icon: Icons.notifications, label: 'お知らせ'));
+        items.add((index: 7, icon: Icons.event, label: 'イベント'));
+        items.add((index: 8, icon: Icons.manage_accounts, label: '管理'));
+    }
+    return items;
+  }
+
+  List<BottomNavigationBarItem> get _bottomNavItems {
+    final visible = <BottomNavigationBarItem>[];
+    switch (_staffType) {
+      case StaffType.plusOnly:
+        visible.addAll([
+          BottomNavigationBarItem(icon: _buildBadgedIcon(Icons.calendar_month, _hasUnreadSchedule), label: '予定'),
+          const BottomNavigationBarItem(icon: Icon(Icons.grid_view), label: 'プラス'),
+          const BottomNavigationBarItem(icon: Icon(Icons.psychology), label: 'AI相談'),
+          BottomNavigationBarItem(icon: _buildBadgedIcon(Icons.chat, _hasUnreadChat), label: 'チャット'),
+        ]);
+      case StaffType.beesmiley:
+        visible.addAll([
+          BottomNavigationBarItem(icon: _buildBadgedIcon(Icons.calendar_month, _hasUnreadSchedule), label: '予定'),
+          BottomNavigationBarItem(icon: _buildBadgedIcon(Icons.edit_note, _hasUnreadRecord), label: '記録'),
+          const BottomNavigationBarItem(icon: Icon(Icons.psychology), label: 'AI相談'),
+          BottomNavigationBarItem(icon: _buildBadgedIcon(Icons.chat, _hasUnreadChat), label: 'チャット'),
+        ]);
+      case StaffType.both:
+      case StaffType.loading:
+        visible.addAll([
           BottomNavigationBarItem(icon: _buildBadgedIcon(Icons.calendar_month, _hasUnreadSchedule), label: '予定'),
           const BottomNavigationBarItem(icon: Icon(Icons.grid_view), label: 'プラス'),
           BottomNavigationBarItem(icon: _buildBadgedIcon(Icons.edit_note, _hasUnreadRecord), label: '記録'),
           const BottomNavigationBarItem(icon: Icon(Icons.psychology), label: 'AI相談'),
           BottomNavigationBarItem(icon: _buildBadgedIcon(Icons.chat, _hasUnreadChat), label: 'チャット'),
-          BottomNavigationBarItem(icon: _buildBadgedIcon(Icons.notifications, _hasUnreadInfo), label: 'お知らせ'),
-          BottomNavigationBarItem(icon: _buildBadgedIcon(Icons.event, _hasUnreadEvent), label: 'イベント'),
-          const BottomNavigationBarItem(icon: Icon(Icons.manage_accounts), label: '管理'),
-        ];
+        ]);
+    }
+    visible.add(const BottomNavigationBarItem(
+        icon: Icon(Icons.more_horiz), label: 'その他'));
+    return visible;
+  }
+
+  /// モバイル: ... メニューを開いて選択させる
+  Future<void> _showMoreMenu() async {
+    final picked = await showModalBottomSheet<int>(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (final m in _moreMenuItems)
+              ListTile(
+                leading: Icon(m.icon),
+                title: Text(m.label),
+                selected: _selectedIndex == m.index,
+                onTap: () => Navigator.pop(ctx, m.index),
+              ),
+          ],
+        ),
+      ),
+    );
+    if (picked != null) {
+      setState(() {
+        _selectedIndex = picked;
+        _adminDetailScreen = null;
+      });
+      _clearUnreadOnTap(picked);
+      _saveIndex(picked);
     }
   }
 
@@ -696,35 +768,38 @@ class _AdminShellState extends State<AdminShell> {
     int newIndex = _selectedIndex;
 
     switch (_staffType) {
-      // インデックスは _getScreen() のcase番号と一致させること
+      // インデックスは _getScreen() のcase番号と一致させること（CRM 追加で +1）
       case StaffType.plusOnly:
-        // 0:予定, 1:プラス, 2:AI相談, 3:チャット, 4:お知らせ, 5:管理
+        // 0:予定, 1:プラス, 2:AI相談, 3:チャット, 4:CRM, 5:お知らせ, 6:管理
         switch (type) {
           case 'schedule': newIndex = 0; break;
           case 'chat': newIndex = 3; break;
-          case 'info': newIndex = 4; break;
+          case 'crm': newIndex = 4; break;
+          case 'info': newIndex = 5; break;
         }
         break;
       case StaffType.beesmiley:
-        // 0:予定, 1:記録, 2:AI相談, 3:チャット, 4:お知らせ, 5:イベント, 6:管理
+        // 0:予定, 1:記録, 2:AI相談, 3:チャット, 4:CRM, 5:お知らせ, 6:イベント, 7:管理
         switch (type) {
           case 'schedule': newIndex = 0; break;
           case 'record': newIndex = 1; break;
           case 'chat': newIndex = 3; break;
-          case 'info': newIndex = 4; break;
-          case 'event': newIndex = 5; break;
+          case 'crm': newIndex = 4; break;
+          case 'info': newIndex = 5; break;
+          case 'event': newIndex = 6; break;
         }
         break;
       case StaffType.both:
       case StaffType.loading:
       default:
-        // 0:予定, 1:プラス, 2:記録, 3:AI相談, 4:チャット, 5:お知らせ, 6:イベント, 7:管理
+        // 0:予定, 1:プラス, 2:記録, 3:AI相談, 4:チャット, 5:CRM, 6:お知らせ, 7:イベント, 8:管理
         switch (type) {
           case 'schedule': newIndex = 0; break;
           case 'record': newIndex = 2; break;
           case 'chat': newIndex = 4; break;
-          case 'info': newIndex = 5; break;
-          case 'event': newIndex = 6; break;
+          case 'crm': newIndex = 5; break;
+          case 'info': newIndex = 6; break;
+          case 'event': newIndex = 7; break;
         }
         break;
     }
@@ -872,14 +947,22 @@ class _AdminShellState extends State<AdminShell> {
         ],
       ),
       bottomNavigationBar: isWebLayout ? null : BottomNavigationBar(
-        currentIndex: safeIndex,
+        // 末尾は「…」（その他）。隠れた画面（CRM/お知らせ/イベント/管理）が
+        // アクティブな場合は「…」を選択中として表示する。
+        currentIndex: safeIndex >= _visibleBottomCount
+            ? _bottomNavItems.length - 1
+            : safeIndex,
         onTap: (i) {
+          if (i == _bottomNavItems.length - 1) {
+            _showMoreMenu();
+            return;
+          }
           setState(() {
             _selectedIndex = i;
             _adminDetailScreen = null;
           });
           _clearUnreadOnTap(i);
-          _saveIndex(i); // 保存
+          _saveIndex(i);
         },
         type: BottomNavigationBarType.fixed,
         selectedItemColor: AppColors.primary,

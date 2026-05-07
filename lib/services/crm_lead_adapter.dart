@@ -228,6 +228,8 @@ Map<String, dynamic> flattenChildToLeadShape(
     'confidence': child['confidence'],
     'source': child['source'],
     'sourceDetail': child['sourceDetail'],
+    // F2: Campaign 紐付け（任意）。null = 媒体（source）のみで管理。
+    'sourceCampaignId': child['sourceCampaignId'],
     'preferredChannel': child['preferredChannel'],
     'preferredDays': child['preferredDays'],
     'preferredTimeSlots': child['preferredTimeSlots'],
@@ -241,6 +243,7 @@ Map<String, dynamic> flattenChildToLeadShape(
     'inquiredAt': child['inquiredAt'],
     'firstContactedAt': child['firstContactedAt'],
     'trialAt': child['trialAt'],
+    'trialActualDate': child['trialActualDate'],
     'enrolledAt': child['enrolledAt'],
     'lostAt': child['lostAt'],
     'withdrawnAt': child['withdrawnAt'],
@@ -254,6 +257,9 @@ Map<String, dynamic> flattenChildToLeadShape(
     'withdrawDetail': child['withdrawDetail'],
     'memo': child['memo'],
     'activities': child['activities'] ?? <Map<String, dynamic>>[],
+    // F_lead_detail_refactor v2: 進捗チェックリスト + 待ち状態
+    'enrollmentChecklist': child['enrollmentChecklist'],
+    'waitingState': child['waitingState'],
     'createdAt': child['createdAt'] ?? family['createdAt'],
     'createdBy': child['createdBy'] ?? family['createdBy'],
     'updatedAt': child['updatedAt'] ?? family['updatedAt'],
