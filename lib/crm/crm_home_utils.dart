@@ -19,7 +19,7 @@ enum CrmUrgentReason {
 /// 分類ラベル（UI 用）
 String crmUrgentReasonLabel(CrmUrgentReason r) => switch (r) {
       CrmUrgentReason.overdue => '期限切れ',
-      CrmUrgentReason.trialFollowupMissing => '体験後フォロー漏れ',
+      CrmUrgentReason.trialFollowupMissing => '体験未実施 (予定経過)',
       CrmUrgentReason.contractStalled => '契約停滞',
       CrmUrgentReason.noNextAction => '次の一手を決める',
     };
@@ -34,26 +34,26 @@ class CrmUrgentThresholds {
 
 /// 1件のリードに対して「今すぐ対応」の理由を列挙する。
 /// 対応終了ステージ（won/lost/withdrawn）は空配列。
+/// F_lead_detail_refactor v2: 待ち状態のリードは「次の一手未設定」アラート対象外。
 List<CrmUrgentReason> urgentReasonsFor(CrmLead lead, {DateTime? now}) {
   if (lead.isClosed) return const [];
   final ref = now ?? DateTime.now();
   final reasons = <CrmUrgentReason>[];
 
-  // 1) 予定日超過
+  // 1) 予定日超過（待ち状態でも次の一手の期限超過は表示する）
   final na = lead.nextActionAt;
   if (na != null && ref.isAfter(na)) {
     reasons.add(CrmUrgentReason.overdue);
   }
 
-  // 2) 体験後フォロー漏れ: 体験実施から 24h 経過し、それ以降の接触がない
-  final trial = lead.trialAt;
-  if (trial != null &&
-      ref.difference(trial).inHours >=
-          CrmUrgentThresholds.trialFollowupHours) {
-    final last = lead.lastContactAt;
-    if (last == null || !last.isAfter(trial)) {
-      reasons.add(CrmUrgentReason.trialFollowupMissing);
-    }
+  // 2) 体験未実施 (v3): 体験予定日が経過したのに体験実施日が空
+  //    キャンセル/再調整漏れの検出を兼ねる。
+  //    体験実施済み (trialActualDate あり) の場合は対象外。
+  final trialPlanned = lead.trialAt;
+  if (trialPlanned != null &&
+      ref.isAfter(trialPlanned) &&
+      lead.trialActualDate == null) {
+    reasons.add(CrmUrgentReason.trialFollowupMissing);
   }
 
   // 3) 契約停滞: onboarding で 7 日以上動きなし
@@ -67,7 +67,8 @@ List<CrmUrgentReason> urgentReasonsFor(CrmLead lead, {DateTime? now}) {
   }
 
   // 4) 次の一手未設定: 最終接触から 24h 経過しても設定されていない
-  if (!lead.hasNextAction) {
+  // 例外: 待ち状態の Lead は次の一手未設定でアラートしない（待つのが正しい状態）
+  if (!lead.hasNextAction && !lead.isWaiting) {
     final since = lead.sinceLastContact(ref);
     if (since != null &&
         since.inHours >= CrmUrgentThresholds.noNextActionHours) {
@@ -277,8 +278,12 @@ class CrmUrgentRow {
   final List<CrmUrgentReason> reasons;
   const CrmUrgentRow({required this.lead, required this.reasons});
 
-  CrmUrgentReason get topReason => reasons.reduce(
-      (a, b) => urgentPriority(a) <= urgentPriority(b) ? a : b);
+  /// 督促理由なしの Lead（次の一手設定済みなど）でも CrmUrgentRow を作る場合があるため
+  /// nullable にする。
+  CrmUrgentReason? get topReason => reasons.isEmpty
+      ? null
+      : reasons.reduce(
+          (a, b) => urgentPriority(a) <= urgentPriority(b) ? a : b);
 }
 
 /// Urgent List 生成（優先度順）
@@ -290,8 +295,9 @@ List<CrmUrgentRow> buildUrgentRows(Iterable<CrmLead> leads, {DateTime? now}) {
     rows.add(CrmUrgentRow(lead: lead, reasons: reasons));
   }
   rows.sort((a, b) {
-    final pa = urgentPriority(a.topReason);
-    final pb = urgentPriority(b.topReason);
+    // buildUrgentRows は reasons 非空のみ追加するため topReason は必ず非null
+    final pa = urgentPriority(a.topReason!);
+    final pb = urgentPriority(b.topReason!);
     if (pa != pb) return pa.compareTo(pb);
     // 同じ理由内では最終接触が古い順
     final la = a.lead.lastContactAt ?? a.lead.inquiredAt;

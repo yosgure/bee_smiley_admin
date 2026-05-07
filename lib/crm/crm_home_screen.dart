@@ -42,18 +42,40 @@ class _CrmHomeScreenState extends State<CrmHomeScreen> {
       final now = DateTime.now();
       final docById = {for (final d in widget.docs) d.id: d};
       final leads = widget.docs.map(CrmLead.fromDoc).toList();
-      final urgentRows = buildUrgentRows(leads, now: now);
-      // _filter (chip) と _stageTab (タブ) の AND フィルタ。
-      final filteredRows = urgentRows.where((r) {
-        if (_filter != null && !r.reasons.contains(_filter)) return false;
+      // 表示対象: 検討中 + 入会手続中（won/lost/withdrawn は除外）。
+      // 旧実装は urgent reason 必須だったが、次の一手を設定すると即座にリストから
+      // 消えるバグになっていたため、active な全 Lead を表示対象にする。
+      final activeLeads = leads
+          .where((l) =>
+              l.stage == 'considering' || l.stage == 'onboarding')
+          .toList();
+      final urgentRows = buildUrgentRows(activeLeads, now: now);
+      final urgentById = {for (final r in urgentRows) r.lead.id: r};
+      // 全 active を CrmUrgentRow に変換（reasons 無しは空配列）
+      final allRows = activeLeads
+          .map((l) => urgentById[l.id] ?? CrmUrgentRow(lead: l, reasons: const []))
+          .toList();
+      // ステージタブのみフィルタ。督促理由カテゴリのフィルタ・ソートは廃止
+      // （体験フォロー漏れ・契約停滞・次の一手未設定 は実質「次の一手未設定」と同義
+      //  であり、絞り込む必要なし。期日昇順ソートで自然に上に来る）。
+      final filteredRows = allRows.where((r) {
         if (_stageTab != 'all' && r.lead.stage != _stageTab) return false;
         return true;
-      }).toList();
-      // 各ステージの件数（タブのバッジ用）。
+      }).toList()
+        // 期日昇順（期限超過 → 直近 → 未設定 の順）。
+        ..sort((a, b) {
+          final aNa = a.lead.nextActionAt;
+          final bNa = b.lead.nextActionAt;
+          if (aNa == null && bNa == null) return 0;
+          if (aNa == null) return 1;
+          if (bNa == null) return -1;
+          return aNa.compareTo(bNa);
+        });
+      // バッジ件数: ステージ別の active 全件
       final consideringCount =
-          urgentRows.where((r) => r.lead.stage == 'considering').length;
+          activeLeads.where((l) => l.stage == 'considering').length;
       final onboardingCount =
-          urgentRows.where((r) => r.lead.stage == 'onboarding').length;
+          activeLeads.where((l) => l.stage == 'onboarding').length;
 
       // 自動選択ロジック: 選択中 Lead が現在のフィルタ済みリストに無ければ
       // 先頭を自動選択（フィルタ chip タップ時 / 初期表示時 / 削除後）。
@@ -82,6 +104,7 @@ class _CrmHomeScreenState extends State<CrmHomeScreen> {
         leads: leads,
         urgentRows: urgentRows,
         filteredRows: filteredRows,
+        activeLeadCount: activeLeads.length,
         consideringCount: consideringCount,
         onboardingCount: onboardingCount,
         now: now,
@@ -135,6 +158,7 @@ class _CrmHomeScreenState extends State<CrmHomeScreen> {
     required List<CrmLead> leads,
     required List<CrmUrgentRow> urgentRows,
     required List<CrmUrgentRow> filteredRows,
+    required int activeLeadCount,
     required int consideringCount,
     required int onboardingCount,
     required DateTime now,
@@ -143,7 +167,8 @@ class _CrmHomeScreenState extends State<CrmHomeScreen> {
   }) {
     final tod = crmTimeOfDay(now);
     final summary = summarizeForHome(leads, now: now);
-    final uniqueLeadCount = urgentRows.length;
+    // ストリップの「全て (N)」バッジは active 全件を表示。
+    final uniqueLeadCount = activeLeadCount;
     final monthly = _calcMonthly(leads, now);
 
     // F_today_tab_polish_v2: 改善 A (挨拶削除) + B (4 カード→1 行) + C (タブ統合)。
@@ -302,122 +327,14 @@ class _TodaySummaryStrip extends StatelessWidget {
                 visualDensity: VisualDensity.compact,
               ),
             ),
-            const SizedBox(width: 16),
-            _separator(c),
-            const SizedBox(width: 12),
-            // v3 改善 1: 4 chip をプルダウンに統合。0 件の項目はメニューに出さない。
-            _filterPulldown(context, summary),
-            const SizedBox(width: 12),
-            _separator(c),
-            const SizedBox(width: 12),
-            // 今月 N/M 入会
-            _readonlyMetric(
-                context, '今月', '${monthly.enrolled}/${monthly.goal} 入会'),
-            const SizedBox(width: 12),
-            _separator(c),
-            const SizedBox(width: 12),
-            // 気づき件数（暫定: 担当未設定など簡易ルール）
-            _readonlyMetric(context, '気づき',
-                '${summary.todayAssigneeMissing > 0 ? 1 : 0} 件'),
+            // 督促理由フィルタ・「今月入会」「気づき」は廃止。
+            // 期日昇順ソートで自然と期限超過が先頭に来るため、フィルタは不要。
           ],
         ),
       ),
     );
   }
 
-  Widget _separator(AppColorScheme c) =>
-      Container(width: 1, height: 22, color: c.borderLight);
-
-  /// v3 改善 1: 4 つの確認ポイントを 1 つのプルダウンに統合。
-  /// メニュー項目: 「すべて表示 (合計)」+ 件数 > 0 の項目のみ。
-  Widget _filterPulldown(BuildContext context, CrmHomeSummary summary) {
-    final c = context.colors;
-    final selected = activeFilter;
-    final byReason = <CrmUrgentReason, int>{
-      CrmUrgentReason.overdue: summary.overdueCount,
-      CrmUrgentReason.trialFollowupMissing: summary.trialFollowupMissing,
-      CrmUrgentReason.contractStalled: summary.contractStalled,
-      CrmUrgentReason.noNextAction: summary.noNextAction,
-    };
-    final total = byReason.values.fold(0, (a, b) => a + b);
-    final isAll = selected == null;
-    final label = isAll
-        ? 'すべて表示 ($total)'
-        : '${crmUrgentReasonLabel(selected)} (${byReason[selected] ?? 0})';
-
-    return PopupMenuButton<CrmUrgentReason?>(
-      tooltip: 'フィルタ',
-      position: PopupMenuPosition.under,
-      onSelected: (value) {
-        // null = すべて表示（フィルタ解除）。それ以外は既存トグルに準拠。
-        if (value == null) {
-          if (activeFilter != null) onTapFilter(activeFilter!);
-        } else {
-          // 同じ項目を再選択しても意味的に「選び直し」なので、
-          // 現在 selected と一致しなければ単に切り替え。
-          if (activeFilter != value) onTapFilter(value);
-        }
-      },
-      itemBuilder: (_) => <PopupMenuEntry<CrmUrgentReason?>>[
-        PopupMenuItem<CrmUrgentReason?>(
-          value: null,
-          child: Text('すべて表示 ($total)'),
-        ),
-        const PopupMenuDivider(),
-        for (final entry in byReason.entries)
-          if (entry.value > 0)
-            PopupMenuItem<CrmUrgentReason?>(
-              value: entry.key,
-              child: Text(
-                  '${crmUrgentReasonLabel(entry.key)} (${entry.value})'),
-            ),
-      ],
-      child: Container(
-        height: 32,
-        padding: const EdgeInsets.symmetric(horizontal: 10),
-        decoration: BoxDecoration(
-          color: !isAll
-              ? AppColors.primary.withValues(alpha: 0.15)
-              : c.scaffoldBgAlt,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: c.borderLight),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(label,
-                style: TextStyle(
-                    fontSize: AppTextSize.small,
-                    fontWeight: FontWeight.w600,
-                    color: !isAll
-                        ? AppColors.primary
-                        : c.textPrimary)),
-            const SizedBox(width: 4),
-            Icon(Icons.arrow_drop_down,
-                size: 18, color: c.textSecondary),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _readonlyMetric(BuildContext context, String label, String value) {
-    final c = context.colors;
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(label,
-            style: TextStyle(
-                fontSize: AppTextSize.caption, color: c.textSecondary)),
-        const SizedBox(width: 4),
-        Text(value,
-            style: TextStyle(
-                fontSize: AppTextSize.body,
-                fontWeight: FontWeight.w600,
-                color: c.textPrimary)),
-      ],
-    );
-  }
 }
 
 // ---------------------------------------------------------- Urgent List

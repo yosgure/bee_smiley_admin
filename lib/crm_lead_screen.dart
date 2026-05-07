@@ -87,10 +87,12 @@ class CrmOptions {
     (id: 'other', label: 'その他'),
   ];
 
+  // F_lead_detail_refactor (Phase 2): LINE は実運用で未使用のため UI から削除。
+  // スキーマ ('line') は既存データ保護のため保持（書き込み禁止、表示なし）。
   static const List<({String id, String label})> channels = [
     (id: 'tel', label: '電話'),
     (id: 'email', label: 'メール'),
-    (id: 'line', label: 'LINE'),
+    (id: 'visit', label: '来所'),
   ];
 
   static const List<({String id, String label})> confidence = [
@@ -105,10 +107,11 @@ class CrmOptions {
     (id: 'have', label: '取得済'),
   ];
 
+  // F_lead_detail_refactor (Phase 2): 'line' を活動種別から削除。
+  // 既存履歴に 'line' が残っているデータは表示時にラベル fallback で対応。
   static const List<({String id, String label})> activityTypes = [
     (id: 'tel', label: '電話'),
     (id: 'email', label: 'メール'),
-    (id: 'line', label: 'LINE'),
     (id: 'visit', label: '来所'),
     (id: 'memo', label: 'メモ'),
     (id: 'task', label: 'タスク'),
@@ -210,30 +213,27 @@ class _CrmLeadScreenState extends State<CrmLeadScreen> {
           onPressed: _close,
         ),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.upload_file, size: 20),
-            tooltip: 'CSVインポート（Notion）',
-            onPressed: _importFromNotionCsv,
-          ),
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            tooltip: '再読込',
-            onPressed: () => setState(() {}),
-          ),
+          // CSV インポート / 再読込はあまり使わないため、より頻度の高い「新規リード」を
+          // 配置。CSV は管理タブのデータメンテナンスから。再読込はブラウザリロードで代替。
+          if (_viewMode != 2)
+            Padding(
+              padding: const EdgeInsets.only(right: 12, top: 8, bottom: 8),
+              child: FilledButton.icon(
+                onPressed: _openNewLead,
+                icon: const Icon(Icons.add, size: 16),
+                label: const Text('新規リード'),
+                style: FilledButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 14),
+                  textStyle: const TextStyle(
+                      fontSize: AppTextSize.small, fontWeight: FontWeight.bold),
+                ),
+              ),
+            ),
         ],
       ),
-      // v4 改善 2: FAB は今日 + データベースタブで表示。分析タブのみ非表示。
-      // 分析画面では新規 Lead 追加の必然性が薄いため。
-      floatingActionButton: _viewMode == 2
-          ? null
-          : FloatingActionButton.extended(
-              onPressed: _openNewLead,
-              backgroundColor: AppColors.primary,
-              icon: const Icon(Icons.add, color: Colors.white),
-              label: const Text('新規リード',
-                  style: TextStyle(
-                      color: Colors.white, fontWeight: FontWeight.bold)),
-            ),
+      // FAB 廃止。AppBar の「新規リード」ボタンに統合。
       body: _buildBody(),
     );
   }
@@ -292,7 +292,9 @@ class _CrmLeadScreenState extends State<CrmLeadScreen> {
 
   // ------------------------------------------------------------
   // CSVインポート（Notionエクスポート用・一回限り）
+  // 現在は AppBar から外したため未使用。再度必要になったら呼び出し元を復活させる。
   // ------------------------------------------------------------
+  // ignore: unused_element
   Future<void> _importFromNotionCsv() async {
     final confirmed = await AppFeedback.confirm(context, title: 'NotionエクスポートCSVをインポート', message: '選択したCSVをリードとして一括登録します。\n'
             '同じCSVを二度インポートすると重複するので注意してください。\n\n続行しますか？', confirmLabel: '選択', cancelLabel: 'キャンセル');
@@ -2254,8 +2256,8 @@ class _CrmLeadEditScreenState extends State<CrmLeadEditScreen> {
           const SizedBox(height: 8),
           _textField('メール', _emailCtrl,
               keyboardType: TextInputType.emailAddress),
-          const SizedBox(height: 8),
-          _textField('LINE ID', _lineCtrl),
+          // F_lead_detail_refactor (Phase 2): LINE ID 入力欄を非表示化。
+          // _lineCtrl と保存時の 'parentLine' 書き込みも下記で空文字にして無効化済み。
           const SizedBox(height: 8),
           _channelSelector(),
           const SizedBox(height: 12),

@@ -66,7 +66,12 @@ class CrmLead {
   DateTime? get inquiredAt => (raw['inquiredAt'] as Timestamp?)?.toDate();
   DateTime? get firstContactedAt =>
       (raw['firstContactedAt'] as Timestamp?)?.toDate();
+  /// 体験予定日（旧称をそのまま流用）。
   DateTime? get trialAt => (raw['trialAt'] as Timestamp?)?.toDate();
+  /// 体験実施日（v3 新設）。null = 未実施 or キャンセル。
+  /// 体験予定日が経過しても trialActualDate が空なら「体験未実施」アラート対象。
+  DateTime? get trialActualDate =>
+      (raw['trialActualDate'] as Timestamp?)?.toDate();
   DateTime? get enrolledAt => (raw['enrolledAt'] as Timestamp?)?.toDate();
   DateTime? get lostAt => (raw['lostAt'] as Timestamp?)?.toDate();
   DateTime? get withdrawnAt => (raw['withdrawnAt'] as Timestamp?)?.toDate();
@@ -86,6 +91,33 @@ class CrmLead {
 
   // メモ
   String get memo => (raw['memo'] as String?) ?? '';
+
+  // 進捗チェックリスト（F_lead_detail_refactor v2: 7 項目固定）
+  Map<String, bool> get enrollmentChecklist {
+    final raw = this.raw['enrollmentChecklist'];
+    if (raw is! Map) return const {};
+    return raw.map((k, v) => MapEntry(k.toString(), v == true));
+  }
+
+  // 待ち状態（reason / deadline / note のいずれか含むときは Map 返す。null なら待機なし）
+  Map<String, dynamic>? get waitingState {
+    final raw = this.raw['waitingState'];
+    if (raw is! Map || raw.isEmpty) return null;
+    return Map<String, dynamic>.from(raw);
+  }
+
+  /// 待ち状態か否か
+  bool get isWaiting => waitingState?['reason'] != null;
+
+  // 児童プロフィール（既存フィールドを直接参照、新しい childProfile マップは作らない）
+  String get mainConcern => (raw['mainConcern'] as String?) ?? '';
+  String get likes => (raw['likes'] as String?) ?? '';
+  String get dislikes => (raw['dislikes'] as String?) ?? '';
+  String get trialNotes => (raw['trialNotes'] as String?) ?? '';
+  String get kindergarten => (raw['kindergarten'] as String?) ?? '';
+  String? get childGender => raw['childGender'] as String?;
+  String get permitStatus =>
+      (raw['permitStatus'] as String?) ?? 'none';
 
   // 対応履歴（配列フィールド。Phase 1 では subcollection 化しない）
   List<CrmActivity> get activities {
