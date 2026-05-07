@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'services/file_downloader.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
@@ -2704,10 +2705,9 @@ class _ChatDetailViewState extends State<ChatDetailView> {
                       tooltip: 'ダウンロード',
                       onPressed: () async {
                         try {
-                          final uri = Uri.parse(url);
-                          if (await canLaunchUrl(uri)) {
-                            await launchUrl(uri, mode: LaunchMode.externalApplication);
-                          }
+                          // Web では <a download> を使って強制ダウンロード。
+                          // launchUrl だとブラウザがインライン表示してしまう。
+                          await downloadFile(url);
                         } catch (e) {
                           debugPrint('Download error: $e');
                         }
@@ -2791,10 +2791,9 @@ class _ChatDetailViewState extends State<ChatDetailView> {
                       ),
                       tooltip: kIsWeb ? 'ダウンロード' : '他のアプリで開く',
                       onPressed: () async {
-                        final uri = Uri.parse(url);
-                        if (await canLaunchUrl(uri)) {
-                          await launchUrl(uri, mode: LaunchMode.externalApplication);
-                        }
+                        // Web では <a download> で強制ダウンロード（ファイル名指定）。
+                        // モバイルは url_launcher で他アプリ起動。
+                        await downloadFile(url, suggestedName: fileName);
                       },
                     ),
                   ],
