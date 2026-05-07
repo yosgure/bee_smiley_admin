@@ -258,8 +258,10 @@ Map<String, dynamic> flattenChildToLeadShape(
     'memo': child['memo'],
     'activities': child['activities'] ?? <Map<String, dynamic>>[],
     // F_lead_detail_refactor v2: 進捗チェックリスト + 待ち状態
+    // v4: enrollmentChecklist は読み取り互換のため残置、書き込みは checklistDates へ
     'enrollmentChecklist': child['enrollmentChecklist'],
-    'waitingState': child['waitingState'],
+    'checklistDates': child['checklistDates'],
+    'checklistNotes': child['checklistNotes'],
     'createdAt': child['createdAt'] ?? family['createdAt'],
     'createdBy': child['createdBy'] ?? family['createdBy'],
     'updatedAt': child['updatedAt'] ?? family['updatedAt'],

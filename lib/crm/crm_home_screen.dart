@@ -198,8 +198,6 @@ class _CrmHomeScreenState extends State<CrmHomeScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: _UrgentSection(
                 rows: filteredRows,
-                totalLeadCount: urgentRows.length,
-                totalObservations: summary.urgentTotal,
                 activeFilter: _filter,
                 onClearFilter: () => setState(() => _filter = null),
                 selectedLeadId: selectedLeadId,
@@ -291,58 +289,98 @@ class _TodaySummaryStrip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final c = context.colors;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: c.cardBg,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: c.borderLight),
-      ),
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
         child: Row(
           children: [
-            // ステージタブ
-            SegmentedButton<String>(
-              showSelectedIcon: false,
-              segments: [
-                ButtonSegment(
-                    value: 'considering',
-                    label: Text('検討中 ($consideringCount)')),
-                ButtonSegment(
-                    value: 'onboarding',
-                    label: Text('入会手続中 ($onboardingCount)')),
-                ButtonSegment(
-                    value: 'all',
-                    label: Text('全て ($uniqueLeadCount)')),
-              ],
-              selected: {activeStageTab},
-              onSelectionChanged: (s) => onStageTabChanged(s.first),
-              style: ButtonStyle(
-                textStyle: WidgetStateProperty.all(
-                    const TextStyle(fontSize: AppTextSize.small)),
-                padding: WidgetStateProperty.all(
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4)),
-                visualDensity: VisualDensity.compact,
-              ),
+            _StageTab(
+              label: '検討中',
+              count: consideringCount,
+              selected: activeStageTab == 'considering',
+              onTap: () => onStageTabChanged('considering'),
             ),
-            // 督促理由フィルタ・「今月入会」「気づき」は廃止。
-            // 期日昇順ソートで自然と期限超過が先頭に来るため、フィルタは不要。
+            const SizedBox(width: 8),
+            _StageTab(
+              label: '入会手続中',
+              count: onboardingCount,
+              selected: activeStageTab == 'onboarding',
+              onTap: () => onStageTabChanged('onboarding'),
+            ),
+            const SizedBox(width: 8),
+            _StageTab(
+              label: '全て',
+              count: uniqueLeadCount,
+              selected: activeStageTab == 'all',
+              onTap: () => onStageTabChanged('all'),
+            ),
           ],
         ),
       ),
     );
   }
+}
 
+/// 軽量タブ。選択時のみ淡色背景。未選択は素のテキスト。
+class _StageTab extends StatelessWidget {
+  final String label;
+  final int count;
+  final bool selected;
+  final VoidCallback onTap;
+  const _StageTab({
+    required this.label,
+    required this.count,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: selected
+              ? AppColors.primary.withValues(alpha: 0.18)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              label,
+              softWrap: false,
+              overflow: TextOverflow.fade,
+              style: TextStyle(
+                fontSize: AppTextSize.small,
+                fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                color: selected ? AppColors.primary : c.textSecondary,
+              ),
+            ),
+            const SizedBox(width: 4),
+            Text(
+              '($count)',
+              style: TextStyle(
+                fontSize: AppTextSize.caption,
+                color: selected ? AppColors.primary : c.textTertiary,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 // ---------------------------------------------------------- Urgent List
 
 class _UrgentSection extends StatelessWidget {
   final List<CrmUrgentRow> rows;
-  final int totalLeadCount;
-  final int totalObservations;
   final CrmUrgentReason? activeFilter;
   final VoidCallback onClearFilter;
   final String? selectedLeadId;
@@ -350,8 +388,6 @@ class _UrgentSection extends StatelessWidget {
 
   const _UrgentSection({
     required this.rows,
-    required this.totalLeadCount,
-    required this.totalObservations,
     required this.activeFilter,
     required this.onClearFilter,
     required this.selectedLeadId,
@@ -360,39 +396,23 @@ class _UrgentSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final c = context.colors;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Row(
-          children: [
-            Text('今日整えたいリード',
-                style: TextStyle(
-                    fontSize: AppTextSize.bodyLarge,
-                    fontWeight: FontWeight.w700,
-                    color: c.textPrimary)),
-            const SizedBox(width: 8),
-            if (activeFilter != null) ...[
-              _filterChip(
-                context,
-                label: crmUrgentReasonLabel(activeFilter!),
-                onClear: onClearFilter,
-              ),
-            ],
-            const Spacer(),
-            Text(
-              activeFilter == null
-                  ? '$totalLeadCount人 / $totalObservations件の確認ポイント'
-                  : '絞り込み中 ${rows.length}人 / 全 $totalLeadCount人',
-              style:
-                  TextStyle(fontSize: AppTextSize.small, color: c.textSecondary),
+        if (activeFilter != null)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 6),
+            child: Row(
+              children: [
+                _filterChip(
+                  context,
+                  label: crmUrgentReasonLabel(activeFilter!),
+                  onClear: onClearFilter,
+                ),
+              ],
             ),
-          ],
-        ),
-        const SizedBox(height: 8),
-        // v3 改善 4a: 外周コンテナのボーダー・背景を撤去。
-        // カード自体に cardBg + border を持たせ、各カードが独立した「島」として
-        // 視認できるようにする（特にライトモードで効果大）。
+          ),
+        if (rows.isNotEmpty) _columnHeader(context),
         Expanded(
           child: rows.isEmpty
               ? _emptyState(context)
@@ -410,6 +430,33 @@ class _UrgentSection extends StatelessWidget {
                 ),
         ),
       ],
+    );
+  }
+
+  Widget _columnHeader(BuildContext context) {
+    final c = context.colors;
+    final style = TextStyle(
+      fontSize: AppTextSize.xs,
+      fontWeight: FontWeight.w600,
+      color: c.textTertiary,
+      letterSpacing: 0.3,
+    );
+    // カード内レイアウトと同じ flex / width で揃える
+    // 左 5px (ステータスバー) + 10px (内側パディング) = 15px インデント
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(15, 4, 10, 6),
+      child: Row(
+        children: [
+          Expanded(flex: 4, child: Text('名前', style: style)),
+          const SizedBox(width: 8),
+          Expanded(flex: 6, child: Text('次の一手', style: style)),
+          const SizedBox(width: 8),
+          SizedBox(
+            width: 64,
+            child: Text('期日', textAlign: TextAlign.right, style: style),
+          ),
+        ],
+      ),
     );
   }
 

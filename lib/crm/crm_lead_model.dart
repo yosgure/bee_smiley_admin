@@ -99,15 +99,28 @@ class CrmLead {
     return raw.map((k, v) => MapEntry(k.toString(), v == true));
   }
 
-  // 待ち状態（reason / deadline / note のいずれか含むときは Map 返す。null なら待機なし）
-  Map<String, dynamic>? get waitingState {
-    final raw = this.raw['waitingState'];
-    if (raw is! Map || raw.isEmpty) return null;
-    return Map<String, dynamic>.from(raw);
+  /// 進捗チェックリストの日付（v4: 日程セクション統合に伴い導入）。
+  /// id → DateTime の対応。auto 項目（既存フィールド由来）はここに含めない。
+  Map<String, DateTime> get checklistDates {
+    final raw = this.raw['checklistDates'];
+    if (raw is! Map) return const {};
+    final out = <String, DateTime>{};
+    raw.forEach((k, v) {
+      if (v is Timestamp) out[k.toString()] = v.toDate();
+    });
+    return out;
   }
 
-  /// 待ち状態か否か
-  bool get isWaiting => waitingState?['reason'] != null;
+  /// チェックリスト項目のメモ（v4.1: 事前ヒアリング等に内容入力）。
+  Map<String, String> get checklistNotes {
+    final raw = this.raw['checklistNotes'];
+    if (raw is! Map) return const {};
+    final out = <String, String>{};
+    raw.forEach((k, v) {
+      if (v is String && v.isNotEmpty) out[k.toString()] = v;
+    });
+    return out;
+  }
 
   // 児童プロフィール（既存フィールドを直接参照、新しい childProfile マップは作らない）
   String get mainConcern => (raw['mainConcern'] as String?) ?? '';

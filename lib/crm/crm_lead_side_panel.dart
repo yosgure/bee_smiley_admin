@@ -141,16 +141,11 @@ class _PanelBody extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                _UrgentContextStrip(lead: lead),
-                const SizedBox(height: 12),
                 _ProgressSection(lead: lead, leadRef: leadRef),
                 const SizedBox(height: 12),
                 _NextActionSection(lead: lead, leadRef: leadRef),
                 const SizedBox(height: 12),
-                _WaitingStateSection(lead: lead, leadRef: leadRef),
                 _HistorySection(lead: lead, leadRef: leadRef),
-                const SizedBox(height: 12),
-                _ScheduleSection(lead: lead, leadRef: leadRef),
                 const SizedBox(height: 12),
                 // v2.1+: 児童プロフィール（ケア情報含む）は基本情報セクションに集約済み。
                 _BasicInfoSection(lead: lead, leadRef: leadRef),
@@ -186,7 +181,7 @@ class _Header extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 14, 8, 12),
       decoration: BoxDecoration(
-        color: c.cardBg,
+        color: c.scaffoldBg,
         border: Border(bottom: BorderSide(color: c.borderLight)),
       ),
       child: Row(
@@ -282,44 +277,6 @@ class _StagePill extends StatelessWidget {
 }
 
 // ============================================================
-// Urgent context (期限切れ等のチップ)
-// ============================================================
-class _UrgentContextStrip extends StatelessWidget {
-  final CrmLead lead;
-  const _UrgentContextStrip({required this.lead});
-
-  @override
-  Widget build(BuildContext context) {
-    final reasons = urgentReasonsFor(lead);
-    if (reasons.isEmpty) return const SizedBox.shrink();
-    // v2.1: 最終接触表示は廃止。情報源は対応履歴セクションに一元化。
-    return Wrap(
-      spacing: 6,
-      runSpacing: 4,
-      crossAxisAlignment: WrapCrossAlignment.center,
-      children: [
-        for (final r in reasons)
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-            decoration: BoxDecoration(
-              color: AppColors.warning.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(12),
-              border:
-                  Border.all(color: AppColors.warning.withValues(alpha: 0.3)),
-            ),
-            child: Text(
-              crmUrgentReasonLabel(r),
-              style: const TextStyle(
-                  fontSize: AppTextSize.caption,
-                  color: AppColors.warning,
-                  fontWeight: FontWeight.w600),
-            ),
-          ),
-      ],
-    );
-  }
-}
-
 // ============================================================
 // 基本情報セクション（最下部、備考＝memo を含む）
 // ============================================================
@@ -341,6 +298,7 @@ class _BasicInfoSectionState extends State<_BasicInfoSection> {
     final lead = widget.lead;
     final c = context.colors;
     return _SectionCard(
+      frameless: true,
       icon: Icons.contact_mail_outlined,
       title: '基本情報',
       child: Column(
@@ -414,22 +372,19 @@ class _BasicInfoSectionState extends State<_BasicInfoSection> {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 3),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           SizedBox(
               width: 60,
-              child: Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: Text(label,
-                    style: TextStyle(
-                        fontSize: AppTextSize.caption,
-                        color: c.textSecondary)),
-              )),
+              child: Text(label,
+                  style: TextStyle(
+                      fontSize: AppTextSize.caption,
+                      color: c.textSecondary))),
           Expanded(
             child: _InlineTextEditor(
               key: ValueKey('$fieldKey:$value'),
               initialText: value,
-              hint: hint,
+              hint: '未入力',
               onCommit: (text) async {
                 if (text == value) return; // 無変更は保存しない
                 await leadRef.update({fieldKey: text});
@@ -528,10 +483,10 @@ class _NextActionSection extends StatelessWidget {
     final note = lead.nextActionNote;
     final overdue = na != null && DateTime.now().isAfter(na);
     return _SectionCard(
+      frameless: true,
       icon: Icons.flag_outlined,
       title: '次の一手',
-      titleColor:
-          overdue ? AppColors.warning : null,
+      titleColor: overdue ? AppColors.warning : null,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -600,94 +555,25 @@ class _NextActionSection extends StatelessWidget {
           ),
           if (na != null || note.isNotEmpty) ...[
             const SizedBox(height: 10),
-            FilledButton.icon(
-              onPressed: () =>
-                  _showCompleteNextActionDialog(context, lead, leadRef),
-              icon: const Icon(Icons.check_circle_outline, size: 16),
-              label: const Text('完了して次を入力'),
-              style: FilledButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                textStyle: const TextStyle(fontSize: AppTextSize.small),
-                visualDensity: VisualDensity.compact,
+            Align(
+              alignment: Alignment.centerLeft,
+              child: FilledButton.tonalIcon(
+                onPressed: () =>
+                    _showCompleteNextActionDialog(context, lead, leadRef),
+                icon: const Icon(Icons.check_circle_outline, size: 16),
+                label: const Text('完了して次を入力'),
+                style: FilledButton.styleFrom(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  textStyle: const TextStyle(fontSize: AppTextSize.small),
+                  visualDensity: VisualDensity.compact,
+                ),
               ),
             ),
           ],
         ],
       ),
     );
-  }
-}
-
-// ============================================================
-// 日程セクション（インライン編集アイコン）
-// ============================================================
-class _ScheduleSection extends StatelessWidget {
-  final CrmLead lead;
-  final LeadViewReference leadRef;
-  const _ScheduleSection({required this.lead, required this.leadRef});
-
-  @override
-  Widget build(BuildContext context) {
-    return _SectionCard(
-      icon: Icons.calendar_today_outlined,
-      title: '日程',
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _dateRow(context, '体験予定', lead.trialAt, 'trialAt'),
-          _dateRow(context, '体験実施', lead.trialActualDate, 'trialActualDate'),
-          _dateRow(context, '初回接触', lead.firstContactedAt, 'firstContactedAt'),
-          _dateRow(context, '入会予定/実績', lead.enrolledAt, 'enrolledAt'),
-        ],
-      ),
-    );
-  }
-
-  Widget _dateRow(BuildContext context, String label, DateTime? value, String fieldKey) {
-    final c = context.colors;
-    final display = value == null
-        ? '未設定（クリックで設定）'
-        : DateFormat('yyyy/M/d (E)', 'ja').format(value);
-    return InkWell(
-      onTap: () => _editDate(context, label, value, fieldKey),
-      borderRadius: BorderRadius.circular(6),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
-        child: Row(
-          children: [
-            SizedBox(
-                width: 88,
-                child: Text(label,
-                    style: TextStyle(
-                        fontSize: AppTextSize.caption,
-                        color: c.textSecondary))),
-            Expanded(
-              child: Text(display,
-                  style: TextStyle(
-                      fontSize: AppTextSize.body,
-                      color: value == null ? c.textTertiary : c.textPrimary,
-                      fontStyle: value == null ? FontStyle.italic : null)),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Future<void> _editDate(BuildContext context, String label,
-      DateTime? current, String fieldKey) async {
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: current ?? DateTime.now(),
-      firstDate: DateTime(2024, 1, 1),
-      lastDate: DateTime(2030, 12, 31),
-      helpText: '$label を選択',
-    );
-    if (picked == null) return;
-    await leadRef.update({fieldKey: Timestamp.fromDate(picked)});
-    if (context.mounted) {
-      AppFeedback.success(context, '$label を更新しました');
-    }
   }
 }
 
@@ -704,6 +590,7 @@ class _HistorySection extends StatelessWidget {
     final c = context.colors;
     final activities = lead.activities.take(20).toList();
     return _SectionCard(
+      frameless: true,
       icon: Icons.history,
       title: '対応履歴',
       trailing: Row(
@@ -882,17 +769,55 @@ class _SectionCard extends StatelessWidget {
   final Color? titleColor;
   final Widget? trailing;
   final Widget child;
+  /// 枠なし表示。タイトル + 本文のみ、背景・ボーダーなし。
+  final bool frameless;
   const _SectionCard({
     required this.icon,
     required this.title,
     required this.child,
     this.titleColor,
     this.trailing,
+    this.frameless = false,
   });
 
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
+    final titleRow = Row(
+      children: [
+        Icon(icon, size: 16, color: titleColor ?? c.textSecondary),
+        const SizedBox(width: 6),
+        Expanded(
+          child: Text(title,
+              style: TextStyle(
+                  fontSize: AppTextSize.small,
+                  fontWeight: FontWeight.w700,
+                  color: titleColor ?? c.textPrimary)),
+        ),
+        if (trailing != null) trailing!,
+      ],
+    );
+    // frameless = タイトルは枠外、本文は枠内
+    if (frameless) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(4, 0, 4, 6),
+            child: titleRow,
+          ),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: c.cardBg,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: c.borderLight),
+            ),
+            child: child,
+          ),
+        ],
+      );
+    }
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -903,20 +828,7 @@ class _SectionCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            children: [
-              Icon(icon, size: 16, color: titleColor ?? c.textSecondary),
-              const SizedBox(width: 6),
-              Expanded(
-                child: Text(title,
-                    style: TextStyle(
-                        fontSize: AppTextSize.small,
-                        fontWeight: FontWeight.w700,
-                        color: titleColor ?? c.textPrimary)),
-              ),
-              if (trailing != null) trailing!,
-            ],
-          ),
+          titleRow,
           const SizedBox(height: 8),
           child,
         ],
@@ -1372,11 +1284,8 @@ Future<void> _showStartOnboardingDialog(
     }),
   );
   if (ok != true) return;
-  // v3: ステージ遷移時にチェックリストを onboarding 用の初期値で上書き（全 false）。
-  // 検討中の旧チェック状態は保持しない。
-  final onboardingInit = <String, bool>{
-    for (final it in _checklistOnboarding) it.id: false,
-  };
+  // v4: ステージ遷移時に checklistDates を空にリセット（新ステージ用に再入力）。
+  // firstContactedAt / trialAt / trialActualDate は履歴として残す。
   await leadRef.update({
     'stage': 'onboarding',
     // 契約予定日は Phase 1 で別フィールド化予定。今は enrolledAt に格納。
@@ -1385,7 +1294,7 @@ Future<void> _showStartOnboardingDialog(
     'permitStatus': permitStatus,
     'nextActionAt': Timestamp.fromDate(nextActionAt),
     'nextActionNote': nextActionNote.text.trim(),
-    'enrollmentChecklist': onboardingInit,
+    'checklistDates': <String, dynamic>{},
   });
   if (context.mounted) AppFeedback.success(context, '入会手続きを開始しました');
 }
@@ -1593,48 +1502,50 @@ Future<void> _reopenToConsidering(
 }
 
 // ============================================================
-// 進捗セクション（v3: ステージ別チェックリスト + 自動チェック）
+// 進捗セクション（v4: 日程セクション統合・各項目に日付を持たせる）
 // ============================================================
 
-/// 検討中の 6 項目。auto=true は元フィールド派生で自動チェック（手動操作不可）。
-const _checklistConsidering = <({String id, String label, bool auto})>[
-  (id: 'inquiry_received', label: '問い合わせ受付', auto: true),
-  (id: 'pre_trial_hearing', label: '事前ヒアリング', auto: false),
-  (id: 'trial_scheduled', label: '体験日程確定', auto: true),
-  (id: 'trial_completed', label: '体験実施', auto: true),
-  (id: 'post_trial_followup', label: '体験後フォロー連絡', auto: false),
-  (id: 'intent_confirmed', label: '入会意向の確認', auto: false),
+/// チェックリスト項目。
+/// - dateField != null  : Lead の既存 Timestamp フィールドを直接読み書き
+/// - dateField == null  : checklistDates マップに id をキーで保存
+/// - hasNote == true    : checklistNotes に内容メモを保存（事前ヒアリング等）
+typedef _ChecklistItem = ({
+  String id,
+  String label,
+  String? dateField,
+  bool hasNote,
+});
+
+/// 検討中フェーズ（6 項目）。
+const _checklistConsidering = <_ChecklistItem>[
+  (id: 'inquired', label: '問い合わせ日', dateField: 'inquiredAt', hasNote: false),
+  (id: 'pre_trial_hearing', label: '事前ヒアリング', dateField: null, hasNote: false),
+  (id: 'trial_scheduled', label: '体験日程', dateField: 'trialAt', hasNote: false),
+  (id: 'trial_completed', label: '体験実施', dateField: 'trialActualDate', hasNote: false),
+  (id: 'post_trial_followup', label: '体験後フォロー連絡', dateField: null, hasNote: false),
+  (id: 'intent_confirmed', label: '入会意向の確認', dateField: null, hasNote: false),
 ];
 
-/// 入会手続中の 7 項目。すべて手動。
-const _checklistOnboarding = <({String id, String label, bool auto})>[
-  (id: 'file_created', label: 'ファイル作成', auto: false),
-  (id: 'hug_registered', label: 'Hug 入力', auto: false),
-  (id: 'assessment_done', label: 'アセスメント', auto: false),
-  (id: 'contract_sent', label: '契約書送付', auto: false),
-  (id: 'contract_received', label: '契約書回収', auto: false),
-  (id: 'support_plan_created', label: '個別支援計画作成', auto: false),
-  (id: 'support_plan_explained', label: '個別支援計画説明', auto: false),
+/// 入会手続中フェーズ（7 項目）。
+const _checklistOnboarding = <_ChecklistItem>[
+  (id: 'file_created', label: 'ファイル作成', dateField: null, hasNote: false),
+  (id: 'hug_registered', label: 'Hug 入力', dateField: null, hasNote: false),
+  (id: 'assessment_done', label: 'アセスメント', dateField: null, hasNote: false),
+  (id: 'contract_sent', label: '契約書送付', dateField: null, hasNote: false),
+  (id: 'contract_received', label: '契約書回収', dateField: null, hasNote: false),
+  (id: 'support_plan_created', label: '個別支援計画作成', dateField: null, hasNote: false),
+  (id: 'support_plan_explained', label: '個別支援計画説明', dateField: null, hasNote: false),
 ];
 
-List<({String id, String label, bool auto})> _checklistFor(String stage) {
-  return stage == 'onboarding'
-      ? _checklistOnboarding
-      : _checklistConsidering;
+List<_ChecklistItem> _checklistFor(String stage) {
+  return stage == 'onboarding' ? _checklistOnboarding : _checklistConsidering;
 }
 
-/// 自動チェック判定: 元フィールドの値から導出。
-bool _isAutoChecked(String id, CrmLead lead) {
-  switch (id) {
-    case 'inquiry_received':
-      return lead.inquiredAt != null;
-    case 'trial_scheduled':
-      return lead.trialAt != null;
-    case 'trial_completed':
-      return lead.trialActualDate != null;
-    default:
-      return false;
+DateTime? _dateFor(_ChecklistItem item, CrmLead lead) {
+  if (item.dateField != null) {
+    return (lead.raw[item.dateField] as Timestamp?)?.toDate();
   }
+  return lead.checklistDates[item.id];
 }
 
 class _ProgressSection extends StatelessWidget {
@@ -1650,18 +1561,10 @@ class _ProgressSection extends StatelessWidget {
       return const SizedBox.shrink(); // won/lost/withdrawn では非表示
     }
     final items = _checklistFor(stage);
-    final stored = lead.enrollmentChecklist;
-    // 表示用 effective state（auto は派生、手動は stored）
-    final effective = <String, bool>{};
-    for (final it in items) {
-      effective[it.id] = it.auto ? _isAutoChecked(it.id, lead) : (stored[it.id] ?? false);
-    }
-    final completed = effective.values.where((v) => v).length;
-    final total = items.length;
     final permit = lead.permitStatus;
-    final title = stage == 'considering' ? '検討フェーズ' : '入会前チェックリスト';
 
     return _SectionCard(
+      frameless: true,
       icon: Icons.checklist_rtl,
       title: '進捗',
       child: Column(
@@ -1681,6 +1584,10 @@ class _ProgressSection extends StatelessWidget {
                   value: permit,
                   isDense: true,
                   underline: const SizedBox.shrink(),
+                  style: TextStyle(
+                    fontSize: AppTextSize.body,
+                    color: c.textPrimary,
+                  ),
                   items: const [
                     DropdownMenuItem(value: 'none', child: Text('無')),
                     DropdownMenuItem(value: 'applying', child: Text('申請中')),
@@ -1694,71 +1601,127 @@ class _ProgressSection extends StatelessWidget {
               ],
             ),
           ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Text(title,
-                  style: TextStyle(
-                      fontSize: AppTextSize.caption,
-                      color: c.textSecondary)),
-              const Spacer(),
-              Text('$completed/$total',
-                  style: TextStyle(
-                      fontSize: AppTextSize.caption,
-                      fontWeight: FontWeight.bold,
-                      color: completed == total
-                          ? AppColors.success
-                          : c.textPrimary)),
-            ],
-          ),
           const SizedBox(height: 4),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(4),
-            child: LinearProgressIndicator(
-              value: total == 0 ? 0 : completed / total,
-              minHeight: 6,
-              backgroundColor: c.scaffoldBgAlt,
-              valueColor: AlwaysStoppedAnimation(
-                  completed == total ? AppColors.success : AppColors.primary),
-            ),
-          ),
-          const SizedBox(height: 8),
-          for (final item in items)
-            CheckboxListTile(
-              value: effective[item.id] ?? false,
-              onChanged: item.auto
-                  ? null
-                  : (v) async {
-                      final next = Map<String, bool>.from(stored);
-                      next[item.id] = v ?? false;
-                      await leadRef.update({'enrollmentChecklist': next});
-                    },
-              title: Row(
-                children: [
-                  Expanded(
-                    child: Text(item.label,
-                        style: TextStyle(
-                            fontSize: AppTextSize.body,
-                            color: item.auto
-                                ? c.textSecondary
-                                : c.textPrimary)),
-                  ),
-                  if (item.auto)
-                    Text('(自動)',
-                        style: TextStyle(
-                            fontSize: AppTextSize.xs,
-                            color: c.textTertiary,
-                            fontStyle: FontStyle.italic)),
-                ],
-              ),
-              dense: true,
-              controlAffinity: ListTileControlAffinity.leading,
-              contentPadding: EdgeInsets.zero,
-              visualDensity: VisualDensity.compact,
-            ),
+          for (final item in items) _itemRow(context, item),
         ],
       ),
     );
+  }
+
+  Widget _itemRow(BuildContext context, _ChecklistItem item) {
+    final c = context.colors;
+    final date = _dateFor(item, lead);
+    final done = date != null;
+    final display = date == null
+        ? '未設定'
+        : DateFormat('yyyy/M/d (E)', 'ja').format(date);
+    final note = item.hasNote ? (lead.checklistNotes[item.id] ?? '') : '';
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        InkWell(
+          onTap: () => _editDate(context, item, date),
+          borderRadius: BorderRadius.circular(6),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+            child: Row(
+              children: [
+                Icon(
+                  done ? Icons.check_circle : Icons.radio_button_unchecked,
+                  size: 18,
+                  color: done ? AppColors.success : c.textTertiary,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(item.label,
+                      style: TextStyle(
+                          fontSize: AppTextSize.body, color: c.textPrimary)),
+                ),
+                Text(
+                  display,
+                  style: TextStyle(
+                    fontSize: AppTextSize.caption,
+                    color: done ? c.textSecondary : c.textTertiary,
+                    fontStyle: done ? null : FontStyle.italic,
+                  ),
+                ),
+                if (done) ...[
+                  const SizedBox(width: 4),
+                  InkWell(
+                    onTap: () => _clearDate(context, item),
+                    borderRadius: BorderRadius.circular(12),
+                    child: Padding(
+                      padding: const EdgeInsets.all(4),
+                      child: Icon(Icons.close,
+                          size: 14, color: c.textTertiary),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+        if (item.hasNote)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(28, 0, 4, 8),
+            child: _InlineTextEditor(
+              key: ValueKey('note-${item.id}-${note.hashCode}'),
+              initialText: note,
+              hint: '${item.label}の内容を入力',
+              onCommit: (v) => _writeNote(item, v),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Future<void> _writeNote(_ChecklistItem item, String value) async {
+    final next = Map<String, dynamic>.from(
+        (lead.raw['checklistNotes'] as Map?) ?? {});
+    if (value.trim().isEmpty) {
+      next.remove(item.id);
+    } else {
+      next[item.id] = value.trim();
+    }
+    await leadRef.update({'checklistNotes': next});
+  }
+
+  Future<void> _editDate(
+      BuildContext context, _ChecklistItem item, DateTime? current) async {
+    final picked = await _quickPickDate(
+      context,
+      title: '${item.label} の日付を選択',
+      initial: current ?? DateTime.now(),
+    );
+    if (picked == null) return;
+    await _writeDate(item, picked);
+    if (context.mounted) {
+      AppFeedback.success(context, '${item.label} を更新しました');
+    }
+  }
+
+  Future<void> _clearDate(BuildContext context, _ChecklistItem item) async {
+    await _writeDate(item, null);
+    if (context.mounted) {
+      AppFeedback.success(context, '${item.label} をクリアしました');
+    }
+  }
+
+  Future<void> _writeDate(_ChecklistItem item, DateTime? date) async {
+    if (item.dateField != null) {
+      await leadRef.update({
+        item.dateField!: date == null ? FieldValue.delete() : Timestamp.fromDate(date),
+      });
+    } else {
+      final next = Map<String, dynamic>.from(
+          (lead.raw['checklistDates'] as Map?) ?? {});
+      if (date == null) {
+        next.remove(item.id);
+      } else {
+        next[item.id] = Timestamp.fromDate(date);
+      }
+      await leadRef.update({'checklistDates': next});
+    }
   }
 }
 
@@ -1766,210 +1729,57 @@ class _ProgressSection extends StatelessWidget {
 // 待ち状態セクション（reason / deadline / note。null なら CTA のみ）
 // ============================================================
 
-const _waitingReasons = <String>[
-  '他事業所決定待ち',
-  '受給者証申請中',
-  '家庭事情(検査入院・引越等)',
-  '空き枠待ち',
-  '連絡待ち(保護者から折り返し予定)',
-  'その他',
-];
-
-class _WaitingStateSection extends StatelessWidget {
-  final CrmLead lead;
-  final LeadViewReference leadRef;
-  const _WaitingStateSection({required this.lead, required this.leadRef});
-
-  @override
-  Widget build(BuildContext context) {
-    final ws = lead.waitingState;
-    if (ws == null || ws['reason'] == null) {
-      // 未設定: 次の一手の下に小さく CTA のみ
-      return Padding(
-        padding: const EdgeInsets.only(top: 4, bottom: 8),
-        child: Center(
-          child: TextButton.icon(
-            icon: const Icon(Icons.hourglass_empty, size: 14),
-            label: const Text('待ち状態を設定'),
-            style: TextButton.styleFrom(
-              textStyle: const TextStyle(fontSize: AppTextSize.caption),
-              visualDensity: VisualDensity.compact,
-            ),
-            onPressed: () => _showWaitingDialog(context, lead, leadRef),
-          ),
-        ),
-      );
-    }
-    final reason = ws['reason'] as String;
-    final deadline = (ws['deadline'] as Timestamp?)?.toDate();
-    final note = (ws['note'] as String?) ?? '';
-    final overdue =
-        deadline != null && deadline.isBefore(DateTime.now());
-    return _SectionCard(
-      icon: Icons.hourglass_top,
-      title: '待ち状態',
-      titleColor: overdue ? AppColors.warning : null,
-      trailing: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          IconButton(
-            icon: const Icon(Icons.edit_outlined, size: 16),
-            tooltip: '編集',
-            visualDensity: VisualDensity.compact,
-            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-            onPressed: () => _showWaitingDialog(context, lead, leadRef),
-          ),
-          IconButton(
-            icon: const Icon(Icons.close, size: 16),
-            tooltip: '解除',
-            visualDensity: VisualDensity.compact,
-            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-            onPressed: () async {
-              await leadRef.update({'waitingState': null});
-              if (context.mounted) {
-                AppFeedback.success(context, '待ち状態を解除しました');
-              }
-            },
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _row(context, '状態', reason, primary: true),
-          if (deadline != null)
-            _row(
-                context,
-                '待ち期限',
-                DateFormat('yyyy/M/d (E)', 'ja').format(deadline) +
-                    (overdue ? '（超過）' : ''),
-                color: overdue ? AppColors.warning : null),
-          if (note.isNotEmpty) _row(context, 'メモ', note),
-        ],
-      ),
-    );
-  }
-
-  Widget _row(BuildContext context, String label, String value,
-      {Color? color, bool primary = false}) {
-    final c = context.colors;
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 3),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-              width: 80,
-              child: Text(label,
-                  style: TextStyle(
-                      fontSize: AppTextSize.caption,
-                      color: c.textSecondary))),
-          Expanded(
-            child: Text(value,
-                style: TextStyle(
-                    fontSize: AppTextSize.body,
-                    fontWeight: primary ? FontWeight.bold : FontWeight.normal,
-                    color: color ?? c.textPrimary)),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-Future<void> _showWaitingDialog(
-    BuildContext context, CrmLead lead, LeadViewReference leadRef) async {
-  final ws = lead.waitingState ?? {};
-  String? reason = ws['reason'] as String?;
-  DateTime? deadline = (ws['deadline'] as Timestamp?)?.toDate();
-  final note = TextEditingController(text: (ws['note'] as String?) ?? '');
-  final ok = await showDialog<bool>(
+/// 日付選択ダイアログ（タップ即決定）。OK ボタン不要、キャンセルのみ。
+Future<DateTime?> _quickPickDate(
+  BuildContext context, {
+  required String title,
+  required DateTime initial,
+  DateTime? firstDate,
+  DateTime? lastDate,
+}) {
+  return showDialog<DateTime>(
     context: context,
-    builder: (ctx) => StatefulBuilder(builder: (ctx, setS) {
-      return AlertDialog(
-        title: const Text('待ち状態'),
-        content: SizedBox(
+    builder: (ctx) {
+      return Dialog(
+        clipBehavior: Clip.antiAlias,
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12)),
+        child: SizedBox(
           width: 360,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              DropdownButtonFormField<String>(
-                initialValue: reason,
-                decoration: const InputDecoration(
-                    labelText: '待ち理由（必須）',
-                    border: OutlineInputBorder(),
-                    isDense: true),
-                items: _waitingReasons
-                    .map((r) =>
-                        DropdownMenuItem(value: r, child: Text(r)))
-                    .toList(),
-                onChanged: (v) => setS(() => reason = v),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 4),
+                child: Text(title,
+                    style: TextStyle(
+                        fontSize: AppTextSize.body,
+                        fontWeight: FontWeight.w600,
+                        color: ctx.colors.textSecondary)),
               ),
-              const SizedBox(height: 8),
-              OutlinedButton.icon(
-                icon: const Icon(Icons.event, size: 16),
-                label: Text(deadline == null
-                    ? '待ち期限を選択（任意）'
-                    : DateFormat('yyyy/M/d (E)', 'ja').format(deadline!)),
-                onPressed: () async {
-                  final d = await showDatePicker(
-                      context: ctx,
-                      initialDate: deadline ?? DateTime.now(),
-                      firstDate: DateTime(2024, 1, 1),
-                      lastDate: DateTime(2030, 12, 31));
-                  if (d != null) setS(() => deadline = d);
-                },
+              CalendarDatePicker(
+                initialDate: initial,
+                firstDate: firstDate ?? DateTime(2024, 1, 1),
+                lastDate: lastDate ?? DateTime(2030, 12, 31),
+                onDateChanged: (d) => Navigator.of(ctx).pop(d),
               ),
-              if (deadline != null) ...[
-                const SizedBox(height: 4),
-                Align(
-                  alignment: Alignment.centerRight,
+              Align(
+                alignment: Alignment.centerRight,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(8, 0, 12, 8),
                   child: TextButton(
-                      onPressed: () => setS(() => deadline = null),
-                      child: const Text('期限をクリア')),
+                    onPressed: () => Navigator.of(ctx).pop(),
+                    child: const Text('キャンセル'),
+                  ),
                 ),
-              ],
-              const SizedBox(height: 8),
-              TextField(
-                controller: note,
-                maxLines: 2,
-                decoration: const InputDecoration(
-                    labelText: 'メモ（任意）',
-                    hintText: '通うなら日数増、wapiに週2 等',
-                    border: OutlineInputBorder(),
-                    isDense: true),
               ),
             ],
           ),
         ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('キャンセル')),
-          FilledButton(
-              onPressed: () {
-                if (reason == null) {
-                  AppFeedback.warning(ctx, '待ち理由を選択してください');
-                  return;
-                }
-                Navigator.pop(ctx, true);
-              },
-              child: const Text('保存')),
-        ],
       );
-    }),
-  );
-  if (ok != true) return;
-  await leadRef.update({
-    'waitingState': {
-      'reason': reason,
-      'deadline':
-          deadline == null ? null : Timestamp.fromDate(deadline!),
-      'note': note.text.trim(),
     },
-  });
-  if (context.mounted) AppFeedback.success(context, '待ち状態を保存しました');
+  );
 }
 
 /// 性別ラベル変換（v2.1: 基本情報セクションからも参照する top-level 関数）。

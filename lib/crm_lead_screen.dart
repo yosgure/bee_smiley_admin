@@ -164,54 +164,27 @@ class _CrmLeadScreenState extends State<CrmLeadScreen> {
     return Scaffold(
       backgroundColor: context.colors.scaffoldBg,
       appBar: AppBar(
-        // v2 改善 D + v3 改善 5: タブを中央寄せ。
-        // [CRM タイトル, Spacer, タブ, Spacer] 構造で AppBar の中央領域に
-        // SegmentedButton を配置。アクションは AppBar.actions プロパティに。
         title: Row(
           children: [
             const Text('CRM',
                 style: TextStyle(
                     fontSize: AppTextSize.title,
                     fontWeight: FontWeight.w600)),
-            const Spacer(),
-            SegmentedButton<int>(
-              showSelectedIcon: false,
-              segments: const [
-                ButtonSegment(
-                    value: 0,
-                    label: Text('今日'),
-                    icon: Icon(Icons.checklist, size: 16)),
-                ButtonSegment(
-                    value: 1,
-                    label: Text('データベース'),
-                    icon: Icon(Icons.view_kanban_outlined, size: 16)),
-                ButtonSegment(
-                    value: 2,
-                    label: Text('分析'),
-                    icon: Icon(Icons.bar_chart, size: 16)),
-              ],
-              selected: {_viewMode},
-              onSelectionChanged: (s) =>
-                  setState(() => _viewMode = s.first),
-              style: ButtonStyle(
-                textStyle: WidgetStateProperty.all(
-                    const TextStyle(fontSize: AppTextSize.small)),
-                padding: WidgetStateProperty.all(
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4)),
+            Expanded(
+              child: Center(
+                child: _ViewModeTabs(
+                  value: _viewMode,
+                  onChanged: (v) => setState(() => _viewMode = v),
+                ),
               ),
             ),
-            const Spacer(),
           ],
         ),
-        // Step 4: ダークモード時に AppBar が真っ黒になるよう scaffoldBg を使う。
-        // ライトモードは cardBg=scaffoldBg=white で同色なので影響なし。
+        // ダークモード時に AppBar が真っ黒になるよう scaffoldBg を使う。
         backgroundColor: context.colors.scaffoldBg,
         elevation: 0,
         foregroundColor: context.colors.textPrimary,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios, size: 20),
-          onPressed: _close,
-        ),
+        automaticallyImplyLeading: false,
         actions: [
           // CSV インポート / 再読込はあまり使わないため、より頻度の高い「新規リード」を
           // 配置。CSV は管理タブのデータメンテナンスから。再読込はブラウザリロードで代替。
@@ -512,6 +485,73 @@ String _childFullName(Map<String, dynamic> d) {
   final pl = (d['parentLastName'] as String? ?? '').trim();
   final last = cl.isNotEmpty ? cl : pl;
   return [last, cf].where((s) => s.isNotEmpty).join(' ');
+}
+
+// ============================================================
+// 上部ビュー切替タブ（軽量・無装飾）
+// ============================================================
+class _ViewModeTabs extends StatelessWidget {
+  final int value;
+  final ValueChanged<int> onChanged;
+  const _ViewModeTabs({required this.value, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 4, 12, 4),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: [
+            _ViewModeTab(label: 'リード', selected: value == 0, onTap: () => onChanged(0)),
+            const SizedBox(width: 8),
+            _ViewModeTab(label: 'データベース', selected: value == 1, onTap: () => onChanged(1)),
+            const SizedBox(width: 8),
+            _ViewModeTab(label: '分析', selected: value == 2, onTap: () => onChanged(2)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ViewModeTab extends StatelessWidget {
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+  const _ViewModeTab({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+        decoration: BoxDecoration(
+          color: selected
+              ? AppColors.primary.withValues(alpha: 0.18)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Text(
+          label,
+          softWrap: false,
+          overflow: TextOverflow.fade,
+          style: TextStyle(
+            fontSize: AppTextSize.body,
+            fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+            color: selected ? AppColors.primary : c.textSecondary,
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 // ============================================================
