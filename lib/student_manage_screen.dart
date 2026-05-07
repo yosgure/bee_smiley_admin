@@ -81,25 +81,56 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
   Future<void> _fetchClassrooms() async {
     try {
       final snapshot = await _classroomsRef.get();
-      final isPlus = widget.collectionName == 'plus_families';
+      // BS と BSP 両方通う子に対応するため、両系統の教室を選択肢に出す。
+      // BS / BSP の自動振り分けは行わず、複数選択で表現する。
       setState(() {
         _classroomList = snapshot.docs
             .map((doc) => (doc.data() as Map<String, dynamic>)['name'] as String? ?? '')
             .where((name) => name.isNotEmpty)
-            // 通常画面ではプラス教室を除外、プラス画面では通常教室を除外
-            .where((name) =>
-                isPlus ? name.contains('プラス') : !name.contains('プラス'))
             .toList();
       });
     } catch (e) {
       setState(() {
-        _classroomList = widget.collectionName == 'plus_families'
-            ? ['ビースマイリープラス湘南藤沢']
-            : [
-                'ビースマイリー湘南藤沢',
-                'ビースマイリー湘南台',
-              ];
+        _classroomList = const [
+          'ビースマイリー湘南藤沢',
+          'ビースマイリー湘南台',
+          'ビースマイリープラス湘南藤沢',
+        ];
       });
+    }
+  }
+
+  /// children の classrooms に BS / BSP 両系統が含まれている場合、もう片方の
+  /// コレクションにも同じ docId で家族レコードを mirror する。両方通う子向け。
+  /// _compat フラグは付けない（両方とも primary 扱い）。
+  Future<void> _mirrorAcrossCollectionsIfNeeded({
+    required String docId,
+    required List<Map<String, dynamic>> children,
+    required Map<String, dynamic> saveData,
+  }) async {
+    bool hasPlus = false;
+    bool hasNormal = false;
+    for (final c in children) {
+      final list = List<String>.from(
+          (c['classrooms'] as List?)?.cast<String>() ?? const <String>[]);
+      for (final name in list) {
+        if (name.contains('プラス')) {
+          hasPlus = true;
+        } else if (name.isNotEmpty) {
+          hasNormal = true;
+        }
+      }
+    }
+    if (!(hasPlus && hasNormal)) return;
+    final otherCollection =
+        widget.collectionName == 'plus_families' ? 'families' : 'plus_families';
+    try {
+      await FirebaseFirestore.instance
+          .collection(otherCollection)
+          .doc(docId)
+          .set(saveData, SetOptions(merge: true));
+    } catch (e) {
+      debugPrint('mirror to $otherCollection failed: $e');
     }
   }
 
@@ -1258,6 +1289,13 @@ class _StudentManageScreenState extends State<StudentManageScreen> {
                           'children': children,
                         };
                         await _familiesRef.doc(familyDoc.id).update(saveData);
+                        // BS / BSP 両方の教室を含む場合、もう一方のコレクションにも同期して
+                        // 「両方通う子」が両系統の画面に出るようにする。
+                        await _mirrorAcrossCollectionsIfNeeded(
+                          docId: familyDoc.id,
+                          children: children,
+                          saveData: saveData,
+                        );
                       } else {
                         // 新規作成の場合はCloud Functionsを使用
                         final familyData = {
