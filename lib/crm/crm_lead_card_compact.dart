@@ -35,8 +35,7 @@ class CrmLeadCardCompact extends StatelessWidget {
 
     // 期日関連
     final na = lead.nextActionAt;
-    final waiting = lead.isWaiting;
-    final statusColor = _statusBarColor(na, waiting);
+    final statusColor = _statusBarColor(na);
     final due = _dueDisplay(context, na);
 
     // 種別アイコン + ラベル
@@ -52,9 +51,14 @@ class CrmLeadCardCompact extends StatelessWidget {
       child: Container(
         margin: const EdgeInsets.symmetric(vertical: 2),
         decoration: BoxDecoration(
-          color: selected ? c.scaffoldBgAlt : c.cardBg,
+          color: selected
+              ? AppColors.primary.withValues(alpha: 0.18)
+              : c.cardBg,
           borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: c.borderLight),
+          border: Border.all(
+            color: selected ? AppColors.primary : c.borderLight,
+            width: selected ? 1.5 : 1,
+          ),
         ),
         clipBehavior: Clip.antiAlias,
         child: Material(
@@ -118,9 +122,11 @@ class CrmLeadCardCompact extends StatelessWidget {
                             flex: 6,
                             child: Row(
                               children: [
-                                Text(typeIcon,
-                                    style: const TextStyle(fontSize: 16)),
-                                const SizedBox(width: 4),
+                                if (typeIcon.isNotEmpty) ...[
+                                  Text(typeIcon,
+                                      style: const TextStyle(fontSize: 16)),
+                                  const SizedBox(width: 4),
+                                ],
                                 Expanded(
                                   child: Text(
                                     actionLabel,
@@ -191,8 +197,7 @@ class CrmLeadCardCompact extends StatelessWidget {
 }
 
 /// v2.1: ステータスバー色。待ち状態 > 期日状態の優先順。
-Color _statusBarColor(DateTime? na, bool waiting) {
-  if (waiting) return const Color(0xFFA855F7); // 紫
+Color _statusBarColor(DateTime? na) {
   if (na == null) return const Color(0xFF9CA3AF); // グレー
   final now = DateTime.now();
   final today = DateTime(now.year, now.month, now.day);
@@ -208,7 +213,7 @@ Color _statusBarColor(DateTime? na, bool waiting) {
     BuildContext context, DateTime? na) {
   final c = context.colors;
   if (na == null) {
-    return (text: '⚠️ 未設定', color: c.textTertiary, bold: false);
+    return (text: '未設定', color: c.textTertiary, bold: false);
   }
   final now = DateTime.now();
   final today = DateTime(now.year, now.month, now.day);
@@ -256,6 +261,6 @@ String _iconForType(String? typeId) {
     case 'other':
       return '📝';
     default:
-      return '⚠️';
+      return '';
   }
 }

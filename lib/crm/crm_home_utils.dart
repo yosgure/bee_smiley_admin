@@ -34,13 +34,12 @@ class CrmUrgentThresholds {
 
 /// 1件のリードに対して「今すぐ対応」の理由を列挙する。
 /// 対応終了ステージ（won/lost/withdrawn）は空配列。
-/// F_lead_detail_refactor v2: 待ち状態のリードは「次の一手未設定」アラート対象外。
 List<CrmUrgentReason> urgentReasonsFor(CrmLead lead, {DateTime? now}) {
   if (lead.isClosed) return const [];
   final ref = now ?? DateTime.now();
   final reasons = <CrmUrgentReason>[];
 
-  // 1) 予定日超過（待ち状態でも次の一手の期限超過は表示する）
+  // 1) 予定日超過
   final na = lead.nextActionAt;
   if (na != null && ref.isAfter(na)) {
     reasons.add(CrmUrgentReason.overdue);
@@ -67,8 +66,7 @@ List<CrmUrgentReason> urgentReasonsFor(CrmLead lead, {DateTime? now}) {
   }
 
   // 4) 次の一手未設定: 最終接触から 24h 経過しても設定されていない
-  // 例外: 待ち状態の Lead は次の一手未設定でアラートしない（待つのが正しい状態）
-  if (!lead.hasNextAction && !lead.isWaiting) {
+  if (!lead.hasNextAction) {
     final since = lead.sinceLastContact(ref);
     if (since != null &&
         since.inHours >= CrmUrgentThresholds.noNextActionHours) {
