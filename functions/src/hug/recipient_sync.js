@@ -30,48 +30,53 @@ function parseDays(text) {
 
 /**
  * プロフィール一覧ページの HTML から児童行をパース。
+ * 各児童は 2 つの tr に分かれる:
+ *   tr1: <button onclick="location.href='...id=N'">詳細</button> | 名前(ふりがな) | 性別 | (空) | 上限管理事業者 | 最終更新
+ *   tr2: 受給者証番号 | 給付支給量 | 合計契約支給量 | 年齢 | 適用期間
+ *
  * 戻り値: [{ hugChildId, name, supplyDays, contractDays }]
  */
 function parseProfileChildrenHtml(html) {
   const $ = cheerio.load(html);
   const rows = [];
-  // ヘッダー判定: 「給付支給量」「合計契約支給量」「児童名」 を含むテーブルのみ対象
+
   $('table').each((_, table) => {
     const headText = $(table).find('th').text();
     if (!headText.includes('給付支給量') || !headText.includes('合計契約支給量')) return;
 
-    // 各 tr に対応する 詳細リンクから hugChildId 抽出 + tdTexts から日数抽出
-    $(table).find('tbody tr, tr').each((_, tr) => {
-      const $tr = $(tr);
-      const detailLink = $tr.find('a[href*="profile_children.php"]').first();
-      if (!detailLink.length) return;
-      const href = detailLink.attr('href') || '';
-      const idMatch = href.match(/[?&]id=(\d+)/);
-      if (!idMatch) return;
+    const trs = $(table).find('tbody > tr').toArray();
+    for (let i = 0; i + 1 < trs.length; i += 2) {
+      const $first = $(trs[i]);
+      const $second = $(trs[i + 1]);
+
+      // 詳細ボタンの onclick から hugChildId を抽出
+      const button = $first.find('button[onclick]').first();
+      const onclick = button.attr('onclick') || '';
+      const idMatch = onclick.match(/[?&]id=(\d+)/);
+      if (!idMatch) continue;
       const hugChildId = idMatch[1];
 
-      // 児童名（ふりがな前まで）
-      const nameCell = $tr.find('td').eq(1).text().trim();
-      const name = nameCell.split(/\s|（/)[0] || nameCell;
+      // 名前: td.td-l に "赤間草月（あかまそうげつ） さん" 形式で入っている
+      const nameRaw = $first.find('td.td-l').text().trim().replace(/\s+/g, ' ');
+      // 全角括弧前まで
+      const name = nameRaw.split(/[（(]/)[0].trim();
 
-      // 各 td テキストを集めて、給付/合計契約 の位置を特定
-      const tds = $tr.find('td').map((_, td) => $(td).text().trim().replace(/\s+/g, ' ')).get();
-      // 列順: [詳細] [児童名/ふりがな + 受給者証] [給付支給量] [合計契約支給量] [性別/年齢] ...
-      // 給付支給量・合計契約支給量は連続した2セルに入る想定。
+      // 第 2 行の td: [受給者証番号][給付支給量][合計契約支給量][年齢][適用期間]
+      const tds = $second.find('> td');
       let supplyDays = null;
       let contractDays = null;
-      // 「N日」形式のセルを上から順に2つ拾う（ヒューリスティック）
-      const dayCells = tds.filter((t) => /^\d+日?$/.test(t.replace(/[\s　]/g, '')));
-      if (dayCells.length >= 2) {
-        supplyDays = parseDays(dayCells[0]);
-        contractDays = parseDays(dayCells[1]);
-      } else if (dayCells.length === 1) {
-        // 給付支給量だけ取れたケース
-        supplyDays = parseDays(dayCells[0]);
+      if (tds.length >= 3) {
+        supplyDays = parseDays($(tds[1]).text());
+        contractDays = parseDays($(tds[2]).text());
       }
 
-      rows.push({ hugChildId: String(hugChildId), name, supplyDays, contractDays });
-    });
+      rows.push({
+        hugChildId: String(hugChildId),
+        name,
+        supplyDays,
+        contractDays,
+      });
+    }
   });
   return rows;
 }
@@ -96,10 +101,18 @@ async function fetchRecipientLimits(debugInfo = null) {
 
   let rows = parseProfileChildrenHtml(html);
   console.log(`[recipient] parsed from GET: ${rows.length} rows`);
-  if (debugInfo) debugInfo.getRows = rows.length;
+  if (debugInfo) {
+    debugInfo.getRows = rows.length;
+    // 給付支給量の最初の出現は <th>。2 番目以降に最初のデータ行がある。
+    const headerIdx = html.indexOf('給付支給量');
+    const tbodyIdx = html.indexOf('<tbody', headerIdx);
+    if (tbodyIdx >= 0) {
+      debugInfo.tbodySnippet = html.substring(tbodyIdx, tbodyIdx + 3500).replace(/\s+/g, ' ');
+    }
+  }
 
-  // GET で取れない場合は フォーム解析 + POST で再試行
-  if (rows.length === 0) {
+  // GET で 0 行のときの POST 再試行は撤廃（GET でデータ表示される）
+  if (false && rows.length === 0) {
     const $form = cheerio.load(html);
 
     // フォーム特定 (name="search" など) を探す
@@ -235,7 +248,8 @@ async function applyToFirestore(rows) {
         supplyDays: r.supplyDays,
         contractDays: r.contractDays,
         supplyMonth: monthKey,
-        lastSyncedAt: FieldValue.serverTimestamp(),
+        // 配列内では FieldValue.serverTimestamp() が使えないので Date を使用
+        lastSyncedAt: new Date(),
       };
       // 値に変化がなければスキップ
       if (

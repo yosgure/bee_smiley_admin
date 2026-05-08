@@ -7784,12 +7784,10 @@ class _StudentSupplyBoxState extends State<_StudentSupplyBox> {
   Future<int> _countUsed() async {
     final start = DateTime(widget.month.year, widget.month.month, 1);
     final end = DateTime(widget.month.year, widget.month.month + 1, 1);
+    // 複合インデックス回避のため studentName だけで取得 → 月範囲はクライアントで絞り込み
     final snap = await FirebaseFirestore.instance
         .collection('plus_lessons')
         .where('studentName', isEqualTo: widget.studentName)
-        .where('date',
-            isGreaterThanOrEqualTo: Timestamp.fromDate(start),
-            isLessThan: Timestamp.fromDate(end))
         .get();
     // 同日重複は 1 日としてカウント
     final days = <String>{};
@@ -7797,6 +7795,7 @@ class _StudentSupplyBoxState extends State<_StudentSupplyBox> {
       final ts = d.data()['date'];
       if (ts is! Timestamp) continue;
       final dt = ts.toDate();
+      if (dt.isBefore(start) || !dt.isBefore(end)) continue;
       days.add('${dt.year}-${dt.month}-${dt.day}');
     }
     return days.length;
