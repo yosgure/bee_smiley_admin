@@ -12,5 +12,6 @@ module.exports = {
   ...require('./src/ai'),
   ...require('./src/hug/sync'),
   ...require('./src/hug/docs'),
+  ...require('./src/hug/recipient_sync'),
   ...require('./src/monitoring'),
 };
