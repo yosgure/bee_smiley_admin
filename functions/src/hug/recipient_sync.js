@@ -79,39 +79,123 @@ function parseProfileChildrenHtml(html) {
 /**
  * Hug ログイン → profile_children.php を取得 → パース。
  */
-async function fetchRecipientLimits() {
+async function fetchRecipientLimits(debugInfo = null) {
   const cookies = await loginToHug();
 
-  // GET。既定で当月分が表示される想定。
+  // GET 取得（既定状態の HTML 確認用）
   const res = await hugFetch(PROFILE_URL, {}, cookies);
   const html = await res.text();
-  if (!html.includes('profile_children.php')) {
-    throw new Error('profile_children.php の取得に失敗（ログイン切れ?）');
-  }
+  const getInfo = {
+    length: html.length,
+    has給付: html.includes('給付支給量'),
+    has全部: html.includes('全部で'),
+    snippet: html.substring(0, 800).replace(/\s+/g, ' '),
+  };
+  console.log(`[recipient] GET html length=${html.length}, includes(給付支給量)=${html.includes('給付支給量')}, includes(全部で)=${html.includes('全部で')}`);
+  if (debugInfo) debugInfo.get = getInfo;
 
   let rows = parseProfileChildrenHtml(html);
+  console.log(`[recipient] parsed from GET: ${rows.length} rows`);
+  if (debugInfo) debugInfo.getRows = rows.length;
 
-  // 取れない場合は POST で当月を明示送信して再試行
+  // GET で取れない場合は フォーム解析 + POST で再試行
   if (rows.length === 0) {
     const $form = cheerio.load(html);
+
+    // フォーム特定 (name="search" など) を探す
+    let $targetForm = null;
+    $form('form').each((_, f) => {
+      const html = $form(f).html() || '';
+      if (html.includes('pccontract') || html.includes('contract_facility')) {
+        $targetForm = $form(f);
+      }
+    });
+    if (!$targetForm) {
+      $targetForm = $form('form').first();
+    }
+
     const formData = {};
-    $form('form input[type="hidden"]').each((_, el) => {
+    $targetForm.find('input[type="hidden"]').each((_, el) => {
       const name = $form(el).attr('name');
       const value = $form(el).attr('value') || '';
       if (name) formData[name] = value;
     });
+    // 全 input の name 一覧をログ
+    const allInputs = [];
+    $targetForm.find('input, select').each((_, el) => {
+      const name = $form(el).attr('name');
+      const type = $form(el).attr('type') || $form(el).get(0).tagName;
+      const value = $form(el).attr('value') || '';
+      const checked = $form(el).attr('checked') !== undefined;
+      if (name) allInputs.push(`${type}:${name}=${value}${checked ? '(checked)' : ''}`);
+    });
+    console.log(`[recipient] form inputs: ${allInputs.join(', ')}`);
+
     const now = new Date();
     formData['pccontract_y'] = String(now.getFullYear());
     formData['pccontract_m'] = String(now.getMonth() + 1);
-    // 契約施設チェックは name="contract_facility[]" などの可能性。
-    // hidden を全部送るだけで GET と同等になる想定。
+
+    // 全 checkbox (チェックされているもの) を含める
+    $targetForm.find('input[type="checkbox"]').each((_, el) => {
+      const name = $form(el).attr('name');
+      const value = $form(el).attr('value') || 'on';
+      if (!name) return;
+      // 既存値があれば配列に
+      if (formData[name] !== undefined) {
+        if (!Array.isArray(formData[name])) formData[name] = [formData[name]];
+        formData[name].push(value);
+      } else {
+        formData[name] = value;
+      }
+    });
+
+    // 検索ボタン
+    formData['search'] = '検索';
+
+    // URLSearchParams で配列対応
+    const params = new URLSearchParams();
+    for (const [k, v] of Object.entries(formData)) {
+      if (Array.isArray(v)) {
+        for (const vv of v) params.append(k, vv);
+      } else {
+        params.append(k, v);
+      }
+    }
+    console.log(`[recipient] POST body keys: ${Object.keys(formData).join(', ')}`);
+
     const postRes = await hugFetch(PROFILE_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams(formData).toString(),
+      body: params.toString(),
     }, cookies);
     const postHtml = await postRes.text();
+    console.log(`[recipient] POST status=${postRes.status}, html length=${postHtml.length}, includes(給付支給量)=${postHtml.includes('給付支給量')}, includes(全部で)=${postHtml.includes('全部で')}`);
+
     rows = parseProfileChildrenHtml(postHtml);
+    console.log(`[recipient] parsed from POST: ${rows.length} rows`);
+
+    if (debugInfo) {
+      debugInfo.postStatus = postRes.status;
+      debugInfo.postLength = postHtml.length;
+      debugInfo.postHas給付 = postHtml.includes('給付支給量');
+      debugInfo.postHas全部 = postHtml.includes('全部で');
+      debugInfo.postRows = rows.length;
+      debugInfo.formInputs = allInputs;
+      const idx = postHtml.indexOf('給付支給量');
+      if (idx >= 0) {
+        const startIdx = Math.max(0, idx - 200);
+        debugInfo.snippetNear給付 = postHtml.substring(startIdx, startIdx + 1500).replace(/\s+/g, ' ');
+      } else {
+        debugInfo.bodySnippet = postHtml.substring(0, 1500).replace(/\s+/g, ' ');
+      }
+    }
+
+    if (rows.length === 0) {
+      const idx = postHtml.indexOf('給付支給量');
+      const startIdx = Math.max(0, idx - 200);
+      console.log(`[recipient] html snippet near 給付支給量 (idx=${idx}):`);
+      console.log(postHtml.substring(startIdx, startIdx + 1500).replace(/\s+/g, ' '));
+    }
   }
 
   return rows;
@@ -175,11 +259,13 @@ async function applyToFirestore(rows) {
   return { totalRows: rows.length, updatedFamilies, updatedChildren };
 }
 
-async function syncCore() {
-  const rows = await fetchRecipientLimits();
+async function syncCore({ debug = false } = {}) {
+  const debugInfo = {};
+  const rows = await fetchRecipientLimits(debug ? debugInfo : null);
   console.log(`[syncHugRecipientLimits] parsed ${rows.length} rows`);
   const result = await applyToFirestore(rows);
   console.log('[syncHugRecipientLimits] result:', JSON.stringify(result));
+  if (debug) result.debug = debugInfo;
   return result;
 }
 
@@ -193,7 +279,8 @@ exports.syncHugRecipientLimits = onCall(
   async (request) => {
     if (!request.auth) throw new HttpsError('unauthenticated', 'ログインが必要です');
     try {
-      return await syncCore();
+      const debug = !!(request.data && request.data.debug);
+      return await syncCore({ debug });
     } catch (error) {
       console.error('syncHugRecipientLimits error:', error);
       throw new HttpsError('internal', error.message || 'sync failed');

@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
@@ -122,14 +124,42 @@ class _HugMappingScreenState extends State<HugMappingScreen>
           .httpsCallable('syncHugRecipientLimits',
               options: HttpsCallableOptions(
                   timeout: const Duration(minutes: 5)));
-      final result = await callable.call();
+      final result = await callable.call({'debug': true});
       final data = (result.data as Map?) ?? {};
       final total = data['totalRows'] ?? 0;
       final fams = data['updatedFamilies'] ?? 0;
       final kids = data['updatedChildren'] ?? 0;
+      // ignore: avoid_print
+      print('[recipient sync debug] ${data['debug']}');
       if (!mounted) return;
-      AppFeedback.info(context,
-          '同期完了: 取得 $total件 / 更新 児童$kids名（家族$fams件）');
+      if (total == 0 && data['debug'] != null) {
+        // 0件時はデバッグ情報をダイアログで表示
+        await showDialog(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('同期診断（0件のため詳細）'),
+            content: SizedBox(
+              width: 600,
+              child: SingleChildScrollView(
+                child: SelectableText(
+                  const JsonEncoder.withIndent('  ')
+                      .convert(data['debug']),
+                  style: const TextStyle(
+                      fontFamily: 'monospace', fontSize: 11),
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('閉じる')),
+            ],
+          ),
+        );
+      } else {
+        AppFeedback.info(context,
+            '同期完了: 取得 $total件 / 更新 児童$kids名（家族$fams件）');
+      }
     } catch (e) {
       if (mounted) AppFeedback.error(context, '同期エラー: $e');
     } finally {
