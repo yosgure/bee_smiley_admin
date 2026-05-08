@@ -586,7 +586,7 @@ class _AdminShellState extends State<AdminShell> {
   
   List<NavigationRailDestination> get _railDestinations {
     const crmRail = NavigationRailDestination(
-        icon: Icon(Icons.support_agent), label: Text('CRM'));
+        icon: Icon(Icons.people_alt_outlined), label: Text('CRM'));
     switch (_staffType) {
       case StaffType.plusOnly:
         return [
