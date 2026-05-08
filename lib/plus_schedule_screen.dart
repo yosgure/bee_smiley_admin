@@ -7789,13 +7789,16 @@ class _StudentSupplyBoxState extends State<_StudentSupplyBox> {
         .collection('plus_lessons')
         .where('studentName', isEqualTo: widget.studentName)
         .get();
-    // 同日重複は 1 日としてカウント
+    // 同日重複は 1 日としてカウント。欠席系コースはカウントしない。
     final days = <String>{};
     for (final d in snap.docs) {
-      final ts = d.data()['date'];
+      final data = d.data();
+      final ts = data['date'];
       if (ts is! Timestamp) continue;
       final dt = ts.toDate();
       if (dt.isBefore(start) || !dt.isBefore(end)) continue;
+      final course = (data['course'] as String?) ?? '';
+      if (course.startsWith('欠席')) continue;
       days.add('${dt.year}-${dt.month}-${dt.day}');
     }
     return days.length;
@@ -7830,6 +7833,11 @@ class _StudentSupplyBoxState extends State<_StudentSupplyBox> {
               _divider(c),
               _cell(context, '合計契約', fmt(contract)),
               _divider(c),
+              _cell(context, '今月利用',
+                  snap.connectionState == ConnectionState.waiting
+                      ? '…'
+                      : '${used}日'),
+              _divider(c),
               _cell(
                 context,
                 '今月残り',
@@ -7839,11 +7847,6 @@ class _StudentSupplyBoxState extends State<_StudentSupplyBox> {
                 valueColor: remainingColor,
                 bold: true,
               ),
-              _divider(c),
-              _cell(context, '今月利用',
-                  snap.connectionState == ConnectionState.waiting
-                      ? '…'
-                      : '${used}日'),
             ],
           );
         },
