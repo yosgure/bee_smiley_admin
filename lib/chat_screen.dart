@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'services/chat_prefs.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'services/file_downloader.dart';
@@ -1079,6 +1080,7 @@ class _ChatDetailViewState extends State<ChatDetailView> {
   final currentUser = FirebaseAuth.instance.currentUser;
   bool _isUploading = false;
   bool _isDraggingOver = false;
+  bool _sendOnEnter = false; // false: Shift+Enter で送信、true: Enter で送信
   Timer? _draftSaveTimer;
   String get _draftKey => 'chat_draft_${widget.roomId}';
 
@@ -1147,12 +1149,19 @@ class _ChatDetailViewState extends State<ChatDetailView> {
       _textController.text = widget.initialDraft;
     }
     _loadPersistedDraft();
+    _loadSendOnEnter();
     _textController.addListener(() {
       widget.onDraftChanged?.call(_textController.text);
       _scheduleDraftSave();
       // @メンション検知（グループチャットのみ）
       if (widget.isGroup) _checkMention();
     });
+  }
+
+  Future<void> _loadSendOnEnter() async {
+    final v = await ChatPrefs.getSendOnEnter();
+    if (!mounted) return;
+    if (v != _sendOnEnter) setState(() => _sendOnEnter = v);
   }
 
   Future<void> _loadPersistedDraft() async {
@@ -1420,7 +1429,16 @@ class _ChatDetailViewState extends State<ChatDetailView> {
                     child: Focus(
                         onKeyEvent: (node, event) {
                           if (_textController.value.composing.isValid) return KeyEventResult.ignored;
-                          if (event is KeyDownEvent && event.logicalKey == LogicalKeyboardKey.enter && HardwareKeyboard.instance.isShiftPressed) { _sendMessage(); return KeyEventResult.handled; }
+                          if (event is KeyDownEvent && event.logicalKey == LogicalKeyboardKey.enter) {
+                            final shift = HardwareKeyboard.instance.isShiftPressed;
+                            // _sendOnEnter=true: Enter で送信 / Shift+Enter で改行
+                            // _sendOnEnter=false: Shift+Enter で送信 / Enter で改行
+                            final shouldSend = _sendOnEnter ? !shift : shift;
+                            if (shouldSend) {
+                              _sendMessage();
+                              return KeyEventResult.handled;
+                            }
+                          }
                           return KeyEventResult.ignored;
                         },
                         child: TextField(
@@ -1428,7 +1446,9 @@ class _ChatDetailViewState extends State<ChatDetailView> {
                           maxLines: null, minLines: 3, keyboardType: TextInputType.multiline,
                           style: TextStyle(fontSize: AppTextSize.bodyLarge, height: 1.5, fontFamily: 'NotoSansJP', fontFamilyFallback: ['Hiragino Sans', 'Roboto', 'sans-serif']),
                           decoration: InputDecoration(
-                            hintText: 'メッセージを入力してください。(Enterで改行 / Shift + Enterで送信)',
+                            hintText: _sendOnEnter
+                                ? 'メッセージを入力してください。(Enterで送信 / Shift + Enterで改行)'
+                                : 'メッセージを入力してください。(Enterで改行 / Shift + Enterで送信)',
                             hintStyle: TextStyle(fontSize: AppTextSize.bodyMd, color: context.colors.iconMuted),
                             border: InputBorder.none,
                             filled: true,

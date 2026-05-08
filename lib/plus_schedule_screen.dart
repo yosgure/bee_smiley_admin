@@ -960,6 +960,18 @@ Map<String, dynamic>? _getCellMemo(DateTime date, int slotIndex) {
           if (firstName.isNotEmpty && !excluded) {
             // studentIdを生成（childにstudentIdがあればそれを使用）
             final studentId = child['studentId'] ?? '${familyUid}_$firstName';
+            // 受給者証情報（給付支給量 / 合計契約支給量）。Hug 由来想定。
+            final rc = child['recipientCard'];
+            int? supplyDays;
+            int? contractDays;
+            if (rc is Map) {
+              final s = rc['supplyDays'];
+              if (s is int) supplyDays = s;
+              if (s is num) supplyDays = s.toInt();
+              final c = rc['contractDays'];
+              if (c is int) contractDays = c;
+              if (c is num) contractDays = c.toInt();
+            }
             students.add({
             'name': '$lastName $firstName'.trim(),
             'firstName': firstName,
@@ -972,6 +984,8 @@ Map<String, dynamic>? _getCellMemo(DateTime date, int slotIndex) {
             'familyUid': familyUid,
             'studentId': studentId,
             'birthDate': child['birthDate'] ?? '',
+            'supplyDays': supplyDays,
+            'contractDays': contractDays,
           });
           }
         }
@@ -2259,19 +2273,6 @@ void _goToPage(int page) {
           }
         }
         break;
-      case 'crm':
-        if (mounted) {
-          final isWide = MediaQuery.of(context).size.width >= 600;
-          if (isWide) {
-            AdminShell.showOverlay(context, const CrmLeadScreen());
-          } else {
-            await Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const CrmLeadScreen()),
-            );
-          }
-        }
-        break;
       case 'training':
         if (mounted) {
           AppFeedback.info(context, '法定研修のリンクは未設定です。');
@@ -2343,7 +2344,6 @@ void _goToPage(int page) {
               padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 6),
               child: Divider(height: 1, color: border),
             ),
-            menuItem('crm', Icons.people_alt_outlined, 'CRM'),
             menuItem('meeting', Icons.description_outlined, '議事録'),
             menuItem('accident', Icons.warning_amber_outlined, '事故・ヒヤリハット'),
             menuItem('complaint', Icons.report_gmailerrorred_outlined, '苦情受付'),
@@ -5231,7 +5231,19 @@ if (inputMode != 'memo') ...[
                             const SizedBox(height: 24),
                             Divider(height: 1, color: context.colors.borderLight),
                             const SizedBox(height: 20),
-                            
+
+                            // 給付支給量 / 合計契約支給量 / 今月残り
+                            _StudentSupplyBox(
+                              key: ValueKey('supply-$title-${date.month}'),
+                              studentName: title,
+                              month: DateTime(date.year, date.month, 1),
+                              supplyDays:
+                                  selectedStudent?['supplyDays'] as int?,
+                              contractDays:
+                                  selectedStudent?['contractDays'] as int?,
+                            ),
+                            const SizedBox(height: 16),
+
                             // タスクセクション
                             Row(
                               children: [
@@ -6277,6 +6289,22 @@ await _loadLessonsForWeek(showLoading: false);
                             const SizedBox(height: 24),
                             Divider(height: 1, color: context.colors.borderLight),
                             const SizedBox(height: 20),
+
+                            // 給付支給量 / 合計契約 / 今月残り / 今月利用
+                            () {
+                              final s = _allStudents.firstWhere(
+                                (e) => (e['name'] as String? ?? '') == studentName,
+                                orElse: () => <String, dynamic>{},
+                              );
+                              return _StudentSupplyBox(
+                                key: ValueKey('supply-edit-$studentName-${date.month}'),
+                                studentName: studentName,
+                                month: DateTime(date.year, date.month, 1),
+                                supplyDays: s['supplyDays'] as int?,
+                                contractDays: s['contractDays'] as int?,
+                              );
+                            }(),
+                            const SizedBox(height: 16),
 
                             // タスクセクション
                             Row(
@@ -7720,6 +7748,138 @@ class _TaskBadgeState extends State<_TaskBadge> {
           ],
         ),
       ),
+    );
+  }
+}
+
+// ============================================================
+// 給付支給量・合計契約支給量・今月残り 表示ウィジェット
+// ============================================================
+class _StudentSupplyBox extends StatefulWidget {
+  final String studentName;
+  final DateTime month; // 1日固定の DateTime
+  final int? supplyDays;
+  final int? contractDays;
+  const _StudentSupplyBox({
+    super.key,
+    required this.studentName,
+    required this.month,
+    required this.supplyDays,
+    required this.contractDays,
+  });
+
+  @override
+  State<_StudentSupplyBox> createState() => _StudentSupplyBoxState();
+}
+
+class _StudentSupplyBoxState extends State<_StudentSupplyBox> {
+  late Future<int> _usedFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _usedFuture = _countUsed();
+  }
+
+  Future<int> _countUsed() async {
+    final start = DateTime(widget.month.year, widget.month.month, 1);
+    final end = DateTime(widget.month.year, widget.month.month + 1, 1);
+    final snap = await FirebaseFirestore.instance
+        .collection('plus_lessons')
+        .where('studentName', isEqualTo: widget.studentName)
+        .where('date',
+            isGreaterThanOrEqualTo: Timestamp.fromDate(start),
+            isLessThan: Timestamp.fromDate(end))
+        .get();
+    // 同日重複は 1 日としてカウント
+    final days = <String>{};
+    for (final d in snap.docs) {
+      final ts = d.data()['date'];
+      if (ts is! Timestamp) continue;
+      final dt = ts.toDate();
+      days.add('${dt.year}-${dt.month}-${dt.day}');
+    }
+    return days.length;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    final supply = widget.supplyDays;
+    final contract = widget.contractDays;
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+      decoration: BoxDecoration(
+        color: c.chipBg,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: FutureBuilder<int>(
+        future: _usedFuture,
+        builder: (context, snap) {
+          final used = snap.data ?? 0;
+          final remaining =
+              contract == null ? null : (contract - used).clamp(-99, 999);
+          final remainingColor = remaining == null
+              ? c.textTertiary
+              : (remaining <= 0
+                  ? AppColors.error
+                  : (remaining <= 2 ? AppColors.warning : c.textPrimary));
+          String fmt(int? v) => v == null ? '—' : '$v日';
+          return Row(
+            children: [
+              _cell(context, '給付支給量', fmt(supply)),
+              _divider(c),
+              _cell(context, '合計契約', fmt(contract)),
+              _divider(c),
+              _cell(
+                context,
+                '今月残り',
+                snap.connectionState == ConnectionState.waiting
+                    ? '…'
+                    : (remaining == null ? '—' : '${remaining}日'),
+                valueColor: remainingColor,
+                bold: true,
+              ),
+              _divider(c),
+              _cell(context, '今月利用',
+                  snap.connectionState == ConnectionState.waiting
+                      ? '…'
+                      : '${used}日'),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _cell(BuildContext context, String label, String value,
+      {Color? valueColor, bool bold = false}) {
+    final c = context.colors;
+    return Expanded(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Text(label,
+              style: TextStyle(
+                  fontSize: AppTextSize.xs, color: c.textSecondary)),
+          const SizedBox(height: 2),
+          Text(value,
+              style: TextStyle(
+                fontSize: AppTextSize.body,
+                fontWeight: bold ? FontWeight.w700 : FontWeight.w600,
+                color: valueColor ?? c.textPrimary,
+              )),
+        ],
+      ),
+    );
+  }
+
+  Widget _divider(dynamic c) {
+    return Container(
+      width: 1,
+      height: 28,
+      color: c.borderLight,
+      margin: const EdgeInsets.symmetric(horizontal: 4),
     );
   }
 }

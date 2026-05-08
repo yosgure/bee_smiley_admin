@@ -19,6 +19,7 @@ class _HugMappingScreenState extends State<HugMappingScreen>
   late TabController _tabController;
   bool _isFetching = false;
   bool _isSyncingAll = false;
+  bool _isSyncingLimits = false;
 
   Map<String, String> _childMapping = {};
   Map<String, String> _staffMapping = {};
@@ -106,6 +107,36 @@ class _HugMappingScreenState extends State<HugMappingScreen>
     }
   }
 
+  /// 給付支給量・合計契約支給量を全児童について同期
+  Future<void> _syncRecipientLimits() async {
+    final confirmed = await AppFeedback.confirm(
+      context,
+      title: '給付支給量を同期',
+      message: 'Hug の児童プロファイル一覧から「給付支給量」「合計契約支給量」を取得して反映します。',
+      confirmLabel: '同期開始',
+    );
+    if (!confirmed) return;
+    setState(() => _isSyncingLimits = true);
+    try {
+      final callable = FirebaseFunctions.instanceFor(region: 'asia-northeast1')
+          .httpsCallable('syncHugRecipientLimits',
+              options: HttpsCallableOptions(
+                  timeout: const Duration(minutes: 5)));
+      final result = await callable.call();
+      final data = (result.data as Map?) ?? {};
+      final total = data['totalRows'] ?? 0;
+      final fams = data['updatedFamilies'] ?? 0;
+      final kids = data['updatedChildren'] ?? 0;
+      if (!mounted) return;
+      AppFeedback.info(context,
+          '同期完了: 取得 $total件 / 更新 児童$kids名（家族$fams件）');
+    } catch (e) {
+      if (mounted) AppFeedback.error(context, '同期エラー: $e');
+    } finally {
+      if (mounted) setState(() => _isSyncingLimits = false);
+    }
+  }
+
   /// hugからマッピング候補を自動取得
   Future<void> _fetchFromHug() async {
     setState(() => _isFetching = true);
@@ -181,6 +212,20 @@ class _HugMappingScreenState extends State<HugMappingScreen>
                   icon: const Icon(Icons.sync),
                   tooltip: '全児童のプロファイルを同期',
                   onPressed: _syncAllHugDocs,
+                ),
+          _isSyncingLimits
+              ? const Padding(
+                  padding: EdgeInsets.all(16),
+                  child: SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: Colors.white)),
+                )
+              : IconButton(
+                  icon: const Icon(Icons.event_available),
+                  tooltip: '給付支給量を同期',
+                  onPressed: _syncRecipientLimits,
                 ),
           _isFetching
               ? const Padding(

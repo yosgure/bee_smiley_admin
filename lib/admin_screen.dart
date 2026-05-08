@@ -20,6 +20,7 @@ import 'family_csv_import_screen.dart';
 import 'tool_csv_import_screen.dart';
 import 'csv_export_screen.dart';
 import 'notification_settings_screen.dart';
+import 'chat_settings_screen.dart';
 import 'ai_command_manage_screen.dart';
 import 'hug_mapping_screen.dart';
 import 'app_theme.dart';
@@ -89,6 +90,8 @@ void _navigateTo(BuildContext context, Widget screen) {
       screenWithBack = ClassroomMasterScreen(onBack: widget.onCloseWebScreen);
     } else if (screen is NotificationSettingsScreen) {
       screenWithBack = NotificationSettingsScreen(onBack: widget.onCloseWebScreen);
+    } else if (screen is ChatSettingsScreen) {
+      screenWithBack = ChatSettingsScreen(onBack: widget.onCloseWebScreen);
     } else if (screen is StaffCsvImportScreen) {
       screenWithBack = StaffCsvImportScreen(onBack: widget.onCloseWebScreen);
     } else if (screen is FamilyCsvImportScreen) {
@@ -918,6 +921,29 @@ Container(
                 trailing: Icon(Icons.arrow_forward_ios, size: 16, color: context.colors.iconMuted),
                 onTap: () {
                   _navigateTo(context, const NotificationSettingsScreen());
+                },
+              ),
+              const Divider(height: 1, indent: 60),
+              ListTile(
+                leading: Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: AppColors.success.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(Icons.chat_bubble_outline,
+                      color: AppColors.success, size: 24),
+                ),
+                title: const Text(
+                  'チャット設定',
+                  style: TextStyle(
+                      fontSize: AppTextSize.titleSm,
+                      fontWeight: FontWeight.bold),
+                ),
+                trailing: Icon(Icons.arrow_forward_ios,
+                    size: 16, color: context.colors.iconMuted),
+                onTap: () {
+                  _navigateTo(context, const ChatSettingsScreen());
                 },
               ),
               const Divider(height: 1, indent: 60),

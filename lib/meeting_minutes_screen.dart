@@ -21,6 +21,16 @@ class MeetingMinutesScreen extends StatefulWidget {
 
 class _MeetingMinutesScreenState extends State<MeetingMinutesScreen> {
   String? _categoryFilter;
+  String? _selectedDocId;
+
+  // ビルド毎に Stream を再生成すると StreamBuilder が再購読して
+  // 一瞬 waiting 状態（チカチカ）になるので、State に保持して使い回す。
+  late final Stream<QuerySnapshot<Map<String, dynamic>>> _docsStream =
+      FirebaseFirestore.instance
+          .collection('meeting_minutes')
+          .orderBy('meetingDate', descending: true)
+          .limit(300)
+          .snapshots();
 
   void _close() {
     if (Navigator.canPop(context)) {
@@ -35,112 +45,280 @@ class _MeetingMinutesScreenState extends State<MeetingMinutesScreen> {
     return Scaffold(
       backgroundColor: context.colors.scaffoldBg,
       appBar: AppBar(
-        title: const Text('議事録・研修記録', style: TextStyle(fontSize: AppTextSize.title, fontWeight: FontWeight.w600)),
+        title: const Text('議事録・研修記録',
+            style: TextStyle(
+                fontSize: AppTextSize.title, fontWeight: FontWeight.w600)),
         backgroundColor: context.colors.cardBg,
         elevation: 0,
         foregroundColor: context.colors.textPrimary,
-        leading: IconButton(icon: const Icon(Icons.arrow_back_ios, size: 20), onPressed: _close),
+        leading: IconButton(
+            icon: const Icon(Icons.arrow_back_ios, size: 20),
+            onPressed: _close),
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () async {
-          await Navigator.push(context,
-              MaterialPageRoute(builder: (_) => const MeetingMinutesEditScreen()));
+          await Navigator.push(
+              context,
+              MaterialPageRoute(
+                  builder: (_) => const MeetingMinutesEditScreen()));
         },
         backgroundColor: AppColors.primary,
         icon: const Icon(Icons.add, color: Colors.white),
-        label: const Text('新規作成', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        label: const Text('新規作成',
+            style:
+                TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
       ),
-      body: Column(
+      body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+        stream: _docsStream,
+        builder: (context, snap) {
+          if (snap.connectionState == ConnectionState.waiting) {
+            return Center(
+                child: CircularProgressIndicator(color: AppColors.primary));
+          }
+          if (snap.hasError) {
+            return Center(
+                child: Text('読み込みエラー: ${snap.error}',
+                    style: TextStyle(color: context.colors.textSecondary)));
+          }
+          final allDocs = snap.data?.docs ?? [];
+          final counts = <String, int>{};
+          for (final d in allDocs) {
+            final c = d.data()['category'] as String? ?? 'other';
+            counts[c] = (counts[c] ?? 0) + 1;
+          }
+          final filtered = _categoryFilter == null
+              ? allDocs
+              : allDocs
+                  .where((d) => d.data()['category'] == _categoryFilter)
+                  .toList();
+          // 選択 doc が現在のフィルタに居ない場合は解除
+          QueryDocumentSnapshot<Map<String, dynamic>>? selectedDoc;
+          for (final d in filtered) {
+            if (d.id == _selectedDocId) {
+              selectedDoc = d;
+              break;
+            }
+          }
+
+          return LayoutBuilder(builder: (context, constraints) {
+            final isWide = constraints.maxWidth >= 900;
+            if (isWide) {
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  SizedBox(
+                    width: 200,
+                    child: _categoryRail(counts, allDocs.length),
+                  ),
+                  VerticalDivider(
+                      width: 1, color: context.colors.borderLight),
+                  SizedBox(
+                    width: 380,
+                    child: _list(filtered),
+                  ),
+                  VerticalDivider(
+                      width: 1, color: context.colors.borderLight),
+                  Expanded(child: _detail(selectedDoc)),
+                ],
+              );
+            }
+            // 狭い画面: ドロップダウン + 一覧（タップで編集画面）
+            return Column(
+              children: [
+                _categoryDropdown(),
+                const Divider(height: 1),
+                Expanded(child: _list(filtered, narrow: true)),
+              ],
+            );
+          });
+        },
+      ),
+    );
+  }
+
+  // ---- 左ペイン: 種別ナビ ----
+  Widget _categoryRail(Map<String, int> counts, int total) {
+    final c = context.colors;
+    final all = MeetingCategory.all;
+    return Container(
+      color: c.cardBg,
+      child: ListView(
+        padding: const EdgeInsets.symmetric(vertical: 8),
         children: [
-          Container(
-            color: context.colors.cardBg,
-            padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
-            child: Align(
-              alignment: Alignment.topCenter,
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 640),
-                child: Container(
-                  height: 40,
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  decoration: BoxDecoration(
-                    color: context.colors.inputFill,
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: DropdownButtonHideUnderline(
-                    child: DropdownButton<String?>(
-                      value: _categoryFilter,
-                      isExpanded: true,
-                      icon: Icon(Icons.expand_more, color: context.colors.textSecondary),
-                      style: TextStyle(fontSize: AppTextSize.body, color: context.colors.textPrimary),
-                      items: [
-                        const DropdownMenuItem<String?>(value: null, child: Text('種類: すべて')),
-                        ...MeetingCategory.all.map((c) => DropdownMenuItem<String?>(
-                              value: c.id,
-                              child: Text(c.label),
-                            )),
-                      ],
-                      onChanged: (v) => setState(() => _categoryFilter = v),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-          const Divider(height: 1),
-          Expanded(child: _buildList()),
+          _railTile(label: 'すべて', count: total, value: null),
+          const SizedBox(height: 4),
+          for (final cat in all)
+            _railTile(
+                label: cat.label,
+                count: counts[cat.id] ?? 0,
+                value: cat.id),
         ],
       ),
     );
   }
 
-  Widget _buildList() {
-    Query<Map<String, dynamic>> q = FirebaseFirestore.instance
-        .collection('meeting_minutes')
-        .orderBy('meetingDate', descending: true)
-        .limit(300);
-    if (_categoryFilter != null) q = q.where('category', isEqualTo: _categoryFilter);
-
-    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-      stream: q.snapshots(),
-      builder: (context, snap) {
-        if (snap.connectionState == ConnectionState.waiting) {
-          return Center(child: CircularProgressIndicator(color: AppColors.primary));
-        }
-        if (snap.hasError) {
-          return Center(child: Text('読み込みエラー: ${snap.error}', style: TextStyle(color: context.colors.textSecondary)));
-        }
-        final docs = snap.data?.docs ?? [];
-        if (docs.isEmpty) {
-          return Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.description_outlined, size: 56, color: context.colors.textTertiary),
-                const SizedBox(height: 12),
-                Text('記録はありません', style: TextStyle(color: context.colors.textSecondary, fontSize: AppTextSize.bodyMd)),
-              ],
-            ),
-          );
-        }
-        return Align(
-          alignment: Alignment.topCenter,
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 640),
-            child: ListView.builder(
-              padding: const EdgeInsets.fromLTRB(12, 10, 12, 88),
-              itemCount: docs.length,
-              itemBuilder: (c, i) => _MeetingListTile(doc: docs[i]),
+  Widget _railTile(
+      {required String label, required int count, required String? value}) {
+    final c = context.colors;
+    final selected = _categoryFilter == value;
+    return InkWell(
+      onTap: () => setState(() {
+        _categoryFilter = value;
+        _selectedDocId = null;
+      }),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: selected
+              ? AppColors.primary.withValues(alpha: 0.12)
+              : Colors.transparent,
+          border: Border(
+            left: BorderSide(
+              color: selected ? AppColors.primary : Colors.transparent,
+              width: 3,
             ),
           ),
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                label,
+                style: TextStyle(
+                  fontSize: AppTextSize.small,
+                  fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                  color: selected ? AppColors.primary : c.textPrimary,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            const SizedBox(width: 6),
+            Text('$count',
+                style: TextStyle(
+                    fontSize: AppTextSize.caption,
+                    color: selected ? AppColors.primary : c.textTertiary)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ---- 狭い画面用ドロップダウン ----
+  Widget _categoryDropdown() {
+    return Container(
+      color: context.colors.cardBg,
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
+      child: Container(
+        height: 40,
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        decoration: BoxDecoration(
+          color: context.colors.inputFill,
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: DropdownButtonHideUnderline(
+          child: DropdownButton<String?>(
+            value: _categoryFilter,
+            isExpanded: true,
+            icon: Icon(Icons.expand_more,
+                color: context.colors.textSecondary),
+            style: TextStyle(
+                fontSize: AppTextSize.body,
+                color: context.colors.textPrimary),
+            items: [
+              const DropdownMenuItem<String?>(
+                  value: null, child: Text('種類: すべて')),
+              ...MeetingCategory.all.map((c) => DropdownMenuItem<String?>(
+                    value: c.id,
+                    child: Text(c.label),
+                  )),
+            ],
+            onChanged: (v) => setState(() => _categoryFilter = v),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ---- 中央ペイン: 一覧 ----
+  Widget _list(List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
+      {bool narrow = false}) {
+    if (docs.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.description_outlined,
+                size: 56, color: context.colors.textTertiary),
+            const SizedBox(height: 12),
+            Text('記録はありません',
+                style: TextStyle(
+                    color: context.colors.textSecondary,
+                    fontSize: AppTextSize.bodyMd)),
+          ],
+        ),
+      );
+    }
+    return ListView.builder(
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 88),
+      itemCount: docs.length,
+      itemBuilder: (c, i) {
+        final doc = docs[i];
+        return _MeetingListTile(
+          doc: doc,
+          selected: !narrow && doc.id == _selectedDocId,
+          compact: !narrow,
+          onTap: () {
+            if (narrow) {
+              Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => MeetingMinutesEditScreen(doc: doc),
+                  ));
+            } else {
+              setState(() => _selectedDocId = doc.id);
+            }
+          },
         );
       },
     );
+  }
+
+  // ---- 右ペイン: 詳細 ----
+  Widget _detail(QueryDocumentSnapshot<Map<String, dynamic>>? doc) {
+    if (doc == null) {
+      return Container(
+        color: context.colors.scaffoldBg,
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.menu_book_outlined,
+                  size: 56, color: context.colors.textTertiary),
+              const SizedBox(height: 12),
+              Text('左の一覧から記録を選択してください',
+                  style: TextStyle(
+                      color: context.colors.textSecondary,
+                      fontSize: AppTextSize.body)),
+            ],
+          ),
+        ),
+      );
+    }
+    return _MeetingDetailView(doc: doc);
   }
 }
 
 class _MeetingListTile extends StatelessWidget {
   final QueryDocumentSnapshot<Map<String, dynamic>> doc;
-  const _MeetingListTile({required this.doc});
+  final bool selected;
+  final bool compact;
+  final VoidCallback onTap;
+  const _MeetingListTile({
+    required this.doc,
+    this.selected = false,
+    this.compact = false,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -157,73 +335,314 @@ class _MeetingListTile extends StatelessWidget {
         ? categoryOther
         : MeetingCategory.labelOf(category);
 
+    final c = context.colors;
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
-        color: context.colors.cardBg,
+        color: selected
+            ? AppColors.primary.withValues(alpha: 0.12)
+            : c.cardBg,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: context.colors.borderLight, width: 0.5),
+        border: Border.all(
+          color: selected ? AppColors.primary : c.borderLight,
+          width: selected ? 1.5 : 0.5,
+        ),
       ),
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
-        onTap: () {
-          Navigator.push(context, MaterialPageRoute(
-            builder: (_) => MeetingMinutesEditScreen(doc: doc),
-          ));
-        },
+        onTap: onTap,
         child: Padding(
-          padding: const EdgeInsets.all(14),
+          padding: const EdgeInsets.all(12),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
                 children: [
                   Text(
-                    date != null ? DateFormat('yyyy/M/d (E)', 'ja').format(date) : '',
-                    style: TextStyle(fontSize: AppTextSize.small, color: context.colors.textSecondary, fontWeight: FontWeight.w600),
+                    date != null
+                        ? DateFormat('yyyy/M/d (E)', 'ja').format(date)
+                        : '',
+                    style: TextStyle(
+                        fontSize: AppTextSize.small,
+                        color: c.textSecondary,
+                        fontWeight: FontWeight.w600),
                   ),
                   const SizedBox(width: 8),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: AppColors.primary.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(6),
+                  Flexible(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: AppColors.primary.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(categoryLabel,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                              fontSize: AppTextSize.caption,
+                              color: AppColors.primary,
+                              fontWeight: FontWeight.w700)),
                     ),
-                    child: Text(categoryLabel,
-                        style: const TextStyle(
-                            fontSize: AppTextSize.caption, color: AppColors.primary, fontWeight: FontWeight.w700)),
                   ),
                   const Spacer(),
                   if (materials.isNotEmpty)
                     Row(children: [
-                      Icon(Icons.attach_file, size: 12, color: context.colors.textTertiary),
+                      Icon(Icons.attach_file,
+                          size: 12, color: c.textTertiary),
                       const SizedBox(width: 2),
                       Text('${materials.length}',
-                          style: TextStyle(fontSize: AppTextSize.caption, color: context.colors.textTertiary)),
+                          style: TextStyle(
+                              fontSize: AppTextSize.caption,
+                              color: c.textTertiary)),
                     ]),
                 ],
               ),
               if (note.isNotEmpty) ...[
                 const SizedBox(height: 4),
                 Text(note,
-                    style: TextStyle(fontSize: AppTextSize.body, color: context.colors.textPrimary, fontWeight: FontWeight.w600)),
+                    maxLines: compact ? 1 : 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                        fontSize: AppTextSize.body,
+                        color: c.textPrimary,
+                        fontWeight: FontWeight.w600)),
               ],
-              if (participantNames.isNotEmpty) ...[
+              if (!compact && participantNames.isNotEmpty) ...[
                 const SizedBox(height: 4),
                 Text(
                   '参加: ${participantNames.join('、')}',
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: TextStyle(fontSize: AppTextSize.caption, color: context.colors.textTertiary),
+                  style: TextStyle(
+                      fontSize: AppTextSize.caption, color: c.textTertiary),
                 ),
               ],
-              if (content.isNotEmpty) ...[
+              if (!compact && content.isNotEmpty) ...[
                 const SizedBox(height: 6),
                 Text(
-                  content.length > 140 ? '${content.substring(0, 140)}…' : content,
-                  style: TextStyle(fontSize: AppTextSize.small, color: context.colors.textSecondary, height: 1.4),
+                  content.length > 140
+                      ? '${content.substring(0, 140)}…'
+                      : content,
+                  style: TextStyle(
+                      fontSize: AppTextSize.small,
+                      color: c.textSecondary,
+                      height: 1.4),
                 ),
               ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ============================================================
+// 詳細ビュー（右ペイン）
+// ============================================================
+class _MeetingDetailView extends StatelessWidget {
+  final QueryDocumentSnapshot<Map<String, dynamic>> doc;
+  const _MeetingDetailView({required this.doc});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    final d = doc.data();
+    final date = (d['meetingDate'] as Timestamp?)?.toDate();
+    final category = d['category'] as String? ?? 'other';
+    final categoryOther = (d['categoryOther'] as String? ?? '').trim();
+    final note = (d['note'] as String? ?? '').trim();
+    final participantNames = List<String>.from(d['participantNames'] ?? []);
+    final content = d['content'] as String? ?? '';
+    final materials = List<String>.from(d['materials'] ?? []);
+
+    final categoryLabel = category == 'other' && categoryOther.isNotEmpty
+        ? categoryOther
+        : MeetingCategory.labelOf(category);
+
+    return Container(
+      color: c.scaffoldBg,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // ヘッダー
+          Container(
+            color: c.cardBg,
+            padding: const EdgeInsets.fromLTRB(20, 14, 16, 14),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Text(
+                            date != null
+                                ? DateFormat('yyyy/M/d (E)', 'ja')
+                                    .format(date)
+                                : '',
+                            style: TextStyle(
+                              fontSize: AppTextSize.bodyLarge,
+                              fontWeight: FontWeight.w700,
+                              color: c.textPrimary,
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: AppColors.primary
+                                  .withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(categoryLabel,
+                                style: const TextStyle(
+                                    fontSize: AppTextSize.caption,
+                                    color: AppColors.primary,
+                                    fontWeight: FontWeight.w700)),
+                          ),
+                        ],
+                      ),
+                      if (note.isNotEmpty) ...[
+                        const SizedBox(height: 6),
+                        Text(note,
+                            style: TextStyle(
+                                fontSize: AppTextSize.bodyLarge,
+                                fontWeight: FontWeight.w600,
+                                color: c.textPrimary)),
+                      ],
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                FilledButton.tonalIcon(
+                  onPressed: () {
+                    Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => MeetingMinutesEditScreen(doc: doc),
+                        ));
+                  },
+                  icon: const Icon(Icons.edit_outlined, size: 16),
+                  label: const Text('編集'),
+                  style: FilledButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 8),
+                    textStyle:
+                        const TextStyle(fontSize: AppTextSize.small),
+                    visualDensity: VisualDensity.compact,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Divider(height: 1, color: c.borderLight),
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (participantNames.isNotEmpty) ...[
+                    _sectionLabel(context, '参加者'),
+                    const SizedBox(height: 6),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      children: [
+                        for (final n in participantNames)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: c.chipBg,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Text(n,
+                                style: TextStyle(
+                                    fontSize: AppTextSize.caption,
+                                    color: c.textPrimary)),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+                  _sectionLabel(context, '内容'),
+                  const SizedBox(height: 6),
+                  if (content.isEmpty)
+                    Text('（記載なし）',
+                        style: TextStyle(
+                            fontSize: AppTextSize.body,
+                            color: c.textTertiary,
+                            fontStyle: FontStyle.italic))
+                  else
+                    SelectableText(
+                      content,
+                      style: TextStyle(
+                        fontSize: AppTextSize.body,
+                        color: c.textPrimary,
+                        height: 1.6,
+                      ),
+                    ),
+                  if (materials.isNotEmpty) ...[
+                    const SizedBox(height: 20),
+                    _sectionLabel(context, '資料'),
+                    const SizedBox(height: 6),
+                    for (final raw in materials)
+                      _materialTile(context, raw),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _sectionLabel(BuildContext context, String label) {
+    return Text(label,
+        style: TextStyle(
+          fontSize: AppTextSize.caption,
+          fontWeight: FontWeight.w700,
+          color: context.colors.textSecondary,
+          letterSpacing: 0.3,
+        ));
+  }
+
+  Widget _materialTile(BuildContext context, String raw) {
+    final m = _Material.fromRaw(raw);
+    final c = context.colors;
+    final display = m.label.isNotEmpty ? m.label : m.url;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(8),
+        onTap: () async {
+          final uri = Uri.tryParse(m.url);
+          if (uri != null) {
+            await launchUrl(uri, mode: LaunchMode.externalApplication);
+          }
+        },
+        child: Padding(
+          padding:
+              const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+          child: Row(
+            children: [
+              Icon(Icons.attach_file, size: 16, color: c.textSecondary),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(display,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: AppTextSize.body,
+                      color: AppColors.primary,
+                      decoration: TextDecoration.underline,
+                    )),
+              ),
             ],
           ),
         ),
