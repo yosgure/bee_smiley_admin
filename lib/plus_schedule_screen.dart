@@ -141,6 +141,11 @@ class _PlusScheduleContentState extends State<PlusScheduleContent> with Automati
   // レッスンデータ（Firestoreから取得）
   List<Map<String, dynamic>> _lessons = [];
   bool _isLoadingLessons = true;
+
+  // 週移動時のブランクを避けるための隣接週レッスンキャッシュ。
+  // キーは週開始日(yyyy-MM-dd)、値はその週のレッスン配列。
+  final Map<String, List<Map<String, dynamic>>> _lessonsCache = {};
+  String _weekCacheKey(DateTime ws) => '${ws.year}-${ws.month.toString().padLeft(2, '0')}-${ws.day.toString().padLeft(2, '0')}';
   
   // 生徒リスト（familiesから取得）
   List<Map<String, dynamic>> _allStudents = [];
@@ -332,6 +337,7 @@ void dispose() {
     await _loadLessonsForMonth();
   } else {
     await _loadLessonsForWeek();
+    _prefetchAdjacentWeeks();
   }
 
   // 初期viewが月の場合、_loadLessonsForWeek を経由しないため _isLoadingLessons が
@@ -1031,94 +1037,102 @@ Map<String, dynamic>? _getCellMemo(DateTime date, int slotIndex) {
   }
 
   // Firestoreから週のレッスンデータを読み込み
-  Future<void> _loadLessonsForWeek({bool showLoading = true}) async {
-  if (!mounted) return;
-  
-  if (showLoading) {
-    setState(() {
-      _isLoadingLessons = true;
+  // 指定週のレッスンを Firestore から取得して整形する（キャッシュも更新）
+  Future<List<Map<String, dynamic>>> _fetchLessonsForWeek(DateTime weekStart) async {
+    final weekStartDate = DateTime(weekStart.year, weekStart.month, weekStart.day);
+    final saturdayDate = weekStartDate.add(const Duration(days: 5));
+    final weekEndDate = DateTime(saturdayDate.year, saturdayDate.month, saturdayDate.day, 23, 59, 59);
+
+    final snapshot = await FirebaseFirestore.instance
+        .collection('plus_lessons')
+        .where('date', isGreaterThanOrEqualTo: Timestamp.fromDate(weekStartDate))
+        .orderBy('date')
+        .get();
+
+    final lessons = <Map<String, dynamic>>[];
+    for (var doc in snapshot.docs) {
+      final data = doc.data();
+      final dateField = data['date'];
+      if (dateField == null || dateField is! Timestamp) continue;
+      final date = dateField.toDate();
+      if (date.isAfter(weekEndDate)) continue;
+
+      final dateOnly = DateTime(date.year, date.month, date.day);
+      final dayIndex = dateOnly.difference(weekStartDate).inDays;
+      if (dayIndex < 0 || dayIndex > 5) continue;
+
+      lessons.add({
+        'id': doc.id,
+        'dayIndex': dayIndex,
+        'slotIndex': data['slotIndex'] ?? 0,
+        'studentName': data['studentName'] ?? '',
+        'teachers': List<String>.from(data['teachers'] ?? []),
+        'room': data['room'] ?? '',
+        'course': data['course'] ?? '通常',
+        'note': data['note'] ?? '',
+        'link': data['link'] ?? '',
+        'date': date,
+        'isCustomEvent': data['isCustomEvent'] ?? false,
+        'isEvent': data['isEvent'] ?? false,
+        'title': data['title'] ?? '',
+        'order': data['order'] ?? (data['createdAt'] as Timestamp?)?.millisecondsSinceEpoch ?? 0,
+      });
+    }
+
+    lessons.sort((a, b) {
+      final dayCompare = (a['dayIndex'] as int).compareTo(b['dayIndex'] as int);
+      if (dayCompare != 0) return dayCompare;
+      final slotCompare = (a['slotIndex'] as int).compareTo(b['slotIndex'] as int);
+      if (slotCompare != 0) return slotCompare;
+      return (a['order'] as int).compareTo(b['order'] as int);
     });
+
+    _lessonsCache[_weekCacheKey(weekStart)] = List<Map<String, dynamic>>.from(lessons);
+    return lessons;
   }
-    
+
+  Future<void> _loadLessonsForWeek({bool showLoading = true}) async {
+    if (!mounted) return;
+
+    if (showLoading) {
+      setState(() {
+        _isLoadingLessons = true;
+      });
+    }
+
     try {
-      // 週の開始日（月曜日）と終了日（土曜日）を日付のみで計算
-      final weekStartDate = DateTime(_weekStart.year, _weekStart.month, _weekStart.day);
-      final saturdayDate = weekStartDate.add(const Duration(days: 5));
-      final weekEndDate = DateTime(saturdayDate.year, saturdayDate.month, saturdayDate.day, 23, 59, 59);
-      
-      // 開始日以降のデータを取得（クライアント側で終了日フィルタリング）
-      final snapshot = await FirebaseFirestore.instance
-          .collection('plus_lessons')
-          .where('date', isGreaterThanOrEqualTo: Timestamp.fromDate(weekStartDate))
-          .orderBy('date')
-          .get();
-      
+      final targetWeekStart = _weekStart;
+      final lessons = await _fetchLessonsForWeek(targetWeekStart);
       if (!mounted) return;
-      
-      final lessons = <Map<String, dynamic>>[];
-      
-      for (var doc in snapshot.docs) {
-        final data = doc.data();
-        // dateがnullまたは不正な場合はスキップ
-        final dateField = data['date'];
-        if (dateField == null || dateField is! Timestamp) continue;
-        
-        final date = dateField.toDate();
-        
-        // 週の終了日より後ならスキップ
-        if (date.isAfter(weekEndDate)) continue;
-        
-        // 日付のみで比較（時刻を無視）
-        final dateOnly = DateTime(date.year, date.month, date.day);
-        final weekStartOnly = DateTime(_weekStart.year, _weekStart.month, _weekStart.day);
-        final dayIndex = dateOnly.difference(weekStartOnly).inDays;
-        
-        // 週の範囲外はスキップ
-        if (dayIndex < 0 || dayIndex > 5) continue;
-        
-        lessons.add({
-          'id': doc.id,
-          'dayIndex': dayIndex,
-          'slotIndex': data['slotIndex'] ?? 0,
-          'studentName': data['studentName'] ?? '',
-          'teachers': List<String>.from(data['teachers'] ?? []),
-          'room': data['room'] ?? '',
-          'course': data['course'] ?? '通常',
-          'note': data['note'] ?? '',
-          'link': data['link'] ?? '',
-          'date': date,
-          'isCustomEvent': data['isCustomEvent'] ?? false,
-          'isEvent': data['isEvent'] ?? false,
-          'title': data['title'] ?? '',
-          'order': data['order'] ?? (data['createdAt'] as Timestamp?)?.millisecondsSinceEpoch ?? 0,
-        });
-      }
-      
-      if (mounted) {
-        // 同じセル内の順序を order（作成順）でソート
-        lessons.sort((a, b) {
-          final dayCompare = (a['dayIndex'] as int).compareTo(b['dayIndex'] as int);
-          if (dayCompare != 0) return dayCompare;
-          final slotCompare = (a['slotIndex'] as int).compareTo(b['slotIndex'] as int);
-          if (slotCompare != 0) return slotCompare;
-          return (a['order'] as int).compareTo(b['order'] as int);
-        });
-        
-        setState(() {
-          _lessons = lessons;
-          _isLoadingLessons = false;
-        });
-        
-        // 生徒メモを先読み（UIをブロックしない）
-        _preloadStudentNotes(lessons);
-        _loadCellMemosForWeek();
-      }
+      // フェッチ中に週が変わっていたら結果は捨てる（古い週の応答が新しい週を上書きしないように）
+      if (targetWeekStart != _weekStart) return;
+
+      setState(() {
+        _lessons = lessons;
+        _isLoadingLessons = false;
+      });
+
+      _preloadStudentNotes(lessons);
+      _loadCellMemosForWeek();
     } catch (e) {
       debugPrint('Error loading lessons: $e');
       if (mounted) {
         setState(() {
           _isLoadingLessons = false;
         });
+      }
+    }
+  }
+
+  // 隣接する前週・翌週をバックグラウンドで先読みしてキャッシュ
+  Future<void> _prefetchAdjacentWeeks() async {
+    for (final delta in const [-1, 1]) {
+      final wk = _weekStart.add(Duration(days: delta * 7));
+      if (_lessonsCache.containsKey(_weekCacheKey(wk))) continue;
+      try {
+        await _fetchLessonsForWeek(wk);
+      } catch (e) {
+        debugPrint('Prefetch error for week $wk: $e');
       }
     }
   }
@@ -1868,16 +1882,22 @@ void _goToPage(int page) {
   _hideCurrentOverlay();
   final weeksDiff = page - 1000;
   final newWeekStart = _baseWeekStart.add(Duration(days: weeksDiff * 7));
-  
+
+  // 先読み済みの隣接週があればそれを即時表示してブランクを回避。
+  // _lessons の dayIndex は _weekStart 相対なので、キャッシュが無ければ空に。
+  final cached = _lessonsCache[_weekCacheKey(newWeekStart)];
+
   setState(() {
     _currentWeekPage = page;
     _weekStart = newWeekStart;
+    _lessons = cached != null ? List<Map<String, dynamic>>.from(cached) : [];
   });
-  
+
   _saveWeekStart(_weekStart);
   _loadShiftData();
-  _loadLessonsForWeek(showLoading: false);  // ← ここを変更
+  _loadLessonsForWeek(showLoading: false);
   _loadAllTasks();
+  _prefetchAdjacentWeeks();
 }
 
 
