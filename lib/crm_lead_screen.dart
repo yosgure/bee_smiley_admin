@@ -9,6 +9,7 @@ import 'app_theme.dart';
 import 'widgets/app_feedback.dart';
 import 'crm/campaign_section.dart';
 import 'crm/crm_home_screen.dart';
+import 'crm/crm_lead_side_panel.dart';
 import 'main.dart';
 import 'services/undo_service.dart';
 import 'services/crm_family_sync.dart';
@@ -559,21 +560,38 @@ class _ViewModeTab extends StatelessWidget {
 // ============================================================
 class _CrmTableView extends StatelessWidget {
   final List<LeadView> docs;
-  const _CrmTableView({required this.docs});
+  // v3.5.3: 2 ペイン用に「選択中の lead id」を受け取り、選択ハイライトする。
+  final String? selectedLeadId;
+  final void Function(LeadView lead)? onSelect;
+  const _CrmTableView({
+    required this.docs,
+    this.selectedLeadId,
+    this.onSelect,
+  });
 
   @override
   Widget build(BuildContext context) {
     return ListView.builder(
       padding: const EdgeInsets.fromLTRB(12, 8, 12, 88),
       itemCount: docs.length,
-      itemBuilder: (c, i) => _LeadTableRow(doc: docs[i]),
+      itemBuilder: (c, i) => _LeadTableRow(
+        doc: docs[i],
+        selected: selectedLeadId == docs[i].id,
+        onSelect: onSelect == null ? null : () => onSelect!(docs[i]),
+      ),
     );
   }
 }
 
 class _LeadTableRow extends StatelessWidget {
   final LeadView doc;
-  const _LeadTableRow({required this.doc});
+  final bool selected;
+  final VoidCallback? onSelect;
+  const _LeadTableRow({
+    required this.doc,
+    this.selected = false,
+    this.onSelect,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -592,16 +610,23 @@ class _LeadTableRow extends StatelessWidget {
     return Container(
       margin: const EdgeInsets.only(bottom: 6),
       decoration: BoxDecoration(
-        color: context.colors.cardBg,
+        color: selected
+            ? AppColors.primary.withValues(alpha: 0.18)
+            : context.colors.cardBg,
         borderRadius: BorderRadius.circular(10),
         border: Border.all(
-            color: isDark ? const Color(0xFF3A3D42) : const Color(0xFFE4E7EB),
-            width: 1),
+            color: selected
+                ? AppColors.primary
+                : (isDark
+                    ? const Color(0xFF3A3D42)
+                    : const Color(0xFFE4E7EB)),
+            width: selected ? 1.5 : 1),
       ),
       child: InkWell(
         borderRadius: BorderRadius.circular(10),
-        onTap: () => Navigator.push(context,
-            MaterialPageRoute(builder: (_) => CrmLeadEditScreen(doc: doc))),
+        onTap: onSelect ??
+            () => Navigator.push(context,
+                MaterialPageRoute(builder: (_) => CrmLeadEditScreen(doc: doc))),
         child: Padding(
           padding: const EdgeInsets.all(12),
           child: Column(
@@ -792,7 +817,9 @@ class _CrmPipelineView extends StatefulWidget {
 
 class _CrmPipelineViewState extends State<_CrmPipelineView> {
   // v3.5: データベースタブを検索/フィルタ/ソート対応に刷新。
+  // v3.5.3: 2 ペイン化（左: リスト、右: サイドパネル詳細）
   String _searchText = '';
+  String? _selectedLeadId;
   // ステージ複数選択フィルタ。デフォルトは進行中（検討中 + 入会手続中 + 入会）。
   final Set<String> _stageFilter = {'considering', 'onboarding', 'won'};
   bool _includeWithdrawn = false;
@@ -859,9 +886,38 @@ class _CrmPipelineViewState extends State<_CrmPipelineView> {
       return _sortDesc ? bd.compareTo(ad) : ad.compareTo(bd);
     });
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
+    return LayoutBuilder(builder: (lbCtx, cons) {
+      final wide = cons.maxWidth >= 1280;
+
+      // wide モードでの自動先頭選択
+      String? effectiveSelectedId = _selectedLeadId;
+      if (wide && filtered.isNotEmpty) {
+        final ids = filtered.map((d) => d.id).toSet();
+        if (effectiveSelectedId == null ||
+            !ids.contains(effectiveSelectedId)) {
+          effectiveSelectedId = filtered.first.id;
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!mounted) return;
+            if (_selectedLeadId != effectiveSelectedId) {
+              setState(() => _selectedLeadId = effectiveSelectedId);
+            }
+          });
+        }
+      }
+
+      LeadView? selectedDoc;
+      if (effectiveSelectedId != null) {
+        for (final d in filtered) {
+          if (d.id == effectiveSelectedId) {
+            selectedDoc = d;
+            break;
+          }
+        }
+      }
+
+      final listPane = Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
         // 検索バー
         Padding(
           padding: const EdgeInsets.fromLTRB(12, 8, 12, 6),
@@ -991,10 +1047,34 @@ class _CrmPipelineViewState extends State<_CrmPipelineView> {
                   child: Text('該当なし',
                       style: TextStyle(color: c.textSecondary)),
                 )
-              : _CrmTableView(docs: filtered),
+              : _CrmTableView(
+                  docs: filtered,
+                  selectedLeadId: effectiveSelectedId,
+                  onSelect: wide
+                      ? (lead) => setState(() => _selectedLeadId = lead.id)
+                      : null,
+                ),
         ),
       ],
     );
+
+      if (!wide) return listPane;
+
+      return Row(
+        children: [
+          Flexible(flex: 33, child: listPane),
+          Flexible(
+            flex: 67,
+            child: selectedDoc == null
+                ? Center(
+                    child: Text('リードを選択してください',
+                        style: TextStyle(color: c.textSecondary)),
+                  )
+                : CrmLeadSidePanel(leadView: selectedDoc),
+          ),
+        ],
+      );
+    });
   }
 }
 
