@@ -797,66 +797,73 @@ class _BasicInfoSectionState extends State<_BasicInfoSection> {
             ),
           ),
           // ── データ行 ──
-          // v3.5.4: 各セル独立した高さ（IntrinsicHeight + stretch を撤廃）。
-          // 行の上罫線は Row 全体を囲む Container で 1 本だけ引く。
-          // 縦罫線は各セル自身の border:right で描画（左揃え start なので
-          // 短いセルがあっても罫線がずれて見えにくい）。
+          // v3.5.5: IntrinsicHeight + stretch で行の高さを揃える（罫線・背景がそろう）
+          // ヒアリング側が大きく見えてしまう問題は、_InlineTextEditor 側で
+          // 独自の OutlineInputBorder を出さず、セルの罫線をそのまま使うことで解消。
           for (var i = 0; i < items.length; i++)
-            Container(
-              decoration: BoxDecoration(border: Border(top: line())),
+            IntrinsicHeight(
               child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Container(
                     width: labelColW,
                     padding: const EdgeInsets.symmetric(
                         horizontal: 10, vertical: 10),
-                    color: c.scaffoldBgAlt,
+                    decoration: BoxDecoration(
+                      color: c.scaffoldBgAlt,
+                      border: Border(right: line(), top: line()),
+                    ),
                     child: Text(items[i].label,
                         style: TextStyle(
                             fontSize: AppTextSize.caption,
                             color: c.textSecondary,
                             fontWeight: FontWeight.bold)),
                   ),
-                  Container(width: 0.5, color: c.borderLight),
                   Expanded(
-                    child: Padding(
+                    child: Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 4, vertical: 2),
+                          horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(
+                        border: Border(right: line(), top: line()),
+                      ),
                       child: _InlineTextEditor(
                         key: ValueKey(
                             '${items[i].intakeKey}:${items[i].intakeValue}'),
                         initialText: items[i].intakeValue,
                         hint: '',
+                        borderless: true,
                         onCommit: (text) async {
                           if (text == items[i].intakeValue) return;
                           await leadRef
                               .update({items[i].intakeKey: text});
                           if (mounted) {
                             AppFeedback.success(context,
-                                '${items[i].label}（アンケート）を保存しました');
+                                '${items[i].label}(アンケート) を保存しました');
                           }
                         },
                       ),
                     ),
                   ),
-                  Container(width: 0.5, color: c.borderLight),
                   Expanded(
-                    child: Padding(
+                    child: Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 4, vertical: 2),
+                          horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(
+                        border: Border(top: line()),
+                      ),
                       child: _InlineTextEditor(
                         key: ValueKey(
                             '${items[i].hearingKey}:${items[i].hearingValue}'),
                         initialText: items[i].hearingValue,
                         hint: '',
+                        borderless: true,
                         onCommit: (text) async {
                           if (text == items[i].hearingValue) return;
                           await leadRef
                               .update({items[i].hearingKey: text});
                           if (mounted) {
                             AppFeedback.success(context,
-                                '${items[i].label}（ヒアリング）を保存しました');
+                                '${items[i].label}(ヒアリング) を保存しました');
                           }
                         },
                       ),
@@ -2465,6 +2472,7 @@ class _InlineTextEditor extends StatefulWidget {
   final int? maxLines; // null = 自動拡張
   final int minLines; // 初期表示の最小行数（フォーカスの有無に関わらず固定）
   final TextInputType? keyboardType;
+  final bool borderless; // テーブルセル内で使う場合は true（独自の枠を出さない）
   final Future<void> Function(String) onCommit;
   const _InlineTextEditor({
     super.key,
@@ -2474,6 +2482,7 @@ class _InlineTextEditor extends StatefulWidget {
     this.maxLines,
     this.minLines = 1,
     this.keyboardType,
+    this.borderless = false,
   });
 
   @override
@@ -2530,22 +2539,30 @@ class _InlineTextEditorState extends State<_InlineTextEditor> {
             fontStyle: FontStyle.italic),
         isDense: true,
         contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-        border: _focused
-            ? OutlineInputBorder(
+        // borderless: テーブルセル内で使う場合は独自枠を出さない
+        // （セルの罫線がそのまま編集領域を示す）
+        border: widget.borderless
+            ? InputBorder.none
+            : (_focused
+                ? OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(6),
+                    borderSide: BorderSide(color: c.borderMedium))
+                : InputBorder.none),
+        enabledBorder: widget.borderless
+            ? InputBorder.none
+            : (_focused
+                ? OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(6),
+                    borderSide: BorderSide(color: c.borderMedium))
+                : InputBorder.none),
+        focusedBorder: widget.borderless
+            ? InputBorder.none
+            : OutlineInputBorder(
                 borderRadius: BorderRadius.circular(6),
-                borderSide: BorderSide(color: c.borderMedium))
-            : InputBorder.none,
-        enabledBorder: _focused
-            ? OutlineInputBorder(
-                borderRadius: BorderRadius.circular(6),
-                borderSide: BorderSide(color: c.borderMedium))
-            : InputBorder.none,
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(6),
-          borderSide: BorderSide(color: AppColors.primary, width: 1.5),
-        ),
-        filled: _focused,
-        fillColor: _focused ? c.cardBg : null,
+                borderSide: BorderSide(color: AppColors.primary, width: 1.5),
+              ),
+        filled: !widget.borderless && _focused,
+        fillColor: !widget.borderless && _focused ? c.cardBg : null,
       ),
     );
   }
