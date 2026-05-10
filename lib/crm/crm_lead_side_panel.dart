@@ -744,7 +744,7 @@ class _BasicInfoSectionState extends State<_BasicInfoSection> {
         padding:
             const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         color: bg,
-        alignment: Alignment.centerLeft,
+        alignment: Alignment.center,
         child: Text(text,
             style: TextStyle(
                 fontSize: AppTextSize.xs,
@@ -828,6 +828,7 @@ class _BasicInfoSectionState extends State<_BasicInfoSection> {
                             '${items[i].intakeKey}:${items[i].intakeValue}'),
                         initialText: items[i].intakeValue,
                         hint: '',
+                        minLines: 3,
                         onCommit: (text) async {
                           if (text == items[i].intakeValue) return;
                           await leadRef
@@ -852,6 +853,7 @@ class _BasicInfoSectionState extends State<_BasicInfoSection> {
                             '${items[i].hearingKey}:${items[i].hearingValue}'),
                         initialText: items[i].hearingValue,
                         hint: '',
+                        minLines: 3,
                         onCommit: (text) async {
                           if (text == items[i].hearingValue) return;
                           await leadRef
@@ -2465,6 +2467,7 @@ class _InlineTextEditor extends StatefulWidget {
   final String initialText;
   final String hint;
   final int? maxLines; // null = 自動拡張
+  final int minLines; // 初期表示の最小行数（フォーカスの有無に関わらず固定）
   final TextInputType? keyboardType;
   final Future<void> Function(String) onCommit;
   const _InlineTextEditor({
@@ -2473,6 +2476,7 @@ class _InlineTextEditor extends StatefulWidget {
     required this.hint,
     required this.onCommit,
     this.maxLines,
+    this.minLines = 1,
     this.keyboardType,
   });
 
@@ -2517,9 +2521,7 @@ class _InlineTextEditorState extends State<_InlineTextEditor> {
       controller: _ctrl,
       focusNode: _focus,
       maxLines: widget.maxLines, // null = 自動拡張
-      // フォーカス時は 4 行分の高さを確保（OutlineInputBorder の枠が見やすい）。
-      // maxLines: 1 が指定されている場合は1行のままにする。
-      minLines: (widget.maxLines == 1) ? 1 : (_focused ? 4 : 1),
+      minLines: widget.minLines, // 親が指定（クリックで伸縮させない、最初から固定）
       keyboardType: widget.keyboardType,
       style: TextStyle(
           fontSize: AppTextSize.body,
