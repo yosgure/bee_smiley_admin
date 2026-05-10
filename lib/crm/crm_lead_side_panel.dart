@@ -677,13 +677,18 @@ class _BasicInfoSectionState extends State<_BasicInfoSection> {
     );
   }
 
-  /// 性別: ChoiceChip 風の3択
+  /// 性別: ChoiceChip 風の2択（男/女）
+  /// 既存データの「男子/女子」も表示できるよう、表示時のみ正規化する。
   Widget _editableGenderRow(BuildContext context, String label,
       String value, LeadViewReference leadRef) {
+    final normalized = (value == '男子' || value == '男')
+        ? '男'
+        : (value == '女子' || value == '女')
+            ? '女'
+            : '';
     const choices = [
-      ('男子', '男子'),
-      ('女子', '女子'),
-      ('その他', 'その他'),
+      ('男', '男'),
+      ('女', '女'),
     ];
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 3),
@@ -700,7 +705,7 @@ class _BasicInfoSectionState extends State<_BasicInfoSection> {
                     label: Text(label2,
                         style: const TextStyle(
                             fontSize: AppTextSize.caption)),
-                    selected: value == v,
+                    selected: normalized == v,
                     onSelected: (s) async {
                       if (!s) return;
                       await leadRef.update({'childGender': v});
