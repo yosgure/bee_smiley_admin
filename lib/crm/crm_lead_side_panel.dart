@@ -294,13 +294,11 @@ class _BasicInfoSection extends StatefulWidget {
 }
 
 class _BasicInfoSectionState extends State<_BasicInfoSection> {
-  // インライン編集化に伴い _editingMemo / _memoCtrl / _saveMemo は廃止。
-  // 備考は _editableMultiline (_InlineTextEditor) で blur 自動保存。
-
   @override
   Widget build(BuildContext context) {
     final lead = widget.lead;
     final c = context.colors;
+    final leadRef = widget.leadRef;
     return _SectionCard(
       frameless: true,
       icon: Icons.contact_mail_outlined,
@@ -308,89 +306,91 @@ class _BasicInfoSectionState extends State<_BasicInfoSection> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          if (lead.parentFullName.isNotEmpty)
-            _row(context, '保護者', lead.parentFullName),
-          if (lead.parentTel.isNotEmpty)
-            _phoneRow(context, '電話', lead.parentTel),
-          if (lead.parentEmail.isNotEmpty)
-            _emailRow(context, 'メール', lead.parentEmail),
-          _row(
-              context,
-              '媒体',
-              CrmOptions.labelOf(CrmOptions.sources, lead.source)),
-          // ── 児童の属性（v2.1: 客観 + ケア情報を集約） ──
+          // ── 連絡先 ──
+          _editableNameRow(context, '保護者',
+              lead.parentLastName, lead.parentFirstName, leadRef),
+          _editablePhoneRow(context, '電話', lead.parentTel, leadRef),
+          _editableEmailRow(context, 'メール', lead.parentEmail, leadRef),
+          _editableSourceRow(context, '媒体', lead.source, leadRef),
+
           const SizedBox(height: 6),
           Divider(height: 1, color: c.borderLight),
           const SizedBox(height: 6),
-          if (lead.childBirthDate != null)
-            _row(context, '生年月日',
-                DateFormat('yyyy/M/d', 'ja').format(lead.childBirthDate!)),
-          if (lead.childGender != null && lead.childGender!.isNotEmpty)
-            _row(context, '性別', _genderLabelStatic(lead.childGender!)),
-          if (lead.kindergarten.isNotEmpty)
-            _row(context, '園', lead.kindergarten),
-          // ケア情報（旧 児童プロフィール）
-          _editableMultiline(context, '主訴', lead.mainConcern,
-              'mainConcern', '困りごと・相談内容', widget.leadRef),
-          _editableMultiline(context, '好きなこと', lead.likes, 'likes',
-              'トング、コーヒーミル 等', widget.leadRef),
-          _editableMultiline(context, '苦手なこと', lead.dislikes, 'dislikes',
-              '風船バレー、音過敏 等', widget.leadRef),
+
+          // ── 児童属性 ──
+          _editableBirthDateRow(
+              context, '生年月日', lead.childBirthDate, leadRef),
+          _editableGenderRow(context, '性別', lead.childGender ?? '', leadRef),
+          _editableSinglelineRow(context, '園', lead.kindergarten,
+              'kindergarten', '◯◯幼稚園', leadRef),
+          _editableSinglelineRow(context, '学年', lead.grade,
+              'grade', '年中', leadRef),
+
+          const SizedBox(height: 8),
+          Divider(height: 1, color: c.borderLight),
+          const SizedBox(height: 8),
+
+          // ── アンケート + ヒアリング 2 層構造 ──
+          _twoLayerField(context, '主訴',
+              lead.mainConcern, lead.mainConcernHearing,
+              'mainConcern', 'mainConcernHearing', leadRef),
+          _twoLayerField(context, '好きなこと',
+              lead.likes, lead.likesHearing,
+              'likes', 'likesHearing', leadRef),
+          _twoLayerField(context, '苦手なこと',
+              lead.dislikes, lead.dislikesHearing,
+              'dislikes', 'dislikesHearing', leadRef),
+          _twoLayerField(context, '既往歴',
+              lead.medicalHistory, lead.medicalHistoryHearing,
+              'medicalHistory', 'medicalHistoryHearing', leadRef),
+          _twoLayerField(context, '診断名',
+              lead.diagnosis, lead.diagnosisHearing,
+              'diagnosis', 'diagnosisHearing', leadRef),
+
+          const SizedBox(height: 8),
+          Divider(height: 1, color: c.borderLight),
+          const SizedBox(height: 8),
+
+          // ── 体験メモ（独立、2層化しない） ──
           _editableMultiline(context, '体験メモ', lead.trialNotes,
-              'trialNotes', '発語は単語のみ 等', widget.leadRef),
-          // 備考: インライン編集（blur で自動保存）。
+              'trialNotes', '発語は単語のみ 等', leadRef),
+          // ── 備考 ──
           _editableMultiline(context, '備考', lead.memo, 'memo',
-              'アレルギー、家庭事情、保護者意向など', widget.leadRef),
+              'アレルギー、家庭事情、保護者意向など', leadRef),
         ],
       ),
     );
   }
 
-  Widget _row(BuildContext context, String label, String value) {
+  // ── 共通ヘルパー ──
+
+  Widget _labelCol(BuildContext context, String label) {
     final c = context.colors;
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 3),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-              width: 60,
-              child: Text(label,
-                  style: TextStyle(
-                      fontSize: AppTextSize.caption, color: c.textSecondary))),
-          Expanded(
-            child: Text(value,
-                style: TextStyle(
-                    fontSize: AppTextSize.body, color: c.textPrimary)),
-          ),
-        ],
-      ),
+    return SizedBox(
+      width: 60,
+      child: Text(label,
+          style: TextStyle(
+              fontSize: AppTextSize.caption, color: c.textSecondary)),
     );
   }
 
-  /// インライン編集（ポップアップを使わず、直接 TextField で編集）。
-  /// blur (focus 喪失) で自動保存。
-  Widget _editableMultiline(BuildContext context, String label, String value,
-      String fieldKey, String hint, LeadViewReference leadRef) {
-    final c = context.colors;
+  /// 1 行テキスト編集（汎用）
+  Widget _editableSinglelineRow(BuildContext context, String label,
+      String value, String fieldKey, String hint, LeadViewReference leadRef) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 3),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          SizedBox(
-              width: 60,
-              child: Text(label,
-                  style: TextStyle(
-                      fontSize: AppTextSize.caption,
-                      color: c.textSecondary))),
+          _labelCol(context, label),
           Expanded(
             child: _InlineTextEditor(
               key: ValueKey('$fieldKey:$value'),
               initialText: value,
-              hint: '未入力',
+              hint: hint.isEmpty ? '未入力' : hint,
+              maxLines: 1,
               onCommit: (text) async {
-                if (text == value) return; // 無変更は保存しない
+                if (text == value) return;
                 await leadRef.update({fieldKey: text});
                 if (mounted) {
                   AppFeedback.success(context, '$label を保存しました');
@@ -403,38 +403,202 @@ class _BasicInfoSectionState extends State<_BasicInfoSection> {
     );
   }
 
-  Widget _phoneRow(BuildContext context, String label, String tel) {
+  /// 複数行テキスト編集（既存・体験メモ・備考用）
+  Widget _editableMultiline(BuildContext context, String label, String value,
+      String fieldKey, String hint, LeadViewReference leadRef) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          _labelCol(context, label),
+          Expanded(
+            child: _InlineTextEditor(
+              key: ValueKey('$fieldKey:$value'),
+              initialText: value,
+              hint: hint.isEmpty ? '未入力' : hint,
+              onCommit: (text) async {
+                if (text == value) return;
+                await leadRef.update({fieldKey: text});
+                if (mounted) {
+                  AppFeedback.success(context, '$label を保存しました');
+                }
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 保護者氏名: 姓名を 1 つの欄で編集、保存時にスペース分割。
+  Widget _editableNameRow(BuildContext context, String label,
+      String last, String first, LeadViewReference leadRef) {
+    final fullName = '$last $first'.trim();
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          _labelCol(context, label),
+          Expanded(
+            child: _InlineTextEditor(
+              key: ValueKey('parentName:$fullName'),
+              initialText: fullName,
+              hint: '姓 名（スペース区切り）',
+              maxLines: 1,
+              onCommit: (text) async {
+                if (text.trim() == fullName) return;
+                final parts = text
+                    .trim()
+                    .split(RegExp(r'[\s　]+'))
+                    .where((p) => p.isNotEmpty)
+                    .toList();
+                final newLast = parts.isNotEmpty ? parts.first : '';
+                final newFirst =
+                    parts.length > 1 ? parts.sublist(1).join('') : '';
+                await leadRef.update({
+                  'parentLastName': newLast,
+                  'parentFirstName': newFirst,
+                });
+                if (mounted) {
+                  AppFeedback.success(context, '保護者名を保存しました');
+                }
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 電話: 編集テキスト + 発信アイコン分離
+  Widget _editablePhoneRow(BuildContext context, String label,
+      String tel, LeadViewReference leadRef) {
     final c = context.colors;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 3),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          SizedBox(
-              width: 60,
-              child: Text(label,
-                  style: TextStyle(
-                      fontSize: AppTextSize.caption, color: c.textSecondary))),
+          _labelCol(context, label),
           Expanded(
-            child: InkWell(
-              borderRadius: BorderRadius.circular(4),
-              onTap: () async {
-                final uri = Uri.parse('tel:${tel.replaceAll(RegExp(r"[^0-9+]"), "")}');
+            child: _InlineTextEditor(
+              key: ValueKey('parentTel:$tel'),
+              initialText: tel,
+              hint: '09000000000',
+              maxLines: 1,
+              keyboardType: TextInputType.phone,
+              onCommit: (text) async {
+                if (text == tel) return;
+                await leadRef.update({'parentTel': text});
+                if (mounted) {
+                  AppFeedback.success(context, '電話番号を保存しました');
+                }
+              },
+            ),
+          ),
+          if (tel.isNotEmpty)
+            IconButton(
+              icon: Icon(Icons.phone_outlined,
+                  size: 18, color: AppColors.primary),
+              tooltip: '電話発信',
+              padding: EdgeInsets.zero,
+              constraints:
+                  const BoxConstraints(minWidth: 32, minHeight: 32),
+              onPressed: () async {
+                final uri = Uri.parse(
+                    'tel:${tel.replaceAll(RegExp(r"[^0-9+]"), "")}');
                 final ok = await launchUrl(uri);
-                if (!ok && context.mounted) {
+                if (!ok && mounted) {
                   await Clipboard.setData(ClipboardData(text: tel));
-                  if (context.mounted) {
-                    AppFeedback.info(context, '電話発信できないためコピーしました: $tel');
+                  if (mounted) {
+                    AppFeedback.info(
+                        context, '電話発信できないためコピーしました: $tel');
                   }
                 }
               },
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 2),
-                child: Text(tel,
+            ),
+        ],
+      ),
+    );
+  }
+
+  /// メール: 編集テキスト + メーラー起動アイコン分離
+  Widget _editableEmailRow(BuildContext context, String label,
+      String email, LeadViewReference leadRef) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          _labelCol(context, label),
+          Expanded(
+            child: _InlineTextEditor(
+              key: ValueKey('parentEmail:$email'),
+              initialText: email,
+              hint: 'name@example.com',
+              maxLines: 1,
+              keyboardType: TextInputType.emailAddress,
+              onCommit: (text) async {
+                if (text == email) return;
+                await leadRef.update({'parentEmail': text});
+                if (mounted) {
+                  AppFeedback.success(context, 'メールを保存しました');
+                }
+              },
+            ),
+          ),
+          if (email.isNotEmpty)
+            IconButton(
+              icon: Icon(Icons.mail_outline,
+                  size: 18, color: AppColors.primary),
+              tooltip: 'メール送信',
+              padding: EdgeInsets.zero,
+              constraints:
+                  const BoxConstraints(minWidth: 32, minHeight: 32),
+              onPressed: () => launchUrl(Uri.parse('mailto:$email')),
+            ),
+        ],
+      ),
+    );
+  }
+
+  /// 媒体: ドロップダウン選択
+  Widget _editableSourceRow(BuildContext context, String label,
+      String value, LeadViewReference leadRef) {
+    final c = context.colors;
+    final options = CrmOptions.sources;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          _labelCol(context, label),
+          Expanded(
+            child: DropdownButtonHideUnderline(
+              child: DropdownButton<String>(
+                value: options.any((o) => o.id == value) ? value : null,
+                isDense: true,
+                hint: Text('未選択',
                     style: TextStyle(
-                        fontSize: AppTextSize.body,
-                        color: AppColors.primary,
-                        decoration: TextDecoration.underline)),
+                        fontSize: AppTextSize.body, color: c.textTertiary)),
+                style: TextStyle(
+                    fontSize: AppTextSize.body, color: c.textPrimary),
+                items: [
+                  for (final o in options)
+                    DropdownMenuItem(
+                      value: o.id,
+                      child: Text(o.label),
+                    ),
+                ],
+                onChanged: (v) async {
+                  if (v == null || v == value) return;
+                  await leadRef.update({'source': v});
+                  if (mounted) {
+                    AppFeedback.success(context, '媒体を保存しました');
+                  }
+                },
               ),
             ),
           ),
@@ -443,31 +607,182 @@ class _BasicInfoSectionState extends State<_BasicInfoSection> {
     );
   }
 
-  Widget _emailRow(BuildContext context, String label, String email) {
+  /// 生年月日: 日付ピッカー
+  Widget _editableBirthDateRow(BuildContext context, String label,
+      DateTime? value, LeadViewReference leadRef) {
     final c = context.colors;
+    final display = value == null
+        ? '未設定'
+        : DateFormat('yyyy/M/d', 'ja').format(value);
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 3),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          SizedBox(
-              width: 60,
-              child: Text(label,
-                  style: TextStyle(
-                      fontSize: AppTextSize.caption, color: c.textSecondary))),
+          _labelCol(context, label),
           Expanded(
             child: InkWell(
               borderRadius: BorderRadius.circular(4),
-              onTap: () => launchUrl(Uri.parse('mailto:$email')),
-              child: Text(email,
-                  style: TextStyle(
-                      fontSize: AppTextSize.body,
-                      color: AppColors.primary,
-                      decoration: TextDecoration.underline)),
+              onTap: () async {
+                final picked = await showDatePicker(
+                  context: context,
+                  initialDate: value ?? DateTime(2020, 1, 1),
+                  firstDate: DateTime(2010, 1, 1),
+                  lastDate: DateTime.now(),
+                );
+                if (picked == null) return;
+                final ts = Timestamp.fromDate(
+                    DateTime(picked.year, picked.month, picked.day));
+                await leadRef.update({'childBirthDate': ts});
+                if (mounted) {
+                  AppFeedback.success(context, '生年月日を保存しました');
+                }
+              },
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 2),
+                child: Text(display,
+                    style: TextStyle(
+                        fontSize: AppTextSize.body,
+                        color: value == null
+                            ? c.textTertiary
+                            : c.textPrimary)),
+              ),
             ),
           ),
         ],
       ),
+    );
+  }
+
+  /// 性別: ChoiceChip 風の3択
+  Widget _editableGenderRow(BuildContext context, String label,
+      String value, LeadViewReference leadRef) {
+    const choices = [
+      ('男子', '男子'),
+      ('女子', '女子'),
+      ('その他', 'その他'),
+    ];
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          _labelCol(context, label),
+          Expanded(
+            child: Wrap(
+              spacing: 6,
+              children: [
+                for (final (label2, v) in choices)
+                  ChoiceChip(
+                    label: Text(label2,
+                        style: const TextStyle(
+                            fontSize: AppTextSize.caption)),
+                    selected: value == v,
+                    onSelected: (s) async {
+                      if (!s) return;
+                      await leadRef.update({'childGender': v});
+                      if (mounted) {
+                        AppFeedback.success(context, '性別を保存しました');
+                      }
+                    },
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// アンケート + ヒアリング 2 層構造（5 項目共通）
+  Widget _twoLayerField(BuildContext context, String label,
+      String intakeValue, String hearingValue,
+      String intakeKey, String hearingKey, LeadViewReference leadRef) {
+    final c = context.colors;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(label,
+              style: TextStyle(
+                  fontSize: AppTextSize.caption,
+                  color: c.textSecondary,
+                  fontWeight: FontWeight.bold)),
+          const SizedBox(height: 4),
+          // アンケート行
+          _twoLayerRow(
+            context,
+            tagLabel: 'アンケート',
+            tagBg: c.scaffoldBgAlt,
+            tagFg: c.textSecondary,
+            value: intakeValue,
+            fieldKey: intakeKey,
+            hint: '保護者からのアンケート',
+            leadRef: leadRef,
+            humanLabel: '$label（アンケート）',
+          ),
+          const SizedBox(height: 4),
+          // ヒアリング行
+          _twoLayerRow(
+            context,
+            tagLabel: 'ヒアリング',
+            tagBg: AppColors.primary.withValues(alpha: 0.15),
+            tagFg: AppColors.primary,
+            value: hearingValue,
+            fieldKey: hearingKey,
+            hint: 'ヒアリングで深掘りした内容',
+            leadRef: leadRef,
+            humanLabel: '$label（ヒアリング）',
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _twoLayerRow(
+    BuildContext context, {
+    required String tagLabel,
+    required Color tagBg,
+    required Color tagFg,
+    required String value,
+    required String fieldKey,
+    required String hint,
+    required LeadViewReference leadRef,
+    required String humanLabel,
+  }) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          padding:
+              const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+          margin: const EdgeInsets.only(top: 3, right: 6),
+          decoration: BoxDecoration(
+            color: tagBg,
+            borderRadius: BorderRadius.circular(3),
+          ),
+          child: Text(tagLabel,
+              style: TextStyle(
+                  fontSize: AppTextSize.xs,
+                  fontWeight: FontWeight.bold,
+                  color: tagFg)),
+        ),
+        Expanded(
+          child: _InlineTextEditor(
+            key: ValueKey('$fieldKey:$value'),
+            initialText: value,
+            hint: hint,
+            onCommit: (text) async {
+              if (text == value) return;
+              await leadRef.update({fieldKey: text});
+              if (mounted) {
+                AppFeedback.success(context, '$humanLabel を保存しました');
+              }
+            },
+          ),
+        ),
+      ],
     );
   }
 }
@@ -2058,29 +2373,21 @@ Future<DateTime?> _quickPickDate(
   );
 }
 
-/// 性別ラベル変換（v2.1: 基本情報セクションからも参照する top-level 関数）。
-String _genderLabelStatic(String g) {
-  switch (g) {
-    case 'male':
-      return '男';
-    case 'female':
-      return '女';
-    default:
-      return 'その他';
-  }
-}
-
 /// インライン編集 TextField。focus 喪失時に自動コミット。
 /// 未 focus 時はテキスト表示風（border なし）、focus 時は通常の TextField スタイル。
 class _InlineTextEditor extends StatefulWidget {
   final String initialText;
   final String hint;
+  final int? maxLines; // null = 自動拡張
+  final TextInputType? keyboardType;
   final Future<void> Function(String) onCommit;
   const _InlineTextEditor({
     super.key,
     required this.initialText,
     required this.hint,
     required this.onCommit,
+    this.maxLines,
+    this.keyboardType,
   });
 
   @override
@@ -2123,8 +2430,9 @@ class _InlineTextEditorState extends State<_InlineTextEditor> {
     return TextField(
       controller: _ctrl,
       focusNode: _focus,
-      maxLines: null,
+      maxLines: widget.maxLines, // null = 自動拡張
       minLines: 1,
+      keyboardType: widget.keyboardType,
       style: TextStyle(
           fontSize: AppTextSize.body,
           color: _ctrl.text.isEmpty ? c.textTertiary : c.textPrimary),

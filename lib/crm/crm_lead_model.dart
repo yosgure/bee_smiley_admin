@@ -127,11 +127,23 @@ class CrmLead {
   }
 
   // 児童プロフィール（既存フィールドを直接参照、新しい childProfile マップは作らない）
+  // 各項目は 2 層構造: アンケート由来（保護者の自記）+ ヒアリング追記（スタッフが深掘り）
   String get mainConcern => (raw['mainConcern'] as String?) ?? '';
+  String get mainConcernHearing =>
+      (raw['mainConcernHearing'] as String?) ?? '';
   String get likes => (raw['likes'] as String?) ?? '';
+  String get likesHearing => (raw['likesHearing'] as String?) ?? '';
   String get dislikes => (raw['dislikes'] as String?) ?? '';
+  String get dislikesHearing => (raw['dislikesHearing'] as String?) ?? '';
+  String get medicalHistory => (raw['medicalHistory'] as String?) ?? '';
+  String get medicalHistoryHearing =>
+      (raw['medicalHistoryHearing'] as String?) ?? '';
+  String get diagnosis => (raw['diagnosis'] as String?) ?? '';
+  String get diagnosisHearing => (raw['diagnosisHearing'] as String?) ?? '';
   String get trialNotes => (raw['trialNotes'] as String?) ?? '';
   String get kindergarten => (raw['kindergarten'] as String?) ?? '';
+  String get grade => (raw['grade'] as String?) ?? '';
+  String get trialAttendee => (raw['trialAttendee'] as String?) ?? '';
   String? get childGender => raw['childGender'] as String?;
   String get permitStatus =>
       (raw['permitStatus'] as String?) ?? 'none';
