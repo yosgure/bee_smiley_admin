@@ -828,7 +828,6 @@ class _BasicInfoSectionState extends State<_BasicInfoSection> {
                             '${items[i].intakeKey}:${items[i].intakeValue}'),
                         initialText: items[i].intakeValue,
                         hint: '',
-                        minLines: 3,
                         onCommit: (text) async {
                           if (text == items[i].intakeValue) return;
                           await leadRef
@@ -853,7 +852,6 @@ class _BasicInfoSectionState extends State<_BasicInfoSection> {
                             '${items[i].hearingKey}:${items[i].hearingValue}'),
                         initialText: items[i].hearingValue,
                         hint: '',
-                        minLines: 3,
                         onCommit: (text) async {
                           if (text == items[i].hearingValue) return;
                           await leadRef
