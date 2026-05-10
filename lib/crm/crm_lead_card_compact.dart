@@ -46,7 +46,7 @@ class CrmLeadCardCompact extends StatelessWidget {
     final typeId = lead.nextActionType;
     final actionLabel = lead.nextActionNote.isNotEmpty
         ? lead.nextActionNote
-        : '次の一手を決める';
+        : '次のアクションを決める';
     final typeIcon = _iconForType(typeId);
     final isUnset = na == null && lead.nextActionNote.isEmpty;
 

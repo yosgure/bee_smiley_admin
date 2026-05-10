@@ -2315,9 +2315,9 @@ class _CrmLeadEditScreenState extends State<CrmLeadEditScreen> {
           const SizedBox(height: 24),
 
           // ============================================================
-          // ② 体験後（個別対応）— 体験で得た情報をもとに次の一手を決める
+          // ② 体験後（個別対応）— 体験で得た情報をもとに次のアクションを決める
           // ============================================================
-          _phaseHeader('② 体験後', '体験で得た情報を残し、次の一手を決める',
+          _phaseHeader('② 体験後', '体験で得た情報を残し、次のアクションを決める',
               icon: Icons.psychology_outlined, color: AppColors.accent),
           _section('体験'),
           _dateField('体験日', _trialAt, (d) => setState(() => _trialAt = d),

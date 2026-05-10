@@ -1,14 +1,14 @@
 // F_lead_detail_refactor (Phase 2): リード詳細パネル新版。
 //
 // 概念整理:
-// - 「次の一手」は 1 リードに 1 つだけ（nextActionAt + nextActionNote）
+// - 「次のアクション」は 1 リードに 1 つだけ（nextActionAt + nextActionNote）
 // - メモは 3 種類:
 //     (a) 対応履歴 = activities[]（過去の実施記録）
-//     (b) 次の一手 = nextActionNote（未来の予定）
+//     (b) 次のアクション = nextActionNote（未来の予定）
 //     (c) プロフィールメモ = memo（常時メモ）
 //   TODO: memo → profileNote にリネーム（Phase 1 スキーマ移行で実施）
 // - 下部アクションは 3 ボタンのみ:
-//     ① 履歴を追加  ② 次の一手を更新  ③ ステージを進める（context 依存）
+//     ① 履歴を追加  ② 次のアクションを更新  ③ ステージを進める（context 依存）
 // - LINE は UI から削除（スキーマ保持）
 //
 // 旧実装は crm_lead_side_panel_legacy.dart に退避（無参照、1 ヶ月後物理削除）。
@@ -473,7 +473,7 @@ class _BasicInfoSectionState extends State<_BasicInfoSection> {
 }
 
 // ============================================================
-// 次の一手セクション（強調表示）
+// 次のアクションセクション（強調表示）
 // ============================================================
 class _NextActionSection extends StatelessWidget {
   final CrmLead lead;
@@ -489,7 +489,7 @@ class _NextActionSection extends StatelessWidget {
     return _SectionCard(
       frameless: true,
       icon: Icons.flag_outlined,
-      title: '次の一手',
+      title: '次のアクション',
       titleColor: overdue ? AppColors.warning : null,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -501,7 +501,7 @@ class _NextActionSection extends StatelessWidget {
             child: Padding(
               padding: const EdgeInsets.symmetric(vertical: 4),
               child: na == null && note.isEmpty
-                  ? Text('次の一手が未設定です（クリックで設定）',
+                  ? Text('次のアクションが未設定です（クリックで設定）',
                       style: TextStyle(
                           fontSize: AppTextSize.body,
                           color: c.textTertiary,
@@ -688,7 +688,7 @@ class _BottomActions extends StatelessWidget {
         color: c.cardBg,
         border: Border(top: BorderSide(color: c.borderLight)),
       ),
-      // 履歴追加・次の一手更新は各セクションのアイコンに移動。
+      // 履歴追加・次のアクション更新は各セクションのアイコンに移動。
       // 下部はステージ進行のみ。
       child: _StageAdvanceButton(lead: lead, leadRef: leadRef),
     );
@@ -935,7 +935,7 @@ Future<void> _showAddHistoryDialog(
   if (context.mounted) AppFeedback.success(context, '履歴を追加しました');
 }
 
-/// 次の一手の種別マスタ。
+/// 次のアクションの種別マスタ。
 /// applicableStages: ステージで絞り込み（'*' = 全ステージ）
 /// defaultDueDays: 種別選択時に「今日 + N 日」を期日デフォルトに
 /// icon: ピル左に表示する絵文字（任意）
@@ -959,16 +959,16 @@ const _nextActionTypes = <({
       applicableStages: ['considering'], defaultDueDays: 14),
   (id: 'attendance_schedule_adjust', label: '通所日程調整', icon: '📅',
       applicableStages: ['considering'], defaultDueDays: 3),
-  // 入会手続中
-  (id: 'recipient_cert_check', label: '受給者証確認', icon: '✅',
+  // 入会手続中（v3: 業務フロー反映）
+  (id: 'contract_date_decision', label: '契約日決定', icon: '✍️',
       applicableStages: ['onboarding'], defaultDueDays: 7),
-  (id: 'contract_send', label: '契約書送付', icon: '📤',
-      applicableStages: ['onboarding'], defaultDueDays: 1),
-  (id: 'contract_receive', label: '契約書回収', icon: '📥',
+  (id: 'assessment_hearing_date', label: 'アセスメントヒアリング日決定', icon: '🗓️',
       applicableStages: ['onboarding'], defaultDueDays: 7),
-  (id: 'enrollment_date_confirm', label: '入会日確定', icon: '🎉',
-      applicableStages: ['onboarding'], defaultDueDays: 3),
-  (id: 'recipient_cert_copy', label: '受給者証コピー受領', icon: '📄',
+  (id: 'assessment_creation', label: 'アセスメント作成', icon: '📝',
+      applicableStages: ['onboarding'], defaultDueDays: 7),
+  (id: 'support_plan_creation', label: '個別支援計画書作成', icon: '📋',
+      applicableStages: ['onboarding'], defaultDueDays: 7),
+  (id: 'planning_meeting', label: '策定会議', icon: '👥',
       applicableStages: ['onboarding'], defaultDueDays: 7),
   // 全ステージ共通
   (id: 'status_check', label: '状況確認', icon: '💬',
@@ -977,7 +977,7 @@ const _nextActionTypes = <({
       applicableStages: ['*'], defaultDueDays: 7),
 ];
 
-/// 次の一手を更新（種別ピッカー + 日付 + メモ）。
+/// 次のアクションを更新（種別ピッカー + 日付 + メモ）。
 /// v3: カスタム Dialog でデザイン刷新（種別をアイコン付きカードのグリッド表示）。
 Future<void> _showUpdateNextActionDialog(
     BuildContext context, CrmLead lead, LeadViewReference leadRef) async {
@@ -1023,7 +1023,7 @@ Future<void> _showUpdateNextActionDialog(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('次の一手を更新',
+                          Text('次のアクションを更新',
                               style: TextStyle(
                                 fontSize: AppTextSize.title,
                                 fontWeight: FontWeight.bold,
@@ -1185,7 +1185,7 @@ Future<void> _showUpdateNextActionDialog(
     'nextActionNote': saveNote,
     'nextActionType': typeId,
   });
-  if (context.mounted) AppFeedback.success(context, '次の一手を更新しました');
+  if (context.mounted) AppFeedback.success(context, '次のアクションを更新しました');
 }
 
 /// ダイアログ内のセクション小見出し（必須マーク対応）。
@@ -1348,10 +1348,10 @@ class _DialogDateButton extends StatelessWidget {
   }
 }
 
-/// 完了 + 次の一手必須入力
+/// 完了 + 次のアクション必須入力
 Future<void> _showCompleteNextActionDialog(
     BuildContext context, CrmLead lead, LeadViewReference leadRef) async {
-  // 完了履歴記録 + 新しい次の一手を入力
+  // 完了履歴記録 + 新しい次のアクションを入力
   DateTime when = DateTime.now().add(const Duration(days: 3));
   final note = TextEditingController();
   final completedNote =
@@ -1360,7 +1360,7 @@ Future<void> _showCompleteNextActionDialog(
     context: context,
     builder: (ctx) => StatefulBuilder(builder: (ctx, setS) {
       return AlertDialog(
-        title: const Text('次の一手を完了'),
+        title: const Text('次のアクションを完了'),
         content: SizedBox(
           width: 380,
           child: Column(
@@ -1379,7 +1379,7 @@ Future<void> _showCompleteNextActionDialog(
                     border: OutlineInputBorder(), isDense: true),
               ),
               const Divider(height: 24),
-              Text('次の一手（必須）',
+              Text('次のアクション（必須）',
                   style: TextStyle(
                       fontSize: AppTextSize.caption,
                       fontWeight: FontWeight.bold,
@@ -1417,7 +1417,7 @@ Future<void> _showCompleteNextActionDialog(
           FilledButton(
               onPressed: () {
                 if (note.text.trim().isEmpty) {
-                  AppFeedback.warning(ctx, '次の一手の内容は必須です');
+                  AppFeedback.warning(ctx, '次のアクションの内容は必須です');
                   return;
                 }
                 Navigator.pop(ctx, true);
@@ -1445,7 +1445,7 @@ Future<void> _showCompleteNextActionDialog(
     'nextActionAt': Timestamp.fromDate(when),
     'nextActionNote': note.text.trim(),
   });
-  if (context.mounted) AppFeedback.success(context, '次の一手を完了しました');
+  if (context.mounted) AppFeedback.success(context, '次のアクションを完了しました');
 }
 
 /// 入会手続き開始モーダル
@@ -1506,7 +1506,7 @@ Future<void> _showStartOnboardingDialog(
                   onChanged: (v) => setS(() => permitStatus = v ?? 'none'),
                 ),
                 const Divider(height: 24),
-                Text('1 つ目の次の一手', style: TextStyle(fontSize: AppTextSize.caption)),
+                Text('1 つ目の次のアクション', style: TextStyle(fontSize: AppTextSize.caption)),
                 Wrap(
                   spacing: 6,
                   children: ['契約書送付', '契約日確定の連絡', '受給者証申請サポート']
@@ -1547,7 +1547,7 @@ Future<void> _showStartOnboardingDialog(
           FilledButton(
               onPressed: () {
                 if (nextActionNote.text.trim().isEmpty) {
-                  AppFeedback.warning(ctx, '次の一手の内容は必須です');
+                  AppFeedback.warning(ctx, '次のアクションの内容は必須です');
                   return;
                 }
                 Navigator.pop(ctx, true);

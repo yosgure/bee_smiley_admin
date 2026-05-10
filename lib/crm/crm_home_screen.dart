@@ -453,7 +453,7 @@ class _UrgentSection extends StatelessWidget {
         children: [
           Expanded(flex: 4, child: Text('名前', style: style)),
           const SizedBox(width: 8),
-          Expanded(flex: 6, child: Text('次の一手', style: style)),
+          Expanded(flex: 6, child: Text('次のアクション', style: style)),
           const SizedBox(width: 8),
           SizedBox(
             width: 64,

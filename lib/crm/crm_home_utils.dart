@@ -6,7 +6,7 @@ import 'crm_lead_model.dart';
 
 /// 督促（今すぐ対応）の分類
 enum CrmUrgentReason {
-  /// 次の一手の予定日を超過している
+  /// 次のアクションの予定日を超過している
   overdue,
   /// 体験後24h以内にフォロー接触がない
   trialFollowupMissing,
@@ -14,7 +14,7 @@ enum CrmUrgentReason {
   contractStalled,
   /// 検討中で問い合わせから N日経過したのにアンケート未回収
   surveyNotReceived,
-  /// 次の一手が未設定で、最終接触から24h経過
+  /// 次のアクションが未設定で、最終接触から24h経過
   noNextAction,
 }
 
@@ -24,7 +24,7 @@ String crmUrgentReasonLabel(CrmUrgentReason r) => switch (r) {
       CrmUrgentReason.trialFollowupMissing => '体験未実施 (予定経過)',
       CrmUrgentReason.contractStalled => '契約停滞',
       CrmUrgentReason.surveyNotReceived => 'アンケート未回収',
-      CrmUrgentReason.noNextAction => '次の一手を決める',
+      CrmUrgentReason.noNextAction => '次のアクションを決める',
     };
 
 /// 督促判定に使う閾値（CLAUDE.md の Alert Thresholds と整合）
@@ -82,7 +82,7 @@ List<CrmUrgentReason> urgentReasonsFor(CrmLead lead, {DateTime? now}) {
     reasons.add(CrmUrgentReason.surveyNotReceived);
   }
 
-  // 5) 次の一手未設定: 最終接触から 24h 経過しても設定されていない
+  // 5) 次のアクション未設定: 最終接触から 24h 経過しても設定されていない
   if (!lead.hasNextAction) {
     final since = lead.sinceLastContact(ref);
     if (since != null &&
@@ -299,7 +299,7 @@ class CrmUrgentRow {
   final List<CrmUrgentReason> reasons;
   const CrmUrgentRow({required this.lead, required this.reasons});
 
-  /// 督促理由なしの Lead（次の一手設定済みなど）でも CrmUrgentRow を作る場合があるため
+  /// 督促理由なしの Lead（次のアクション設定済みなど）でも CrmUrgentRow を作る場合があるため
   /// nullable にする。
   CrmUrgentReason? get topReason => reasons.isEmpty
       ? null

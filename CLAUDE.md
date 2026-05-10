@@ -52,7 +52,7 @@
 - `trialFollowupMissing` — 体験予定日経過＋体験実施日未入力
 - `contractStalled` — 入会手続中で 7 日以上動きなし
 - `surveyNotReceived` — 検討中で問い合わせから 7 日経過＋アンケート未回収
-- `noNextAction` — 次の一手未設定 + 最終接触から 24h 経過
+- `noNextAction` — 次のアクション未設定 + 最終接触から 24h 経過
 
 ### Design Tokens
 - アラート色は `context.alerts.{warning|urgent|info|success}` を必ず経由する（`Colors.red` / `Colors.blue` の直接指定禁止）
@@ -73,14 +73,18 @@ CRM の Lead ステージ管理が安定したら、status フィールドをス
 ## CRM Lead Model Rules
 
 ### Single Next Action
-- 1 リードは常に「次の一手」を 1 つだけ持つ（`nextActionAt` + `nextActionNote`）
-- 完了時は次の一手の内容入力が必須（空のまま完了不可）
+- 1 リードは常に「次のアクション」を 1 つだけ持つ（`nextActionAt` + `nextActionNote` + `nextActionType`）
+- 完了時は次のアクションの内容入力が必須（空のまま完了不可）
 - lead-CRM context では独立した tasks の概念を導入しない（汎用タスク機能とは別）
+- **検討中**ステージにおいて「次のアクション」は基本的に**保護者側の動き待ち**を表す。
+  期日 = 「この日まで動きが無ければスタッフから催促する締切」と統一して扱う。
+  待ち事項（種別）と能動アクション（状況確認・その他）を同じ枠で扱うため、
+  かつての「待ち状態」セクションは復活させない。
 
 ### Memo Separation
 3 種類のメモを混同しない:
 - `activities[]` — 過去の対応実績（履歴タイムライン）
-- `nextActionNote` — 1 件の未来の予定
+- `nextActionNote` — 1 件の次のアクション（補足メモ）
 - `memo` — 常時のプロフィールメモ（アレルギー・家庭事情・保護者意向等）
 
 汎用「メモ」ボタン・フィールドは禁止。
@@ -119,7 +123,7 @@ CRM 関連 UI は **目的別** に役割を分離する:
 固定順:
 1. **ステージ遷移ボタン**（具体ボタン式 — Stage Transition UI 参照）
 2. **進捗チェックリスト**（Stage-Specific Checklists 参照）
-3. **次の一手**（1 件のみ — Single Next Action 参照）
+3. **次のアクション**（1 件のみ — Single Next Action 参照）
 4. **対応履歴**（`activities[]`）
 5. **基本情報**: 媒体 / 媒体詳細 / 希望曜日 / 希望時間帯 / 希望開始時期 / 主訴 / 好きなこと / 苦手なこと / 体験メモ / 備考
 
@@ -167,6 +171,25 @@ contract_sent, contract_received, support_plan_created, support_plan_explained
 ハードコード `_nextActionTypes` 定数（`crm_lead_side_panel.dart`）。
 ステージで絞り込み、種別選択時に期日デフォルト自動セット。
 将来 `nextActionTypes` Firestore コレクションに切り出し可能。
+
+**検討中（保護者の動き待ち系 + 能動アクション）**:
+- `visit_other_facility` 他施設見学
+- `family_consultation` 家族で相談
+- `day_increase_request` 日数増枠対応
+- `other_facility_withdrawal` 他事業所退所手続き
+- `recipient_cert_application` 受給者証申請
+- `attendance_schedule_adjust` 通所日程調整
+- `status_check` 状況確認（能動）
+
+**入会手続中（HUG連携書類フロー）**:
+- `contract_date_decision` 契約日決定
+- `assessment_hearing_date` アセスメントヒアリング日決定
+- `assessment_creation` アセスメント作成
+- `support_plan_creation` 個別支援計画書作成
+- `planning_meeting` 策定会議
+
+**全ステージ共通**:
+- `other` その他（補足必須要件は撤廃済み — v3）
 
 ## Form Auto-Import (Google フォーム自動取り込み)
 
