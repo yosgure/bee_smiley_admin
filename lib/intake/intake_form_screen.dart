@@ -267,8 +267,8 @@ class _IntakeFormScreenState extends State<IntakeFormScreen> {
                   _input('', _dislikesCtrl, maxLines: 3),
                   _labelHint('既往歴', 'ある場合はできるだけ詳しく'),
                   _input('', _medicalHistoryCtrl, maxLines: 3),
-                  _input('体験当日の来所予定の方', _trialAttendeeCtrl,
-                      hint: '例: 母'),
+                  _labelHint('体験当日の来所予定の方', '例: 母'),
+                  _input('', _trialAttendeeCtrl),
                 ]),
                 _section('その他', [
                   _sourceSelector(),
@@ -400,12 +400,14 @@ class _IntakeFormScreenState extends State<IntakeFormScreen> {
       int maxLines = 1,
       TextInputType? keyboard,
       String? Function(String?)? validator}) {
+    final hasLabel = label.isNotEmpty;
     return TextFormField(
       controller: ctrl,
       keyboardType: keyboard,
       maxLines: maxLines,
       decoration: InputDecoration(
-        labelText: label + (required ? ' *' : ''),
+        // ラベル空文字（_labelHint で外側に出している）の場合は labelText 自体を出さない
+        labelText: hasLabel ? label + (required ? ' *' : '') : null,
         hintText: hint,
         border: const OutlineInputBorder(),
         isDense: true,
