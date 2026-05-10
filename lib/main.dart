@@ -291,6 +291,7 @@ class _AdminShellState extends State<AdminShell> {
   bool _hasUnreadInfo = false;
   bool _hasUnreadEvent = false;
   bool _hasUnreadRecord = false;
+  bool _hasUnreadCrm = false;
   StaffType _staffType = StaffType.loading;
 
   // アプリアイコンバッジ：いずれかの種類で未読があれば 1、無ければ 0（運用案A）
@@ -299,7 +300,8 @@ class _AdminShellState extends State<AdminShell> {
         _hasUnreadSchedule ||
         _hasUnreadInfo ||
         _hasUnreadEvent ||
-        _hasUnreadRecord;
+        _hasUnreadRecord ||
+        _hasUnreadCrm;
     NotificationService().setBadge(hasAny ? 1 : 0);
   }
 
@@ -307,25 +309,28 @@ class _AdminShellState extends State<AdminShell> {
   String? _navTypeForIndex(int i) {
     switch (_staffType) {
       case StaffType.plusOnly:
-        // 0:予定, 1:プラス, 2:AI相談, 3:チャット, 4:お知らせ, 5:管理
+        // 0:予定, 1:プラス, 2:AI相談, 3:チャット, 4:CRM, 5:お知らせ, 6:管理
         if (i == 0) return 'schedule';
-        if (i == 4) return 'info';
+        if (i == 4) return 'crm';
+        if (i == 5) return 'info';
         return null;
       case StaffType.beesmiley:
-        // 0:予定, 1:記録, 2:AI相談, 3:チャット, 4:お知らせ, 5:イベント, 6:管理
+        // 0:予定, 1:記録, 2:AI相談, 3:チャット, 4:CRM, 5:お知らせ, 6:イベント, 7:管理
         if (i == 0) return 'schedule';
         if (i == 1) return 'record';
-        if (i == 4) return 'info';
-        if (i == 5) return 'event';
+        if (i == 4) return 'crm';
+        if (i == 5) return 'info';
+        if (i == 6) return 'event';
         return null;
       case StaffType.both:
       case StaffType.loading:
       default:
-        // 0:予定, 1:プラス, 2:記録, 3:AI相談, 4:チャット, 5:お知らせ, 6:イベント, 7:管理
+        // 0:予定, 1:プラス, 2:記録, 3:AI相談, 4:チャット, 5:CRM, 6:お知らせ, 7:イベント, 8:管理
         if (i == 0) return 'schedule';
         if (i == 2) return 'record';
-        if (i == 5) return 'info';
-        if (i == 6) return 'event';
+        if (i == 5) return 'crm';
+        if (i == 6) return 'info';
+        if (i == 7) return 'event';
         return null;
     }
   }
@@ -333,6 +338,12 @@ class _AdminShellState extends State<AdminShell> {
   void _clearUnreadOnTap(int index) {
     final type = _navTypeForIndex(index);
     if (type == null) return;
+    if (type == 'crm') {
+      // CRM は Firestore 側に未読フラグがあるので一括クリア。
+      // クライアント側の _hasUnreadCrm は Firestore リスナー経由で更新される。
+      _clearAllCrmUnread();
+      return;
+    }
     setState(() {
       switch (type) {
         case 'schedule':
@@ -351,6 +362,25 @@ class _AdminShellState extends State<AdminShell> {
     });
     _updateAppBadge();
   }
+
+  /// CRM タブを開いた時、plus_families の notifyUnread = true を一括で false にする。
+  /// Firestore の更新は非同期で進み、リスナー経由で _hasUnreadCrm が false になる。
+  Future<void> _clearAllCrmUnread() async {
+    try {
+      final snap = await FirebaseFirestore.instance
+          .collection('plus_families')
+          .where('notifyUnread', isEqualTo: true)
+          .get();
+      if (snap.docs.isEmpty) return;
+      final batch = FirebaseFirestore.instance.batch();
+      for (final doc in snap.docs) {
+        batch.update(doc.reference, {'notifyUnread': false});
+      }
+      await batch.commit();
+    } catch (e) {
+      debugPrint('Error clearing CRM unread: $e');
+    }
+  }
   
   // Web版で右側に表示する管理詳細画面を保持する変数
   Widget? _adminDetailScreen;
@@ -362,6 +392,7 @@ class _AdminShellState extends State<AdminShell> {
   Map<String, dynamic>? _pendingAiChatStudent;
   
   StreamSubscription<QuerySnapshot>? _chatRoomsSubscription;
+  StreamSubscription<QuerySnapshot>? _crmUnreadSubscription;
   final Map<String, StreamSubscription<QuerySnapshot>> _messageSubscriptions = {};
 
   @override
@@ -372,15 +403,35 @@ class _AdminShellState extends State<AdminShell> {
     _setupNotificationListener();
     _setupNavigationListener();
     _setupChatUnreadListener();
+    _setupCrmUnreadListener();
   }
-  
+
   @override
   void dispose() {
     _chatRoomsSubscription?.cancel();
+    _crmUnreadSubscription?.cancel();
     for (var sub in _messageSubscriptions.values) {
       sub.cancel();
     }
     super.dispose();
+  }
+
+  /// CRM 未読（plus_families.notifyUnread == true）を監視。
+  /// 1件以上あれば赤ポチ表示。フォーム自動取り込みで作成されたリードを通知する。
+  void _setupCrmUnreadListener() {
+    _crmUnreadSubscription = FirebaseFirestore.instance
+        .collection('plus_families')
+        .where('notifyUnread', isEqualTo: true)
+        .snapshots()
+        .listen((snap) {
+      final hasUnread = snap.docs.isNotEmpty;
+      if (mounted && _hasUnreadCrm != hasUnread) {
+        setState(() => _hasUnreadCrm = hasUnread);
+        _updateAppBadge();
+      }
+    }, onError: (e) {
+      debugPrint('CRM unread listener error: $e');
+    });
   }
 
   // 保存されたページインデックスを読み込む
@@ -585,8 +636,9 @@ class _AdminShellState extends State<AdminShell> {
   }
   
   List<NavigationRailDestination> get _railDestinations {
-    const crmRail = NavigationRailDestination(
-        icon: Icon(Icons.people_alt_outlined), label: Text('CRM'));
+    final crmRail = NavigationRailDestination(
+        icon: _buildBadgedIcon(Icons.people_alt_outlined, _hasUnreadCrm),
+        label: const Text('CRM'));
     switch (_staffType) {
       case StaffType.plusOnly:
         return [
@@ -637,27 +689,27 @@ class _AdminShellState extends State<AdminShell> {
   }
 
   /// 「…」内に出す index 範囲（visible 以降すべて）
-  List<({int index, IconData icon, String label})> get _moreMenuItems {
-    final items = <({int index, IconData icon, String label})>[];
+  List<({int index, IconData icon, String label, bool hasUnread})> get _moreMenuItems {
+    final items = <({int index, IconData icon, String label, bool hasUnread})>[];
     switch (_staffType) {
       case StaffType.plusOnly:
         // 4:CRM 5:お知らせ 6:管理
-        items.add((index: 4, icon: Icons.support_agent, label: 'CRM'));
-        items.add((index: 5, icon: Icons.notifications, label: 'お知らせ'));
-        items.add((index: 6, icon: Icons.manage_accounts, label: '管理'));
+        items.add((index: 4, icon: Icons.people_alt_outlined, label: 'CRM', hasUnread: _hasUnreadCrm));
+        items.add((index: 5, icon: Icons.notifications, label: 'お知らせ', hasUnread: _hasUnreadInfo));
+        items.add((index: 6, icon: Icons.manage_accounts, label: '管理', hasUnread: false));
       case StaffType.beesmiley:
         // 4:CRM 5:お知らせ 6:イベント 7:管理
-        items.add((index: 4, icon: Icons.support_agent, label: 'CRM'));
-        items.add((index: 5, icon: Icons.notifications, label: 'お知らせ'));
-        items.add((index: 6, icon: Icons.event, label: 'イベント'));
-        items.add((index: 7, icon: Icons.manage_accounts, label: '管理'));
+        items.add((index: 4, icon: Icons.people_alt_outlined, label: 'CRM', hasUnread: _hasUnreadCrm));
+        items.add((index: 5, icon: Icons.notifications, label: 'お知らせ', hasUnread: _hasUnreadInfo));
+        items.add((index: 6, icon: Icons.event, label: 'イベント', hasUnread: _hasUnreadEvent));
+        items.add((index: 7, icon: Icons.manage_accounts, label: '管理', hasUnread: false));
       case StaffType.both:
       case StaffType.loading:
         // 5:CRM 6:お知らせ 7:イベント 8:管理
-        items.add((index: 5, icon: Icons.support_agent, label: 'CRM'));
-        items.add((index: 6, icon: Icons.notifications, label: 'お知らせ'));
-        items.add((index: 7, icon: Icons.event, label: 'イベント'));
-        items.add((index: 8, icon: Icons.manage_accounts, label: '管理'));
+        items.add((index: 5, icon: Icons.people_alt_outlined, label: 'CRM', hasUnread: _hasUnreadCrm));
+        items.add((index: 6, icon: Icons.notifications, label: 'お知らせ', hasUnread: _hasUnreadInfo));
+        items.add((index: 7, icon: Icons.event, label: 'イベント', hasUnread: _hasUnreadEvent));
+        items.add((index: 8, icon: Icons.manage_accounts, label: '管理', hasUnread: false));
     }
     return items;
   }
@@ -704,7 +756,7 @@ class _AdminShellState extends State<AdminShell> {
           children: [
             for (final m in _moreMenuItems)
               ListTile(
-                leading: Icon(m.icon),
+                leading: _buildBadgedIcon(m.icon, m.hasUnread),
                 title: Text(m.label),
                 selected: _selectedIndex == m.index,
                 onTap: () => Navigator.pop(ctx, m.index),

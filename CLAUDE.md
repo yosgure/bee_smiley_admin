@@ -92,15 +92,43 @@ LINE は連絡手段に含めない（UI から削除済み、スキーマは互
 - `memo` → `profileNote`
 （リネーム時はマイグレーションスクリプト + 双方向参照対応必須）
 
-### Lead Detail 7-Section Layout (v2)
-リード詳細パネルは以下の固定セクション順:
-1. 基本情報 (連絡先 + 媒体 + 備考)
-2. 進捗 (受給者証 + 7 項目チェックリスト + 進捗バー)
-3. 次の一手 (1 件のみ)
-4. 待ち状態 (該当時のみ表示)
-5. 児童プロフィール (生年月日 / 性別 / 園 / 主訴 / 好き / 苦手 / 体験メモ)
-6. 日程
-7. 対応履歴
+## CRM UI Architecture (v3)
+
+CRM 関連 UI は **目的別** に役割を分離する:
+
+| UI | ファイル | 目的 | 主な使い手 |
+|---|---|---|---|
+| **サイドパネル** | `crm_lead_side_panel.dart` | リード進行管理（ステージ遷移・次の一手・対応履歴） + 軽量メタ情報（媒体・希望条件・備考） | 現場スタッフ |
+| **児童マスタ画面** | `crm_lead_screen.dart` `CrmLeadEditScreen` (※将来リネーム) | HUG同期情報の編集。リード〜在籍生徒〜退会者まで全員に対応 | 事務 |
+| **データベースタブ** | `crm_lead_screen.dart` `_CrmTableView` | 全児童の検索・絞り込み・一覧 | 経営者 + スタッフ |
+| **管理タブ保護者・児童(bsp)** | `student_manage_screen.dart` | 退会済アーカイブ・データ操作（重複機能廃止後の特化用途） | 管理者 |
+| **分析タブ** | (未実装) | 集計・可視化のみ | 経営者 |
+
+### Side Panel Sections（v3 仕様）
+固定順:
+1. **ステージ遷移ボタン**（具体ボタン式 — Stage Transition UI 参照）
+2. **進捗チェックリスト**（Stage-Specific Checklists 参照）
+3. **次の一手**（1 件のみ — Single Next Action 参照）
+4. **対応履歴**（`activities[]`）
+5. **基本情報**: 媒体 / 媒体詳細 / 希望曜日 / 希望時間帯 / 希望開始時期 / 主訴 / 好きなこと / 苦手なこと / 体験メモ / 備考
+
+旧「待ち状態」セクションは廃止（後述）。
+
+### Child Master Screen
+旧 `CrmLeadEditScreen` を「児童マスタ画面」として位置づける。スコープ:
+- リード段階・入会手続き中・在籍生徒・退会者すべてで開ける
+- 内容: 児童詳細（生年月日 / 性別 / 園 / 学年 / 既往歴 / 診断名）/ 保護者情報（姓名 / ふりがな / 電話 / メール / 住所 / 続柄）/ 受給者証 / 契約日 / 支援計画
+- 開く導線: ①サイドパネルの「編集」ボタン ②データベースタブの行タップ ③管理タブ保護者・児童画面の児童カードタップ
+- フェーズ別ステッパーUI（①体験前/②体験後/...）は廃止予定（将来 Stage Transition UI に統合）
+
+### Database Tab Specification
+- 粒度: **児童 1 件 = 1 行**（`plus_families.children[]` フラット化）
+- 列: 児童名 / 年齢 / ステージ / 教室 / 保護者 / 媒体 / 問い合わせ日 / 入会日 / 次の一手期限
+- フィルタ: ステージ複数選択 / 教室 / 媒体 / 入会日範囲 / 退会済含むトグル
+- 検索: 児童名 / 保護者名 / 電話 部分一致
+- 並び: 列ヘッダクリックでソート切替
+- 表示範囲: リード + 在籍生徒 + 退会者すべて（フィルタで絞る）
+- タップ: 児童マスタ画面を開く
 
 ### Stage-Specific Checklists (v3)
 進捗チェックリストはステージごとに切り替わる。現ステージのみ Firestore に保存。
@@ -122,12 +150,73 @@ contract_sent, contract_received, support_plan_created, support_plan_explained
 
 受給者証は別フィールド `permitStatus`（none / applying / have）、両ステージ共通。
 
-### Waiting State (待ち状態)
-固定 6 理由: 他事業所決定待ち / 受給者証申請中 / 家庭事情 / 空き枠待ち / 連絡待ち / その他。
-**待ち状態の Lead は「次の一手未設定」アラート対象外**（待つのが正しい状態）。
-ただし「次の一手の期限超過」は引き続きアラート対象。
-
 ### Next Action Types
 ハードコード `_nextActionTypes` 定数（`crm_lead_side_panel.dart`）。
-ステージで絞り込み、種別選択時に期日デフォルト自動セット。`other` のみ補足必須。
+ステージで絞り込み、種別選択時に期日デフォルト自動セット。
 将来 `nextActionTypes` Firestore コレクションに切り出し可能。
+
+## Form Auto-Import (Google フォーム自動取り込み)
+
+体験アンケート (Google フォーム) の回答を **plus_families** に自動同期する。
+
+### パイプライン
+```
+Google フォーム
+  └─ onFormSubmit (Apps Script)
+       └─ HTTPS POST → Cloud Functions
+            └─ plus_families に upsert
+                 ├─ メール / 電話一致 → 既存 family.children[i] を更新
+                 └─ 一致なし → 新規 family + child[0] 作成
+```
+
+### マージキー
+**メール OR 電話番号の完全一致**で既存リードを検索し、見つかれば更新。なければ新規作成。
+
+### 初期値
+- `stage`: `considering`（検討中）
+- `inquiredAt`: フォーム回答時刻
+- `source`: フォームの「お知りになりました」をマッピング
+- 通知未読フラグ: `notifyUnread = true`
+
+### フィールドマッピング（フォーム → Firestore）
+| フォーム項目 | Firestore (`plus_families`) |
+|---|---|
+| 保護者様のお名前 | `lastName` + `firstName`（姓名分割） |
+| 保護者様のお名前（ふりがな） | `lastNameKana` + `firstNameKana` |
+| お子さまのお名前 | `children[].lastName` + `firstName` |
+| お子さまのお名前（ふりがな） | `children[].lastNameKana` + `firstNameKana` |
+| お子さまの誕生日 | `children[].birthDate` |
+| お子様の性別 | `children[].gender`（男子/女子/その他） |
+| ご住所 | `address` |
+| メールアドレス | `email` |
+| 電話番号 | `phone` |
+| 受給者証の有無 | `children[].permitStatus`（有→have / 無→none） |
+| 診断名 | `children[].diagnosis` |
+| 幼稚園/保育園名 | `children[].school` |
+| 学年 | `children[].grade` |
+| 体験理由 | `children[].mainConcern`（主訴） |
+| 好きなこと・得意なこと | `children[].likes` |
+| 嫌いなこと・苦手なこと | `children[].dislikes` |
+| 既往歴 | `children[].medicalHistory` |
+| 体験当日来所予定 | `children[].trialAttendee` |
+| 認知経路 | `source`（媒体） |
+| その他 | `memo` |
+
+## Unread Notification Badge
+
+新規リードの取り込みや未確認の動きをサイドメニュー CRM アイコンの **赤ポチ** で示す。
+
+- 判定: `plus_families` のうち `notifyUnread == true` が1件以上ある
+- 既読化: 該当リードを開いた時に `notifyUnread = false` に更新
+- 実装: Firestore リスナーでカウント監視、サイドメニュー側で Badge ウィジェット表示
+- FCM・プッシュ通知は使わない（アプリ内バッジのみ）
+
+## Removed Fields / Features (v3)
+
+以下は削除済み・削除予定。マイグレーションで Firestore からも除去:
+- `confidence`（A/B/C 入会確度）— 分析価値が薄く運用負担が大きいため廃止
+- `partnerCategory` — 媒体の二重管理になっていたため廃止
+- 待ち状態関連 (`waitReason` / `waitDeadline` / `waitNote`) — UI もコメントアウトのまま運用されていなかったため正式廃止
+- `nextActionType == 'other'` 選択時の補足必須バリデーション — 入力負担削減のため撤廃
+
+待ち状態廃止後の挙動: 「他事業所決定待ち」「受給者証申請中」のような本当に待つしかないリードも、督促タブの「次の一手未設定」アラートに表示される（実害なしと判断）。
