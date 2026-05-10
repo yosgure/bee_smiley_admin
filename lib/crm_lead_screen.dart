@@ -790,59 +790,197 @@ class _CrmPipelineView extends StatefulWidget {
   State<_CrmPipelineView> createState() => _CrmPipelineViewState();
 }
 
-enum _DbViewFilter { active, unclassifiedLost }
-
 class _CrmPipelineViewState extends State<_CrmPipelineView> {
-  _DbViewFilter _filter = _DbViewFilter.active;
+  // v3.5: データベースタブを検索/フィルタ/ソート対応に刷新。
+  String _searchText = '';
+  // ステージ複数選択フィルタ。デフォルトは進行中（検討中 + 入会手続中 + 入会）。
+  final Set<String> _stageFilter = {'considering', 'onboarding', 'won'};
+  bool _includeWithdrawn = false;
+  bool _includeLost = false;
+  String _sortBy = 'inquiredAt'; // inquiredAt / enrolledAt / nextActionAt
+  bool _sortDesc = true;
+
+  static const _stageOptions = [
+    ('considering', '検討中'),
+    ('onboarding', '入会手続中'),
+    ('won', '入会'),
+  ];
+
+  static const _sortOptions = [
+    ('inquiredAt', '問い合わせ日'),
+    ('enrolledAt', '入会日'),
+    ('nextActionAt', '次のアクション期日'),
+    ('lastActivityAt', '最終接触日'),
+  ];
 
   @override
   Widget build(BuildContext context) {
-    final unclassifiedLostCount = widget.docs.where((d) {
-      final m = d.data();
-      final stage = m['stage'] as String? ?? '';
-      final reason = m['lossReason'] as String?;
-      return stage == 'lost' && (reason == null || reason.isEmpty);
-    }).length;
+    final c = context.colors;
+    final search = _searchText.trim().toLowerCase();
 
     final filtered = widget.docs.where((d) {
       final m = d.data();
-      final stage = m['stage'] as String? ?? '';
-      switch (_filter) {
-        case _DbViewFilter.active:
-          return stage == 'considering' || stage == 'onboarding';
-        case _DbViewFilter.unclassifiedLost:
-          final reason = m['lossReason'] as String?;
-          return stage == 'lost' && (reason == null || reason.isEmpty);
+      final stage = m['stage'] as String? ?? 'considering';
+
+      // ステージフィルタ
+      final inMain = _stageFilter.contains(stage);
+      final isLost = stage == 'lost';
+      final isWithdrawn = stage == 'withdrawn';
+      if (!inMain &&
+          !(_includeLost && isLost) &&
+          !(_includeWithdrawn && isWithdrawn)) {
+        return false;
       }
-    }).toList()
-      ..sort((a, b) {
-        final aNext = (a.data()['nextActionAt'] as Timestamp?)?.toDate();
-        final bNext = (b.data()['nextActionAt'] as Timestamp?)?.toDate();
-        if (aNext == null && bNext == null) return 0;
-        if (aNext == null) return 1;
-        if (bNext == null) return -1;
-        return aNext.compareTo(bNext);
-      });
+
+      // 検索
+      if (search.isNotEmpty) {
+        final childName =
+            '${m['childLastName'] ?? ''}${m['childFirstName'] ?? ''}'
+                .toLowerCase();
+        final parentName =
+            '${m['parentLastName'] ?? ''}${m['parentFirstName'] ?? ''}'
+                .toLowerCase();
+        final tel = (m['parentTel'] as String? ?? '');
+        if (!childName.contains(search) &&
+            !parentName.contains(search) &&
+            !tel.contains(search)) {
+          return false;
+        }
+      }
+      return true;
+    }).toList();
+
+    filtered.sort((a, b) {
+      final ad = (a.data()[_sortBy] as Timestamp?)?.toDate();
+      final bd = (b.data()[_sortBy] as Timestamp?)?.toDate();
+      if (ad == null && bd == null) return 0;
+      if (ad == null) return 1;
+      if (bd == null) return -1;
+      return _sortDesc ? bd.compareTo(ad) : ad.compareTo(bd);
+    });
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        // 検索バー
         Padding(
-          padding: const EdgeInsets.fromLTRB(8, 4, 8, 8),
+          padding: const EdgeInsets.fromLTRB(12, 8, 12, 6),
+          child: TextField(
+            decoration: InputDecoration(
+              hintText: '児童名・保護者名・電話で検索',
+              hintStyle: TextStyle(
+                  fontSize: AppTextSize.body, color: c.textTertiary),
+              prefixIcon:
+                  Icon(Icons.search, size: 18, color: c.textTertiary),
+              suffixIcon: _searchText.isEmpty
+                  ? null
+                  : IconButton(
+                      icon: const Icon(Icons.clear, size: 16),
+                      onPressed: () => setState(() => _searchText = ''),
+                    ),
+              isDense: true,
+              filled: true,
+              fillColor: c.cardBg,
+              border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: BorderSide(color: c.borderLight)),
+              enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: BorderSide(color: c.borderLight)),
+              focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide:
+                      BorderSide(color: AppColors.primary, width: 1.5)),
+              contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 8, vertical: 8),
+            ),
+            style: TextStyle(
+                fontSize: AppTextSize.body, color: c.textPrimary),
+            onChanged: (v) => setState(() => _searchText = v),
+          ),
+        ),
+        // ステージフィルタ
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 0, 12, 4),
           child: Wrap(
-            spacing: 8,
+            spacing: 6,
+            runSpacing: 6,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              ChoiceChip(
-                label: const Text('進行中'),
-                selected: _filter == _DbViewFilter.active,
-                onSelected: (_) =>
-                    setState(() => _filter = _DbViewFilter.active),
+              for (final (id, label) in _stageOptions)
+                FilterChip(
+                  label: Text(label,
+                      style:
+                          const TextStyle(fontSize: AppTextSize.caption)),
+                  selected: _stageFilter.contains(id),
+                  onSelected: (s) => setState(() {
+                    if (s) {
+                      _stageFilter.add(id);
+                    } else {
+                      _stageFilter.remove(id);
+                    }
+                  }),
+                ),
+              FilterChip(
+                label: const Text('失注を含む',
+                    style: TextStyle(fontSize: AppTextSize.caption)),
+                selected: _includeLost,
+                onSelected: (s) => setState(() => _includeLost = s),
               ),
-              ChoiceChip(
-                label: Text('未分類失注 ($unclassifiedLostCount)'),
-                selected: _filter == _DbViewFilter.unclassifiedLost,
-                onSelected: (_) => setState(
-                    () => _filter = _DbViewFilter.unclassifiedLost),
+              FilterChip(
+                label: const Text('退会を含む',
+                    style: TextStyle(fontSize: AppTextSize.caption)),
+                selected: _includeWithdrawn,
+                onSelected: (s) =>
+                    setState(() => _includeWithdrawn = s),
+              ),
+            ],
+          ),
+        ),
+        // ソート + 件数
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 4, 12, 4),
+          child: Row(
+            children: [
+              Text('${filtered.length} 件',
+                  style: TextStyle(
+                      fontSize: AppTextSize.caption,
+                      color: c.textSecondary,
+                      fontWeight: FontWeight.bold)),
+              const SizedBox(width: 12),
+              Text('ソート:',
+                  style: TextStyle(
+                      fontSize: AppTextSize.caption,
+                      color: c.textSecondary)),
+              const SizedBox(width: 4),
+              DropdownButtonHideUnderline(
+                child: DropdownButton<String>(
+                  value: _sortBy,
+                  isDense: true,
+                  style: TextStyle(
+                      fontSize: AppTextSize.caption,
+                      color: c.textPrimary),
+                  items: [
+                    for (final (id, label) in _sortOptions)
+                      DropdownMenuItem(value: id, child: Text(label)),
+                  ],
+                  onChanged: (v) => setState(
+                      () => _sortBy = v ?? 'inquiredAt'),
+                ),
+              ),
+              IconButton(
+                icon: Icon(
+                    _sortDesc
+                        ? Icons.arrow_downward
+                        : Icons.arrow_upward,
+                    size: 16,
+                    color: c.textSecondary),
+                tooltip: _sortDesc ? '降順' : '昇順',
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(
+                    minWidth: 28, minHeight: 28),
+                onPressed: () =>
+                    setState(() => _sortDesc = !_sortDesc),
               ),
             ],
           ),
@@ -850,12 +988,8 @@ class _CrmPipelineViewState extends State<_CrmPipelineView> {
         Expanded(
           child: filtered.isEmpty
               ? Center(
-                  child: Text(
-                      _filter == _DbViewFilter.unclassifiedLost
-                          ? '未分類の失注はありません'
-                          : 'パイプライン対象のリードはありません',
-                      style:
-                          TextStyle(color: context.colors.textSecondary)),
+                  child: Text('該当なし',
+                      style: TextStyle(color: c.textSecondary)),
                 )
               : _CrmTableView(docs: filtered),
         ),
