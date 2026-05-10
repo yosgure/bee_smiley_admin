@@ -1745,6 +1745,12 @@ class _CrmLeadEditScreenState extends State<CrmLeadEditScreen> {
   final _medicalHistoryCtrl = TextEditingController();
   final _diagnosisCtrl = TextEditingController();
 
+  // v3.5.2: ふりがなを姓名2分割（公開フォームのスキーマに合わせる）
+  final _childLastNameKanaCtrl = TextEditingController();
+  final _childFirstNameKanaCtrl = TextEditingController();
+  final _parentLastNameKanaCtrl = TextEditingController();
+  final _parentFirstNameKanaCtrl = TextEditingController();
+
   // ネクスト
   DateTime? _nextActionAt;
   final _nextActionNoteCtrl = TextEditingController();
@@ -1821,6 +1827,17 @@ class _CrmLeadEditScreenState extends State<CrmLeadEditScreen> {
       _gradeCtrl.text = d['grade'] ?? '';
       _medicalHistoryCtrl.text = d['medicalHistory'] ?? '';
       _diagnosisCtrl.text = d['diagnosis'] ?? '';
+      // ふりがなは姓名分割を優先、無い場合は旧 childKana / parentKana から
+      _childLastNameKanaCtrl.text = d['childLastNameKana'] ??
+          (d['childKana'] is String && (d['childKana'] as String).isNotEmpty
+              ? d['childKana']
+              : '');
+      _childFirstNameKanaCtrl.text = d['childFirstNameKana'] ?? '';
+      _parentLastNameKanaCtrl.text = d['parentLastNameKana'] ??
+          (d['parentKana'] is String && (d['parentKana'] as String).isNotEmpty
+              ? d['parentKana']
+              : '');
+      _parentFirstNameKanaCtrl.text = d['parentFirstNameKana'] ?? '';
       _mainConcernCtrl.text = d['mainConcern'] ?? '';
       _likesCtrl.text = d['likes'] ?? '';
       _dislikesCtrl.text = d['dislikes'] ?? '';
@@ -1874,6 +1891,10 @@ class _CrmLeadEditScreenState extends State<CrmLeadEditScreen> {
       _gradeCtrl,
       _medicalHistoryCtrl,
       _diagnosisCtrl,
+      _childLastNameKanaCtrl,
+      _childFirstNameKanaCtrl,
+      _parentLastNameKanaCtrl,
+      _parentFirstNameKanaCtrl,
       _nextActionNoteCtrl,
       _lossDetailCtrl,
       _withdrawDetailCtrl,
@@ -1963,6 +1984,10 @@ class _CrmLeadEditScreenState extends State<CrmLeadEditScreen> {
       'grade': _gradeCtrl.text.trim(),
       'medicalHistory': _medicalHistoryCtrl.text.trim(),
       'diagnosis': _diagnosisCtrl.text.trim(),
+      'childLastNameKana': _childLastNameKanaCtrl.text.trim(),
+      'childFirstNameKana': _childFirstNameKanaCtrl.text.trim(),
+      'parentLastNameKana': _parentLastNameKanaCtrl.text.trim(),
+      'parentFirstNameKana': _parentFirstNameKanaCtrl.text.trim(),
       'nextActionAt':
           _nextActionAt == null ? null : Timestamp.fromDate(_nextActionAt!),
       'nextActionNote': _nextActionNoteCtrl.text.trim(),
@@ -2336,13 +2361,18 @@ class _CrmLeadEditScreenState extends State<CrmLeadEditScreen> {
   }
 
   /// v3.5: 児童マスタ画面（罫線テーブル形式）。
+  /// v3.5.2: 最大幅 880px でセンタリング（横長すぎ問題を解消）。
   /// 旧 _buildForm は _buildFormLegacy として保留（dead code、後で削除）。
   Widget _buildForm({bool showActivities = false}) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
+    return Align(
+      alignment: Alignment.topCenter,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 880),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
           if (_convertedFamilyId != null && _stage == 'won')
             Container(
               margin: const EdgeInsets.only(bottom: 12),
@@ -2374,19 +2404,23 @@ class _CrmLeadEditScreenState extends State<CrmLeadEditScreen> {
           _section2('児童基本情報', [
             _tableRowSplit(
                 '姓 / 名',
-                _plainTextField(_childLastNameCtrl, hint: '姓'),
-                _plainTextField(_childFirstNameCtrl, hint: '名'),
+                _plainTextField(_childLastNameCtrl),
+                _plainTextField(_childFirstNameCtrl),
                 required: true),
-            _tableRow('ふりがな', _plainTextField(_childKanaCtrl)),
+            _tableRowSplit(
+                'ふりがな',
+                _plainTextField(_childLastNameKanaCtrl),
+                _plainTextField(_childFirstNameKanaCtrl)),
             _tableRowSplit(
                 '生年月日 / 性別',
                 _plainDateField(_childBirthDate,
                     (d) => setState(() => _childBirthDate = d),
                     nullable: true),
                 _genderSelector()),
-            _tableRow('園・学校', _plainTextField(_kindergartenCtrl)),
-            _tableRow('学年',
-                _plainTextField(_gradeCtrl, hint: '例: 年中、小1'),
+            _tableRowSplit(
+                '園・学校 / 学年',
+                _plainTextField(_kindergartenCtrl),
+                _plainTextField(_gradeCtrl),
                 isLast: true),
           ]),
 
@@ -2394,19 +2428,20 @@ class _CrmLeadEditScreenState extends State<CrmLeadEditScreen> {
           _section2('保護者情報', [
             _tableRowSplit(
                 '姓 / 名',
-                _plainTextField(_parentLastNameCtrl, hint: '姓'),
-                _plainTextField(_parentFirstNameCtrl, hint: '名'),
+                _plainTextField(_parentLastNameCtrl),
+                _plainTextField(_parentFirstNameCtrl),
                 required: true),
-            _tableRow('ふりがな', _plainTextField(_parentKanaCtrl)),
-            _tableRow(
-                '電話',
+            _tableRowSplit(
+                'ふりがな',
+                _plainTextField(_parentLastNameKanaCtrl),
+                _plainTextField(_parentFirstNameKanaCtrl)),
+            _tableRowSplit(
+                '電話 / メール',
                 _plainTextField(_telCtrl,
                     keyboardType: TextInputType.phone),
-                required: true),
-            _tableRow(
-                'メール',
                 _plainTextField(_emailCtrl,
-                    keyboardType: TextInputType.emailAddress)),
+                    keyboardType: TextInputType.emailAddress),
+                required: true),
             _tableRow('連絡優先', _channelSelector()),
             _tableRowSplit(
                 '郵便番号 / 都道府県',
@@ -2414,8 +2449,7 @@ class _CrmLeadEditScreenState extends State<CrmLeadEditScreen> {
                     keyboardType: TextInputType.number,
                     hint: '251-0042'),
                 _prefectureSelector()),
-            _tableRow('市町村・番地',
-                _plainTextField(_cityCtrl, hint: '藤沢市…'),
+            _tableRow('市町村・番地', _plainTextField(_cityCtrl),
                 isLast: true),
           ]),
 
@@ -2516,7 +2550,9 @@ class _CrmLeadEditScreenState extends State<CrmLeadEditScreen> {
             const SizedBox(height: 16),
             _buildActivitySection(),
           ],
-        ],
+            ],
+          ),
+        ),
       ),
     );
   }
