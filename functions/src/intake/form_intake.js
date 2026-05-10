@@ -300,6 +300,76 @@ async function upsertFromForm(p) {
 
 // ===== HTTPS エンドポイント =====
 
+// ===== 公開エンドポイント（自前アプリのアンケートフォーム用） =====
+// 認証なしで Web フロントから直接 POST。
+// セキュリティ: ハニーポット（隠しフィールド `_hp` が空であることを確認）+
+//             簡易レート制限（IPごとに分単位でカウント、メモリ保持なので
+//             Cloud Run インスタンス再起動でリセット）。
+const _rateLimitBucket = new Map(); // ip -> [{ts, count}]
+const RATE_LIMIT_WINDOW_MS = 60 * 1000;
+const RATE_LIMIT_MAX = 5;
+
+function checkRateLimit(ip) {
+  const now = Date.now();
+  const arr = _rateLimitBucket.get(ip) || [];
+  const recent = arr.filter((t) => now - t < RATE_LIMIT_WINDOW_MS);
+  if (recent.length >= RATE_LIMIT_MAX) return false;
+  recent.push(now);
+  _rateLimitBucket.set(ip, recent);
+  return true;
+}
+
+exports.intakeFormPublic = onRequest(
+  {
+    region: 'asia-northeast1',
+    cors: true, // Flutter Web (bee-smiley-admin.web.app) からの呼び出しを許可
+    timeoutSeconds: 30,
+  },
+  async (req, res) => {
+    if (req.method !== 'POST') {
+      res.status(405).json({ error: 'Method not allowed' });
+      return;
+    }
+
+    // ハニーポット検証
+    const honeypot = (req.body && req.body._hp) || '';
+    if (honeypot) {
+      console.warn('[intakeFormPublic] honeypot triggered, ignoring');
+      // ボット検知: 成功っぽく返してログだけ残す
+      res.status(200).json({ ok: true });
+      return;
+    }
+
+    // レート制限
+    const ip = req.ip ||
+        req.headers['x-forwarded-for'] ||
+        'unknown';
+    const ipKey = String(ip).split(',')[0].trim();
+    if (!checkRateLimit(ipKey)) {
+      console.warn('[intakeFormPublic] rate limit hit:', ipKey);
+      res.status(429).json({ error: 'Too many requests' });
+      return;
+    }
+
+    try {
+      const payload = req.body || {};
+      // 必須項目の最小バリデーション（メール or 電話）
+      if (!payload.email && !payload.phone) {
+        res
+            .status(400)
+            .json({ error: 'メールアドレスか電話番号は必須です' });
+        return;
+      }
+      const result = await upsertFromForm(payload);
+      console.log('[intakeFormPublic] success:', result);
+      res.status(200).json({ ok: true, ...result });
+    } catch (err) {
+      console.error('[intakeFormPublic] error:', err);
+      res.status(500).json({ error: err.message || String(err) });
+    }
+  }
+);
+
 exports.intakeForm = onRequest(
   {
     region: 'asia-northeast1',

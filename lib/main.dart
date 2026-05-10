@@ -22,6 +22,7 @@ import 'plus_schedule_screen.dart';
 import 'crm_lead_screen.dart';
 import 'parent_main.dart';
 import 'ai_chat_main_screen.dart';
+import 'intake/intake_form_screen.dart';
 
 // テーマモード管理（グローバル）
 final ValueNotifier<ThemeMode> themeNotifier = ValueNotifier(ThemeMode.system);
@@ -63,6 +64,17 @@ void main() async {
 class BeeSmileyApp extends StatelessWidget {
   const BeeSmileyApp({super.key});
 
+  /// 公開フォーム画面を出すべき URL かどうか。
+  /// 例: bee-smiley-admin.web.app/intake / .../#/intake / .../#intake
+  static bool _isPublicIntakeRoute() {
+    final base = Uri.base;
+    final path = base.path.toLowerCase();
+    final frag = base.fragment.toLowerCase();
+    return path.endsWith('/intake') ||
+        frag == '/intake' ||
+        frag == 'intake';
+  }
+
   @override
   Widget build(BuildContext context) {
     return ValueListenableBuilder<ThemeMode>(
@@ -81,7 +93,9 @@ class BeeSmileyApp extends StatelessWidget {
           ],
           supportedLocales: const [Locale('ja', 'JP')],
           locale: const Locale('ja', 'JP'),
-          home: const AuthCheckWrapper(),
+          home: _isPublicIntakeRoute()
+              ? const IntakeFormScreen()
+              : const AuthCheckWrapper(),
         );
       },
     );
