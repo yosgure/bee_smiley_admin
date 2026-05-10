@@ -2241,7 +2241,6 @@ class _CrmLeadEditScreenState extends State<CrmLeadEditScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final isWide = MediaQuery.of(context).size.width >= 900;
     return Scaffold(
       backgroundColor: context.colors.scaffoldBg,
       appBar: AppBar(
@@ -2331,17 +2330,8 @@ class _CrmLeadEditScreenState extends State<CrmLeadEditScreen> {
           ),
         ),
       ),
-      body: isWide
-          ? Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(flex: 3, child: _buildForm()),
-                Container(
-                    width: 1, color: context.colors.borderLight),
-                Expanded(flex: 2, child: _buildActivityPanel()),
-              ],
-            )
-          : _buildForm(showActivities: true),
+      // v3.5.1: 児童マスタ画面は 1 ペイン化（対応履歴はサイドパネル側に集約済み）。
+      body: _buildForm(),
     );
   }
 
@@ -3319,36 +3309,25 @@ class _CrmLeadEditScreenState extends State<CrmLeadEditScreen> {
   }
 
   Widget _genderSelector() {
-    return InputDecorator(
-      decoration: InputDecoration(
-        labelText: '性別',
-        labelStyle:
-            TextStyle(fontSize: AppTextSize.small, color: context.colors.textSecondary),
-        isDense: true,
-        filled: true,
-        fillColor: context.colors.cardBg,
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
-          borderSide: BorderSide(color: context.colors.borderLight),
-        ),
-      ),
-      child: Row(
-        children: ['男', '女', 'その他'].map((g) {
-          final sel = _childGender == g;
-          return Padding(
-            padding: const EdgeInsets.only(right: 6),
-            child: ChoiceChip(
-              label: Text(g, style: const TextStyle(fontSize: AppTextSize.caption)),
-              selected: sel,
-              onSelected: (_) => setState(() => _childGender = sel ? '' : g),
-              padding: const EdgeInsets.symmetric(horizontal: 4),
-              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            ),
-          );
-        }).toList(),
-      ),
+    // v3.5.1: 罫線テーブル内で使うのでラベル枠は外す。値は「男子/女子」で統一
+    // （フォーム取り込みも同じ値を使うため）。「その他」は廃止。
+    return Row(
+      children: ['男子', '女子'].map((g) {
+        final sel = _childGender == g;
+        return Padding(
+          padding: const EdgeInsets.only(right: 6),
+          child: ChoiceChip(
+            label: Text(g,
+                style: const TextStyle(fontSize: AppTextSize.caption)),
+            selected: sel,
+            onSelected: (_) =>
+                setState(() => _childGender = sel ? '' : g),
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            visualDensity: VisualDensity.compact,
+          ),
+        );
+      }).toList(),
     );
   }
 
@@ -3425,24 +3404,22 @@ class _CrmLeadEditScreenState extends State<CrmLeadEditScreen> {
   ];
 
   Widget _prefectureSelector() {
-    return InputDecorator(
-      decoration: InputDecoration(
-        labelText: '都道府県 (HUG必須)',
-        labelStyle: TextStyle(fontSize: AppTextSize.small),
-        border: const OutlineInputBorder(),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-      ),
-      child: DropdownButtonHideUnderline(
-        child: DropdownButton<String>(
-          isDense: true,
-          isExpanded: true,
-          value: _prefecture.isEmpty ? null : _prefecture,
-          hint: const Text('選択'),
-          items: _prefectures
-              .map((p) => DropdownMenuItem(value: p, child: Text(p)))
-              .toList(),
-          onChanged: (v) => setState(() => _prefecture = v ?? ''),
-        ),
+    // v3.5.1: 罫線テーブル内で使うのでラベル枠を外し、コンパクトな Dropdown だけに
+    final c = context.colors;
+    return DropdownButtonHideUnderline(
+      child: DropdownButton<String>(
+        isDense: true,
+        isExpanded: true,
+        value: _prefecture.isEmpty ? null : _prefecture,
+        hint: Text('選択',
+            style: TextStyle(
+                fontSize: AppTextSize.body, color: c.textTertiary)),
+        style: TextStyle(
+            fontSize: AppTextSize.body, color: c.textPrimary),
+        items: _prefectures
+            .map((p) => DropdownMenuItem(value: p, child: Text(p)))
+            .toList(),
+        onChanged: (v) => setState(() => _prefecture = v ?? ''),
       ),
     );
   }
