@@ -461,17 +461,20 @@ class _IntakeFormScreenState extends State<IntakeFormScreen> {
         border: OutlineInputBorder(),
         isDense: true,
       ),
-      child: Wrap(
-        spacing: 8,
+      child: Row(
         children: [
-          for (final g in const ['男子', '女子', 'その他'])
-            ChoiceChip(
-              label: Text(g,
-                  style: const TextStyle(fontSize: AppTextSize.caption)),
-              selected: _childGender == g,
-              onSelected: (s) {
-                if (s) setState(() => _childGender = g);
-              },
+          for (final g in const ['男子', '女子'])
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: ChoiceChip(
+                label: Text(g,
+                    style:
+                        const TextStyle(fontSize: AppTextSize.caption)),
+                selected: _childGender == g,
+                onSelected: (s) {
+                  if (s) setState(() => _childGender = g);
+                },
+              ),
             ),
         ],
       ),
