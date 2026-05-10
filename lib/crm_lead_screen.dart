@@ -1606,6 +1606,11 @@ class _CrmLeadEditScreenState extends State<CrmLeadEditScreen> {
   final _dislikesCtrl = TextEditingController();
   final _trialNotesCtrl = TextEditingController();
 
+  // v3.5: 学年 / 既往歴 / 診断名（フォーム取り込み + 児童マスタ画面で編集）
+  final _gradeCtrl = TextEditingController();
+  final _medicalHistoryCtrl = TextEditingController();
+  final _diagnosisCtrl = TextEditingController();
+
   // ネクスト
   DateTime? _nextActionAt;
   final _nextActionNoteCtrl = TextEditingController();
@@ -1679,6 +1684,9 @@ class _CrmLeadEditScreenState extends State<CrmLeadEditScreen> {
       _preferredDaysCtrl.text = d['preferredDays'] ?? '';
       _preferredTimeCtrl.text = d['preferredTimeSlots'] ?? '';
       _preferredStartCtrl.text = d['preferredStart'] ?? '';
+      _gradeCtrl.text = d['grade'] ?? '';
+      _medicalHistoryCtrl.text = d['medicalHistory'] ?? '';
+      _diagnosisCtrl.text = d['diagnosis'] ?? '';
       _mainConcernCtrl.text = d['mainConcern'] ?? '';
       _likesCtrl.text = d['likes'] ?? '';
       _dislikesCtrl.text = d['dislikes'] ?? '';
@@ -1729,6 +1737,9 @@ class _CrmLeadEditScreenState extends State<CrmLeadEditScreen> {
       _likesCtrl,
       _dislikesCtrl,
       _trialNotesCtrl,
+      _gradeCtrl,
+      _medicalHistoryCtrl,
+      _diagnosisCtrl,
       _nextActionNoteCtrl,
       _lossDetailCtrl,
       _withdrawDetailCtrl,
@@ -1815,6 +1826,9 @@ class _CrmLeadEditScreenState extends State<CrmLeadEditScreen> {
       'likes': _likesCtrl.text.trim(),
       'dislikes': _dislikesCtrl.text.trim(),
       'trialNotes': _trialNotesCtrl.text.trim(),
+      'grade': _gradeCtrl.text.trim(),
+      'medicalHistory': _medicalHistoryCtrl.text.trim(),
+      'diagnosis': _diagnosisCtrl.text.trim(),
       'nextActionAt':
           _nextActionAt == null ? null : Timestamp.fromDate(_nextActionAt!),
       'nextActionNote': _nextActionNoteCtrl.text.trim(),
@@ -2197,7 +2211,373 @@ class _CrmLeadEditScreenState extends State<CrmLeadEditScreen> {
     );
   }
 
+  /// v3.5: 児童マスタ画面（罫線テーブル形式）。
+  /// 旧 _buildForm は _buildFormLegacy として保留（dead code、後で削除）。
   Widget _buildForm({bool showActivities = false}) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (_convertedFamilyId != null && _stage == 'won')
+            Container(
+              margin: const EdgeInsets.only(bottom: 12),
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: AppColors.success.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: AppColors.successBorder),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.check_circle,
+                      color: AppColors.success, size: 18),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                        '保護者・児童マスタに入会済（ID: $_convertedFamilyId）',
+                        style: TextStyle(
+                            fontSize: AppTextSize.small,
+                            color: AppColors.successDark,
+                            fontWeight: FontWeight.w600)),
+                  ),
+                ],
+              ),
+            ),
+
+          // ── [1] 児童基本情報 ──
+          _section2('児童基本情報', [
+            _tableRowSplit(
+                '姓 / 名',
+                _plainTextField(_childLastNameCtrl, hint: '姓'),
+                _plainTextField(_childFirstNameCtrl, hint: '名'),
+                required: true),
+            _tableRow('ふりがな', _plainTextField(_childKanaCtrl)),
+            _tableRowSplit(
+                '生年月日 / 性別',
+                _plainDateField(_childBirthDate,
+                    (d) => setState(() => _childBirthDate = d),
+                    nullable: true),
+                _genderSelector()),
+            _tableRow('園・学校', _plainTextField(_kindergartenCtrl)),
+            _tableRow('学年',
+                _plainTextField(_gradeCtrl, hint: '例: 年中、小1'),
+                isLast: true),
+          ]),
+
+          // ── [2] 保護者情報 ──
+          _section2('保護者情報', [
+            _tableRowSplit(
+                '姓 / 名',
+                _plainTextField(_parentLastNameCtrl, hint: '姓'),
+                _plainTextField(_parentFirstNameCtrl, hint: '名'),
+                required: true),
+            _tableRow('ふりがな', _plainTextField(_parentKanaCtrl)),
+            _tableRow(
+                '電話',
+                _plainTextField(_telCtrl,
+                    keyboardType: TextInputType.phone),
+                required: true),
+            _tableRow(
+                'メール',
+                _plainTextField(_emailCtrl,
+                    keyboardType: TextInputType.emailAddress)),
+            _tableRow('連絡優先', _channelSelector()),
+            _tableRowSplit(
+                '郵便番号 / 都道府県',
+                _plainTextField(_postalCodeCtrl,
+                    keyboardType: TextInputType.number,
+                    hint: '251-0042'),
+                _prefectureSelector()),
+            _tableRow('市町村・番地',
+                _plainTextField(_cityCtrl, hint: '藤沢市…'),
+                isLast: true),
+          ]),
+
+          // ── [3] 受給者証 ──
+          _section2('受給者証情報（HUG必須）', [
+            _tableRow('受給者証の有無', _permitSelector(),
+                isLast: _permitStatus != 'have'),
+            if (_permitStatus == 'have') ...[
+              _tableRow(
+                  '受給者証番号', _plainTextField(_recipientNumberCtrl),
+                  required: true),
+              _tableRow('サービス種別', _recipientServiceSelector(),
+                  required: true),
+              _tableRow(
+                  '利用開始日',
+                  _plainDateField(_recipientStartAt,
+                      (d) => setState(() => _recipientStartAt = d),
+                      nullable: true),
+                  required: true),
+              _tableRow(
+                  '負担上限月額（円）',
+                  _plainTextField(_recipientMonthlyLimitCtrl,
+                      keyboardType: TextInputType.number,
+                      hint: '4600'),
+                  required: true,
+                  isLast: true),
+            ],
+          ]),
+
+          // ── [4] アレルギー・医療情報 ──
+          _section2('アレルギー・医療情報', [
+            _tableRow('アレルギー',
+                _plainTextField(_allergyCtrl, hint: '無ければ「なし」')),
+            _tableRow('既往歴', _plainTextField(_medicalHistoryCtrl)),
+            _tableRow('診断名', _plainTextField(_diagnosisCtrl),
+                isLast: true),
+          ]),
+
+          // ── [5] 媒体・流入経路 ──
+          _section2('媒体・流入経路', [
+            _tableRow('媒体', _sourceDropdown()),
+            _tableRow(
+                '問い合わせ日',
+                _plainDateField(_inquiredAt,
+                    (d) => setState(() => _inquiredAt = d)),
+                required: true),
+            _tableRow(
+                '体験日',
+                _plainDateField(_trialAt,
+                    (d) => setState(() => _trialAt = d),
+                    nullable: true),
+                isLast: true),
+          ]),
+
+          // ── [6] 失注/退会情報（条件付き） ──
+          if (_stage == 'lost')
+            _section2('失注情報', [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 10, 16, 6),
+                child: _lossReasonSelector(),
+              ),
+              _tableRow('失注詳細', _plainTextField(_lossDetailCtrl)),
+              Padding(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 10, vertical: 4),
+                child: CheckboxListTile(
+                  value: _reapproachOk,
+                  onChanged: (v) =>
+                      setState(() => _reapproachOk = v ?? true),
+                  title: Text('再アプローチ可',
+                      style: TextStyle(
+                          fontSize: AppTextSize.body,
+                          color: context.colors.textPrimary)),
+                  dense: true,
+                  controlAffinity: ListTileControlAffinity.leading,
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ),
+            ]),
+          if (_stage == 'withdrawn')
+            _section2('退会情報', [
+              _tableRow(
+                  '退会日',
+                  _plainDateField(_withdrawnAt,
+                      (d) => setState(() => _withdrawnAt = d),
+                      nullable: true),
+                  required: true),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 6, 16, 6),
+                child: _withdrawReasonSelector(),
+              ),
+              _tableRow('退会詳細',
+                  _plainTextField(_withdrawDetailCtrl),
+                  isLast: true),
+            ]),
+
+          if (showActivities) ...[
+            const SizedBox(height: 16),
+            _buildActivitySection(),
+          ],
+        ],
+      ),
+    );
+  }
+
+  // ============================================================
+  // セクションカード + 罫線テーブル ヘルパー（v3.5）
+  // ============================================================
+
+  Widget _section2(String title, List<Widget> rows) {
+    final c = context.colors;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        color: c.cardBg,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: c.borderLight),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Container(
+            padding:
+                const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            decoration: BoxDecoration(
+              color: c.scaffoldBgAlt,
+              border: Border(bottom: BorderSide(color: c.borderLight)),
+            ),
+            child: Text(title,
+                style: TextStyle(
+                    fontSize: AppTextSize.body,
+                    fontWeight: FontWeight.bold,
+                    color: c.textPrimary)),
+          ),
+          for (final row in rows) row,
+        ],
+      ),
+    );
+  }
+
+  Widget _tableRow(String label, Widget input,
+      {bool required = false, bool isLast = false}) {
+    final c = context.colors;
+    return Container(
+      decoration: BoxDecoration(
+        border: isLast
+            ? null
+            : Border(
+                bottom:
+                    BorderSide(color: c.borderLight, width: 0.5)),
+      ),
+      child: IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Container(
+              width: 140,
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: c.scaffoldBgAlt,
+                border: Border(
+                    right: BorderSide(
+                        color: c.borderLight, width: 0.5)),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Text(label,
+                        style: TextStyle(
+                            fontSize: AppTextSize.caption,
+                            color: c.textSecondary,
+                            fontWeight: FontWeight.w600)),
+                  ),
+                  if (required)
+                    Container(
+                      margin: const EdgeInsets.only(top: 2, left: 4),
+                      width: 6,
+                      height: 6,
+                      decoration: BoxDecoration(
+                        color: context.alerts.urgent.icon,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 12, vertical: 6),
+                child: input,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _tableRowSplit(String label, Widget left, Widget right,
+      {bool required = false, bool isLast = false}) {
+    return _tableRow(
+      label,
+      Row(
+        children: [
+          Expanded(child: left),
+          const SizedBox(width: 8),
+          Expanded(child: right),
+        ],
+      ),
+      required: required,
+      isLast: isLast,
+    );
+  }
+
+  Widget _plainTextField(TextEditingController ctrl,
+      {String? hint,
+      TextInputType? keyboardType,
+      int maxLines = 1}) {
+    final c = context.colors;
+    return TextField(
+      controller: ctrl,
+      keyboardType: keyboardType,
+      maxLines: maxLines,
+      style:
+          TextStyle(fontSize: AppTextSize.body, color: c.textPrimary),
+      decoration: InputDecoration(
+        hintText: hint,
+        hintStyle: TextStyle(
+            fontSize: AppTextSize.body, color: c.textTertiary),
+        border: InputBorder.none,
+        enabledBorder: InputBorder.none,
+        focusedBorder: UnderlineInputBorder(
+          borderSide:
+              BorderSide(color: AppColors.primary, width: 1.5),
+        ),
+        isDense: true,
+        contentPadding: const EdgeInsets.symmetric(vertical: 6),
+      ),
+    );
+  }
+
+  Widget _plainDateField(
+      DateTime? value, void Function(DateTime) onPick,
+      {bool nullable = false}) {
+    final c = context.colors;
+    final display = value == null
+        ? '未設定'
+        : DateFormat('yyyy/M/d', 'ja').format(value);
+    return InkWell(
+      onTap: () async {
+        final picked = await showDatePicker(
+          context: context,
+          initialDate: value ?? DateTime.now(),
+          firstDate: DateTime(2010, 1, 1),
+          lastDate: DateTime(2035, 12, 31),
+        );
+        if (picked != null) onPick(picked);
+      },
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 6),
+        child: Row(
+          children: [
+            Icon(Icons.event_outlined,
+                size: 16, color: c.textTertiary),
+            const SizedBox(width: 6),
+            Text(display,
+                style: TextStyle(
+                    fontSize: AppTextSize.body,
+                    color: value == null
+                        ? c.textTertiary
+                        : c.textPrimary)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ============================================================
+  // _buildFormLegacy（旧仕様、保留中）
+  // ============================================================
+  // ignore: unused_element
+  Widget _buildFormLegacy({bool showActivities = false}) {
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
       child: Column(
