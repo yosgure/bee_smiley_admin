@@ -244,7 +244,9 @@ class _IntakeFormScreenState extends State<IntakeFormScreen> {
                           required: true),
                       _input('名ふりがな', _childFirstNameKanaCtrl,
                           required: true)),
-                  _row2(_birthDatePicker(), _genderSelector()),
+                  // 誕生日と性別はモバイル可読性のため縦並び
+                  _birthDatePicker(),
+                  _genderSelector(),
                   _input('幼稚園・保育園・学校名', _kindergartenCtrl,
                       hint: '通っていない場合は空欄'),
                   _input('学年', _gradeCtrl, hint: '例: 年中、小1'),
@@ -253,16 +255,18 @@ class _IntakeFormScreenState extends State<IntakeFormScreen> {
                       hint: 'ある場合のみ。なければ空欄'),
                 ]),
                 _section('体験について', [
-                  _input('体験を希望される理由（お困りごと、不安なことなど）',
-                      _mainConcernCtrl,
+                  _labelHint('体験を希望される理由', 'お困りごと、不安なことなど',
+                      required: true),
+                  _input('', _mainConcernCtrl,
                       required: true, maxLines: 4),
-                  _input('お子さまの好きなこと、得意なこと', _likesCtrl,
-                      maxLines: 3),
-                  _input('お子さまの嫌いなこと、苦手なこと', _dislikesCtrl,
-                      maxLines: 3),
-                  _input('既往歴', _medicalHistoryCtrl,
-                      hint: 'ある場合はできるだけ詳しくお知らせください',
-                      maxLines: 3),
+                  _labelHint(
+                      'お子さまの好きなこと、得意なこと', '得意なこと・夢中になっていることなど'),
+                  _input('', _likesCtrl, maxLines: 3),
+                  _labelHint(
+                      'お子さまの嫌いなこと、苦手なこと', '苦手な刺激・困りやすい場面など'),
+                  _input('', _dislikesCtrl, maxLines: 3),
+                  _labelHint('既往歴', 'ある場合はできるだけ詳しく'),
+                  _input('', _medicalHistoryCtrl, maxLines: 3),
                   _input('体験当日の来所予定の方', _trialAttendeeCtrl,
                       hint: '例: 母'),
                 ]),
@@ -422,18 +426,49 @@ class _IntakeFormScreenState extends State<IntakeFormScreen> {
     return null;
   }
 
+  /// ラベル + 補足ヒントを TextField の上に独立表示。
+  /// 長いガイド文が labelText に入って入力時に縮んで読みづらくなる問題を回避。
+  Widget _labelHint(String label, String hint, {bool required = false}) {
+    final c = context.colors;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text(label,
+                  style: TextStyle(
+                      fontSize: AppTextSize.body,
+                      fontWeight: FontWeight.w600,
+                      color: c.textPrimary)),
+              if (required) ...[
+                const SizedBox(width: 6),
+                Text('*',
+                    style: TextStyle(
+                        fontSize: AppTextSize.body,
+                        color: context.alerts.urgent.icon)),
+              ],
+            ],
+          ),
+          if (hint.isNotEmpty) ...[
+            const SizedBox(height: 2),
+            Text(hint,
+                style: TextStyle(
+                    fontSize: AppTextSize.xs, color: c.textTertiary)),
+          ],
+        ],
+      ),
+    );
+  }
+
   Widget _birthDatePicker() {
     final display = _childBirthDate == null
-        ? 'お誕生日を選択 *'
+        ? '日付を選択 *'
         : DateFormat('yyyy/M/d', 'ja').format(_childBirthDate!);
     return InkWell(
       onTap: () async {
-        final picked = await showDatePicker(
-          context: context,
-          initialDate: _childBirthDate ?? DateTime(2020, 1, 1),
-          firstDate: DateTime(2010, 1, 1),
-          lastDate: DateTime.now(),
-        );
+        final picked = await _showSimpleDatePicker();
         if (picked != null) {
           setState(() => _childBirthDate = picked);
         }
@@ -451,6 +486,40 @@ class _IntakeFormScreenState extends State<IntakeFormScreen> {
                     ? context.colors.textTertiary
                     : context.colors.textPrimary)),
       ),
+    );
+  }
+
+  /// ヘッダなしの日付ピッカー（CalendarDatePicker をダイアログで包む）。
+  Future<DateTime?> _showSimpleDatePicker() async {
+    DateTime selected = _childBirthDate ?? DateTime(2020, 1, 1);
+    return showDialog<DateTime>(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          contentPadding:
+              const EdgeInsets.fromLTRB(8, 12, 8, 0),
+          content: SizedBox(
+            width: 320,
+            height: 360,
+            child: CalendarDatePicker(
+              initialDate: selected,
+              firstDate: DateTime(2010),
+              lastDate: DateTime.now(),
+              onDateChanged: (d) => selected = d,
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('キャンセル'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, selected),
+              child: const Text('OK'),
+            ),
+          ],
+        );
+      },
     );
   }
 
