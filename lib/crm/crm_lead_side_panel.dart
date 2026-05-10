@@ -959,16 +959,15 @@ const _nextActionTypes = <({
       applicableStages: ['considering'], defaultDueDays: 14),
   (id: 'attendance_schedule_adjust', label: '通所日程調整', icon: '📅',
       applicableStages: ['considering'], defaultDueDays: 3),
-  // 入会手続中（v3: 業務フロー反映）
-  (id: 'contract_date_decision', label: '契約日決定', icon: '✍️',
+  // 入会手続中（v3: 進捗を進めるための汎用カテゴリ。
+  //  項目自体は進捗チェックリスト 5 項目で達成記録、ここはその補助アクション）
+  (id: 'contact_confirm', label: '連絡・確認', icon: '📞',
+      applicableStages: ['onboarding'], defaultDueDays: 3),
+  (id: 'schedule_adjust', label: '日程調整', icon: '🗓️',
+      applicableStages: ['onboarding'], defaultDueDays: 3),
+  (id: 'document_creation', label: '書類作成', icon: '📝',
       applicableStages: ['onboarding'], defaultDueDays: 7),
-  (id: 'assessment_hearing_date', label: 'アセスメントヒアリング日決定', icon: '🗓️',
-      applicableStages: ['onboarding'], defaultDueDays: 7),
-  (id: 'assessment_creation', label: 'アセスメント作成', icon: '📝',
-      applicableStages: ['onboarding'], defaultDueDays: 7),
-  (id: 'support_plan_creation', label: '個別支援計画書作成', icon: '📋',
-      applicableStages: ['onboarding'], defaultDueDays: 7),
-  (id: 'planning_meeting', label: '策定会議', icon: '👥',
+  (id: 'meeting_adjust', label: '会議調整', icon: '👥',
       applicableStages: ['onboarding'], defaultDueDays: 7),
   // 全ステージ共通
   (id: 'status_check', label: '状況確認', icon: '💬',
@@ -1800,15 +1799,18 @@ const _checklistConsidering = <_ChecklistItem>[
   (id: 'intent_confirmed', label: '入会意向の確認', dateField: null, hasNote: false),
 ];
 
-/// 入会手続中フェーズ（7 項目）。
+/// 入会手続中フェーズ（v3: 5 項目固定、業務フロー反映）。
 const _checklistOnboarding = <_ChecklistItem>[
-  (id: 'file_created', label: 'ファイル作成', dateField: null, hasNote: false),
-  (id: 'hug_registered', label: 'Hug 入力', dateField: null, hasNote: false),
-  (id: 'assessment_done', label: 'アセスメント', dateField: null, hasNote: false),
-  (id: 'contract_sent', label: '契約書送付', dateField: null, hasNote: false),
-  (id: 'contract_received', label: '契約書回収', dateField: null, hasNote: false),
-  (id: 'support_plan_created', label: '個別支援計画作成', dateField: null, hasNote: false),
-  (id: 'support_plan_explained', label: '個別支援計画説明', dateField: null, hasNote: false),
+  (id: 'assessment_hearing_date_set', label: 'アセスメントヒアリング日決定',
+      dateField: null, hasNote: false),
+  (id: 'contract_date_set', label: '契約日決定',
+      dateField: null, hasNote: false),
+  (id: 'assessment_created', label: 'アセスメント作成',
+      dateField: null, hasNote: false),
+  (id: 'support_plan_created', label: '個別支援計画書作成',
+      dateField: null, hasNote: false),
+  (id: 'planning_meeting_done', label: '策定会議',
+      dateField: null, hasNote: false),
 ];
 
 List<_ChecklistItem> _checklistFor(String stage) {

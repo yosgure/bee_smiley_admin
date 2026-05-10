@@ -153,8 +153,9 @@ CRM 関連 UI は **目的別** に役割を分離する:
 survey_received (アンケート回収), trial_completed (体験実施),
 intent_confirmed (入会意向の確認)
 
-**入会手続中 (7 項目)**: file_created, hug_registered, assessment_done,
-contract_sent, contract_received, support_plan_created, support_plan_explained
+**入会手続中 (5 項目)**: assessment_hearing_date_set (アセスメントヒアリング日決定),
+contract_date_set (契約日決定), assessment_created (アセスメント作成),
+support_plan_created (個別支援計画書作成), planning_meeting_done (策定会議)
 
 **自動チェック項目** (UI で disabled、元フィールドから派生):
 - `inquired` ← `inquiredAt` が非 null
@@ -181,12 +182,13 @@ contract_sent, contract_received, support_plan_created, support_plan_explained
 - `attendance_schedule_adjust` 通所日程調整
 - `status_check` 状況確認（能動）
 
-**入会手続中（HUG連携書類フロー）**:
-- `contract_date_decision` 契約日決定
-- `assessment_hearing_date` アセスメントヒアリング日決定
-- `assessment_creation` アセスメント作成
-- `support_plan_creation` 個別支援計画書作成
-- `planning_meeting` 策定会議
+**入会手続中（進捗を進めるための汎用カテゴリ）**:
+- `contact_confirm` 連絡・確認
+- `schedule_adjust` 日程調整
+- `document_creation` 書類作成
+- `meeting_adjust` 会議調整
+
+入会手続中ステージでは、達成項目の記録は **進捗チェックリスト 5 項目**（アセスメントヒアリング日決定 / 契約日決定 / アセスメント作成 / 個別支援計画書作成 / 策定会議）側で行う。「次のアクション」種別は、それを進めるためのスタッフ視点の汎用カテゴリに留める。
 
 **全ステージ共通**:
 - `other` その他（補足必須要件は撤廃済み — v3）
