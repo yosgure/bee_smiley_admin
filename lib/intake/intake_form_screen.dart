@@ -534,7 +534,7 @@ class _IntakeFormScreenState extends State<IntakeFormScreen> {
       ),
       child: Row(
         children: [
-          for (final g in const ['男子', '女子'])
+          for (final g in const ['男', '女'])
             Padding(
               padding: const EdgeInsets.only(right: 8),
               child: ChoiceChip(

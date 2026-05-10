@@ -488,6 +488,20 @@ String _childFullName(Map<String, dynamic> d) {
   return [last, cf].where((s) => s.isNotEmpty).join(' ');
 }
 
+int? _childAge(Map<String, dynamic> d) {
+  final bd = d['childBirthDate'];
+  DateTime? bdt;
+  if (bd is Timestamp) bdt = bd.toDate();
+  if (bdt == null) return null;
+  final now = DateTime.now();
+  var age = now.year - bdt.year;
+  if (now.month < bdt.month ||
+      (now.month == bdt.month && now.day < bdt.day)) {
+    age--;
+  }
+  return age >= 0 ? age : null;
+}
+
 // ============================================================
 // 上部ビュー切替タブ（軽量・無装飾）
 // ============================================================
@@ -599,12 +613,11 @@ class _LeadTableRow extends StatelessWidget {
     final stage = d['stage'] as String? ?? 'considering';
     final color = CrmOptions.stageColor(stage);
     final childName = _childFullName(d);
-    final source = d['source'] as String? ?? '';
-    final tel = d['parentTel'] as String? ?? '';
-    final inquiredAt = (d['inquiredAt'] as Timestamp?)?.toDate();
-    final trialAt = (d['trialAt'] as Timestamp?)?.toDate();
+    final age = _childAge(d);
     final nextAt = (d['nextActionAt'] as Timestamp?)?.toDate();
+    final nextNote = (d['nextActionNote'] as String? ?? '').trim();
     final overdue = nextAt != null && nextAt.isBefore(DateTime.now());
+    final notifyUnread = d['notifyUnread'] == true;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Container(
@@ -628,10 +641,12 @@ class _LeadTableRow extends StatelessWidget {
             () => Navigator.push(context,
                 MaterialPageRoute(builder: (_) => CrmLeadEditScreen(doc: doc))),
         child: Padding(
-          padding: const EdgeInsets.all(12),
+          padding: const EdgeInsets.symmetric(
+              horizontal: 12, vertical: 10),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // 1 行目: ステージピル + 児童名 + 年齢 + (NEW)
               Row(
                 children: [
                   Container(
@@ -649,6 +664,11 @@ class _LeadTableRow extends StatelessWidget {
                             fontWeight: FontWeight.bold)),
                   ),
                   const SizedBox(width: 8),
+                  if (notifyUnread) ...[
+                    Icon(Icons.fiber_manual_record,
+                        size: 8, color: context.alerts.urgent.icon),
+                    const SizedBox(width: 4),
+                  ],
                   Expanded(
                     child: Text(
                       childName.isEmpty ? '(児童名未入力)' : childName,
@@ -656,41 +676,46 @@ class _LeadTableRow extends StatelessWidget {
                           fontSize: AppTextSize.bodyMd,
                           fontWeight: FontWeight.bold,
                           color: context.colors.textPrimary),
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
-                  if (source.isNotEmpty)
-                    Text(CrmOptions.labelOf(CrmOptions.sources, source),
+                  if (age != null)
+                    Text('$age歳',
                         style: TextStyle(
                             fontSize: AppTextSize.caption,
-                            color: context.colors.textSecondary)),
+                            color: context.colors.textTertiary)),
                 ],
               ),
               const SizedBox(height: 6),
-              Wrap(
-                spacing: 12,
-                runSpacing: 4,
+              // 2 行目: 次のアクション + 期日
+              Row(
                 children: [
-                  if (tel.isNotEmpty)
-                    _meta(context, Icons.phone_outlined, tel),
-                  if (inquiredAt != null)
-                    _meta(context, Icons.mail_outline,
-                        '問: ${DateFormat('M/d').format(inquiredAt)}'),
-                  if (trialAt != null)
-                    _meta(context, Icons.event_outlined,
-                        '体験: ${DateFormat('M/d').format(trialAt)}'),
+                  Expanded(
+                    child: Text(
+                      nextNote.isEmpty
+                          ? '次のアクション未設定'
+                          : nextNote,
+                      style: TextStyle(
+                          fontSize: AppTextSize.caption,
+                          color: nextNote.isEmpty
+                              ? context.colors.textTertiary
+                              : context.colors.textSecondary),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
                   if (nextAt != null)
-                    _meta(
-                        context,
-                        overdue ? Icons.warning_amber : Icons.schedule,
-                        '次回: ${DateFormat('M/d').format(nextAt)}',
-                        color: overdue ? context.alerts.urgent.icon : context.alerts.info.icon),
+                    Text(
+                      DateFormat('M/d').format(nextAt),
+                      style: TextStyle(
+                          fontSize: AppTextSize.caption,
+                          fontWeight: FontWeight.bold,
+                          color: overdue
+                              ? context.alerts.urgent.icon
+                              : context.colors.textSecondary),
+                    ),
                 ],
               ),
-              // 入会手続中はHUG必須項目の進捗バーを表示（契約完了までの埋まり具合）
-              if (stage == 'onboarding') ...[
-                const SizedBox(height: 8),
-                _HugProgressBar(data: d),
-              ],
             ],
           ),
         ),
@@ -3425,11 +3450,17 @@ class _CrmLeadEditScreenState extends State<CrmLeadEditScreen> {
   }
 
   Widget _genderSelector() {
-    // v3.5.1: 罫線テーブル内で使うのでラベル枠は外す。値は「男子/女子」で統一
-    // （フォーム取り込みも同じ値を使うため）。「その他」は廃止。
+    // v3.5.6: 値は「男/女」で統一（フォーム取り込みも同じ）。「その他」廃止。
+    // 既存データの「男子/女子」も表示できるよう、表示時のみマッピング。
+    String displayValue(String raw) {
+      if (raw == '男' || raw == '男子') return '男';
+      if (raw == '女' || raw == '女子') return '女';
+      return '';
+    }
+    final cur = displayValue(_childGender);
     return Row(
-      children: ['男子', '女子'].map((g) {
-        final sel = _childGender == g;
+      children: ['男', '女'].map((g) {
+        final sel = cur == g;
         return Padding(
           padding: const EdgeInsets.only(right: 6),
           child: ChoiceChip(
