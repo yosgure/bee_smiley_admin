@@ -717,124 +717,157 @@ class _BasicInfoSectionState extends State<_BasicInfoSection> {
     );
   }
 
-  /// アンケート + ヒアリング 2 層テーブル（v3.3）。
-  /// ヘッダ行で「アンケート」「ヒアリング」のタグを 1 回だけ表示し、
-  /// 各データ行は「項目名 / アンケート文 / ヒアリング文」の 3 カラム。
-  /// 名前/次のアクション/期日 のテーブル構造に揃える発想。
-  Widget _twoLayerTable(BuildContext context, LeadViewReference leadRef, {
-    required List<({
-      String label,
-      String intakeValue,
-      String hearingValue,
-      String intakeKey,
-      String hearingKey,
-    })> items,
+  /// アンケート + ヒアリング 2 層テーブル（v3.4: 罫線付き）。
+  /// 各セルが明示的に枠で囲まれ、空欄でも「ここに入力する」と分かる。
+  /// placeholder の薄字を廃止（罫線で記入領域を示す）。
+  Widget _twoLayerTable(
+    BuildContext context,
+    LeadViewReference leadRef, {
+    required List<
+            ({
+              String label,
+              String intakeValue,
+              String hearingValue,
+              String intakeKey,
+              String hearingKey,
+            })>
+        items,
   }) {
     final c = context.colors;
-    const labelColW = 80.0;
-    const colGap = 12.0;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        // ── ヘッダ行（タグ 1 回だけ） ──
-        Padding(
-          padding: const EdgeInsets.only(bottom: 6),
-          child: Row(
-            children: [
-              const SizedBox(width: labelColW),
-              Expanded(
-                child: _columnTag(
-                  context,
-                  label: 'アンケート',
-                  bg: c.scaffoldBgAlt,
-                  fg: c.textSecondary,
-                ),
-              ),
-              const SizedBox(width: colGap),
-              Expanded(
-                child: _columnTag(
-                  context,
-                  label: 'ヒアリング',
-                  bg: AppColors.primary.withValues(alpha: 0.15),
-                  fg: AppColors.primary,
-                ),
-              ),
-            ],
-          ),
-        ),
-        // ── データ行 ──
-        for (final item in items)
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 4),
+    const labelColW = 96.0;
+
+    BorderSide line() => BorderSide(color: c.borderLight, width: 0.5);
+
+    Widget headerCell(
+        {required String text, required Color bg, required Color fg}) {
+      return Container(
+        padding:
+            const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        color: bg,
+        alignment: Alignment.centerLeft,
+        child: Text(text,
+            style: TextStyle(
+                fontSize: AppTextSize.xs,
+                fontWeight: FontWeight.bold,
+                color: fg)),
+      );
+    }
+
+    return Container(
+      decoration: BoxDecoration(
+        border: Border.all(color: c.borderLight, width: 0.5),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // ── ヘッダ行 ──
+          IntrinsicHeight(
             child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                SizedBox(
+                Container(
                   width: labelColW,
-                  child: Padding(
-                    padding: const EdgeInsets.only(top: 8),
-                    child: Text(item.label,
-                        style: TextStyle(
-                            fontSize: AppTextSize.caption,
-                            color: c.textSecondary,
-                            fontWeight: FontWeight.bold)),
+                  decoration: BoxDecoration(
+                    color: c.scaffoldBgAlt,
+                    border: Border(right: line()),
                   ),
                 ),
                 Expanded(
-                  child: _InlineTextEditor(
-                    key: ValueKey('${item.intakeKey}:${item.intakeValue}'),
-                    initialText: item.intakeValue,
-                    hint: '保護者からの自記',
-                    onCommit: (text) async {
-                      if (text == item.intakeValue) return;
-                      await leadRef.update({item.intakeKey: text});
-                      if (mounted) {
-                        AppFeedback.success(context,
-                            '${item.label}（アンケート）を保存しました');
-                      }
-                    },
+                  child: Container(
+                    decoration: BoxDecoration(
+                      border: Border(right: line()),
+                    ),
+                    child: headerCell(
+                      text: 'アンケート',
+                      bg: c.scaffoldBgAlt,
+                      fg: c.textSecondary,
+                    ),
                   ),
                 ),
-                const SizedBox(width: colGap),
                 Expanded(
-                  child: _InlineTextEditor(
-                    key:
-                        ValueKey('${item.hearingKey}:${item.hearingValue}'),
-                    initialText: item.hearingValue,
-                    hint: 'ヒアリングで深掘り',
-                    onCommit: (text) async {
-                      if (text == item.hearingValue) return;
-                      await leadRef.update({item.hearingKey: text});
-                      if (mounted) {
-                        AppFeedback.success(context,
-                            '${item.label}（ヒアリング）を保存しました');
-                      }
-                    },
+                  child: headerCell(
+                    text: 'ヒアリング',
+                    bg: AppColors.primary.withValues(alpha: 0.12),
+                    fg: AppColors.primary,
                   ),
                 ),
               ],
             ),
           ),
-      ],
-    );
-  }
-
-  /// ヘッダ用の小タグ（左寄せ）。
-  Widget _columnTag(BuildContext context,
-      {required String label, required Color bg, required Color fg}) {
-    return Align(
-      alignment: Alignment.centerLeft,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-        decoration: BoxDecoration(
-          color: bg,
-          borderRadius: BorderRadius.circular(3),
-        ),
-        child: Text(label,
-            style: TextStyle(
-                fontSize: AppTextSize.xs,
-                fontWeight: FontWeight.bold,
-                color: fg)),
+          // ── データ行 ──
+          for (var i = 0; i < items.length; i++)
+            IntrinsicHeight(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Container(
+                    width: labelColW,
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 10, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: c.scaffoldBgAlt,
+                      border: Border(right: line(), top: line()),
+                    ),
+                    child: Text(items[i].label,
+                        style: TextStyle(
+                            fontSize: AppTextSize.caption,
+                            color: c.textSecondary,
+                            fontWeight: FontWeight.bold)),
+                  ),
+                  Expanded(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 4, vertical: 2),
+                      decoration: BoxDecoration(
+                        border: Border(right: line(), top: line()),
+                      ),
+                      child: _InlineTextEditor(
+                        key: ValueKey(
+                            '${items[i].intakeKey}:${items[i].intakeValue}'),
+                        initialText: items[i].intakeValue,
+                        hint: '',
+                        onCommit: (text) async {
+                          if (text == items[i].intakeValue) return;
+                          await leadRef
+                              .update({items[i].intakeKey: text});
+                          if (mounted) {
+                            AppFeedback.success(context,
+                                '${items[i].label}（アンケート）を保存しました');
+                          }
+                        },
+                      ),
+                    ),
+                  ),
+                  Expanded(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 4, vertical: 2),
+                      decoration: BoxDecoration(
+                        border: Border(top: line()),
+                      ),
+                      child: _InlineTextEditor(
+                        key: ValueKey(
+                            '${items[i].hearingKey}:${items[i].hearingValue}'),
+                        initialText: items[i].hearingValue,
+                        hint: '',
+                        onCommit: (text) async {
+                          if (text == items[i].hearingValue) return;
+                          await leadRef
+                              .update({items[i].hearingKey: text});
+                          if (mounted) {
+                            AppFeedback.success(context,
+                                '${items[i].label}（ヒアリング）を保存しました');
+                          }
+                        },
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
       ),
     );
   }
