@@ -153,6 +153,9 @@ class CrmLead {
   bool get isClosed =>
       stage == 'won' || stage == 'lost' || stage == 'withdrawn';
 
+  /// フォーム自動取り込みの未読フラグ。リードカードに NEW バッジを出すかどうか。
+  bool get notifyUnread => raw['notifyUnread'] == true;
+
   /// 最終接触からの経過時間。`lastContactAt` が null なら inquiredAt を起点とする。
   Duration? sinceLastContact([DateTime? now]) {
     final base = lastContactAt ?? inquiredAt;

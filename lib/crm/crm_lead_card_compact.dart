@@ -112,7 +112,15 @@ class CrmLeadCardCompact extends StatelessWidget {
                                   ],
                                 ),
                                 const SizedBox(height: 3),
-                                _stageBadge(context, lead.stage),
+                                Row(
+                                  children: [
+                                    _stageBadge(context, lead.stage),
+                                    if (lead.notifyUnread) ...[
+                                      const SizedBox(width: 4),
+                                      _newBadge(context),
+                                    ],
+                                  ],
+                                ),
                               ],
                             ),
                           ),
@@ -190,6 +198,27 @@ class CrmLeadCardCompact extends StatelessWidget {
           fontSize: AppTextSize.xs,
           fontWeight: FontWeight.bold,
           color: color,
+        ),
+      ),
+    );
+  }
+
+  /// フォーム自動取り込み直後の未読バッジ。リードを開くと消える。
+  Widget _newBadge(BuildContext context) {
+    final palette = context.alerts.urgent;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+      decoration: BoxDecoration(
+        color: palette.background,
+        borderRadius: BorderRadius.circular(3),
+        border: Border.all(color: palette.border, width: 0.5),
+      ),
+      child: Text(
+        'NEW',
+        style: TextStyle(
+          fontSize: AppTextSize.xs,
+          fontWeight: FontWeight.bold,
+          color: palette.icon,
         ),
       ),
     );

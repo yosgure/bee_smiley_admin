@@ -50,6 +50,10 @@ class _CrmLeadSidePanelState extends State<CrmLeadSidePanel> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) => _focus.requestFocus());
+    // 注: markRead はここでは呼ばない。CrmHomeScreen は wide モードで
+    // リスト先頭を自動選択するため、initState で既読化すると新規リードを
+    // 視認する前にバッジが消えてしまう。既読化は明示クリック側（onSelectLead /
+    // _LeadTableRow.onTap / CrmLeadEditScreen.initState）で行う。
   }
 
   @override

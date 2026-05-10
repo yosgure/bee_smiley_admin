@@ -1638,6 +1638,9 @@ class _CrmLeadEditScreenState extends State<CrmLeadEditScreen> {
   void initState() {
     super.initState();
     if (widget.doc != null) {
+      // フォーム自動取り込みの未読フラグを既読化（児童ごと）。
+      // 既に既読なら何もしないので毎回呼んでも安全。
+      widget.doc!.markRead();
       final d = widget.doc!.data();
       _childLastNameCtrl.text = d['childLastName'] ?? '';
       _childFirstNameCtrl.text = d['childFirstName'] ?? '';

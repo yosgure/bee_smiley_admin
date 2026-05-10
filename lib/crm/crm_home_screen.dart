@@ -109,7 +109,11 @@ class _CrmHomeScreenState extends State<CrmHomeScreen> {
         onboardingCount: onboardingCount,
         now: now,
         selectedLeadId: effectiveSelectedId,
-        onSelectLead: (id) => setState(() => _selectedLeadId = id),
+        onSelectLead: (id) {
+          setState(() => _selectedLeadId = id);
+          // 明示クリック時のみ NEW バッジを既読化（自動先頭選択では消えない）。
+          docById[id]?.markRead();
+        },
       );
 
       if (!wide) {

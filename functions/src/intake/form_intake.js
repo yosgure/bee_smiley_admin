@@ -180,9 +180,13 @@ async function upsertFromForm(p) {
     intakeFormRaw: p.raw || null, // 生回答を念のため保存
     inquiredAt: submittedAt,
     lastActivityAt: submittedAt,
+    // 児童ごとの未読フラグ（リードカードの NEW バッジ用）
+    notifyUnread: true,
+    notifyUnreadAt: submittedAt,
   };
 
   // 家族レベルに積むフィールド
+  // family.notifyUnread は children のいずれかが未読ならtrue（サイドメニュー赤ポチ用ロールアップ）
   const familyPayload = {
     lastName: s(p.parentLastName),
     firstName: s(p.parentFirstName),
@@ -192,7 +196,7 @@ async function upsertFromForm(p) {
     email,
     address: s(p.address),
     postalCode: s(p.postalCode),
-    notifyUnread: true, // CRM アイコン赤ポチ用
+    notifyUnread: true,
     notifyUnreadAt: submittedAt,
     updatedAt: FieldValue.serverTimestamp(),
     updatedBy: 'form_intake',

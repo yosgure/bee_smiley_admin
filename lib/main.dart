@@ -338,12 +338,9 @@ class _AdminShellState extends State<AdminShell> {
   void _clearUnreadOnTap(int index) {
     final type = _navTypeForIndex(index);
     if (type == null) return;
-    if (type == 'crm') {
-      // CRM は Firestore 側に未読フラグがあるので一括クリア。
-      // クライアント側の _hasUnreadCrm は Firestore リスナー経由で更新される。
-      _clearAllCrmUnread();
-      return;
-    }
+    // CRM の赤ポチは Firestore 側 children[].notifyUnread を購読しており、
+    // 個別リードを開いた時にだけ既読化する（タブを開いただけでは何もしない）。
+    if (type == 'crm') return;
     setState(() {
       switch (type) {
         case 'schedule':
@@ -361,25 +358,6 @@ class _AdminShellState extends State<AdminShell> {
       }
     });
     _updateAppBadge();
-  }
-
-  /// CRM タブを開いた時、plus_families の notifyUnread = true を一括で false にする。
-  /// Firestore の更新は非同期で進み、リスナー経由で _hasUnreadCrm が false になる。
-  Future<void> _clearAllCrmUnread() async {
-    try {
-      final snap = await FirebaseFirestore.instance
-          .collection('plus_families')
-          .where('notifyUnread', isEqualTo: true)
-          .get();
-      if (snap.docs.isEmpty) return;
-      final batch = FirebaseFirestore.instance.batch();
-      for (final doc in snap.docs) {
-        batch.update(doc.reference, {'notifyUnread': false});
-      }
-      await batch.commit();
-    } catch (e) {
-      debugPrint('Error clearing CRM unread: $e');
-    }
   }
   
   // Web版で右側に表示する管理詳細画面を保持する変数

@@ -122,6 +122,36 @@ class LeadView {
       }
     });
   }
+
+  /// このリードを既読化する。children[childIndex].notifyUnread = false にし、
+  /// 同 family の他 child にも未読が無ければ family.notifyUnread も false に更新（ロールアップ）。
+  /// すでに既読の場合は何もしない（書き込み回避）。
+  Future<void> markRead() async {
+    if (_flatData['notifyUnread'] != true) return;
+    await FirebaseFirestore.instance.runTransaction((tx) async {
+      final snap = await tx.get(_familyRef);
+      final data = snap.data() ?? <String, dynamic>{};
+      final children = List<Map<String, dynamic>>.from(
+          (data['children'] as List? ?? [])
+              .map((c) => Map<String, dynamic>.from(c as Map)));
+      if (childIndex < 0 || childIndex >= children.length) return;
+      final child = children[childIndex];
+      if (child['notifyUnread'] != true) return; // 既に既読
+      child['notifyUnread'] = false;
+      child.remove('notifyUnreadAt');
+      children[childIndex] = child;
+
+      final anyUnread = children.any((c) => c['notifyUnread'] == true);
+      final update = <String, dynamic>{
+        'children': children,
+        'notifyUnread': anyUnread,
+      };
+      if (!anyUnread) {
+        update['notifyUnreadAt'] = FieldValue.delete();
+      }
+      tx.update(_familyRef, update);
+    });
+  }
 }
 
 /// `LeadView.reference.update(...)` / `.delete()` のためのシム。
@@ -130,6 +160,7 @@ class LeadViewReference {
   LeadViewReference(this._lv);
   Future<void> update(Map<String, dynamic> data) => _lv.update(data);
   Future<void> delete() => _lv.delete();
+  Future<void> markRead() => _lv.markRead();
   String get id => _lv.id;
 }
 
@@ -269,6 +300,9 @@ Map<String, dynamic> flattenChildToLeadShape(
     'sourceLeadId': child['sourceLeadId'],
     // 自分自身が family なので convertedFamilyId = familyId（互換のため）
     'convertedFamilyId': familyId,
+    // フォーム自動取り込みの未読フラグ（リードカード NEW バッジ用）
+    'notifyUnread': child['notifyUnread'] == true,
+    'notifyUnreadAt': child['notifyUnreadAt'],
   };
   // pre-existing 入会児童で stage が無い場合は status から派生
   if (flat['stage'] == null) {
