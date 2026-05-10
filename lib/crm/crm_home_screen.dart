@@ -126,12 +126,12 @@ class _CrmHomeScreenState extends State<CrmHomeScreen> {
         );
       }
 
-      // 2 ペイン常時表示。中央 45% / 右 55%（Flexible で伸縮可）。
+      // 2 ペイン常時表示。リスト 33% / 詳細 67%（v3.1: 詳細を広く取る）
       return Row(
         children: [
-          Flexible(flex: 45, child: home),
+          Flexible(flex: 33, child: home),
           Flexible(
-            flex: 55,
+            flex: 67,
             child: selectedDoc == null
                 ? _emptyDetailPlaceholder(context)
                 : CrmLeadSidePanel(

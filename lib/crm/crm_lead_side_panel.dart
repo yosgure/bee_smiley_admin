@@ -694,9 +694,9 @@ class _BasicInfoSectionState extends State<_BasicInfoSection> {
     );
   }
 
-  /// アンケート + ヒアリング 2 層構造（v3.1: コンパクト版・案B）
-  /// アンケートは📋アイコン+1行省略表示、ヒアリングがメイン編集領域。
-  /// アンケート行をタップするとダイアログで全文編集可。
+  /// アンケート + ヒアリング 2 層構造（v3.2: 左右レイアウト・案A）
+  /// 左にアンケート（保護者の自記）、右にヒアリング（スタッフ追記）。
+  /// サイドパネル幅を 67% に拡大したことで横並びが現実的に。
   Widget _twoLayerField(BuildContext context, String label,
       String intakeValue, String hearingValue,
       String intakeKey, String hearingKey, LeadViewReference leadRef) {
@@ -712,161 +712,90 @@ class _BasicInfoSectionState extends State<_BasicInfoSection> {
                   fontSize: AppTextSize.caption,
                   color: c.textSecondary,
                   fontWeight: FontWeight.bold)),
-          const SizedBox(height: 4),
-
-          // アンケート行（コンパクト、tap で編集ダイアログ）
-          _intakeCompactRow(
-              context, label, intakeValue, intakeKey, leadRef),
-          const SizedBox(height: 4),
-
-          // ヒアリング編集領域（メイン）
-          _InlineTextEditor(
-            key: ValueKey('$hearingKey:$hearingValue'),
-            initialText: hearingValue,
-            hint: 'ヒアリングを記入',
-            onCommit: (text) async {
-              if (text == hearingValue) return;
-              await leadRef.update({hearingKey: text});
-              if (mounted) {
-                AppFeedback.success(context, '$label（ヒアリング）を保存しました');
-              }
-            },
+          const SizedBox(height: 6),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: _layerColumn(
+                  context,
+                  tagLabel: 'アンケート',
+                  tagBg: c.scaffoldBgAlt,
+                  tagFg: c.textSecondary,
+                  value: intakeValue,
+                  fieldKey: intakeKey,
+                  hint: '保護者からの自記',
+                  leadRef: leadRef,
+                  humanLabel: '$label（アンケート）',
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _layerColumn(
+                  context,
+                  tagLabel: 'ヒアリング',
+                  tagBg: AppColors.primary.withValues(alpha: 0.15),
+                  tagFg: AppColors.primary,
+                  value: hearingValue,
+                  fieldKey: hearingKey,
+                  hint: 'ヒアリングで深掘りした内容',
+                  leadRef: leadRef,
+                  humanLabel: '$label（ヒアリング）',
+                ),
+              ),
+            ],
           ),
         ],
       ),
     );
   }
 
-  /// アンケート1行コンパクト表示（tap でダイアログ全文編集）。
-  Widget _intakeCompactRow(BuildContext context, String label,
-      String value, String fieldKey, LeadViewReference leadRef) {
-    final c = context.colors;
-    final isEmpty = value.trim().isEmpty;
-    return InkWell(
-      borderRadius: BorderRadius.circular(4),
-      onTap: () =>
-          _showIntakeEditDialog(context, label, value, fieldKey, leadRef),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-        child: Row(
-          children: [
-            Icon(Icons.assignment_outlined,
-                size: 14,
-                color: isEmpty ? c.textTertiary : c.textSecondary),
-            const SizedBox(width: 6),
-            Expanded(
-              child: Text(
-                isEmpty ? 'アンケート未入力（タップで編集）' : value,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+  /// 左右カラムの中身（タグ + 編集欄）。
+  Widget _layerColumn(
+    BuildContext context, {
+    required String tagLabel,
+    required Color tagBg,
+    required Color tagFg,
+    required String value,
+    required String fieldKey,
+    required String hint,
+    required LeadViewReference leadRef,
+    required String humanLabel,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Align(
+          alignment: Alignment.centerLeft,
+          child: Container(
+            padding:
+                const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+            decoration: BoxDecoration(
+              color: tagBg,
+              borderRadius: BorderRadius.circular(3),
+            ),
+            child: Text(tagLabel,
                 style: TextStyle(
-                  fontSize: AppTextSize.caption,
-                  color: isEmpty ? c.textTertiary : c.textSecondary,
-                  fontStyle:
-                      isEmpty ? FontStyle.italic : FontStyle.normal,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  /// アンケート全文編集ダイアログ。
-  Future<void> _showIntakeEditDialog(BuildContext context, String label,
-      String currentValue, String fieldKey, LeadViewReference leadRef) async {
-    final ctrl = TextEditingController(text: currentValue);
-    final result = await showDialog<String>(
-      context: context,
-      builder: (ctx) {
-        final c = ctx.colors;
-        return Dialog(
-          backgroundColor: c.cardBg,
-          shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(14)),
-          insetPadding: const EdgeInsets.symmetric(
-              horizontal: 32, vertical: 40),
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 480),
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(20, 18, 20, 14),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Row(
-                    children: [
-                      Icon(Icons.assignment_outlined,
-                          size: 18, color: c.textSecondary),
-                      const SizedBox(width: 6),
-                      Text('$label（アンケート）',
-                          style: TextStyle(
-                              fontSize: AppTextSize.body,
-                              fontWeight: FontWeight.bold,
-                              color: c.textPrimary)),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  Text('保護者からの自記内容。原則そのまま保持。',
-                      style: TextStyle(
-                          fontSize: AppTextSize.xs,
-                          color: c.textTertiary)),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: ctrl,
-                    maxLines: 6,
-                    minLines: 3,
-                    style: TextStyle(
-                        fontSize: AppTextSize.body,
-                        color: c.textPrimary),
-                    decoration: InputDecoration(
-                      hintText: '未入力',
-                      filled: true,
-                      fillColor: c.scaffoldBgAlt,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        borderSide: BorderSide(color: c.borderLight),
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        borderSide: BorderSide(color: c.borderLight),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        borderSide: BorderSide(
-                            color: AppColors.primary, width: 1.5),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      TextButton(
-                        onPressed: () => Navigator.pop(ctx),
-                        child: const Text('キャンセル'),
-                      ),
-                      const SizedBox(width: 8),
-                      FilledButton(
-                        onPressed: () => Navigator.pop(ctx, ctrl.text),
-                        child: const Text('保存'),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
+                    fontSize: AppTextSize.xs,
+                    fontWeight: FontWeight.bold,
+                    color: tagFg)),
           ),
-        );
-      },
+        ),
+        const SizedBox(height: 4),
+        _InlineTextEditor(
+          key: ValueKey('$fieldKey:$value'),
+          initialText: value,
+          hint: hint,
+          onCommit: (text) async {
+            if (text == value) return;
+            await leadRef.update({fieldKey: text});
+            if (mounted) {
+              AppFeedback.success(context, '$humanLabel を保存しました');
+            }
+          },
+        ),
+      ],
     );
-    if (result != null && result != currentValue) {
-      await leadRef.update({fieldKey: result});
-      if (mounted) {
-        AppFeedback.success(context, '$label（アンケート）を保存しました');
-      }
-    }
   }
 }
 
