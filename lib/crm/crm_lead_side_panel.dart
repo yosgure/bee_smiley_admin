@@ -789,8 +789,8 @@ class _BasicInfoSectionState extends State<_BasicInfoSection> {
                 Expanded(
                   child: headerCell(
                     text: 'ヒアリング',
-                    bg: AppColors.primary.withValues(alpha: 0.12),
-                    fg: AppColors.primary,
+                    bg: c.scaffoldBgAlt,
+                    fg: c.textSecondary,
                   ),
                 ),
               ],
@@ -2517,7 +2517,9 @@ class _InlineTextEditorState extends State<_InlineTextEditor> {
       controller: _ctrl,
       focusNode: _focus,
       maxLines: widget.maxLines, // null = 自動拡張
-      minLines: 1,
+      // フォーカス時は 4 行分の高さを確保（OutlineInputBorder の枠が見やすい）。
+      // maxLines: 1 が指定されている場合は1行のままにする。
+      minLines: (widget.maxLines == 1) ? 1 : (_focused ? 4 : 1),
       keyboardType: widget.keyboardType,
       style: TextStyle(
           fontSize: AppTextSize.body,
