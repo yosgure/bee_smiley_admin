@@ -12,6 +12,8 @@ enum CrmUrgentReason {
   trialFollowupMissing,
   /// 入会手続中で7日以上動きがない
   contractStalled,
+  /// 検討中で問い合わせから N日経過したのにアンケート未回収
+  surveyNotReceived,
   /// 次の一手が未設定で、最終接触から24h経過
   noNextAction,
 }
@@ -21,6 +23,7 @@ String crmUrgentReasonLabel(CrmUrgentReason r) => switch (r) {
       CrmUrgentReason.overdue => '期限切れ',
       CrmUrgentReason.trialFollowupMissing => '体験未実施 (予定経過)',
       CrmUrgentReason.contractStalled => '契約停滞',
+      CrmUrgentReason.surveyNotReceived => 'アンケート未回収',
       CrmUrgentReason.noNextAction => '次の一手を決める',
     };
 
@@ -30,6 +33,9 @@ class CrmUrgentThresholds {
   static const staleProcessingDays = 7;
   static const trialFollowupHours = 24;
   static const noNextActionHours = 24;
+  /// 問い合わせ受付からアンケート回収までの上限日数。
+  /// これを超えてもアンケートが届かないリードは督促タブに浮上。
+  static const surveyDelayDays = 7;
 }
 
 /// 1件のリードに対して「今すぐ対応」の理由を列挙する。
@@ -65,7 +71,18 @@ List<CrmUrgentReason> urgentReasonsFor(CrmLead lead, {DateTime? now}) {
     }
   }
 
-  // 4) 次の一手未設定: 最終接触から 24h 経過しても設定されていない
+  // 4) アンケート未回収: considering で問い合わせから N日経過 + surveyReceivedAt 空
+  //    フォーム自動取り込みは surveyReceivedAt を立てるので、ここに引っかかるのは
+  //    「電話/DM で受付したがアンケートURLに回答してもらえていない」リード。
+  if (lead.stage == 'considering' &&
+      lead.surveyReceivedAt == null &&
+      lead.inquiredAt != null &&
+      ref.difference(lead.inquiredAt!).inDays >=
+          CrmUrgentThresholds.surveyDelayDays) {
+    reasons.add(CrmUrgentReason.surveyNotReceived);
+  }
+
+  // 5) 次の一手未設定: 最終接触から 24h 経過しても設定されていない
   if (!lead.hasNextAction) {
     final since = lead.sinceLastContact(ref);
     if (since != null &&
@@ -82,7 +99,8 @@ int urgentPriority(CrmUrgentReason r) => switch (r) {
       CrmUrgentReason.overdue => 0,
       CrmUrgentReason.trialFollowupMissing => 1,
       CrmUrgentReason.contractStalled => 2,
-      CrmUrgentReason.noNextAction => 3,
+      CrmUrgentReason.surveyNotReceived => 3,
+      CrmUrgentReason.noNextAction => 4,
     };
 
 /// 「今日進めると良い」カテゴリ
@@ -200,6 +218,7 @@ class CrmHomeSummary {
   final int overdueCount;
   final int trialFollowupMissing;
   final int contractStalled;
+  final int surveyNotReceived;
   final int noNextAction;
 
   final int todayReplyDue;
@@ -212,6 +231,7 @@ class CrmHomeSummary {
     required this.overdueCount,
     required this.trialFollowupMissing,
     required this.contractStalled,
+    required this.surveyNotReceived,
     required this.noNextAction,
     required this.todayReplyDue,
     required this.todayTrialScheduling,
@@ -224,7 +244,7 @@ class CrmHomeSummary {
 
 /// リード群からホーム用サマリを計算する。
 CrmHomeSummary summarizeForHome(Iterable<CrmLead> leads, {DateTime? now}) {
-  int overdue = 0, trialMiss = 0, stalled = 0, noNext = 0;
+  int overdue = 0, trialMiss = 0, stalled = 0, surveyMiss = 0, noNext = 0;
   int reply = 0, trial = 0, almost = 0, assignee = 0;
 
   for (final lead in leads) {
@@ -237,6 +257,8 @@ CrmHomeSummary summarizeForHome(Iterable<CrmLead> leads, {DateTime? now}) {
           trialMiss++;
         case CrmUrgentReason.contractStalled:
           stalled++;
+        case CrmUrgentReason.surveyNotReceived:
+          surveyMiss++;
         case CrmUrgentReason.noNextAction:
           noNext++;
       }
@@ -258,10 +280,11 @@ CrmHomeSummary summarizeForHome(Iterable<CrmLead> leads, {DateTime? now}) {
   }
 
   return CrmHomeSummary(
-    urgentTotal: overdue + trialMiss + stalled + noNext,
+    urgentTotal: overdue + trialMiss + stalled + surveyMiss + noNext,
     overdueCount: overdue,
     trialFollowupMissing: trialMiss,
     contractStalled: stalled,
+    surveyNotReceived: surveyMiss,
     noNextAction: noNext,
     todayReplyDue: reply,
     todayTrialScheduling: trial,

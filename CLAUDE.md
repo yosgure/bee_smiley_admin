@@ -38,10 +38,21 @@
 - `検討中` → `入会` の直接遷移は禁止（必ず `入会手続中` を経由）
 - 遷移可否は `CrmOptions.canTransition(from, to)` で検証
 
-### Alert Thresholds（`crm_lead_screen.dart` に定数化）
+### Alert Thresholds（`crm_lead_screen.dart` / `crm_home_utils.dart` に定数化）
 - `STALE_CONSIDERING_DAYS = 3`
 - `STALE_PROCESSING_DAYS = 7`
 - `RECIPIENT_CARD_STALE_DAYS = 14`
+- `SURVEY_DELAY_DAYS = 7` — 問い合わせ受付からアンケート回収までの上限（超えると督促タブに浮上）
+- `NO_NEXT_ACTION_HOURS = 24`
+- `TRIAL_FOLLOWUP_HOURS = 24`
+
+### Urgent Reason Categories（`CrmUrgentReason`）
+督促タブに表示する分類:
+- `overdue` — 次の一手の予定日を超過
+- `trialFollowupMissing` — 体験予定日経過＋体験実施日未入力
+- `contractStalled` — 入会手続中で 7 日以上動きなし
+- `surveyNotReceived` — 検討中で問い合わせから 7 日経過＋アンケート未回収
+- `noNextAction` — 次の一手未設定 + 最終接触から 24h 経過
 
 ### Design Tokens
 - アラート色は `context.alerts.{warning|urgent|info|success}` を必ず経由する（`Colors.red` / `Colors.blue` の直接指定禁止）

@@ -66,6 +66,10 @@ class CrmLead {
   DateTime? get inquiredAt => (raw['inquiredAt'] as Timestamp?)?.toDate();
   DateTime? get firstContactedAt =>
       (raw['firstContactedAt'] as Timestamp?)?.toDate();
+  /// アンケート（Googleフォーム体験アンケート）回収日時。
+  /// 自動取り込み時にセット。手動チェックも可。
+  DateTime? get surveyReceivedAt =>
+      (raw['surveyReceivedAt'] as Timestamp?)?.toDate();
   /// 体験予定日（旧称をそのまま流用）。
   DateTime? get trialAt => (raw['trialAt'] as Timestamp?)?.toDate();
   /// 体験実施日（v3 新設）。null = 未実施 or キャンセル。
