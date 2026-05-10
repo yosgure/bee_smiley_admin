@@ -935,42 +935,55 @@ Future<void> _showAddHistoryDialog(
   if (context.mounted) AppFeedback.success(context, '履歴を追加しました');
 }
 
-/// F_lead_detail_refactor v2: 次の一手の種別マスタ。
+/// 次の一手の種別マスタ。
 /// applicableStages: ステージで絞り込み（'*' = 全ステージ）
 /// defaultDueDays: 種別選択時に「今日 + N 日」を期日デフォルトに
+/// icon: ピル左に表示する絵文字（任意）
 const _nextActionTypes = <({
   String id,
   String label,
+  String icon,
   List<String> applicableStages,
-  int defaultDueDays
+  int defaultDueDays,
 })>[
-  (id: 'trial_schedule', label: '体験日程',
+  // 検討中（v3: 業務フロー反映）
+  (id: 'visit_other_facility', label: '他施設見学', icon: '🏫',
+      applicableStages: ['considering'], defaultDueDays: 7),
+  (id: 'family_consultation', label: '家族で相談', icon: '👨‍👩‍👧',
       applicableStages: ['considering'], defaultDueDays: 3),
-  (id: 'trial_reminder', label: '体験リマインド',
-      applicableStages: ['considering'], defaultDueDays: 1),
-  (id: 'trial_followup', label: '体験後フォロー',
-      applicableStages: ['considering'], defaultDueDays: 1),
-  (id: 'recipient_cert_check', label: '受給者証確認',
-      applicableStages: ['considering', 'onboarding'], defaultDueDays: 7),
-  (id: 'contract_send', label: '契約書送付',
+  (id: 'day_increase_request', label: '日数増枠対応', icon: '📈',
+      applicableStages: ['considering'], defaultDueDays: 3),
+  (id: 'other_facility_withdrawal', label: '他事業所退所手続き', icon: '🚪',
+      applicableStages: ['considering'], defaultDueDays: 7),
+  (id: 'recipient_cert_application', label: '受給者証申請', icon: '📋',
+      applicableStages: ['considering'], defaultDueDays: 14),
+  (id: 'attendance_schedule_adjust', label: '通所日程調整', icon: '📅',
+      applicableStages: ['considering'], defaultDueDays: 3),
+  // 入会手続中
+  (id: 'recipient_cert_check', label: '受給者証確認', icon: '✅',
+      applicableStages: ['onboarding'], defaultDueDays: 7),
+  (id: 'contract_send', label: '契約書送付', icon: '📤',
       applicableStages: ['onboarding'], defaultDueDays: 1),
-  (id: 'contract_receive', label: '契約書回収',
+  (id: 'contract_receive', label: '契約書回収', icon: '📥',
       applicableStages: ['onboarding'], defaultDueDays: 7),
-  (id: 'enrollment_date_confirm', label: '入会日確定',
+  (id: 'enrollment_date_confirm', label: '入会日確定', icon: '🎉',
       applicableStages: ['onboarding'], defaultDueDays: 3),
-  (id: 'recipient_cert_copy', label: '受給者証コピー受領',
+  (id: 'recipient_cert_copy', label: '受給者証コピー受領', icon: '📄',
       applicableStages: ['onboarding'], defaultDueDays: 7),
-  (id: 'status_check', label: '状況確認',
+  // 全ステージ共通
+  (id: 'status_check', label: '状況確認', icon: '💬',
       applicableStages: ['*'], defaultDueDays: 7),
-  (id: 'other', label: 'その他',
+  (id: 'other', label: 'その他', icon: '📝',
       applicableStages: ['*'], defaultDueDays: 7),
 ];
 
-/// 次の一手を更新（種別ピッカー + 日付 + 補足）
+/// 次の一手を更新（種別ピッカー + 日付 + メモ）。
+/// v3: カスタム Dialog でデザイン刷新（種別をアイコン付きカードのグリッド表示）。
 Future<void> _showUpdateNextActionDialog(
     BuildContext context, CrmLead lead, LeadViewReference leadRef) async {
   String? typeId = lead.nextActionType;
-  DateTime when = lead.nextActionAt ?? DateTime.now().add(const Duration(days: 1));
+  DateTime when =
+      lead.nextActionAt ?? DateTime.now().add(const Duration(days: 1));
   final note = TextEditingController(text: lead.nextActionNote);
   final stage = lead.stage;
   // ステージに応じた選択肢
@@ -980,47 +993,100 @@ Future<void> _showUpdateNextActionDialog(
           t.applicableStages.contains(stage))
       .toList();
 
+  final childName = lead.childFullName.isEmpty ? '名前未登録' : lead.childFullName;
+
   final ok = await showDialog<bool>(
     context: context,
     builder: (ctx) => StatefulBuilder(builder: (ctx, setS) {
-      return AlertDialog(
-        title: const Text('次の一手を更新'),
-        content: SizedBox(
-          width: 380,
-          child: SingleChildScrollView(
+      final c = ctx.colors;
+      return Dialog(
+        backgroundColor: c.cardBg,
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16)),
+        insetPadding:
+            const EdgeInsets.symmetric(horizontal: 32, vertical: 40),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 520),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(24, 20, 24, 16),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Text('種別（必須）',
-                    style: TextStyle(
-                        fontSize: AppTextSize.caption,
-                        color: context.colors.textSecondary)),
-                const SizedBox(height: 4),
-                Wrap(
-                  spacing: 6,
-                  runSpacing: 6,
+                // ヘッダ
+                Row(
                   children: [
-                    for (final t in available)
-                      ChoiceChip(
-                        label: Text(t.label,
-                            style:
-                                const TextStyle(fontSize: AppTextSize.caption)),
-                        selected: typeId == t.id,
-                        onSelected: (_) => setS(() {
-                          typeId = t.id;
-                          // 種別選択時に期日を自動セット（既存の手動値があればそれを優先）
-                          when = DateTime.now()
-                              .add(Duration(days: t.defaultDueDays));
-                        }),
+                    Icon(Icons.flag_outlined,
+                        size: 22, color: AppColors.primary),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('次の一手を更新',
+                              style: TextStyle(
+                                fontSize: AppTextSize.title,
+                                fontWeight: FontWeight.bold,
+                                color: c.textPrimary,
+                              )),
+                          const SizedBox(height: 2),
+                          Text(childName,
+                              style: TextStyle(
+                                fontSize: AppTextSize.caption,
+                                color: c.textSecondary,
+                              )),
+                        ],
                       ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close, size: 20),
+                      onPressed: () => Navigator.pop(ctx, false),
+                      tooltip: 'キャンセル',
+                    ),
                   ],
                 ),
-                const SizedBox(height: 12),
-                OutlinedButton.icon(
-                  icon: const Icon(Icons.event, size: 16),
-                  label: Text(DateFormat('yyyy/M/d (E)', 'ja').format(when)),
-                  onPressed: () async {
+                const SizedBox(height: 16),
+                Divider(color: c.borderLight, height: 1),
+                const SizedBox(height: 20),
+
+                // ─── 種別 ───
+                _dialogSectionLabel(context, '種別', required: true),
+                const SizedBox(height: 8),
+                LayoutBuilder(builder: (ctx, cons) {
+                  // 1 行 3 列のグリッド（最小幅 140px）
+                  final cols = cons.maxWidth >= 480 ? 3 : 2;
+                  const spacing = 8.0;
+                  final itemW =
+                      (cons.maxWidth - spacing * (cols - 1)) / cols;
+                  return Wrap(
+                    spacing: spacing,
+                    runSpacing: spacing,
+                    children: [
+                      for (final t in available)
+                        SizedBox(
+                          width: itemW,
+                          child: _NextActionTypeCard(
+                            label: t.label,
+                            icon: t.icon,
+                            selected: typeId == t.id,
+                            onTap: () => setS(() {
+                              typeId = t.id;
+                              when = DateTime.now()
+                                  .add(Duration(days: t.defaultDueDays));
+                            }),
+                          ),
+                        ),
+                    ],
+                  );
+                }),
+                const SizedBox(height: 24),
+
+                // ─── 期日 ───
+                _dialogSectionLabel(context, '期日'),
+                const SizedBox(height: 8),
+                _DialogDateButton(
+                  date: when,
+                  onPick: () async {
                     final d = await showDatePicker(
                         context: ctx,
                         initialDate: when,
@@ -1030,43 +1096,87 @@ Future<void> _showUpdateNextActionDialog(
                     setS(() => when = DateTime(d.year, d.month, d.day));
                   },
                 ),
+                const SizedBox(height: 24),
+
+                // ─── メモ ───
+                _dialogSectionLabel(context, 'メモ'),
                 const SizedBox(height: 8),
                 TextField(
                   controller: note,
-                  maxLines: 2,
+                  maxLines: 4,
+                  minLines: 3,
+                  style: TextStyle(
+                      fontSize: AppTextSize.body, color: c.textPrimary),
                   decoration: InputDecoration(
-                      labelText: typeId == 'other' ? '補足（必須）' : '補足（任意）',
-                      hintText: '電話で日程確認、契約書送付 など',
-                      border: const OutlineInputBorder(),
-                      isDense: true),
+                    hintText: '補足や前提共有など（任意）',
+                    hintStyle: TextStyle(color: c.textTertiary),
+                    filled: true,
+                    fillColor: c.scaffoldBgAlt,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: BorderSide(color: c.borderLight),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: BorderSide(color: c.borderLight),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide:
+                          BorderSide(color: AppColors.primary, width: 1.5),
+                    ),
+                    contentPadding: const EdgeInsets.all(12),
+                    isDense: true,
+                  ),
+                ),
+                const SizedBox(height: 24),
+
+                // ─── アクション ───
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(ctx, false),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 4),
+                        child: Text('キャンセル',
+                            style: TextStyle(
+                                fontSize: AppTextSize.body,
+                                color: c.textSecondary)),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    FilledButton(
+                      style: FilledButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 24, vertical: 12),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10)),
+                      ),
+                      onPressed: () {
+                        if (typeId == null) {
+                          AppFeedback.warning(ctx, '種別を選択してください');
+                          return;
+                        }
+                        Navigator.pop(ctx, true);
+                      },
+                      child: Text('更新',
+                          style: TextStyle(
+                              fontSize: AppTextSize.body,
+                              fontWeight: FontWeight.bold)),
+                    ),
+                  ],
                 ),
               ],
             ),
           ),
         ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('キャンセル')),
-          FilledButton(
-              onPressed: () {
-                if (typeId == null) {
-                  AppFeedback.warning(ctx, '種別を選択してください');
-                  return;
-                }
-                if (typeId == 'other' && note.text.trim().isEmpty) {
-                  AppFeedback.warning(ctx, '「その他」は補足が必須です');
-                  return;
-                }
-                Navigator.pop(ctx, true);
-              },
-              child: const Text('更新')),
-        ],
       );
     }),
   );
   if (ok != true) return;
-  // typeId が選択されていれば label を補足デフォルトとして使う
+  // typeId が選択されていれば label を nextActionNote のデフォルトとして使う
   final label = available.firstWhere((t) => t.id == typeId,
       orElse: () => available.last);
   final saveNote = note.text.trim().isEmpty ? label.label : note.text.trim();
@@ -1076,6 +1186,166 @@ Future<void> _showUpdateNextActionDialog(
     'nextActionType': typeId,
   });
   if (context.mounted) AppFeedback.success(context, '次の一手を更新しました');
+}
+
+/// ダイアログ内のセクション小見出し（必須マーク対応）。
+Widget _dialogSectionLabel(BuildContext context, String label,
+    {bool required = false}) {
+  final c = context.colors;
+  return Row(
+    children: [
+      Text(label,
+          style: TextStyle(
+              fontSize: AppTextSize.body,
+              fontWeight: FontWeight.bold,
+              color: c.textPrimary)),
+      if (required) ...[
+        const SizedBox(width: 6),
+        Container(
+          padding:
+              const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+          decoration: BoxDecoration(
+            color: context.alerts.urgent.background,
+            borderRadius: BorderRadius.circular(3),
+          ),
+          child: Text('必須',
+              style: TextStyle(
+                  fontSize: AppTextSize.xs,
+                  fontWeight: FontWeight.bold,
+                  color: context.alerts.urgent.icon)),
+        ),
+      ],
+    ],
+  );
+}
+
+/// 種別カード（アイコン + ラベル）。選択時はprimary色で強調。
+class _NextActionTypeCard extends StatelessWidget {
+  final String label;
+  final String icon;
+  final bool selected;
+  final VoidCallback onTap;
+  const _NextActionTypeCard({
+    required this.label,
+    required this.icon,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(10),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 120),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(
+            color: selected
+                ? AppColors.primary.withValues(alpha: 0.12)
+                : c.scaffoldBgAlt,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: selected ? AppColors.primary : c.borderLight,
+              width: selected ? 1.5 : 1,
+            ),
+          ),
+          child: Row(
+            children: [
+              Text(icon, style: const TextStyle(fontSize: 18)),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: AppTextSize.caption,
+                    fontWeight:
+                        selected ? FontWeight.bold : FontWeight.w500,
+                    color:
+                        selected ? AppColors.primary : c.textPrimary,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 期日ピッカーボタン（フル幅、明示的な期日表示）。
+class _DialogDateButton extends StatelessWidget {
+  final DateTime date;
+  final VoidCallback onPick;
+  const _DialogDateButton({required this.date, required this.onPick});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final dateDay = DateTime(date.year, date.month, date.day);
+    final diff = dateDay.difference(today).inDays;
+    final relative = diff == 0
+        ? '今日'
+        : diff == 1
+            ? '明日'
+            : diff > 0
+                ? '$diff日後'
+                : '${-diff}日前';
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onPick,
+        borderRadius: BorderRadius.circular(10),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          decoration: BoxDecoration(
+            color: c.scaffoldBgAlt,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: c.borderLight),
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.event, size: 18, color: AppColors.primary),
+              const SizedBox(width: 10),
+              Text(
+                DateFormat('yyyy/M/d (E)', 'ja').format(date),
+                style: TextStyle(
+                    fontSize: AppTextSize.body,
+                    fontWeight: FontWeight.w600,
+                    color: c.textPrimary),
+              ),
+              const SizedBox(width: 10),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(relative,
+                    style: TextStyle(
+                        fontSize: AppTextSize.xs,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.primary)),
+              ),
+              const Spacer(),
+              Icon(Icons.arrow_drop_down,
+                  size: 20, color: c.textSecondary),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 /// 完了 + 次の一手必須入力
