@@ -180,6 +180,8 @@ async function upsertFromForm(p) {
     intakeFormRaw: p.raw || null, // 生回答を念のため保存
     inquiredAt: submittedAt,
     lastActivityAt: submittedAt,
+    // フォーム回答受信時刻 = 「アンケート回収」チェックリスト項目の自動チェック判定
+    surveyReceivedAt: submittedAt,
     // 児童ごとの未読フラグ（リードカードの NEW バッジ用）
     notifyUnread: true,
     notifyUnreadAt: submittedAt,

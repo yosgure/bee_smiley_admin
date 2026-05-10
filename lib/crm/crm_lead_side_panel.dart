@@ -1520,13 +1520,13 @@ typedef _ChecklistItem = ({
   bool hasNote,
 });
 
-/// 検討中フェーズ（6 項目）。
+/// 検討中フェーズ（5 項目）。
+/// アンケート回収はフォーム自動取り込みで自動チェック（surveyReceivedAt が非 null）。
 const _checklistConsidering = <_ChecklistItem>[
-  (id: 'inquired', label: '問い合わせ日', dateField: 'inquiredAt', hasNote: false),
-  (id: 'pre_trial_hearing', label: '事前ヒアリング', dateField: null, hasNote: false),
-  (id: 'trial_scheduled', label: '体験日程', dateField: 'trialAt', hasNote: false),
+  (id: 'inquired', label: '問い合わせ受付', dateField: 'inquiredAt', hasNote: false),
+  (id: 'trial_scheduled', label: '体験日決定', dateField: 'trialAt', hasNote: false),
+  (id: 'survey_received', label: 'アンケート回収', dateField: 'surveyReceivedAt', hasNote: false),
   (id: 'trial_completed', label: '体験実施', dateField: 'trialActualDate', hasNote: false),
-  (id: 'post_trial_followup', label: '体験後フォロー連絡', dateField: null, hasNote: false),
   (id: 'intent_confirmed', label: '入会意向の確認', dateField: null, hasNote: false),
 ];
 

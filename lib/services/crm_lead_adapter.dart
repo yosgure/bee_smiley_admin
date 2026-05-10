@@ -273,6 +273,7 @@ Map<String, dynamic> flattenChildToLeadShape(
     'trialNotes': child['trialNotes'],
     'inquiredAt': child['inquiredAt'],
     'firstContactedAt': child['firstContactedAt'],
+    'surveyReceivedAt': child['surveyReceivedAt'],
     'trialAt': child['trialAt'],
     'trialActualDate': child['trialActualDate'],
     'enrolledAt': child['enrolledAt'],

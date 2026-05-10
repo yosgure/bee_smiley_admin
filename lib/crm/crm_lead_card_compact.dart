@@ -35,7 +35,11 @@ class CrmLeadCardCompact extends StatelessWidget {
 
     // 期日関連
     final na = lead.nextActionAt;
-    final statusColor = _statusBarColor(na);
+    // 未読（フォーム自動取り込み）は最優先で赤いステータスバーで示す。
+    // 期日緊急度の色は未読が消えてから見え始める。
+    final statusColor = lead.notifyUnread
+        ? context.alerts.urgent.icon
+        : _statusBarColor(na);
     final due = _dueDisplay(context, na);
 
     // 種別アイコン + ラベル
@@ -88,9 +92,17 @@ class CrmLeadCardCompact extends StatelessWidget {
                               children: [
                                 Row(
                                   crossAxisAlignment:
-                                      CrossAxisAlignment.baseline,
-                                  textBaseline: TextBaseline.alphabetic,
+                                      CrossAxisAlignment.center,
                                   children: [
+                                    if (lead.notifyUnread) ...[
+                                      Icon(
+                                        Icons.fiber_manual_record,
+                                        size: 8,
+                                        color: context.alerts.urgent.icon,
+                                        semanticLabel: '新規',
+                                      ),
+                                      const SizedBox(width: 4),
+                                    ],
                                     Flexible(
                                       child: Text(
                                         name,
@@ -112,15 +124,7 @@ class CrmLeadCardCompact extends StatelessWidget {
                                   ],
                                 ),
                                 const SizedBox(height: 3),
-                                Row(
-                                  children: [
-                                    _stageBadge(context, lead.stage),
-                                    if (lead.notifyUnread) ...[
-                                      const SizedBox(width: 4),
-                                      _newBadge(context),
-                                    ],
-                                  ],
-                                ),
+                                _stageBadge(context, lead.stage),
                               ],
                             ),
                           ),
@@ -203,26 +207,6 @@ class CrmLeadCardCompact extends StatelessWidget {
     );
   }
 
-  /// フォーム自動取り込み直後の未読バッジ。リードを開くと消える。
-  Widget _newBadge(BuildContext context) {
-    final palette = context.alerts.urgent;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-      decoration: BoxDecoration(
-        color: palette.background,
-        borderRadius: BorderRadius.circular(3),
-        border: Border.all(color: palette.border, width: 0.5),
-      ),
-      child: Text(
-        'NEW',
-        style: TextStyle(
-          fontSize: AppTextSize.xs,
-          fontWeight: FontWeight.bold,
-          color: palette.icon,
-        ),
-      ),
-    );
-  }
 }
 
 /// v2.1: ステータスバー色。待ち状態 > 期日状態の優先順。

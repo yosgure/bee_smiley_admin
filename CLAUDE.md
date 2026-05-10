@@ -134,15 +134,17 @@ CRM 関連 UI は **目的別** に役割を分離する:
 進捗チェックリストはステージごとに切り替わる。現ステージのみ Firestore に保存。
 ステージ遷移（検討中 → 入会手続中）時は新ステージ用の初期値で上書きされ、過去のチェック状態は保持しない。
 
-**検討中 (6 項目)**: inquiry_received, pre_trial_hearing, trial_scheduled,
-trial_completed, post_trial_followup, intent_confirmed
+**検討中 (5 項目)**: inquired (問い合わせ受付), trial_scheduled (体験日決定),
+survey_received (アンケート回収), trial_completed (体験実施),
+intent_confirmed (入会意向の確認)
 
 **入会手続中 (7 項目)**: file_created, hug_registered, assessment_done,
 contract_sent, contract_received, support_plan_created, support_plan_explained
 
 **自動チェック項目** (UI で disabled、元フィールドから派生):
-- `inquiry_received` ← `inquiredAt` が非 null
+- `inquired` ← `inquiredAt` が非 null
 - `trial_scheduled` ← `trialAt` が非 null
+- `survey_received` ← `surveyReceivedAt` が非 null（フォーム自動取り込み時に自動セット）
 - `trial_completed` ← `trialActualDate` が非 null（trialAt 経過のみでは入らない）
 
 `trialAt` 経過 + `trialActualDate` 空 = 督促タブに「体験未実施 (予定経過)」表示。
