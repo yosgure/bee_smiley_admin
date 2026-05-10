@@ -330,22 +330,45 @@ class _BasicInfoSectionState extends State<_BasicInfoSection> {
           Divider(height: 1, color: c.borderLight),
           const SizedBox(height: 8),
 
-          // ── アンケート + ヒアリング 2 層構造 ──
-          _twoLayerField(context, '主訴',
-              lead.mainConcern, lead.mainConcernHearing,
-              'mainConcern', 'mainConcernHearing', leadRef),
-          _twoLayerField(context, '好きなこと',
-              lead.likes, lead.likesHearing,
-              'likes', 'likesHearing', leadRef),
-          _twoLayerField(context, '苦手なこと',
-              lead.dislikes, lead.dislikesHearing,
-              'dislikes', 'dislikesHearing', leadRef),
-          _twoLayerField(context, '既往歴',
-              lead.medicalHistory, lead.medicalHistoryHearing,
-              'medicalHistory', 'medicalHistoryHearing', leadRef),
-          _twoLayerField(context, '診断名',
-              lead.diagnosis, lead.diagnosisHearing,
-              'diagnosis', 'diagnosisHearing', leadRef),
+          // ── アンケート + ヒアリング 2 層テーブル ──
+          // ヘッダ「アンケート」「ヒアリング」は 1 回だけ、各行は項目名 + 2 編集欄。
+          _twoLayerTable(context, leadRef, items: [
+            (
+              label: '主訴',
+              intakeValue: lead.mainConcern,
+              hearingValue: lead.mainConcernHearing,
+              intakeKey: 'mainConcern',
+              hearingKey: 'mainConcernHearing',
+            ),
+            (
+              label: '好きなこと',
+              intakeValue: lead.likes,
+              hearingValue: lead.likesHearing,
+              intakeKey: 'likes',
+              hearingKey: 'likesHearing',
+            ),
+            (
+              label: '苦手なこと',
+              intakeValue: lead.dislikes,
+              hearingValue: lead.dislikesHearing,
+              intakeKey: 'dislikes',
+              hearingKey: 'dislikesHearing',
+            ),
+            (
+              label: '既往歴',
+              intakeValue: lead.medicalHistory,
+              hearingValue: lead.medicalHistoryHearing,
+              intakeKey: 'medicalHistory',
+              hearingKey: 'medicalHistoryHearing',
+            ),
+            (
+              label: '診断名',
+              intakeValue: lead.diagnosis,
+              hearingValue: lead.diagnosisHearing,
+              intakeKey: 'diagnosis',
+              hearingKey: 'diagnosisHearing',
+            ),
+          ]),
 
           const SizedBox(height: 8),
           Divider(height: 1, color: c.borderLight),
@@ -694,107 +717,125 @@ class _BasicInfoSectionState extends State<_BasicInfoSection> {
     );
   }
 
-  /// アンケート + ヒアリング 2 層構造（v3.2: 左右レイアウト・案A）
-  /// 左にアンケート（保護者の自記）、右にヒアリング（スタッフ追記）。
-  /// サイドパネル幅を 67% に拡大したことで横並びが現実的に。
-  Widget _twoLayerField(BuildContext context, String label,
-      String intakeValue, String hearingValue,
-      String intakeKey, String hearingKey, LeadViewReference leadRef) {
+  /// アンケート + ヒアリング 2 層テーブル（v3.3）。
+  /// ヘッダ行で「アンケート」「ヒアリング」のタグを 1 回だけ表示し、
+  /// 各データ行は「項目名 / アンケート文 / ヒアリング文」の 3 カラム。
+  /// 名前/次のアクション/期日 のテーブル構造に揃える発想。
+  Widget _twoLayerTable(BuildContext context, LeadViewReference leadRef, {
+    required List<({
+      String label,
+      String intakeValue,
+      String hearingValue,
+      String intakeKey,
+      String hearingKey,
+    })> items,
+  }) {
     final c = context.colors;
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          // 項目ラベル
-          Text(label,
-              style: TextStyle(
-                  fontSize: AppTextSize.caption,
-                  color: c.textSecondary,
-                  fontWeight: FontWeight.bold)),
-          const SizedBox(height: 6),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
+    const labelColW = 80.0;
+    const colGap = 12.0;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // ── ヘッダ行（タグ 1 回だけ） ──
+        Padding(
+          padding: const EdgeInsets.only(bottom: 6),
+          child: Row(
             children: [
+              const SizedBox(width: labelColW),
               Expanded(
-                child: _layerColumn(
+                child: _columnTag(
                   context,
-                  tagLabel: 'アンケート',
-                  tagBg: c.scaffoldBgAlt,
-                  tagFg: c.textSecondary,
-                  value: intakeValue,
-                  fieldKey: intakeKey,
-                  hint: '保護者からの自記',
-                  leadRef: leadRef,
-                  humanLabel: '$label（アンケート）',
+                  label: 'アンケート',
+                  bg: c.scaffoldBgAlt,
+                  fg: c.textSecondary,
                 ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: colGap),
               Expanded(
-                child: _layerColumn(
+                child: _columnTag(
                   context,
-                  tagLabel: 'ヒアリング',
-                  tagBg: AppColors.primary.withValues(alpha: 0.15),
-                  tagFg: AppColors.primary,
-                  value: hearingValue,
-                  fieldKey: hearingKey,
-                  hint: 'ヒアリングで深掘りした内容',
-                  leadRef: leadRef,
-                  humanLabel: '$label（ヒアリング）',
+                  label: 'ヒアリング',
+                  bg: AppColors.primary.withValues(alpha: 0.15),
+                  fg: AppColors.primary,
                 ),
               ),
             ],
           ),
-        ],
-      ),
+        ),
+        // ── データ行 ──
+        for (final item in items)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SizedBox(
+                  width: labelColW,
+                  child: Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Text(item.label,
+                        style: TextStyle(
+                            fontSize: AppTextSize.caption,
+                            color: c.textSecondary,
+                            fontWeight: FontWeight.bold)),
+                  ),
+                ),
+                Expanded(
+                  child: _InlineTextEditor(
+                    key: ValueKey('${item.intakeKey}:${item.intakeValue}'),
+                    initialText: item.intakeValue,
+                    hint: '保護者からの自記',
+                    onCommit: (text) async {
+                      if (text == item.intakeValue) return;
+                      await leadRef.update({item.intakeKey: text});
+                      if (mounted) {
+                        AppFeedback.success(context,
+                            '${item.label}（アンケート）を保存しました');
+                      }
+                    },
+                  ),
+                ),
+                const SizedBox(width: colGap),
+                Expanded(
+                  child: _InlineTextEditor(
+                    key:
+                        ValueKey('${item.hearingKey}:${item.hearingValue}'),
+                    initialText: item.hearingValue,
+                    hint: 'ヒアリングで深掘り',
+                    onCommit: (text) async {
+                      if (text == item.hearingValue) return;
+                      await leadRef.update({item.hearingKey: text});
+                      if (mounted) {
+                        AppFeedback.success(context,
+                            '${item.label}（ヒアリング）を保存しました');
+                      }
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+      ],
     );
   }
 
-  /// 左右カラムの中身（タグ + 編集欄）。
-  Widget _layerColumn(
-    BuildContext context, {
-    required String tagLabel,
-    required Color tagBg,
-    required Color tagFg,
-    required String value,
-    required String fieldKey,
-    required String hint,
-    required LeadViewReference leadRef,
-    required String humanLabel,
-  }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Align(
-          alignment: Alignment.centerLeft,
-          child: Container(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-            decoration: BoxDecoration(
-              color: tagBg,
-              borderRadius: BorderRadius.circular(3),
-            ),
-            child: Text(tagLabel,
-                style: TextStyle(
-                    fontSize: AppTextSize.xs,
-                    fontWeight: FontWeight.bold,
-                    color: tagFg)),
-          ),
+  /// ヘッダ用の小タグ（左寄せ）。
+  Widget _columnTag(BuildContext context,
+      {required String label, required Color bg, required Color fg}) {
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+        decoration: BoxDecoration(
+          color: bg,
+          borderRadius: BorderRadius.circular(3),
         ),
-        const SizedBox(height: 4),
-        _InlineTextEditor(
-          key: ValueKey('$fieldKey:$value'),
-          initialText: value,
-          hint: hint,
-          onCommit: (text) async {
-            if (text == value) return;
-            await leadRef.update({fieldKey: text});
-            if (mounted) {
-              AppFeedback.success(context, '$humanLabel を保存しました');
-            }
-          },
-        ),
-      ],
+        child: Text(label,
+            style: TextStyle(
+                fontSize: AppTextSize.xs,
+                fontWeight: FontWeight.bold,
+                color: fg)),
+      ),
     );
   }
 }
