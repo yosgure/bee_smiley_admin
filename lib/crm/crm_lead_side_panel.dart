@@ -797,32 +797,32 @@ class _BasicInfoSectionState extends State<_BasicInfoSection> {
             ),
           ),
           // ── データ行 ──
+          // v3.5.4: 各セル独立した高さ（IntrinsicHeight + stretch を撤廃）。
+          // 行の上罫線は Row 全体を囲む Container で 1 本だけ引く。
+          // 縦罫線は各セル自身の border:right で描画（左揃え start なので
+          // 短いセルがあっても罫線がずれて見えにくい）。
           for (var i = 0; i < items.length; i++)
-            IntrinsicHeight(
+            Container(
+              decoration: BoxDecoration(border: Border(top: line())),
               child: Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Container(
                     width: labelColW,
                     padding: const EdgeInsets.symmetric(
                         horizontal: 10, vertical: 10),
-                    decoration: BoxDecoration(
-                      color: c.scaffoldBgAlt,
-                      border: Border(right: line(), top: line()),
-                    ),
+                    color: c.scaffoldBgAlt,
                     child: Text(items[i].label,
                         style: TextStyle(
                             fontSize: AppTextSize.caption,
                             color: c.textSecondary,
                             fontWeight: FontWeight.bold)),
                   ),
+                  Container(width: 0.5, color: c.borderLight),
                   Expanded(
-                    child: Container(
+                    child: Padding(
                       padding: const EdgeInsets.symmetric(
                           horizontal: 4, vertical: 2),
-                      decoration: BoxDecoration(
-                        border: Border(right: line(), top: line()),
-                      ),
                       child: _InlineTextEditor(
                         key: ValueKey(
                             '${items[i].intakeKey}:${items[i].intakeValue}'),
@@ -840,13 +840,11 @@ class _BasicInfoSectionState extends State<_BasicInfoSection> {
                       ),
                     ),
                   ),
+                  Container(width: 0.5, color: c.borderLight),
                   Expanded(
-                    child: Container(
+                    child: Padding(
                       padding: const EdgeInsets.symmetric(
                           horizontal: 4, vertical: 2),
-                      decoration: BoxDecoration(
-                        border: Border(top: line()),
-                      ),
                       child: _InlineTextEditor(
                         key: ValueKey(
                             '${items[i].hearingKey}:${items[i].hearingValue}'),
