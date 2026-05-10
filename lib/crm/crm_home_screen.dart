@@ -169,7 +169,6 @@ class _CrmHomeScreenState extends State<CrmHomeScreen> {
     required String? selectedLeadId,
     required ValueChanged<String> onSelectLead,
   }) {
-    final tod = crmTimeOfDay(now);
     final summary = summarizeForHome(leads, now: now);
     // ストリップの「全て (N)」バッジは active 全件を表示。
     final uniqueLeadCount = activeLeadCount;
@@ -209,14 +208,7 @@ class _CrmHomeScreenState extends State<CrmHomeScreen> {
               ),
             ),
           ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-            child: _ClosingBanner(
-              remainingUrgent: summary.urgentTotal,
-              tomorrowCount: _calcTomorrow(leads, now),
-              tod: tod,
-            ),
-          ),
+          // v3.4: 「あと N 件 / 今日はここまで」のクロージングバナーは削除（ノイズ）
         ],
       ),
     );
@@ -244,21 +236,6 @@ class _CrmHomeScreenState extends State<CrmHomeScreen> {
     return (enrolled: enrolled, goal: 10, inquired: inquired, trial: trial);
   }
 
-  int _calcTomorrow(List<CrmLead> leads, DateTime now) {
-    final t = DateTime(now.year, now.month, now.day + 1);
-    var count = 0;
-    for (final l in leads) {
-      if (l.isClosed) continue;
-      final n = l.nextActionAt;
-      if (n != null &&
-          n.year == t.year &&
-          n.month == t.month &&
-          n.day == t.day) {
-        count++;
-      }
-    }
-    return count;
-  }
 
 }
 
@@ -300,6 +277,13 @@ class _TodaySummaryStrip extends StatelessWidget {
         child: Row(
           children: [
             _StageTab(
+              label: '全て',
+              count: uniqueLeadCount,
+              selected: activeStageTab == 'all',
+              onTap: () => onStageTabChanged('all'),
+            ),
+            const SizedBox(width: 8),
+            _StageTab(
               label: '検討中',
               count: consideringCount,
               selected: activeStageTab == 'considering',
@@ -311,13 +295,6 @@ class _TodaySummaryStrip extends StatelessWidget {
               count: onboardingCount,
               selected: activeStageTab == 'onboarding',
               onTap: () => onStageTabChanged('onboarding'),
-            ),
-            const SizedBox(width: 8),
-            _StageTab(
-              label: '全て',
-              count: uniqueLeadCount,
-              selected: activeStageTab == 'all',
-              onTap: () => onStageTabChanged('all'),
             ),
           ],
         ),
@@ -514,44 +491,3 @@ class _UrgentSection extends StatelessWidget {
   }
 }
 
-// ---------------------------------------------------------- Closing
-
-class _ClosingBanner extends StatelessWidget {
-  final int remainingUrgent;
-  final int tomorrowCount;
-  final CrmTimeOfDay tod;
-  const _ClosingBanner({
-    required this.remainingUrgent,
-    required this.tomorrowCount,
-    required this.tod,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final msg = crmClosingMessage(
-      tod: tod,
-      remainingUrgent: remainingUrgent,
-      tomorrowCount: tomorrowCount,
-    );
-    final c = context.colors;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      decoration: BoxDecoration(
-        color: c.cardBg,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: c.borderLight),
-      ),
-      child: Row(
-        children: [
-          Icon(Icons.local_cafe_outlined, size: 18, color: c.textTertiary),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(msg,
-                style: TextStyle(
-                    fontSize: AppTextSize.body, color: c.textSecondary, height: 1.5)),
-          ),
-        ],
-      ),
-    );
-  }
-}
