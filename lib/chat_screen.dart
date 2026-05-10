@@ -1089,6 +1089,7 @@ class _ChatDetailViewState extends State<ChatDetailView> {
 
   // @メンション用
   bool _showMentionOverlay = false;
+  bool _showAllOption = false;
   List<MapEntry<String, dynamic>> _filteredMembers = [];
   int _mentionStartIndex = -1;
   List<String> _mentionedUids = [];
@@ -1233,11 +1234,28 @@ class _ChatDetailViewState extends State<ChatDetailView> {
     final filtered = widget.memberNames.entries
         .where((e) => e.key != myUid && e.value.toString().toLowerCase().contains(query))
         .toList();
+    final showAll = query.isEmpty || 'all'.contains(query) || '全員'.contains(query);
     setState(() {
       _mentionStartIndex = atIndex;
       _filteredMembers = filtered;
-      _showMentionOverlay = filtered.isNotEmpty;
+      _showAllOption = showAll;
+      _showMentionOverlay = showAll || filtered.isNotEmpty;
     });
+  }
+
+  void _insertAllMention() {
+    final text = _textController.text;
+    final cursorPos = _textController.selection.baseOffset;
+    final before = text.substring(0, _mentionStartIndex);
+    final after = text.substring(cursorPos);
+    const mention = '@all ';
+    _textController.text = '$before$mention$after';
+    _textController.selection = TextSelection.collapsed(offset: before.length + mention.length);
+    final myUid = currentUser?.uid;
+    for (final uid in widget.memberNames.keys) {
+      if (uid != myUid && !_mentionedUids.contains(uid)) _mentionedUids.add(uid);
+    }
+    setState(() => _showMentionOverlay = false);
   }
 
   void _insertMention(String uid, String name) {
@@ -1253,9 +1271,10 @@ class _ChatDetailViewState extends State<ChatDetailView> {
   }
 
   Widget _buildMentionOverlay() {
-    if (!_showMentionOverlay || _filteredMembers.isEmpty) return const SizedBox.shrink();
+    if (!_showMentionOverlay) return const SizedBox.shrink();
+    if (!_showAllOption && _filteredMembers.isEmpty) return const SizedBox.shrink();
     return Container(
-      constraints: const BoxConstraints(maxHeight: 160),
+      constraints: const BoxConstraints(maxHeight: 360),
       margin: const EdgeInsets.symmetric(horizontal: 12),
       decoration: BoxDecoration(
         color: context.colors.cardBg,
@@ -1263,39 +1282,57 @@ class _ChatDetailViewState extends State<ChatDetailView> {
         border: Border.all(color: context.colors.borderMedium),
         boxShadow: [BoxShadow(color: context.colors.shadow, blurRadius: 8, offset: const Offset(0, -2))],
       ),
-      child: ListView.builder(
+      child: ListView(
         shrinkWrap: true,
         padding: const EdgeInsets.symmetric(vertical: 4),
-        itemCount: _filteredMembers.length,
-        itemBuilder: (context, index) {
-          final entry = _filteredMembers[index];
-          final name = entry.value.toString();
-          final initial = name.isNotEmpty ? name.characters.first : '?';
-          return InkWell(
-            onTap: () => _insertMention(entry.key, name),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-              child: Row(
-                children: [
-                  CircleAvatar(
-                    radius: 14,
-                    backgroundColor: context.colors.chipBg,
-                    child: Text(
-                      initial,
-                      style: TextStyle(
-                        fontSize: AppTextSize.small,
-                        fontWeight: FontWeight.bold,
-                        color: context.colors.textSecondary,
-                      ),
+        children: [
+          if (_showAllOption)
+            InkWell(
+              onTap: _insertAllMention,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                child: Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 14,
+                      backgroundColor: context.colors.chipBg,
+                      child: Icon(Icons.groups, size: 16, color: context.colors.textSecondary),
                     ),
-                  ),
-                  const SizedBox(width: 10),
-                  Text(name, style: TextStyle(fontSize: AppTextSize.bodyLarge, color: context.colors.textPrimary)),
-                ],
+                    const SizedBox(width: 10),
+                    Text('@all', style: TextStyle(fontSize: AppTextSize.bodyLarge, color: context.colors.textPrimary)),
+                  ],
+                ),
               ),
             ),
-          );
-        },
+          ..._filteredMembers.map((entry) {
+            final name = entry.value.toString();
+            final initial = name.isNotEmpty ? name.characters.first : '?';
+            return InkWell(
+              onTap: () => _insertMention(entry.key, name),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                child: Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 14,
+                      backgroundColor: context.colors.chipBg,
+                      child: Text(
+                        initial,
+                        style: TextStyle(
+                          fontSize: AppTextSize.small,
+                          fontWeight: FontWeight.bold,
+                          color: context.colors.textSecondary,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Text(name, style: TextStyle(fontSize: AppTextSize.bodyLarge, color: context.colors.textPrimary)),
+                  ],
+                ),
+              ),
+            );
+          }),
+        ],
       ),
     );
   }
@@ -2553,6 +2590,7 @@ class _ChatDetailViewState extends State<ChatDetailView> {
       setState(() {
         _replyTo = null;
         _mentionedUids = [];
+        _showAllOption = false;
       });
     }
   }
