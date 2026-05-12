@@ -2826,6 +2826,10 @@ void _goToPage(int page) {
     // スタッフ(staffId)ごとの実施/目標を集計（〜昨日）
     final actualCounts = <String, int>{for (final id in targetStaff.keys) id: 0};
     final targetCounts = <String, int>{for (final id in targetStaff.keys) id: 0};
+    // 日数内訳（出勤/半休/休）— ダイアログで表示用
+    final fullDays = <String, int>{for (final id in targetStaff.keys) id: 0};
+    final halfDays = <String, int>{for (final id in targetStaff.keys) id: 0};
+    final offDays = <String, int>{for (final id in targetStaff.keys) id: 0};
 
     var d = startDate;
     while (!d.isAfter(endDate)) {
@@ -2842,6 +2846,14 @@ void _goToPage(int page) {
         final fullNameNormalized = (info['name'] as String).replaceAll(RegExp(r'[\s\u3000]'), '');
         final slotTarget = info['slotTarget'] as int;
         final status = _getShiftStatus(staffId, d);
+
+        if (status == 'off') {
+          offDays[staffId] = offDays[staffId]! + 1;
+        } else if (status == 'half') {
+          halfDays[staffId] = halfDays[staffId]! + 1;
+        } else {
+          fullDays[staffId] = fullDays[staffId]! + 1;
+        }
 
         if (status != 'off') {
           final dayTarget = status == 'half' ? (slotTarget - 1) : slotTarget;
@@ -3044,49 +3056,66 @@ void _goToPage(int page) {
                           children: [
                             Expanded(
                               flex: 3,
-                              child: Row(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  Text(lastName, style: const TextStyle(fontSize: AppTextSize.bodyMd)),
-                                  const SizedBox(width: 4),
-                                  GestureDetector(
-                                    onTap: () {
-                                      showDialog(
-                                        context: ctx,
-                                        builder: (editCtx) {
-                                          int editTarget = slotTarget;
-                                          return StatefulBuilder(
-                                            builder: (editCtx, setEditState) => AlertDialog(
-                                              title: Text('$lastName の1日あたり目標コマ数'),
-                                              content: DropdownButton<int>(
-                                                value: editTarget,
-                                                items: [1, 2, 3, 4, 5, 6].map((d) => DropdownMenuItem(value: d, child: Text('$dコマ/日'))).toList(),
-                                                onChanged: (v) {
-                                                  if (v != null) setEditState(() => editTarget = v);
-                                                },
-                                              ),
-                                              actions: [
-                                                TextButton(onPressed: () => Navigator.pop(editCtx), child: const Text('キャンセル')),
-                                                ElevatedButton(
-                                                  onPressed: () async {
-                                                    await FirebaseFirestore.instance.collection('staffs').doc(staffId).update({'dailySlotTarget': editTarget});
-                                                    info['slotTarget'] = editTarget;
-                                                    final idx = _staffList.indexWhere((s) => s['id'] == staffId);
-                                                    if (idx != -1) _staffList[idx]['dailySlotTarget'] = editTarget;
-                                                    Navigator.pop(editCtx);
-                                                    setDialogState(() {});
-                                                  },
-                                                  style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, foregroundColor: context.colors.textOnPrimary),
-                                                  child: const Text('保存'),
+                                  Row(
+                                    children: [
+                                      Text(lastName, style: const TextStyle(fontSize: AppTextSize.bodyMd)),
+                                      const SizedBox(width: 4),
+                                      GestureDetector(
+                                        onTap: () {
+                                          showDialog(
+                                            context: ctx,
+                                            builder: (editCtx) {
+                                              int editTarget = slotTarget;
+                                              return StatefulBuilder(
+                                                builder: (editCtx, setEditState) => AlertDialog(
+                                                  title: Text('$lastName の1日あたり目標コマ数'),
+                                                  content: DropdownButton<int>(
+                                                    value: editTarget,
+                                                    items: [1, 2, 3, 4, 5, 6].map((d) => DropdownMenuItem(value: d, child: Text('$dコマ/日'))).toList(),
+                                                    onChanged: (v) {
+                                                      if (v != null) setEditState(() => editTarget = v);
+                                                    },
+                                                  ),
+                                                  actions: [
+                                                    TextButton(onPressed: () => Navigator.pop(editCtx), child: const Text('キャンセル')),
+                                                    ElevatedButton(
+                                                      onPressed: () async {
+                                                        await FirebaseFirestore.instance.collection('staffs').doc(staffId).update({'dailySlotTarget': editTarget});
+                                                        info['slotTarget'] = editTarget;
+                                                        final idx = _staffList.indexWhere((s) => s['id'] == staffId);
+                                                        if (idx != -1) _staffList[idx]['dailySlotTarget'] = editTarget;
+                                                        Navigator.pop(editCtx);
+                                                        setDialogState(() {});
+                                                      },
+                                                      style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, foregroundColor: context.colors.textOnPrimary),
+                                                      child: const Text('保存'),
+                                                    ),
+                                                  ],
                                                 ),
-                                              ],
-                                            ),
+                                              );
+                                            },
                                           );
                                         },
-                                      );
-                                    },
+                                        child: Text(
+                                          '(${slotTarget}/日)',
+                                          style: TextStyle(fontSize: AppTextSize.caption, color: context.colors.textTertiary),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  // 出勤 / 半休 / 休 の日数内訳（実績期間ベース）
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 2),
                                     child: Text(
-                                      '(${slotTarget}/日)',
-                                      style: TextStyle(fontSize: AppTextSize.caption, color: context.colors.textTertiary),
+                                      '出勤${fullDays[staffId] ?? 0} 半休${halfDays[staffId] ?? 0} 休${offDays[staffId] ?? 0}',
+                                      style: TextStyle(
+                                        fontSize: AppTextSize.caption,
+                                        color: context.colors.textTertiary,
+                                      ),
                                     ),
                                   ),
                                 ],
