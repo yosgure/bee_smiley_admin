@@ -788,6 +788,9 @@ class _PlusShiftDecisionDialogState extends State<PlusShiftDecisionDialog> {
   bool _loading = true;
   bool _saving = false;
 
+  /// 表示対象の月。ヘッダーの月切替で変更可能。
+  late DateTime _targetMonth;
+
   // プラスのスタッフ一覧 {id, name, furigana}
   final List<Map<String, dynamic>> _plusStaffs = [];
 
@@ -808,10 +811,10 @@ class _PlusShiftDecisionDialogState extends State<PlusShiftDecisionDialog> {
   final Map<String, Map<String, dynamic>> _originalDaysByMonth = {};
   final Set<String> _existingShiftDocs = <String>{};
 
-  String get _monthKey => DateFormat('yyyy-MM').format(widget.targetMonth);
+  String get _monthKey => DateFormat('yyyy-MM').format(_targetMonth);
 
-  DateTime get _rangeStart => _dateOnly(shiftRangeStart(widget.targetMonth));
-  DateTime get _rangeEnd => _dateOnly(shiftRangeEnd(widget.targetMonth));
+  DateTime get _rangeStart => _dateOnly(shiftRangeStart(_targetMonth));
+  DateTime get _rangeEnd => _dateOnly(shiftRangeEnd(_targetMonth));
 
   /// 範囲に跨る月キー一覧（plus_shifts の読み書き対象）
   List<String> get _involvedMonthKeys {
@@ -827,7 +830,27 @@ class _PlusShiftDecisionDialogState extends State<PlusShiftDecisionDialog> {
   @override
   void initState() {
     super.initState();
+    _targetMonth = DateTime(widget.targetMonth.year, widget.targetMonth.month, 1);
     _load();
+  }
+
+  /// 月切替（前月/次月）。状態をリセットして再読み込みする。
+  Future<void> _changeMonth(int delta) async {
+    if (_loading || _saving) return;
+    setState(() {
+      _targetMonth =
+          DateTime(_targetMonth.year, _targetMonth.month + delta, 1);
+      _loading = true;
+      _plusStaffs.clear();
+      _requestedOffDates.clear();
+      _requestedStrongOffDates.clear();
+      _requestedHalfAmDates.clear();
+      _requestedHalfPmDates.clear();
+      _offDates.clear();
+      _originalDaysByMonth.clear();
+      _existingShiftDocs.clear();
+    });
+    await _load();
   }
 
   Future<void> _load() async {
@@ -901,8 +924,7 @@ class _PlusShiftDecisionDialogState extends State<PlusShiftDecisionDialog> {
               final out = <DateTime>{};
               for (final n in (entry[field] as List?) ?? const []) {
                 final day = (n as num).toInt();
-                final d = DateTime(widget.targetMonth.year,
-                    widget.targetMonth.month, day);
+                final d = DateTime(_targetMonth.year, _targetMonth.month, day);
                 if (!d.isBefore(_rangeStart) && !d.isAfter(_rangeEnd)) {
                   out.add(d);
                 }
@@ -1222,28 +1244,56 @@ class _PlusShiftDecisionDialogState extends State<PlusShiftDecisionDialog> {
       child: SizedBox(
         width: dialogWidth,
         height: dialogHeight,
-        child: _loading
-            ? const Center(child: CircularProgressIndicator())
-            : Column(
-                children: [
+        child: Column(
+              children: [
                   // ヘッダ（狭幅では2段組）
                   Padding(
                     padding: const EdgeInsets.fromLTRB(20, 16, 12, 8),
                     child: LayoutBuilder(builder: (ctx, c) {
                       final compact = c.maxWidth < 560;
+                      final monthSwitcher = Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            onPressed: (_loading || _saving)
+                                ? null
+                                : () => _changeMonth(-1),
+                            icon: const Icon(Icons.chevron_left),
+                            tooltip: '前月',
+                            visualDensity: VisualDensity.compact,
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(
+                                minWidth: 32, minHeight: 32),
+                          ),
+                          Padding(
+                            padding:
+                                const EdgeInsets.symmetric(horizontal: 4),
+                            child: Text(
+                              '${_targetMonth.year}年${_targetMonth.month}月 シフト決定',
+                              style: const TextStyle(
+                                  fontSize: AppTextSize.title,
+                                  fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                          IconButton(
+                            onPressed: (_loading || _saving)
+                                ? null
+                                : () => _changeMonth(1),
+                            icon: const Icon(Icons.chevron_right),
+                            tooltip: '次月',
+                            visualDensity: VisualDensity.compact,
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(
+                                minWidth: 32, minHeight: 32),
+                          ),
+                        ],
+                      );
                       final titleRow = Row(
                         children: [
                           const Icon(Icons.edit_calendar,
                               color: AppColors.warning, size: 22),
                           const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              '${widget.targetMonth.year}年${widget.targetMonth.month}月 シフト決定',
-                              style: const TextStyle(
-                                  fontSize: AppTextSize.title, fontWeight: FontWeight.bold),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
+                          Expanded(child: monthSwitcher),
                           IconButton(
                             onPressed: () => Navigator.of(context).pop(),
                             icon: const Icon(Icons.close),
@@ -1265,7 +1315,8 @@ class _PlusShiftDecisionDialogState extends State<PlusShiftDecisionDialog> {
                           ),
                           const SizedBox(width: 8),
                           ElevatedButton.icon(
-                            onPressed: _saving ? null : _save,
+                            onPressed:
+                                (_saving || _loading) ? null : _save,
                             icon: _saving
                                 ? const SizedBox(
                                     width: 14,
@@ -1297,22 +1348,20 @@ class _PlusShiftDecisionDialogState extends State<PlusShiftDecisionDialog> {
                           const Icon(Icons.edit_calendar,
                               color: AppColors.warning, size: 22),
                           const SizedBox(width: 8),
+                          monthSwitcher,
+                          const SizedBox(width: 12),
                           Expanded(
                             child: Text(
-                              '${widget.targetMonth.year}年${widget.targetMonth.month}月 シフト決定',
-                              style: const TextStyle(
-                                  fontSize: AppTextSize.title, fontWeight: FontWeight.bold),
+                              '希望提出: $submittedCount/${_plusStaffs.length}人',
+                              style: TextStyle(
+                                  fontSize: AppTextSize.small,
+                                  color: context.colors.textSecondary),
                             ),
-                          ),
-                          Text(
-                            '希望提出: $submittedCount/${_plusStaffs.length}人',
-                            style: TextStyle(
-                                fontSize: AppTextSize.small,
-                                color: context.colors.textSecondary),
                           ),
                           const SizedBox(width: 12),
                           ElevatedButton.icon(
-                            onPressed: _saving ? null : _save,
+                            onPressed:
+                                (_saving || _loading) ? null : _save,
                             icon: _saving
                                 ? const SizedBox(
                                     width: 14,
@@ -1373,9 +1422,11 @@ class _PlusShiftDecisionDialogState extends State<PlusShiftDecisionDialog> {
                     );
                   }),
                   const Divider(height: 1),
-                  // カレンダー本体
+                  // カレンダー本体（_loading 中はローダー）
                   Expanded(
-                    child: _buildCalendar(),
+                    child: _loading
+                        ? const Center(child: CircularProgressIndicator())
+                        : _buildCalendar(),
                   ),
                   const Divider(height: 1),
                   // 凡例
@@ -1511,7 +1562,7 @@ class _PlusShiftDecisionDialogState extends State<PlusShiftDecisionDialog> {
             ? AppColors.infoBorder
             : context.colors.textPrimary;
     final isOtherMonth =
-        date != null && date.month != widget.targetMonth.month;
+        date != null && date.month != _targetMonth.month;
     final dayLabel = date == null
         ? ''
         : isOtherMonth

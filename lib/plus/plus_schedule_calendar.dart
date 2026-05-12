@@ -12,39 +12,21 @@ extension PlusScheduleCalendar on _PlusScheduleContentState {
     final year = _monthViewDate.year;
     final month = _monthViewDate.month;
     final firstDayOfMonth = DateTime(year, month, 1);
-    final lastDayOfMonth = DateTime(year, month + 1, 0);
-    final daysInMonth = lastDayOfMonth.day;
 
-    // 月曜始まりで計算（日曜は除外）
-    final firstWeekday = firstDayOfMonth.weekday; // 1=月曜, 7=日曜
-    final startOffset = firstWeekday - 1;
+    // 月末を含む週の土曜日まで表示する。月末が日曜の月は当月内で閉じる。
+    // 例: 2026/6 → 7/4(土) まで、2026/5 → 5/30(土) まで（5/31 は日曜のため非表示）。
+    final calRangeEnd = monthCalendarRangeEnd(_monthViewDate);
 
     final today = DateTime.now();
     final days = ['月', '火', '水', '木', '金', '土']; // 日曜を除外
-
-    // 日付リストを作成（日曜を除く）
-    List<DateTime?> calendarDays = [];
-
-    // 月初の空白
-    for (int i = 0; i < startOffset; i++) {
-      calendarDays.add(null);
-    }
-
-    // 各日付を追加（日曜日以外）
-    for (int day = 1; day <= daysInMonth; day++) {
-      final date = DateTime(year, month, day);
-      if (date.weekday != DateTime.sunday) {
-        calendarDays.add(date);
-      }
-    }
 
     // 週ごとに分割（6列）
     List<List<DateTime?>> weeks = [];
     List<DateTime?> currentWeek = [];
 
-    for (int day = 1; day <= daysInMonth; day++) {
-      final date = DateTime(year, month, day);
-
+    for (var date = firstDayOfMonth;
+        !date.isAfter(calRangeEnd);
+        date = date.add(const Duration(days: 1))) {
       if (date.weekday == DateTime.sunday) continue;
 
       if (currentWeek.isEmpty && weeks.isEmpty) {
@@ -328,6 +310,8 @@ extension PlusScheduleCalendar on _PlusScheduleContentState {
       overlay.insert(_currentOverlay!);
     }
 
+    final isShiftMode = _monthViewSubMode == 1;
+
     return GestureDetector(
       onTap: () {
         _hideCurrentOverlay();
@@ -342,7 +326,9 @@ extension PlusScheduleCalendar on _PlusScheduleContentState {
       child: MouseRegion(
         key: cellKey,
         cursor: SystemMouseCursors.click,
-        onEnter: (_) => showCellOverlay(),
+        onEnter: (_) {
+          if (!isShiftMode) showCellOverlay();
+        },
         onExit: (_) => _hideCurrentOverlay(),
         child: Container(
           decoration: BoxDecoration(
@@ -356,32 +342,49 @@ extension PlusScheduleCalendar on _PlusScheduleContentState {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               // 日付ヘッダー（中央寄せ、タスク件数なし）
-              Container(
-                height: 24,
-                alignment: Alignment.center,
-                child: Container(
-                  width: 22,
-                  height: 22,
-                  decoration: BoxDecoration(
-                    color: isToday ? AppColors.primary : Colors.transparent,
-                    shape: BoxShape.circle,
-                  ),
-                  child: Center(
+              // 月またぎ表示時は他月の日を「M/d」で示し、当月の日のみ「d」と数字だけにする
+              Builder(builder: (_) {
+                final isOtherMonth = date.month != _monthViewDate.month;
+                final label = isOtherMonth
+                    ? '${date.month}/${date.day}'
+                    : '$dayNumber';
+                final color = isToday
+                    ? Colors.white
+                    : isOtherMonth
+                        ? context.colors.textTertiary
+                        : (isSaturday
+                            ? AppColors.primary
+                            : context.colors.textPrimary);
+                return Container(
+                  height: 24,
+                  alignment: Alignment.center,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6),
+                    height: 22,
+                    decoration: BoxDecoration(
+                      color: isToday ? AppColors.primary : Colors.transparent,
+                      borderRadius: BorderRadius.circular(11),
+                    ),
+                    alignment: Alignment.center,
                     child: Text(
-                      '$dayNumber',
+                      label,
                       style: TextStyle(
-                        fontSize: AppTextSize.body,
-                        fontWeight: isToday ? FontWeight.bold : FontWeight.normal,
-                        color: isToday
-                            ? Colors.white
-                            : (isSaturday ? AppColors.primary : context.colors.textPrimary),
+                        fontSize: isOtherMonth
+                            ? AppTextSize.small
+                            : AppTextSize.body,
+                        fontWeight:
+                            isToday ? FontWeight.bold : FontWeight.normal,
+                        color: color,
                       ),
                     ),
                   ),
-                ),
-              ),
+                );
+              }),
+              // シフト表モード: スタッフごとの出勤情報を縦に並べる
+              if (!isHoliday && isShiftMode)
+                Expanded(child: _buildShiftCellBody(date))
               // 4コマ（時間帯）ごとのレッスン表示 - 縦に4列
-              if (!isHoliday)
+              else if (!isHoliday)
                 Expanded(
                   child: Padding(
                     padding: const EdgeInsets.only(left: 4),
@@ -479,6 +482,120 @@ extension PlusScheduleCalendar on _PlusScheduleContentState {
                 ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+
+  /// 月カレンダーのシフト表モードで、1日分のセル本体を描画する。
+  /// 各スタッフ 1 行で「名字 9:00–18:00 / 休 / 半休時間」を縦に並べる。
+  /// シフト未保存時のフォールバック:
+  ///   - fulltime → defaultShift で出勤扱い
+  ///   - part-time → 休扱い
+  Widget _buildShiftCellBody(DateTime date) {
+    // 月モードのカレンダー初表示時に当月のシフトデータが未ロードなら読み込み開始
+    final mk = DateFormat('yyyy-MM').format(date);
+    if (!_loadedShiftMonths.contains(mk)) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _loadShiftDataForMonth(DateTime(date.year, date.month, 1));
+      });
+    }
+
+    final staffs = _staffList
+        .where((s) => s['showInSchedule'] != false)
+        .toList()
+      ..sort((a, b) {
+        final fa = (a['furigana'] as String? ?? '');
+        final fb = (b['furigana'] as String? ?? '');
+        return fa.compareTo(fb);
+      });
+
+    final shifts = _shiftData[_dateKey(date)] ?? [];
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    Widget? rowFor(Map<String, dynamic> staff) {
+      Map<String, dynamic>? slot;
+      for (final s in shifts) {
+        if (s['staffId'] == staff['id']) {
+          slot = s;
+          break;
+        }
+      }
+      // シフト未登録（slot 無し）の日は「未決定」扱いで表示しない。
+      // デフォルト時間のフォールバックを出すと、まだ決まっていないシフトが
+      // 決定済みに見えてしまうため。
+      if (slot == null) return null;
+
+      final rawStatus = slot['shiftStatus'] as String?;
+      final isWorking = slot['isWorking'];
+      final String? status = rawStatus ??
+          (isWorking == false ? 'off' : (isWorking == true ? 'full' : null));
+      final String start = (slot['start'] as String? ?? '').trim();
+      final String end = (slot['end'] as String? ?? '').trim();
+
+      final fullLastName = (staff['name'] as String? ?? '').split(' ').first;
+      // 月カレンダー内のセルは幅が狭いので姓を先頭 2 文字に切り詰める
+      // 例: 安保→安保 / フィリップス→フィ
+      final lastName = fullLastName.length > 2
+          ? fullLastName.substring(0, 2)
+          : fullLastName;
+      final timeText = (start.isNotEmpty && end.isNotEmpty) ? '$start–$end' : '';
+
+      Color fg;
+      FontWeight weight;
+      String value;
+      if (status == 'off') {
+        value = '休';
+        fg = isDark ? AppColors.errorBg : AppColors.errorDark;
+        weight = FontWeight.w700;
+      } else if (status == 'half') {
+        value = timeText.isNotEmpty ? timeText : '半休';
+        fg = isDark ? AppColors.warningBg : AppColors.warningDark;
+        weight = FontWeight.w600;
+      } else {
+        value = timeText.isNotEmpty ? timeText : '出勤';
+        fg = context.colors.textPrimary;
+        weight = FontWeight.w500;
+      }
+
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 1),
+        child: Row(
+          children: [
+            SizedBox(
+              width: 36,
+              child: Text(
+                lastName,
+                style: const TextStyle(
+                  fontSize: AppTextSize.caption,
+                  fontWeight: FontWeight.w600,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            const SizedBox(width: 4),
+            Expanded(
+              child: Text(
+                value,
+                style: TextStyle(
+                  fontSize: AppTextSize.caption,
+                  color: fg,
+                  fontWeight: weight,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(6, 2, 6, 4),
+      child: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: staffs.map(rowFor).whereType<Widget>().toList(),
         ),
       ),
     );
