@@ -65,7 +65,10 @@ class _PlusScheduleContentState extends State<PlusScheduleContent> with Automati
   
 // 表示モード: 0=週カレンダー, 1=ダッシュボード, 2=月カレンダー
   int _viewMode = 0;
-  
+
+  // 月カレンダーのサブモード: 0=スケジュール, 1=シフト表
+  int _monthViewSubMode = 0;
+
   // 月カレンダー用の表示月
   late DateTime _monthViewDate;
   
@@ -1147,8 +1150,11 @@ Map<String, dynamic>? _getCellMemo(DateTime date, int slotIndex) {
     
     try {
       final monthStart = DateTime(_monthViewDate.year, _monthViewDate.month, 1);
-      final monthEnd = DateTime(_monthViewDate.year, _monthViewDate.month + 1, 0, 23, 59, 59);
-      
+      // 月カレンダー描画範囲と一致させる（例: 2026/6 → 7/4(土) まで）。
+      final rangeEnd = monthCalendarRangeEnd(_monthViewDate);
+      final monthEnd =
+          DateTime(rangeEnd.year, rangeEnd.month, rangeEnd.day, 23, 59, 59);
+
       final snapshot = await FirebaseFirestore.instance
           .collection('plus_lessons')
           .where('date', isGreaterThanOrEqualTo: Timestamp.fromDate(monthStart))
@@ -1594,8 +1600,9 @@ Map<String, dynamic>? _getCellMemo(DateTime date, int slotIndex) {
     });
     _saveMonthViewDate(_monthViewDate);
     _loadLessonsForMonth();
+    if (_monthViewSubMode == 1) _loadShiftDataForMonth(_monthViewDate);
   }
-  
+
   void _nextMonth() {
     _hideCurrentOverlay();
     setState(() {
@@ -1603,14 +1610,16 @@ Map<String, dynamic>? _getCellMemo(DateTime date, int slotIndex) {
     });
     _saveMonthViewDate(_monthViewDate);
     _loadLessonsForMonth();
+    if (_monthViewSubMode == 1) _loadShiftDataForMonth(_monthViewDate);
   }
-  
+
   void _goToThisMonth() {
     _hideCurrentOverlay();
     setState(() {
       _monthViewDate = DateTime(DateTime.now().year, DateTime.now().month, 1);
     });
     _loadLessonsForMonth();
+    if (_monthViewSubMode == 1) _loadShiftDataForMonth(_monthViewDate);
   }
 
   DateTime _getMonday(DateTime date) {
@@ -1730,6 +1739,71 @@ void _goToThisWeek() {
       });
     } catch (e) {
       debugPrint('Error loading shift data: $e');
+    }
+  }
+
+  /// 月カレンダー（月モード）の描画範囲の終端日を返す。
+  /// 月末を含む週の土曜まで延長するが、月末が日曜の月は当月内に閉じる
+  /// （日曜は描画しないため、月内で表示される最終日が土曜になる）。
+  /// 例:
+  ///   - 2026/5: 月末 5/31(日) → 5/30(土) で終わり
+  ///   - 2026/6: 月末 6/30(火) → 7/4(土) まで
+  DateTime monthCalendarRangeEnd(DateTime month) {
+    final lastDay = DateTime(month.year, month.month + 1, 0);
+    if (lastDay.weekday == DateTime.sunday) {
+      return lastDay.subtract(const Duration(days: 1));
+    }
+    final daysToSat = (6 - lastDay.weekday + 7) % 7;
+    return lastDay.add(Duration(days: daysToSat));
+  }
+
+  /// 指定月のシフト/休業日を Firestore から取得しキャッシュに反映する。
+  /// 月カレンダーは「月末を含む週の土曜まで」描画するため、月末を含む週が翌月に
+  /// またぐ場合は翌月分もまとめてロードする。
+  Future<void> _loadShiftDataForMonth(DateTime month) async {
+    final first = DateTime(month.year, month.month, 1);
+    final keys = <String>{DateFormat('yyyy-MM').format(first)};
+    final rangeEnd = monthCalendarRangeEnd(month);
+    if (rangeEnd.month != month.month) {
+      keys.add(DateFormat('yyyy-MM').format(rangeEnd));
+    }
+    for (final mk in keys) {
+      await _fetchShiftMonthDoc(mk);
+    }
+  }
+
+  /// 指定の yyyy-MM ドキュメントを読み込み、キャッシュに反映する。
+  Future<void> _fetchShiftMonthDoc(String mk) async {
+    if (_loadedShiftMonths.contains(mk)) return;
+    try {
+      final doc = await FirebaseFirestore.instance
+          .collection('plus_shifts')
+          .doc(mk)
+          .get();
+      if (!mounted) return;
+      setState(() {
+        _shiftData.removeWhere((k, _) => k.startsWith('$mk-'));
+        _holidays.removeWhere((k) => k.startsWith('$mk-'));
+        if (doc.exists) {
+          final data = doc.data();
+          final days = data?['days'] as Map<String, dynamic>? ?? {};
+          days.forEach((dayKey, value) {
+            if (value is List) {
+              final dateKey = '$mk-${dayKey.padLeft(2, '0')}';
+              _shiftData[dateKey] = List<Map<String, dynamic>>.from(
+                value.map((e) => Map<String, dynamic>.from(e as Map)),
+              );
+            }
+          });
+          final holidays = data?['holidays'] as List<dynamic>? ?? [];
+          for (final h in holidays) {
+            _holidays.add('$mk-${h.toString().padLeft(2, '0')}');
+          }
+        }
+        _loadedShiftMonths.add(mk);
+      });
+    } catch (e) {
+      debugPrint('Error loading shift data for $mk: $e');
     }
   }
 
@@ -2054,6 +2128,26 @@ void _goToPage(int page) {
             ),
           ],
           const Spacer(),
+          // 月モード時のサブモードトグル（スケジュール / シフト表）をトップバー中央に配置
+          if (_viewMode == 2) ...[
+            Container(
+              height: 36,
+              padding: const EdgeInsets.all(3),
+              decoration: BoxDecoration(
+                color: context.colors.chipBg,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _buildMonthSubModeTab(0, Icons.calendar_view_month, 'スケジュール'),
+                  const SizedBox(width: 2),
+                  _buildMonthSubModeTab(1, Icons.view_list, 'シフト表'),
+                ],
+              ),
+            ),
+            const Spacer(),
+          ],
           // 近日の誕生日バナー（ヘッダー内、集計ボタンの左）
           _buildBirthdayHeaderBadge(),
           // 集計ボタン
@@ -2495,6 +2589,60 @@ void _goToPage(int page) {
             icon,
             size: 18,
             color: isSelected ? AppColors.primary : context.colors.textSecondary,
+          ),
+        ),
+      ),
+    );
+  }
+
+  // 月モードのサブモード切替（スケジュール / シフト表）
+  Widget _buildMonthSubModeTab(int mode, IconData icon, String label) {
+    final isSelected = _monthViewSubMode == mode;
+    return Tooltip(
+      message: label,
+      child: GestureDetector(
+        onTap: () {
+          if (_monthViewSubMode == mode) return;
+          _hideCurrentOverlay();
+          setState(() => _monthViewSubMode = mode);
+          if (mode == 1) {
+            _loadShiftDataForMonth(_monthViewDate);
+          }
+        },
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 120),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+          decoration: BoxDecoration(
+            color: isSelected ? context.colors.cardBg : Colors.transparent,
+            borderRadius: BorderRadius.circular(6),
+            boxShadow: isSelected
+                ? [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.08),
+                      blurRadius: 2,
+                      offset: const Offset(0, 1),
+                    ),
+                  ]
+                : null,
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                icon,
+                size: 16,
+                color: isSelected ? AppColors.primary : context.colors.textSecondary,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: AppTextSize.small,
+                  fontWeight: FontWeight.w600,
+                  color: isSelected ? AppColors.primary : context.colors.textSecondary,
+                ),
+              ),
+            ],
           ),
         ),
       ),
