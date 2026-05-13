@@ -1290,6 +1290,16 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
     final type = person['type'] as String;
     final name = type == 'student' ? _resolveStudentName(person) : rawName;
     final note = person['note'] as String? ?? '';
+    final personFamilyId = person['familyId'] as String?;
+    final personFirstName = person['firstName'] as String?;
+    bool matchesEntry(Map<String, dynamic> e) {
+      if (e['type'] != type) return false;
+      if (personFamilyId != null && personFirstName != null &&
+          e['familyId'] == personFamilyId && e['firstName'] == personFirstName) {
+        return true;
+      }
+      return e['name'] == rawName;
+    }
 
     return Padding(
       padding: const EdgeInsets.only(left: 8, bottom: 4),
@@ -1332,7 +1342,7 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
                     ElevatedButton(
                       onPressed: () {
                         final entries = _schedule[courseId]?[day] ?? [];
-                        final idx = entries.indexWhere((e) => e['name'] == name && e['type'] == type);
+                        final idx = entries.indexWhere(matchesEntry);
                         if (idx != -1) {
                           entries[idx]['note'] = noteCtrl.text;
                           _saveScheduleToFirestore();
@@ -1355,9 +1365,7 @@ class _BeeDashboardContentState extends State<BeeDashboardContent> {
             constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
             tooltip: '削除',
             onPressed: () {
-              _schedule[courseId]?[day]?.removeWhere(
-                (e) => e['name'] == name && e['type'] == type,
-              );
+              _schedule[courseId]?[day]?.removeWhere(matchesEntry);
               _saveScheduleToFirestore();
               onChanged();
             },
