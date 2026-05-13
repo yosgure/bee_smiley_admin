@@ -32,6 +32,11 @@ import 'widgets/emoji_stamp_picker.dart';
 // 1. メイン画面 (ChatListScreen)
 // ==========================================
 
+// PDF やメールから貼り付けたファイル名に U+0010 等の C0/C1 制御文字が混入し、
+// tofu (□) として描画されることがあるため除去する。
+String _sanitizeFileName(String s) =>
+    s.replaceAll(RegExp('[\u0000-\u001F\u007F-\u009F]'), '');
+
 class ChatListScreen extends StatefulWidget {
   const ChatListScreen({super.key});
 
@@ -1814,7 +1819,7 @@ class _ChatDetailViewState extends State<ChatDetailView> {
         if (text.isNotEmpty) ...[const SizedBox(height: 8), SelectionArea(child: Text.rich(TextSpan(children: _buildTextSpansWithLinks(text, ctx: context))))]
       ]);
     } else if (type == 'file') {
-      final String fName = msg['fileName'] ?? 'ファイル';
+      final String fName = _sanitizeFileName(msg['fileName'] ?? 'ファイル');
       final int? fSize = msg['fileSize'] is int ? msg['fileSize'] : null;
       final String fUrl = msg['url'] ?? '';
       final Timestamp? createdAt = msg['createdAt'] as Timestamp?;
@@ -2371,7 +2376,7 @@ class _ChatDetailViewState extends State<ChatDetailView> {
       setState(() => _isUploading = true);
       try {
         final bytes = await file.readAsBytes();
-        final name = file.name;
+        final name = _sanitizeFileName(file.name);
         final ext = name.contains('.') ? name.split('.').last.toLowerCase() : '';
         final isVideo = file.mimeType?.startsWith('video/') == true ||
             const ['mp4', 'mov', 'avi', 'webm', 'mkv', 'm4v'].contains(ext);
@@ -2429,7 +2434,7 @@ class _ChatDetailViewState extends State<ChatDetailView> {
       if (!mounted) return;
       setState(() => _isUploading = true);
       try {
-        final name = file.name;
+        final name = _sanitizeFileName(file.name);
         final ext = name.contains('.') ? name.split('.').last.toLowerCase() : '';
         final fileName = '${DateTime.now().millisecondsSinceEpoch}_$name';
         final ref = FirebaseStorage.instance
@@ -2496,7 +2501,7 @@ class _ChatDetailViewState extends State<ChatDetailView> {
       setState(() => _isUploading = true);
       try {
         final bytes = await file.readAsBytes();
-        final name = file.name;
+        final name = _sanitizeFileName(file.name);
         final ext = name.contains('.') ? name.split('.').last.toLowerCase() : '';
         final fileName = '${DateTime.now().millisecondsSinceEpoch}_$name';
         final ref = FirebaseStorage.instance
