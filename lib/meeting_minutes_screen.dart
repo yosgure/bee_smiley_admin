@@ -23,6 +23,16 @@ class _MeetingMinutesScreenState extends State<MeetingMinutesScreen> {
   String? _categoryFilter;
   String? _selectedDocId;
 
+  static const List<String> _cellMemoTitles = ['放デイ', '就学支援', '感覚統合'];
+  static const String _cellMemoCategoryPrefix = 'cell_memo:';
+
+  bool get _isCellMemoCategory =>
+      _categoryFilter?.startsWith(_cellMemoCategoryPrefix) ?? false;
+
+  String? get _cellMemoTitleFromFilter => _isCellMemoCategory
+      ? _categoryFilter!.substring(_cellMemoCategoryPrefix.length)
+      : null;
+
   // ビルド毎に Stream を再生成すると StreamBuilder が再購読して
   // 一瞬 waiting 状態（チカチカ）になるので、State に保持して使い回す。
   late final Stream<QuerySnapshot<Map<String, dynamic>>> _docsStream =
@@ -30,6 +40,12 @@ class _MeetingMinutesScreenState extends State<MeetingMinutesScreen> {
           .collection('meeting_minutes')
           .orderBy('meetingDate', descending: true)
           .limit(300)
+          .snapshots();
+
+  late final Stream<QuerySnapshot<Map<String, dynamic>>> _cellMemosStream =
+      FirebaseFirestore.instance
+          .collection('plus_cell_memos')
+          .orderBy('date', descending: true)
           .snapshots();
 
   void _close() {
@@ -40,12 +56,183 @@ class _MeetingMinutesScreenState extends State<MeetingMinutesScreen> {
     }
   }
 
+  Future<void> _showCellMemoEditDialog(BuildContext context,
+      QueryDocumentSnapshot<Map<String, dynamic>> doc) async {
+    final d = doc.data();
+    final date = (d['date'] as Timestamp?)?.toDate();
+    final slotIndex = d['slotIndex'] as int? ?? 0;
+    if (date == null) return;
+
+    final initialTitle = d['title']?.toString() ?? '';
+    String selectedTitle =
+        _cellMemoTitles.contains(initialTitle) ? initialTitle : '';
+    final commentController =
+        TextEditingController(text: d['comment'] ?? '');
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
+    final docId = doc.id;
+    final slotLabel = (slotIndex >= 0 && slotIndex < _cellMemoTimeSlots.length)
+        ? _cellMemoTimeSlots[slotIndex]
+        : '';
+
+    await showDialog(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) => AlertDialog(
+          backgroundColor: context.colors.cardBg,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          titlePadding: const EdgeInsets.fromLTRB(20, 16, 12, 0),
+          contentPadding: const EdgeInsets.fromLTRB(20, 12, 20, 4),
+          actionsPadding: const EdgeInsets.fromLTRB(20, 8, 16, 12),
+          title: Row(
+            children: [
+              Icon(Icons.info_outline,
+                  color: context.colors.textSecondary, size: 22),
+              const SizedBox(width: 8),
+              const Expanded(
+                child: Text('コマメモを編集',
+                    style: TextStyle(fontSize: AppTextSize.titleLg)),
+              ),
+              IconButton(
+                icon: const Icon(Icons.delete_outline,
+                    color: AppColors.error, size: 20),
+                tooltip: '削除',
+                onPressed: () async {
+                  final confirm = await showDialog<bool>(
+                    context: dialogContext,
+                    builder: (ctx) => AlertDialog(
+                      backgroundColor: context.colors.cardBg,
+                      title: const Text('メモを削除'),
+                      content: const Text('このメモを削除しますか？'),
+                      actions: [
+                        TextButton(
+                            onPressed: () => Navigator.pop(ctx, false),
+                            child: const Text('キャンセル')),
+                        TextButton(
+                            onPressed: () => Navigator.pop(ctx, true),
+                            child: const Text('削除',
+                                style: TextStyle(color: AppColors.error))),
+                      ],
+                    ),
+                  );
+                  if (confirm == true) {
+                    if (dialogContext.mounted) Navigator.pop(dialogContext);
+                    await FirebaseFirestore.instance
+                        .collection('plus_cell_memos')
+                        .doc(docId)
+                        .delete();
+                    if (mounted) {
+                      setState(() => _selectedDocId = null);
+                      scaffoldMessenger.showSnackBar(
+                          const SnackBar(content: Text('メモを削除しました')));
+                    }
+                  }
+                },
+              ),
+              IconButton(
+                icon: Icon(Icons.close,
+                    color: context.colors.textSecondary, size: 20),
+                tooltip: '閉じる',
+                onPressed: () => Navigator.pop(dialogContext),
+              ),
+            ],
+          ),
+          content: SizedBox(
+            width: 380,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '${DateFormat('M月d日 (E)', 'ja').format(date)} $slotLabel',
+                  style: TextStyle(
+                      fontSize: AppTextSize.bodyMd,
+                      color: context.colors.textSecondary),
+                ),
+                const SizedBox(height: 20),
+                Text(
+                  'タイトル',
+                  style: TextStyle(
+                    fontSize: AppTextSize.bodyMd,
+                    color: context.colors.textSecondary,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  children: _cellMemoTitles
+                      .map((t) => ChoiceChip(
+                            label: Text(t),
+                            selected: selectedTitle == t,
+                            onSelected: (s) {
+                              if (s) setDialogState(() => selectedTitle = t);
+                            },
+                          ))
+                      .toList(),
+                ),
+                const SizedBox(height: 20),
+                Text(
+                  'コメント',
+                  style: TextStyle(
+                    fontSize: AppTextSize.bodyMd,
+                    color: context.colors.textSecondary,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: commentController,
+                  decoration: InputDecoration(
+                    hintText: '例：今日の活動内容、注意事項など',
+                    border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8)),
+                    contentPadding: const EdgeInsets.all(12),
+                  ),
+                  maxLines: 5,
+                  minLines: 3,
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('キャンセル')),
+            ElevatedButton(
+              onPressed: selectedTitle.isEmpty
+                  ? null
+                  : () async {
+                      await FirebaseFirestore.instance
+                          .collection('plus_cell_memos')
+                          .doc(docId)
+                          .set({
+                        'title': selectedTitle,
+                        'comment': commentController.text.trim(),
+                        'date': Timestamp.fromDate(date),
+                        'slotIndex': slotIndex,
+                        'updatedAt': FieldValue.serverTimestamp(),
+                      }, SetOptions(merge: true));
+                      if (dialogContext.mounted) Navigator.pop(dialogContext);
+                      scaffoldMessenger.showSnackBar(
+                          const SnackBar(content: Text('メモを保存しました')));
+                    },
+              style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  foregroundColor: context.colors.textOnPrimary),
+              child: const Text('保存'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: context.colors.scaffoldBg,
       appBar: AppBar(
-        title: const Text('議事録・研修記録',
+        title: const Text('ドキュメント',
             style: TextStyle(
                 fontSize: AppTextSize.title, fontWeight: FontWeight.w600)),
         backgroundColor: context.colors.cardBg,
@@ -80,64 +267,89 @@ class _MeetingMinutesScreenState extends State<MeetingMinutesScreen> {
                 child: Text('読み込みエラー: ${snap.error}',
                     style: TextStyle(color: context.colors.textSecondary)));
           }
-          final allDocs = snap.data?.docs ?? [];
-          final counts = <String, int>{};
-          for (final d in allDocs) {
-            final c = d.data()['category'] as String? ?? 'other';
-            counts[c] = (counts[c] ?? 0) + 1;
-          }
-          final filtered = _categoryFilter == null
-              ? allDocs
-              : allDocs
-                  .where((d) => d.data()['category'] == _categoryFilter)
-                  .toList();
-          // 選択 doc が現在のフィルタに居ない場合は解除
-          QueryDocumentSnapshot<Map<String, dynamic>>? selectedDoc;
-          for (final d in filtered) {
-            if (d.id == _selectedDocId) {
-              selectedDoc = d;
-              break;
-            }
-          }
+          return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+            stream: _cellMemosStream,
+            builder: (context, cmSnap) {
+              final allDocs = snap.data?.docs ?? [];
+              final cellMemoDocs = cmSnap.data?.docs ?? [];
 
-          return LayoutBuilder(builder: (context, constraints) {
-            final isWide = constraints.maxWidth >= 900;
-            if (isWide) {
-              return Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  SizedBox(
-                    width: 200,
-                    child: _categoryRail(counts, allDocs.length),
-                  ),
-                  VerticalDivider(
-                      width: 1, color: context.colors.borderLight),
-                  SizedBox(
-                    width: 380,
-                    child: _list(filtered),
-                  ),
-                  VerticalDivider(
-                      width: 1, color: context.colors.borderLight),
-                  Expanded(child: _detail(selectedDoc)),
-                ],
-              );
-            }
-            // 狭い画面: ドロップダウン + 一覧（タップで編集画面）
-            return Column(
-              children: [
-                _categoryDropdown(),
-                const Divider(height: 1),
-                Expanded(child: _list(filtered, narrow: true)),
-              ],
-            );
-          });
+              final counts = <String, int>{};
+              for (final d in allDocs) {
+                final c = d.data()['category'] as String? ?? 'other';
+                counts[c] = (counts[c] ?? 0) + 1;
+              }
+
+              final cellMemoCounts = <String, int>{};
+              for (final d in cellMemoDocs) {
+                final t = d.data()['title'] as String? ?? '';
+                if (t.isNotEmpty) {
+                  cellMemoCounts[t] = (cellMemoCounts[t] ?? 0) + 1;
+                }
+              }
+
+              final List<QueryDocumentSnapshot<Map<String, dynamic>>> filtered;
+              if (_isCellMemoCategory) {
+                final title = _cellMemoTitleFromFilter!;
+                filtered = cellMemoDocs
+                    .where((d) => d.data()['title'] == title)
+                    .toList();
+              } else if (_categoryFilter == null) {
+                filtered = allDocs;
+              } else {
+                filtered = allDocs
+                    .where((d) => d.data()['category'] == _categoryFilter)
+                    .toList();
+              }
+
+              QueryDocumentSnapshot<Map<String, dynamic>>? selectedDoc;
+              for (final d in filtered) {
+                if (d.id == _selectedDocId) {
+                  selectedDoc = d;
+                  break;
+                }
+              }
+
+              return LayoutBuilder(builder: (context, constraints) {
+                final isWide = constraints.maxWidth >= 900;
+                if (isWide) {
+                  return Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      SizedBox(
+                        width: 200,
+                        child: _categoryRail(
+                            counts, cellMemoCounts, allDocs.length),
+                      ),
+                      VerticalDivider(
+                          width: 1, color: context.colors.borderLight),
+                      SizedBox(
+                        width: 380,
+                        child: _list(filtered),
+                      ),
+                      VerticalDivider(
+                          width: 1, color: context.colors.borderLight),
+                      Expanded(child: _detail(selectedDoc)),
+                    ],
+                  );
+                }
+                return Column(
+                  children: [
+                    _categoryDropdown(),
+                    const Divider(height: 1),
+                    Expanded(child: _list(filtered, narrow: true)),
+                  ],
+                );
+              });
+            },
+          );
         },
       ),
     );
   }
 
   // ---- 左ペイン: 種別ナビ ----
-  Widget _categoryRail(Map<String, int> counts, int total) {
+  Widget _categoryRail(
+      Map<String, int> counts, Map<String, int> cellMemoCounts, int total) {
     final c = context.colors;
     final all = MeetingCategory.all;
     return Container(
@@ -152,6 +364,11 @@ class _MeetingMinutesScreenState extends State<MeetingMinutesScreen> {
                 label: cat.label,
                 count: counts[cat.id] ?? 0,
                 value: cat.id),
+          for (final title in _cellMemoTitles)
+            _railTile(
+                label: title,
+                count: cellMemoCounts[title] ?? 0,
+                value: '$_cellMemoCategoryPrefix$title'),
         ],
       ),
     );
@@ -231,6 +448,10 @@ class _MeetingMinutesScreenState extends State<MeetingMinutesScreen> {
                     value: c.id,
                     child: Text(c.label),
                   )),
+              ..._cellMemoTitles.map((t) => DropdownMenuItem<String?>(
+                    value: '$_cellMemoCategoryPrefix$t',
+                    child: Text(t),
+                  )),
             ],
             onChanged: (v) => setState(() => _categoryFilter = v),
           ),
@@ -258,11 +479,25 @@ class _MeetingMinutesScreenState extends State<MeetingMinutesScreen> {
         ),
       );
     }
+    final isCellMemo = _isCellMemoCategory;
     return ListView.builder(
       padding: const EdgeInsets.fromLTRB(12, 10, 12, 88),
       itemCount: docs.length,
       itemBuilder: (c, i) {
         final doc = docs[i];
+        if (isCellMemo) {
+          return _CellMemoListTile(
+            doc: doc,
+            selected: !narrow && doc.id == _selectedDocId,
+            onTap: () {
+              if (narrow) {
+                _showCellMemoEditDialog(context, doc);
+              } else {
+                setState(() => _selectedDocId = doc.id);
+              }
+            },
+          );
+        }
         return _MeetingListTile(
           doc: doc,
           selected: !narrow && doc.id == _selectedDocId,
@@ -302,6 +537,12 @@ class _MeetingMinutesScreenState extends State<MeetingMinutesScreen> {
             ],
           ),
         ),
+      );
+    }
+    if (_isCellMemoCategory) {
+      return _CellMemoDetailView(
+        doc: doc,
+        onEdit: () => _showCellMemoEditDialog(context, doc),
       );
     }
     return _MeetingDetailView(doc: doc);
@@ -358,14 +599,17 @@ class _MeetingListTile extends StatelessWidget {
             children: [
               Row(
                 children: [
-                  Text(
-                    date != null
-                        ? DateFormat('yyyy/M/d (E)', 'ja').format(date)
-                        : '',
-                    style: TextStyle(
-                        fontSize: AppTextSize.small,
-                        color: c.textSecondary,
-                        fontWeight: FontWeight.w600),
+                  SizedBox(
+                    width: 110,
+                    child: Text(
+                      date != null
+                          ? DateFormat('yyyy/M/d (E)', 'ja').format(date)
+                          : '',
+                      style: TextStyle(
+                          fontSize: AppTextSize.small,
+                          color: c.textSecondary,
+                          fontWeight: FontWeight.w600),
+                    ),
                   ),
                   const SizedBox(width: 8),
                   Flexible(
@@ -384,17 +628,16 @@ class _MeetingListTile extends StatelessWidget {
                               fontWeight: FontWeight.w700)),
                     ),
                   ),
-                  const Spacer(),
-                  if (materials.isNotEmpty)
-                    Row(children: [
-                      Icon(Icons.attach_file,
-                          size: 12, color: c.textTertiary),
-                      const SizedBox(width: 2),
-                      Text('${materials.length}',
-                          style: TextStyle(
-                              fontSize: AppTextSize.caption,
-                              color: c.textTertiary)),
-                    ]),
+                  if (materials.isNotEmpty) ...[
+                    const SizedBox(width: 8),
+                    Icon(Icons.attach_file,
+                        size: 12, color: c.textTertiary),
+                    const SizedBox(width: 2),
+                    Text('${materials.length}',
+                        style: TextStyle(
+                            fontSize: AppTextSize.caption,
+                            color: c.textTertiary)),
+                  ],
                 ],
               ),
               if (note.isNotEmpty) ...[
@@ -857,7 +1100,7 @@ class _MeetingMinutesEditScreenState extends State<MeetingMinutesEditScreen> {
     return Scaffold(
       backgroundColor: context.colors.scaffoldBg,
       appBar: AppBar(
-        title: Text(_isEdit ? '議事録・研修記録を編集' : '議事録・研修記録を作成',
+        title: Text(_isEdit ? 'ドキュメントを編集' : 'ドキュメントを作成',
             style: const TextStyle(fontSize: AppTextSize.title, fontWeight: FontWeight.w600)),
         backgroundColor: context.colors.cardBg,
         elevation: 0,
@@ -1296,6 +1539,208 @@ class _Staff {
   const _Staff({required this.id, required this.name, required this.kana});
 }
 
+// ============================================================
+// コマメモ 一覧タイル
+// ============================================================
+const List<String> _cellMemoTimeSlots = ['9:30〜', '11:00〜', '14:00〜', '15:30〜'];
+
+class _CellMemoListTile extends StatelessWidget {
+  final QueryDocumentSnapshot<Map<String, dynamic>> doc;
+  final bool selected;
+  final VoidCallback onTap;
+  const _CellMemoListTile({
+    required this.doc,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final d = doc.data();
+    final date = (d['date'] as Timestamp?)?.toDate();
+    final title = (d['title'] as String? ?? '').trim();
+    final slotIndex = d['slotIndex'] as int? ?? 0;
+    final slotLabel = (slotIndex >= 0 && slotIndex < _cellMemoTimeSlots.length)
+        ? _cellMemoTimeSlots[slotIndex]
+        : '';
+
+    final c = context.colors;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      decoration: BoxDecoration(
+        color: selected
+            ? AppColors.primary.withValues(alpha: 0.12)
+            : c.cardBg,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: selected ? AppColors.primary : c.borderLight,
+          width: selected ? 1.5 : 0.5,
+        ),
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            children: [
+              SizedBox(
+                width: 110,
+                child: Text(
+                  date != null
+                      ? DateFormat('yyyy/M/d (E)', 'ja').format(date)
+                      : '',
+                  style: TextStyle(
+                      fontSize: AppTextSize.small,
+                      color: c.textSecondary,
+                      fontWeight: FontWeight.w600),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Flexible(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: AppColors.primary.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(title,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                          fontSize: AppTextSize.caption,
+                          color: AppColors.primary,
+                          fontWeight: FontWeight.w700)),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(slotLabel,
+                  style: TextStyle(
+                      fontSize: AppTextSize.caption,
+                      color: c.textTertiary)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ============================================================
+// コマメモ 詳細
+// ============================================================
+class _CellMemoDetailView extends StatelessWidget {
+  final QueryDocumentSnapshot<Map<String, dynamic>> doc;
+  final VoidCallback onEdit;
+  const _CellMemoDetailView({required this.doc, required this.onEdit});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    final d = doc.data();
+    final date = (d['date'] as Timestamp?)?.toDate();
+    final title = (d['title'] as String? ?? '').trim();
+    final comment = (d['comment'] as String? ?? '').trim();
+    final slotIndex = d['slotIndex'] as int? ?? 0;
+    final slotLabel = (slotIndex >= 0 && slotIndex < _cellMemoTimeSlots.length)
+        ? _cellMemoTimeSlots[slotIndex]
+        : '';
+
+    return Container(
+      color: c.scaffoldBg,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Container(
+            color: c.cardBg,
+            padding: const EdgeInsets.fromLTRB(20, 14, 16, 14),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Text(
+                            date != null
+                                ? '${DateFormat('yyyy/M/d (E)', 'ja').format(date)} $slotLabel'
+                                : '',
+                            style: TextStyle(
+                              fontSize: AppTextSize.bodyLarge,
+                              fontWeight: FontWeight.w700,
+                              color: c.textPrimary,
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: AppColors.primary
+                                  .withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(title,
+                                style: const TextStyle(
+                                    fontSize: AppTextSize.caption,
+                                    color: AppColors.primary,
+                                    fontWeight: FontWeight.w700)),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                FilledButton.tonalIcon(
+                  onPressed: onEdit,
+                  icon: const Icon(Icons.edit_outlined, size: 16),
+                  label: const Text('編集'),
+                  style: FilledButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 8),
+                    textStyle:
+                        const TextStyle(fontSize: AppTextSize.small),
+                    visualDensity: VisualDensity.compact,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Divider(height: 1, color: c.borderLight),
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (comment.isEmpty)
+                    Text(
+                      'コメントはありません',
+                      style: TextStyle(
+                          fontSize: AppTextSize.body,
+                          color: c.textTertiary),
+                    )
+                  else
+                    Text(
+                      comment,
+                      style: TextStyle(
+                          fontSize: AppTextSize.body,
+                          color: c.textPrimary,
+                          height: 1.6),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class MeetingCategory {
   final String id;
   final String label;
@@ -1316,7 +1761,6 @@ class MeetingCategory {
     MeetingCategory(id: 'disaster_drill', label: '防災訓練'),
     MeetingCategory(id: 'practical_training', label: '実践研修'),
     MeetingCategory(id: 'liaison_meeting', label: '児童発達支援事業所連絡会'),
-    MeetingCategory(id: 'other', label: 'その他'),
   ];
 
   static String labelOf(String id) {
