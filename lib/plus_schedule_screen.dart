@@ -122,6 +122,12 @@ class _PlusScheduleContentState extends State<PlusScheduleContent> with Automati
     '欠席（HUG登録なし）',
   ];
 
+  static const List<String> _cellMemoTitleOptions = [
+    '放デイ',
+    '就学支援',
+    '感覚統合',
+  ];
+
   // HUG欠席送信の失敗バナー（セッション内のみ）
   final List<Map<String, dynamic>> _failedAbsenceSends = [];
 
@@ -357,28 +363,26 @@ void dispose() {
 // ★追加★ コマメモを週単位で読み込み
 Future<void> _loadCellMemosForWeek() async {
   try {
+    final targetWeekStart = _weekStart;
+    final start = Timestamp.fromDate(targetWeekStart);
+    final end = Timestamp.fromDate(targetWeekStart.add(const Duration(days: 6)));
+
+    final snapshot = await FirebaseFirestore.instance
+        .collection('plus_cell_memos')
+        .where('date', isGreaterThanOrEqualTo: start)
+        .where('date', isLessThan: end)
+        .get();
+
+    if (targetWeekStart != _weekStart) return;
+
     final memos = <String, Map<String, dynamic>>{};
-    
-    for (int dayIndex = 0; dayIndex < 6; dayIndex++) {
-      final date = _weekStart.add(Duration(days: dayIndex));
-      final dateStr = DateFormat('yyyy-MM-dd').format(date);
-      
-      for (int slotIndex = 0; slotIndex < 4; slotIndex++) {
-        final docId = '${dateStr}_$slotIndex';
-        final doc = await FirebaseFirestore.instance
-            .collection('plus_cell_memos')
-            .doc(docId)
-            .get();
-        
-        if (doc.exists) {
-          memos[docId] = {
-            'id': doc.id,
-            ...doc.data()!,
-          };
-        }
-      }
+    for (final doc in snapshot.docs) {
+      memos[doc.id] = {
+        'id': doc.id,
+        ...doc.data(),
+      };
     }
-    
+
     if (mounted) {
       setState(() {
         _cellMemos = memos;
@@ -2458,7 +2462,7 @@ void _goToPage(int page) {
               padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 6),
               child: Divider(height: 1, color: border),
             ),
-            menuItem('meeting', Icons.description_outlined, '議事録'),
+            menuItem('meeting', Icons.description_outlined, 'ドキュメント'),
             menuItem('accident', Icons.warning_amber_outlined, '事故・ヒヤリハット'),
             menuItem('complaint', Icons.report_gmailerrorred_outlined, '苦情受付'),
             menuItem('training', Icons.school_outlined, '法定研修'),
@@ -2817,8 +2821,12 @@ void _goToPage(int page) {
     }
 
     bool _isWorkingDay(DateTime date) {
-      // 日曜のみ自動的に営業外。月曜は2026-06より営業開始。
+      // 日曜は営業外。月曜は2026-06より営業開始予定（それ以前は営業外）。
       if (date.weekday == DateTime.sunday) return false;
+      if (date.weekday == DateTime.monday &&
+          date.isBefore(DateTime(2026, 6, 1))) {
+        return false;
+      }
       if (_isHoliday(date)) return false;
       return true;
     }
@@ -3481,16 +3489,20 @@ Widget _buildCellMemoIcon(DateTime date, int slotIndex, Map<String, dynamic> mem
     final overlay = Overlay.of(context);
     final offset = renderBox.localToGlobal(Offset.zero);
     final screenWidth = MediaQuery.of(context).size.width;
-    
+    final screenHeight = MediaQuery.of(context).size.height;
+
     const popupWidth = 200.0;
+    const estimatedPopupHeight = 120.0;
     final showOnLeft = offset.dx + popupWidth > screenWidth - 20;
-    
+    final showAbove = offset.dy + estimatedPopupHeight > screenHeight - 20;
+
     _currentOverlay = OverlayEntry(
       builder: (ctx) {
         double left = showOnLeft ? offset.dx - popupWidth - 8 : offset.dx + 24;
-        
+
         return Positioned(
-          top: offset.dy - 8,
+          top: showAbove ? null : offset.dy - 8,
+          bottom: showAbove ? (screenHeight - offset.dy + 8) : null,
           left: left,
           child: Material(
             elevation: 8,
@@ -3550,21 +3562,27 @@ Widget _buildCellMemoIcon(DateTime date, int slotIndex, Map<String, dynamic> mem
 
 // ★追加★ コマメモ編集ダイアログ
 void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> memo) {
-  final titleController = TextEditingController(text: memo['title'] ?? '');
+  final initialTitle = memo['title']?.toString() ?? '';
+  String selectedTitle = _cellMemoTitleOptions.contains(initialTitle) ? initialTitle : '';
   final commentController = TextEditingController(text: memo['comment'] ?? '');
   final scaffoldMessenger = ScaffoldMessenger.of(context);
-  
+
   showDialog(
     context: context,
-    builder: (dialogContext) => AlertDialog(
+    builder: (dialogContext) => StatefulBuilder(
+      builder: (dialogContext, setDialogState) => AlertDialog(
       backgroundColor: context.colors.cardBg,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      titlePadding: const EdgeInsets.fromLTRB(20, 16, 12, 0),
+      contentPadding: const EdgeInsets.fromLTRB(20, 12, 20, 4),
+      actionsPadding: const EdgeInsets.fromLTRB(20, 8, 16, 12),
       title: Row(
         children: [
           Icon(Icons.info_outline, color: context.colors.textSecondary, size: 22),
           const SizedBox(width: 8),
-          const Text('コマメモを編集', style: TextStyle(fontSize: AppTextSize.titleLg)),
-          const Spacer(),
+          const Expanded(
+            child: Text('コマメモを編集', style: TextStyle(fontSize: AppTextSize.titleLg)),
+          ),
           IconButton(
             icon: const Icon(Icons.delete_outline, color: AppColors.error, size: 20),
             tooltip: '削除',
@@ -3611,10 +3629,15 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
               }
             },
           ),
+          IconButton(
+            icon: Icon(Icons.close, color: context.colors.textSecondary, size: 20),
+            tooltip: '閉じる',
+            onPressed: () => Navigator.pop(dialogContext),
+          ),
         ],
       ),
       content: SizedBox(
-        width: 350,
+        width: 380,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -3623,24 +3646,45 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
               '${DateFormat('M月d日 (E)', 'ja').format(date)} ${_timeSlots[slotIndex]}',
               style: TextStyle(fontSize: AppTextSize.bodyMd, color: context.colors.textSecondary),
             ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: titleController,
-              decoration: InputDecoration(
-                labelText: 'タイトル',
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                contentPadding: const EdgeInsets.all(12),
+            const SizedBox(height: 20),
+            Text(
+              'タイトル',
+              style: TextStyle(
+                fontSize: AppTextSize.bodyMd,
+                color: context.colors.textSecondary,
+                fontWeight: FontWeight.w500,
               ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              children: _cellMemoTitleOptions.map((t) => ChoiceChip(
+                label: Text(t),
+                selected: selectedTitle == t,
+                onSelected: (s) {
+                  if (s) setDialogState(() => selectedTitle = t);
+                },
+              )).toList(),
+            ),
+            const SizedBox(height: 20),
+            Text(
+              'コメント',
+              style: TextStyle(
+                fontSize: AppTextSize.bodyMd,
+                color: context.colors.textSecondary,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            const SizedBox(height: 8),
             TextField(
               controller: commentController,
               decoration: InputDecoration(
-                labelText: 'コメント（任意）',
+                hintText: '例：今日の活動内容、注意事項など',
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
                 contentPadding: const EdgeInsets.all(12),
               ),
-              maxLines: 3,
+              maxLines: 5,
+              minLines: 3,
             ),
           ],
         ),
@@ -3648,10 +3692,8 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
       actions: [
         TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('キャンセル')),
         ElevatedButton(
-          onPressed: () async {
-            final title = titleController.text.trim();
-            if (title.isEmpty) return;
-            await _saveCellMemo(date, slotIndex, title, commentController.text.trim());
+          onPressed: selectedTitle.isEmpty ? null : () async {
+            await _saveCellMemo(date, slotIndex, selectedTitle, commentController.text.trim());
             if (dialogContext.mounted) Navigator.pop(dialogContext);
             scaffoldMessenger.showSnackBar(const SnackBar(content: Text('メモを保存しました')));
           },
@@ -3659,6 +3701,7 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
           child: const Text('保存'),
         ),
       ],
+    ),
     ),
   );
 }
@@ -3899,11 +3942,12 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
                   },
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                    constraints: const BoxConstraints(minWidth: 32),
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(4),
                     ),
                     child: Text(
-                      lesson['room'],
+                      lesson['room'] ?? '',
                       style: TextStyle(
                         color: context.colors.textSecondary,
                         fontSize: AppTextSize.body,
@@ -4031,7 +4075,10 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
       
       final overlay = Overlay.of(context);
       final offset = renderBox.localToGlobal(Offset.zero);
-      
+      final screenHeight = MediaQuery.of(context).size.height;
+      const estimatedPopupHeight = 200.0;
+      final showAbove = offset.dy + estimatedPopupHeight > screenHeight - 20;
+
       // ポップアップ内容
       final popupContent = Material(
         elevation: 4,
@@ -4065,7 +4112,8 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
           }
           
           return Positioned(
-            top: offset.dy,
+            top: showAbove ? null : offset.dy,
+            bottom: showAbove ? (screenHeight - offset.dy - renderBox.size.height) : null,
             left: left,
             child: popupContent,
           );
@@ -4222,11 +4270,12 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
                   },
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                    constraints: const BoxConstraints(minWidth: 32),
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(4),
                     ),
                     child: Text(
-                      lesson['room'],
+                      lesson['room'] ?? '',
                       style: TextStyle(
                         color: context.colors.textSecondary,
                         fontSize: AppTextSize.body,
@@ -5279,24 +5328,21 @@ final memoCommentController = TextEditingController();
                           ],
 
                           if (inputMode == 'memo') ...[
-  TextField(
-    controller: memoTitleController,
-    decoration: InputDecoration(
-      hintText: 'タイトルを入力',
-      prefixIcon: Icon(Icons.info_outline, size: 20, color: context.colors.iconMuted),
-      border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(8),
-        borderSide: BorderSide(color: context.colors.borderMedium),
-      ),
-      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-    ),
-    onChanged: (_) => setDialogState(() {}),
+  Wrap(
+    spacing: 8,
+    children: _cellMemoTitleOptions.map((t) => ChoiceChip(
+      label: Text(t),
+      selected: memoTitleController.text == t,
+      onSelected: (s) {
+        if (s) setDialogState(() => memoTitleController.text = t);
+      },
+    )).toList(),
   ),
   const SizedBox(height: 12),
   TextField(
     controller: memoCommentController,
     decoration: InputDecoration(
-      hintText: 'コメント（任意）',
+      hintText: 'コメント',
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(8),
         borderSide: BorderSide(color: context.colors.borderMedium),
@@ -5778,7 +5824,7 @@ await _loadLessonsForWeek(showLoading: false);
                         ),
                         child: Text(
   inputMode == 'memo'
-      ? (memoTitleController.text.trim().isEmpty ? 'タイトルを入力してください' : 'メモを追加')
+      ? (memoTitleController.text.trim().isEmpty ? 'タイトルを選択してください' : 'メモを追加')
       : title.isEmpty
           ? (inputMode == 'student' ? '生徒を選択してください' : 'タイトルを入力してください')
           : '$titleを追加',
