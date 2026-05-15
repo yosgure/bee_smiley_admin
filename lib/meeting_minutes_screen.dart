@@ -1837,15 +1837,15 @@ class _CellMemoCurriculumView extends StatelessWidget {
   static const List<int> _fiscalMonths = [4, 5, 6, 7, 8, 9, 10, 11, 12, 1, 2, 3];
 
   // 月の第N週（月曜始まり）
-  // 最初の月曜を含む週 = 1W。月初の最初の月曜より前の日（土日）も 1W に含める。
-  // 以降は次の月曜から 2W、3W、…
+  // 月初〜月の最初の月曜の前日 = 1W
+  // 最初の月曜から1週間 = 2W、以降 3W、4W、5W
   int _weekIndex(DateTime date) {
     final firstOfMonth = DateTime(date.year, date.month, 1);
     final daysToFirstMonday =
         (DateTime.monday - firstOfMonth.weekday + 7) % 7;
     final firstMondayDay = 1 + daysToFirstMonday;
     if (date.day < firstMondayDay) return 0;
-    return ((date.day - firstMondayDay) ~/ 7).clamp(0, 4);
+    return (((date.day - firstMondayDay) ~/ 7) + 1).clamp(0, 4);
   }
 
   int _fiscalYearOf(DateTime date) =>

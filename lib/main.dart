@@ -349,6 +349,27 @@ class _AdminShellState extends State<AdminShell> {
     }
   }
 
+  Future<bool?> _confirmLeaveOverlay() async {
+    return showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('画面を移動しますか？'),
+        content: const Text('編集中の内容は保存されない場合があります。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('キャンセル'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: TextButton.styleFrom(foregroundColor: AppColors.error),
+            child: const Text('移動する'),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _clearUnreadOnTap(int index) {
     final type = _navTypeForIndex(index);
     if (type == null) return;
@@ -936,7 +957,12 @@ class _AdminShellState extends State<AdminShell> {
         children: [
           if (isWebLayout) NavigationRail(
             selectedIndex: safeIndex,
-            onDestinationSelected: (i) {
+            onDestinationSelected: (i) async {
+              if (_contentOverlay != null) {
+                final shouldLeave = await _confirmLeaveOverlay();
+                if (shouldLeave != true) return;
+              }
+              if (!mounted) return;
               setState(() {
                 _selectedIndex = i;
                 _adminDetailScreen = null;
@@ -996,14 +1022,20 @@ class _AdminShellState extends State<AdminShell> {
         currentIndex: safeIndex >= _visibleBottomCount
             ? _bottomNavItems.length - 1
             : safeIndex,
-        onTap: (i) {
+        onTap: (i) async {
           if (i == _bottomNavItems.length - 1) {
             _showMoreMenu();
             return;
           }
+          if (_contentOverlay != null) {
+            final shouldLeave = await _confirmLeaveOverlay();
+            if (shouldLeave != true) return;
+          }
+          if (!mounted) return;
           setState(() {
             _selectedIndex = i;
             _adminDetailScreen = null;
+            _contentOverlay = null;
           });
           _clearUnreadOnTap(i);
           _saveIndex(i);

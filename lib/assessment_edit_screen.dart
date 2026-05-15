@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
@@ -8,6 +10,7 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:intl/intl.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:image/image.dart' as img;
+import 'package:shared_preferences/shared_preferences.dart';
 import 'app_theme.dart';
 import 'widgets/app_feedback.dart';
 import 'main.dart';
@@ -82,20 +85,117 @@ class _AssessmentEditScreenState extends State<AssessmentEditScreen> {
 
   Map<String, List<String>> _nonCognitiveSkillMap = {};
 
+  Timer? _draftSaveTimer;
+
+  String get _draftKey =>
+      'assessment_draft:${widget.studentId}:${widget.type}:${widget.docId ?? 'new'}';
+
   @override
   void initState() {
     super.initState();
     _initializationFuture = _initializeAll();
+    // 5秒ごとに入力中の内容をローカルにスナップショット保存
+    _draftSaveTimer =
+        Timer.periodic(const Duration(seconds: 5), (_) => _saveDraftLocal());
+  }
+
+  @override
+  void dispose() {
+    _draftSaveTimer?.cancel();
+    // 画面を離れる時に最後のスナップショットを保存
+    _saveDraftLocal();
+    super.dispose();
   }
 
   Future<void> _initializeAll() async {
     await _fetchMasters();
-    
+
     if (widget.initialData != null) {
       _initializeEditData();
     } else {
       _initializeNewData();
     }
+
+    // 初期化完了後にローカルドラフトの復元を試みる
+    if (mounted) await _maybeRestoreDraft();
+  }
+
+  Future<void> _saveDraftLocal() async {
+    if (!mounted) return;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final data = <String, dynamic>{
+        'date': _selectedDate.toIso8601String(),
+        'monthlySummary': _monthlySummaryController.text,
+        'weeklyEntries': _weeklyEntries,
+        'monthlyEntries': _monthlyEntries,
+      };
+      await prefs.setString(_draftKey, jsonEncode(data));
+    } catch (e) {
+      debugPrint('Assessment draft save error: $e');
+    }
+  }
+
+  Future<void> _maybeRestoreDraft() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_draftKey);
+      if (raw == null || raw.isEmpty) return;
+      final data = jsonDecode(raw) as Map<String, dynamic>;
+      if (!mounted) return;
+      final shouldRestore = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('編集中の下書きが見つかりました'),
+          content: const Text('前回の編集途中の内容を復元しますか？'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('破棄して新規'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              style: TextButton.styleFrom(foregroundColor: AppColors.primary),
+              child: const Text('復元する'),
+            ),
+          ],
+        ),
+      );
+      if (shouldRestore != true) {
+        await prefs.remove(_draftKey);
+        return;
+      }
+      if (!mounted) return;
+      setState(() {
+        final dateStr = data['date'] as String?;
+        if (dateStr != null) _selectedDate = DateTime.parse(dateStr);
+        _monthlySummaryController.text =
+            (data['monthlySummary'] as String?) ?? '';
+        final w = data['weeklyEntries'];
+        if (w is List) {
+          _weeklyEntries = w
+              .map<Map<String, dynamic>>(
+                  (e) => Map<String, dynamic>.from(e as Map))
+              .toList();
+        }
+        final m = data['monthlyEntries'];
+        if (m is List) {
+          _monthlyEntries = m
+              .map<Map<String, String?>>(
+                  (e) => Map<String, String?>.from(e as Map))
+              .toList();
+        }
+      });
+    } catch (e) {
+      debugPrint('Assessment draft restore error: $e');
+    }
+  }
+
+  Future<void> _clearDraftLocal() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_draftKey);
+    } catch (_) {}
   }
 
   Future<void> _fetchMasters() async {
@@ -447,6 +547,9 @@ class _AssessmentEditScreenState extends State<AssessmentEditScreen> {
         final ref = await FirebaseFirestore.instance.collection('assessments').add(data);
         newDocId = ref.id;
       }
+
+      // Firestore 保存成功後にローカル下書きをクリア
+      await _clearDraftLocal();
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
