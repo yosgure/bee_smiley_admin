@@ -267,15 +267,23 @@ class AdminShell extends StatefulWidget {
   const AdminShell({super.key});
 
   /// コンテンツエリア内にオーバーレイ画面を表示（サイドバーを残す）
-  static void showOverlay(BuildContext context, Widget screen) {
+  /// [confirmLeave] を true にすると、タブ切替時に確認ダイアログを表示する
+  static void showOverlay(BuildContext context, Widget screen,
+      {bool confirmLeave = false}) {
     final state = context.findAncestorStateOfType<_AdminShellState>();
-    state?.setState(() => state._contentOverlay = screen);
+    state?.setState(() {
+      state._contentOverlay = screen;
+      state._overlayConfirmLeave = confirmLeave;
+    });
   }
 
   /// オーバーレイ画面を閉じる
   static void hideOverlay(BuildContext context) {
     final state = context.findAncestorStateOfType<_AdminShellState>();
-    state?.setState(() => state._contentOverlay = null);
+    state?.setState(() {
+      state._contentOverlay = null;
+      state._overlayConfirmLeave = false;
+    });
   }
 
   /// AI相談タブに遷移して生徒を選択
@@ -400,6 +408,7 @@ class _AdminShellState extends State<AdminShell> {
 
   // コンテンツエリア内のオーバーレイ画面（サイドバーを残して表示）
   Widget? _contentOverlay;
+  bool _overlayConfirmLeave = false;
 
   // AI相談に生徒情報付きでジャンプする用
   Map<String, dynamic>? _pendingAiChatStudent;
@@ -958,7 +967,7 @@ class _AdminShellState extends State<AdminShell> {
           if (isWebLayout) NavigationRail(
             selectedIndex: safeIndex,
             onDestinationSelected: (i) async {
-              if (_contentOverlay != null) {
+              if (_contentOverlay != null && _overlayConfirmLeave) {
                 final shouldLeave = await _confirmLeaveOverlay();
                 if (shouldLeave != true) return;
               }
@@ -967,6 +976,7 @@ class _AdminShellState extends State<AdminShell> {
                 _selectedIndex = i;
                 _adminDetailScreen = null;
                 _contentOverlay = null;
+                _overlayConfirmLeave = false;
               });
               _clearUnreadOnTap(i);
               _saveIndex(i); // 保存
@@ -1036,6 +1046,7 @@ class _AdminShellState extends State<AdminShell> {
             _selectedIndex = i;
             _adminDetailScreen = null;
             _contentOverlay = null;
+            _overlayConfirmLeave = false;
           });
           _clearUnreadOnTap(i);
           _saveIndex(i);
