@@ -126,7 +126,9 @@ class _PlusScheduleContentState extends State<PlusScheduleContent> with Automati
     '放デイ',
     '就学支援',
     '感覚統合',
+    'イベント',
   ];
+  static const String _cellMemoTitleOther = 'その他';
 
   // HUG欠席送信の失敗バナー（セッション内のみ）
   final List<Map<String, dynamic>> _failedAbsenceSends = [];
@@ -3563,7 +3565,9 @@ Widget _buildCellMemoIcon(DateTime date, int slotIndex, Map<String, dynamic> mem
 // ★追加★ コマメモ編集ダイアログ
 void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> memo) {
   final initialTitle = memo['title']?.toString() ?? '';
-  String selectedTitle = _cellMemoTitleOptions.contains(initialTitle) ? initialTitle : '';
+  final isPreset = _cellMemoTitleOptions.contains(initialTitle);
+  String selectedTitle = isPreset ? initialTitle : (initialTitle.isNotEmpty ? _cellMemoTitleOther : '');
+  final customTitleController = TextEditingController(text: isPreset ? '' : initialTitle);
   final commentController = TextEditingController(text: memo['comment'] ?? '');
   final scaffoldMessenger = ScaffoldMessenger.of(context);
 
@@ -3658,14 +3662,36 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
             const SizedBox(height: 8),
             Wrap(
               spacing: 8,
-              children: _cellMemoTitleOptions.map((t) => ChoiceChip(
-                label: Text(t),
-                selected: selectedTitle == t,
-                onSelected: (s) {
-                  if (s) setDialogState(() => selectedTitle = t);
-                },
-              )).toList(),
+              runSpacing: 8,
+              children: [
+                ..._cellMemoTitleOptions.map((t) => ChoiceChip(
+                      label: Text(t),
+                      selected: selectedTitle == t,
+                      onSelected: (s) {
+                        if (s) setDialogState(() => selectedTitle = t);
+                      },
+                    )),
+                ChoiceChip(
+                  label: const Text(_cellMemoTitleOther),
+                  selected: selectedTitle == _cellMemoTitleOther,
+                  onSelected: (s) {
+                    if (s) setDialogState(() => selectedTitle = _cellMemoTitleOther);
+                  },
+                ),
+              ],
             ),
+            if (selectedTitle == _cellMemoTitleOther) ...[
+              const SizedBox(height: 8),
+              TextField(
+                controller: customTitleController,
+                decoration: InputDecoration(
+                  hintText: 'タイトルを入力',
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                ),
+                onChanged: (_) => setDialogState(() {}),
+              ),
+            ],
             const SizedBox(height: 20),
             Text(
               'コメント',
@@ -3691,15 +3717,20 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
       ),
       actions: [
         TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('キャンセル')),
-        ElevatedButton(
-          onPressed: selectedTitle.isEmpty ? null : () async {
-            await _saveCellMemo(date, slotIndex, selectedTitle, commentController.text.trim());
-            if (dialogContext.mounted) Navigator.pop(dialogContext);
-            scaffoldMessenger.showSnackBar(const SnackBar(content: Text('メモを保存しました')));
-          },
-          style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, foregroundColor: context.colors.textOnPrimary),
-          child: const Text('保存'),
-        ),
+        Builder(builder: (_) {
+          final effectiveTitle = selectedTitle == _cellMemoTitleOther
+              ? customTitleController.text.trim()
+              : selectedTitle;
+          return ElevatedButton(
+            onPressed: effectiveTitle.isEmpty ? null : () async {
+              await _saveCellMemo(date, slotIndex, effectiveTitle, commentController.text.trim());
+              if (dialogContext.mounted) Navigator.pop(dialogContext);
+              scaffoldMessenger.showSnackBar(const SnackBar(content: Text('メモを保存しました')));
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, foregroundColor: context.colors.textOnPrimary),
+            child: const Text('保存'),
+          );
+        }),
       ],
     ),
     ),
@@ -5029,7 +5060,8 @@ for (var staff in _staffList.where((s) => s['showInSchedule'] != false)) {
     // 入力モード: 'student'=生徒選択, 'custom'=イベント
     String inputMode = 'student';
     final memoTitleController = TextEditingController();
-final memoCommentController = TextEditingController();
+    String memoSelectedOption = '';
+    final memoCommentController = TextEditingController();
     Map<String, dynamic>? selectedStudent;
     final customTitleController = TextEditingController();
     List<String> selectedTeachers = [];
@@ -5330,14 +5362,49 @@ final memoCommentController = TextEditingController();
                           if (inputMode == 'memo') ...[
   Wrap(
     spacing: 8,
-    children: _cellMemoTitleOptions.map((t) => ChoiceChip(
-      label: Text(t),
-      selected: memoTitleController.text == t,
-      onSelected: (s) {
-        if (s) setDialogState(() => memoTitleController.text = t);
-      },
-    )).toList(),
+    runSpacing: 8,
+    children: [
+      ..._cellMemoTitleOptions.map((t) => ChoiceChip(
+            label: Text(t),
+            selected: memoSelectedOption == t,
+            onSelected: (s) {
+              if (s) {
+                setDialogState(() {
+                  memoSelectedOption = t;
+                  memoTitleController.text = t;
+                });
+              }
+            },
+          )),
+      ChoiceChip(
+        label: const Text(_cellMemoTitleOther),
+        selected: memoSelectedOption == _cellMemoTitleOther,
+        onSelected: (s) {
+          if (s) {
+            setDialogState(() {
+              memoSelectedOption = _cellMemoTitleOther;
+              memoTitleController.text = '';
+            });
+          }
+        },
+      ),
+    ],
   ),
+  if (memoSelectedOption == _cellMemoTitleOther) ...[
+    const SizedBox(height: 8),
+    TextField(
+      controller: memoTitleController,
+      decoration: InputDecoration(
+        hintText: 'タイトルを入力',
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: BorderSide(color: context.colors.borderMedium),
+        ),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      ),
+      onChanged: (_) => setDialogState(() {}),
+    ),
+  ],
   const SizedBox(height: 12),
   TextField(
     controller: memoCommentController,

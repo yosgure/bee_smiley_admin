@@ -23,8 +23,17 @@ class _MeetingMinutesScreenState extends State<MeetingMinutesScreen> {
   String? _categoryFilter;
   String? _selectedDocId;
 
-  static const List<String> _cellMemoTitles = ['放デイ', '就学支援', '感覚統合'];
+  static const List<String> _cellMemoTitles = ['放デイ', '就学支援', '感覚統合', 'イベント'];
+  static const String _cellMemoTitleOther = 'その他';
   static const String _cellMemoCategoryPrefix = 'cell_memo:';
+
+  // カリキュラム表で表示中の年度（4月始まり）
+  late int _curriculumFiscalYear = _currentFiscalYear();
+
+  static int _currentFiscalYear() {
+    final now = DateTime.now();
+    return now.month >= 4 ? now.year : now.year - 1;
+  }
 
   bool get _isCellMemoCategory =>
       _categoryFilter?.startsWith(_cellMemoCategoryPrefix) ?? false;
@@ -64,8 +73,12 @@ class _MeetingMinutesScreenState extends State<MeetingMinutesScreen> {
     if (date == null) return;
 
     final initialTitle = d['title']?.toString() ?? '';
-    String selectedTitle =
-        _cellMemoTitles.contains(initialTitle) ? initialTitle : '';
+    final isPreset = _cellMemoTitles.contains(initialTitle);
+    String selectedTitle = isPreset
+        ? initialTitle
+        : (initialTitle.isNotEmpty ? _cellMemoTitleOther : '');
+    final customTitleController =
+        TextEditingController(text: isPreset ? '' : initialTitle);
     final commentController =
         TextEditingController(text: d['comment'] ?? '');
     final scaffoldMessenger = ScaffoldMessenger.of(context);
@@ -160,16 +173,39 @@ class _MeetingMinutesScreenState extends State<MeetingMinutesScreen> {
                 const SizedBox(height: 8),
                 Wrap(
                   spacing: 8,
-                  children: _cellMemoTitles
-                      .map((t) => ChoiceChip(
-                            label: Text(t),
-                            selected: selectedTitle == t,
-                            onSelected: (s) {
-                              if (s) setDialogState(() => selectedTitle = t);
-                            },
-                          ))
-                      .toList(),
+                  runSpacing: 8,
+                  children: [
+                    ..._cellMemoTitles.map((t) => ChoiceChip(
+                          label: Text(t),
+                          selected: selectedTitle == t,
+                          onSelected: (s) {
+                            if (s) setDialogState(() => selectedTitle = t);
+                          },
+                        )),
+                    ChoiceChip(
+                      label: const Text(_cellMemoTitleOther),
+                      selected: selectedTitle == _cellMemoTitleOther,
+                      onSelected: (s) {
+                        if (s) {
+                          setDialogState(() => selectedTitle = _cellMemoTitleOther);
+                        }
+                      },
+                    ),
+                  ],
                 ),
+                if (selectedTitle == _cellMemoTitleOther) ...[
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: customTitleController,
+                    decoration: InputDecoration(
+                      hintText: 'タイトルを入力',
+                      border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8)),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    ),
+                    onChanged: (_) => setDialogState(() {}),
+                  ),
+                ],
                 const SizedBox(height: 20),
                 Text(
                   'コメント',
@@ -198,29 +234,34 @@ class _MeetingMinutesScreenState extends State<MeetingMinutesScreen> {
             TextButton(
                 onPressed: () => Navigator.pop(dialogContext),
                 child: const Text('キャンセル')),
-            ElevatedButton(
-              onPressed: selectedTitle.isEmpty
-                  ? null
-                  : () async {
-                      await FirebaseFirestore.instance
-                          .collection('plus_cell_memos')
-                          .doc(docId)
-                          .set({
-                        'title': selectedTitle,
-                        'comment': commentController.text.trim(),
-                        'date': Timestamp.fromDate(date),
-                        'slotIndex': slotIndex,
-                        'updatedAt': FieldValue.serverTimestamp(),
-                      }, SetOptions(merge: true));
-                      if (dialogContext.mounted) Navigator.pop(dialogContext);
-                      scaffoldMessenger.showSnackBar(
-                          const SnackBar(content: Text('メモを保存しました')));
-                    },
-              style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primary,
-                  foregroundColor: context.colors.textOnPrimary),
-              child: const Text('保存'),
-            ),
+            Builder(builder: (_) {
+              final effectiveTitle = selectedTitle == _cellMemoTitleOther
+                  ? customTitleController.text.trim()
+                  : selectedTitle;
+              return ElevatedButton(
+                onPressed: effectiveTitle.isEmpty
+                    ? null
+                    : () async {
+                        await FirebaseFirestore.instance
+                            .collection('plus_cell_memos')
+                            .doc(docId)
+                            .set({
+                          'title': effectiveTitle,
+                          'comment': commentController.text.trim(),
+                          'date': Timestamp.fromDate(date),
+                          'slotIndex': slotIndex,
+                          'updatedAt': FieldValue.serverTimestamp(),
+                        }, SetOptions(merge: true));
+                        if (dialogContext.mounted) Navigator.pop(dialogContext);
+                        scaffoldMessenger.showSnackBar(
+                            const SnackBar(content: Text('メモを保存しました')));
+                      },
+                style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: context.colors.textOnPrimary),
+                child: const Text('保存'),
+              );
+            }),
           ],
         ),
       ),
@@ -311,6 +352,40 @@ class _MeetingMinutesScreenState extends State<MeetingMinutesScreen> {
 
               return LayoutBuilder(builder: (context, constraints) {
                 final isWide = constraints.maxWidth >= 900;
+                // コマメモカテゴリは月×週グリッドのカリキュラム表に切り替え
+                if (_isCellMemoCategory) {
+                  final curriculum = _CellMemoCurriculumView(
+                    title: _cellMemoTitleFromFilter!,
+                    fiscalYear: _curriculumFiscalYear,
+                    docs: filtered,
+                    onYearChange: (y) =>
+                        setState(() => _curriculumFiscalYear = y),
+                    onCellTap: (doc) =>
+                        _showCellMemoEditDialog(context, doc),
+                  );
+                  if (isWide) {
+                    return Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        SizedBox(
+                          width: 200,
+                          child: _categoryRail(
+                              counts, cellMemoCounts, allDocs.length),
+                        ),
+                        VerticalDivider(
+                            width: 1, color: context.colors.borderLight),
+                        Expanded(child: curriculum),
+                      ],
+                    );
+                  }
+                  return Column(
+                    children: [
+                      _categoryDropdown(),
+                      const Divider(height: 1),
+                      Expanded(child: curriculum),
+                    ],
+                  );
+                }
                 if (isWide) {
                   return Row(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1736,6 +1811,269 @@ class _CellMemoDetailView extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+// ============================================================
+// コマメモ カリキュラム表（月×週グリッド）
+// ============================================================
+class _CellMemoCurriculumView extends StatelessWidget {
+  final String title;
+  final int fiscalYear;
+  final List<QueryDocumentSnapshot<Map<String, dynamic>>> docs;
+  final ValueChanged<int> onYearChange;
+  final void Function(QueryDocumentSnapshot<Map<String, dynamic>>) onCellTap;
+
+  const _CellMemoCurriculumView({
+    required this.title,
+    required this.fiscalYear,
+    required this.docs,
+    required this.onYearChange,
+    required this.onCellTap,
+  });
+
+  static const List<int> _fiscalMonths = [4, 5, 6, 7, 8, 9, 10, 11, 12, 1, 2, 3];
+
+  // 月の第N週（月曜始まり）
+  // 最初の月曜を含む週 = 1W。月初の最初の月曜より前の日（土日）も 1W に含める。
+  // 以降は次の月曜から 2W、3W、…
+  int _weekIndex(DateTime date) {
+    final firstOfMonth = DateTime(date.year, date.month, 1);
+    final daysToFirstMonday =
+        (DateTime.monday - firstOfMonth.weekday + 7) % 7;
+    final firstMondayDay = 1 + daysToFirstMonday;
+    if (date.day < firstMondayDay) return 0;
+    return ((date.day - firstMondayDay) ~/ 7).clamp(0, 4);
+  }
+
+  int _fiscalYearOf(DateTime date) =>
+      date.month >= 4 ? date.year : date.year - 1;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+
+    // メモを month × weekIndex でグループ化
+    final grid = <int, Map<int, List<QueryDocumentSnapshot<Map<String, dynamic>>>>>{};
+    for (final doc in docs) {
+      final date = (doc.data()['date'] as Timestamp?)?.toDate();
+      if (date == null) continue;
+      if (_fiscalYearOf(date) != fiscalYear) continue;
+      final w = _weekIndex(date);
+      grid.putIfAbsent(date.month, () => {});
+      grid[date.month]!.putIfAbsent(w, () => []);
+      grid[date.month]![w]!.add(doc);
+    }
+    // 各セル内は日付順
+    for (final m in grid.values) {
+      for (final list in m.values) {
+        list.sort((a, b) {
+          final da = (a.data()['date'] as Timestamp?)?.toDate();
+          final db = (b.data()['date'] as Timestamp?)?.toDate();
+          if (da == null || db == null) return 0;
+          return da.compareTo(db);
+        });
+      }
+    }
+
+    const columnWidths = <int, TableColumnWidth>{
+      0: FixedColumnWidth(64),
+      1: FlexColumnWidth(),
+      2: FlexColumnWidth(),
+      3: FlexColumnWidth(),
+      4: FlexColumnWidth(),
+      5: FlexColumnWidth(),
+    };
+
+    return Container(
+      color: c.scaffoldBg,
+      child: Column(
+        children: [
+          // ヘッダー: タイトル + 年度切り替え
+          Container(
+            color: c.cardBg,
+            padding: const EdgeInsets.fromLTRB(20, 12, 16, 12),
+            child: Row(
+              children: [
+                Text(
+                  title,
+                  style: TextStyle(
+                    fontSize: AppTextSize.titleLg,
+                    fontWeight: FontWeight.w700,
+                    color: c.textPrimary,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                IconButton(
+                  icon: const Icon(Icons.chevron_left, size: 22),
+                  tooltip: '前年度',
+                  onPressed: () => onYearChange(fiscalYear - 1),
+                ),
+                Text(
+                  '$fiscalYear年度',
+                  style: TextStyle(
+                    fontSize: AppTextSize.body,
+                    fontWeight: FontWeight.w600,
+                    color: c.textPrimary,
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.chevron_right, size: 22),
+                  tooltip: '次年度',
+                  onPressed: () => onYearChange(fiscalYear + 1),
+                ),
+              ],
+            ),
+          ),
+          Divider(height: 1, color: c.borderLight),
+          // 固定ヘッダー（実施週 / 1W〜5W）
+          Table(
+            border: TableBorder(
+              top: BorderSide(color: c.borderLight, width: 0.5),
+              left: BorderSide(color: c.borderLight, width: 0.5),
+              right: BorderSide(color: c.borderLight, width: 0.5),
+              bottom: BorderSide(color: c.borderLight, width: 0.5),
+              verticalInside: BorderSide(color: c.borderLight, width: 0.5),
+            ),
+            columnWidths: columnWidths,
+            children: [
+              TableRow(
+                decoration: BoxDecoration(color: c.cardBg),
+                children: [
+                  _headerCell('実施週', c),
+                  _headerCell('1W', c),
+                  _headerCell('2W', c),
+                  _headerCell('3W', c),
+                  _headerCell('4W', c),
+                  _headerCell('5W', c),
+                ],
+              ),
+            ],
+          ),
+          // ボディ（スクロール可能）
+          Expanded(
+            child: SingleChildScrollView(
+              child: Table(
+                border: TableBorder(
+                  left: BorderSide(color: c.borderLight, width: 0.5),
+                  right: BorderSide(color: c.borderLight, width: 0.5),
+                  bottom: BorderSide(color: c.borderLight, width: 0.5),
+                  horizontalInside: BorderSide(color: c.borderLight, width: 0.5),
+                  verticalInside: BorderSide(color: c.borderLight, width: 0.5),
+                ),
+                columnWidths: columnWidths,
+                defaultVerticalAlignment: TableCellVerticalAlignment.top,
+                children: [
+                  for (final month in _fiscalMonths)
+                    TableRow(
+                      children: [
+                        _monthCell('$month月', c),
+                        for (int w = 0; w < 5; w++)
+                          _bodyCell(grid[month]?[w] ?? const [], c),
+                      ],
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _headerCell(String label, AppColorScheme c) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+      alignment: Alignment.center,
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: AppTextSize.small,
+          fontWeight: FontWeight.w700,
+          color: c.textSecondary,
+        ),
+      ),
+    );
+  }
+
+  Widget _monthCell(String label, AppColorScheme c) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+      child: Align(
+        alignment: Alignment.center,
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: AppTextSize.body,
+            fontWeight: FontWeight.w600,
+            color: c.textPrimary,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _bodyCell(
+      List<QueryDocumentSnapshot<Map<String, dynamic>>> entries,
+      AppColorScheme c) {
+    return Padding(
+      padding: const EdgeInsets.all(6),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (final doc in entries)
+            _entryTile(doc, c),
+          if (entries.isEmpty) const SizedBox(height: 32),
+        ],
+      ),
+    );
+  }
+
+  Widget _entryTile(
+      QueryDocumentSnapshot<Map<String, dynamic>> doc, AppColorScheme c) {
+    final d = doc.data();
+    final date = (d['date'] as Timestamp?)?.toDate();
+    final comment = (d['comment'] as String? ?? '').trim();
+    final dateLabel = date != null ? '${date.day}日' : '';
+
+    return InkWell(
+      onTap: () => onCellTap(doc),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (dateLabel.isNotEmpty)
+              Text(
+                dateLabel,
+                style: TextStyle(
+                  fontSize: AppTextSize.caption,
+                  color: c.textTertiary,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            if (comment.isNotEmpty)
+              Text(
+                comment,
+                style: TextStyle(
+                  fontSize: AppTextSize.small,
+                  color: c.textPrimary,
+                  height: 1.4,
+                ),
+              )
+            else
+              Text(
+                '(コメントなし)',
+                style: TextStyle(
+                  fontSize: AppTextSize.small,
+                  color: c.textTertiary,
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }
