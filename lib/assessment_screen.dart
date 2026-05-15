@@ -212,6 +212,7 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
           type: type,
           onClose: () => AdminShell.hideOverlay(context),
         ),
+        confirmLeave: true,
       );
     } else {
       Navigator.push(

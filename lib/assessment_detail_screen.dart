@@ -82,6 +82,7 @@ class _AssessmentDetailScreenState extends State<AssessmentDetailScreen> {
           initialData: _data,
           onClose: () => AdminShell.hideOverlay(context),
         ),
+        confirmLeave: true,
       );
     } else {
       Navigator.pushReplacement(
