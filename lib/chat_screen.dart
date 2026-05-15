@@ -57,6 +57,11 @@ class _ChatListScreenState extends State<ChatListScreen> {
   Set<String> _staffUids = {};
   bool _staffUidsLoaded = false;
 
+  // タブの未読件数表示用: ルームごとの未読件数と現在のルームドキュメントキャッシュ
+  final Map<String, int> _unreadByRoom = {};
+  final Map<String, DocumentSnapshot> _roomDocsCache = {};
+  final Map<String, StreamSubscription<QuerySnapshot>> _unreadSubs = {};
+
   StreamSubscription<String>? _pendingChatRoomSub;
 
   static const _filterPrefsKey = 'chat_list_filter';
@@ -105,7 +110,75 @@ class _ChatListScreenState extends State<ChatListScreen> {
   @override
   void dispose() {
     _pendingChatRoomSub?.cancel();
+    for (final sub in _unreadSubs.values) {
+      sub.cancel();
+    }
+    _unreadSubs.clear();
     super.dispose();
+  }
+
+  // ルーム一覧の更新時に、各ルームの未読件数 subscription を同期する
+  void _syncRoomUnreadSubscriptions(List<DocumentSnapshot> docs) {
+    final myUid = currentUser?.uid;
+    if (myUid == null) return;
+
+    _roomDocsCache
+      ..clear()
+      ..addEntries(docs.map((d) => MapEntry(d.id, d)));
+
+    final currentIds = docs.map((d) => d.id).toSet();
+    for (final id in _unreadSubs.keys.toList()) {
+      if (!currentIds.contains(id)) {
+        _unreadSubs[id]?.cancel();
+        _unreadSubs.remove(id);
+        _unreadByRoom.remove(id);
+      }
+    }
+
+    for (final doc in docs) {
+      if (_unreadSubs.containsKey(doc.id)) continue;
+      _unreadSubs[doc.id] = FirebaseFirestore.instance
+          .collection('chat_rooms')
+          .doc(doc.id)
+          .collection('messages')
+          .where('senderId', isNotEqualTo: myUid)
+          .snapshots()
+          .listen((snap) {
+        int count = 0;
+        for (final m in snap.docs) {
+          final data = m.data();
+          final readBy = List<String>.from(data['readBy'] ?? []);
+          if (!readBy.contains(myUid)) count++;
+        }
+        if (mounted && _unreadByRoom[doc.id] != count) {
+          setState(() => _unreadByRoom[doc.id] = count);
+        }
+      });
+    }
+  }
+
+  // タブのフィルタ条件に合うルームの未読合計を返す
+  int _unreadCountForFilter(String filter) {
+    int total = 0;
+    for (final entry in _unreadByRoom.entries) {
+      if (entry.value == 0) continue;
+      final doc = _roomDocsCache[entry.key];
+      if (doc == null) continue;
+      if (filter == 'all' || _matchesFilterFor(doc, filter)) {
+        total += entry.value;
+      }
+    }
+    return total;
+  }
+
+  bool _matchesFilterFor(DocumentSnapshot roomDoc, String filter) {
+    if (filter == 'all') return true;
+    final data = roomDoc.data() as Map<String, dynamic>;
+    final members = List<String>.from(data['members'] ?? []);
+    final others = members.where((id) => id != currentUser?.uid).toList();
+    if (others.isEmpty) return true;
+    final hasParent = others.any((id) => !_staffUids.contains(id));
+    return filter == 'staff' ? !hasParent : hasParent;
   }
 
   void _setupPendingChatRoomListener() {
@@ -434,6 +507,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
   Widget _buildFilterToggle() {
     Widget seg(String value, String label) {
       final selected = _filter == value;
+      final unread = _unreadCountForFilter(value);
       return Expanded(
         child: InkWell(
           onTap: () {
@@ -448,13 +522,39 @@ class _ChatListScreenState extends State<ChatListScreen> {
               color: selected ? AppColors.primary : Colors.transparent,
               borderRadius: BorderRadius.circular(6),
             ),
-            child: Text(
-              label,
-              style: TextStyle(
-                fontSize: AppTextSize.small,
-                fontWeight: FontWeight.w600,
-                color: selected ? Colors.white : context.colors.textSecondary,
-              ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: AppTextSize.small,
+                    fontWeight: FontWeight.w600,
+                    color: selected ? Colors.white : context.colors.textSecondary,
+                  ),
+                ),
+                if (unread > 0) ...[
+                  const SizedBox(width: 6),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                    constraints: const BoxConstraints(minWidth: 18),
+                    decoration: BoxDecoration(
+                      color: selected ? Colors.white : AppColors.error,
+                      borderRadius: BorderRadius.circular(9),
+                    ),
+                    child: Text(
+                      unread > 99 ? '99+' : '$unread',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: AppTextSize.caption,
+                        fontWeight: FontWeight.bold,
+                        color: selected ? AppColors.primary : Colors.white,
+                      ),
+                    ),
+                  ),
+                ],
+              ],
             ),
           ),
         ),
@@ -490,6 +590,9 @@ class _ChatListScreenState extends State<ChatListScreen> {
         if (!snapshot.hasData || snapshot.data!.docs.isEmpty) return const Center(child: Text('チャット履歴はありません'));
 
         final allDocs = snapshot.data!.docs;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _syncRoomUnreadSubscriptions(allDocs);
+        });
         final docs = _staffUidsLoaded
             ? allDocs.where(_matchesFilter).toList()
             : allDocs;
