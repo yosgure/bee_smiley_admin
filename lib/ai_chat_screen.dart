@@ -1408,6 +1408,55 @@ class _AiChatScreenState extends State<AiChatScreen> {
     }
   }
 
+  /// Google Calendar 風の 10 分刻みドロップダウン時間ピッカー。
+  /// [anchorContext] は表示位置の基準（タップされた InkWell の context を渡す）。
+  Future<TimeOfDay?> _pickTime10min(BuildContext anchorContext, TimeOfDay? current) async {
+    final box = anchorContext.findRenderObject() as RenderBox?;
+    if (box == null) return null;
+    final offset = box.localToGlobal(Offset.zero);
+    final size = box.size;
+    final overlay = Overlay.of(anchorContext).context.findRenderObject() as RenderBox;
+
+    // 24h × 6 = 144 スロット
+    final slots = <TimeOfDay>[];
+    for (int h = 0; h < 24; h++) {
+      for (int m = 0; m < 60; m += 10) {
+        slots.add(TimeOfDay(hour: h, minute: m));
+      }
+    }
+    // current 未指定時は 09:00 にスクロール位置を合わせる
+    TimeOfDay initial;
+    if (current != null) {
+      final rounded = TimeOfDay(hour: current.hour, minute: (current.minute ~/ 10) * 10);
+      initial = slots.firstWhere(
+        (t) => t.hour == rounded.hour && t.minute == rounded.minute,
+        orElse: () => slots[9 * 6], // 09:00
+      );
+    } else {
+      initial = slots[9 * 6]; // 09:00
+    }
+
+    return showMenu<TimeOfDay>(
+      context: anchorContext,
+      initialValue: initial,
+      position: RelativeRect.fromLTRB(
+        offset.dx,
+        offset.dy + size.height,
+        overlay.size.width - offset.dx - size.width,
+        overlay.size.height - offset.dy - size.height,
+      ),
+      constraints: const BoxConstraints(maxHeight: 320, minWidth: 96),
+      items: slots.map((t) {
+        final label = '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
+        return PopupMenuItem<TimeOfDay>(
+          value: t,
+          height: 32,
+          child: Text(label, style: const TextStyle(fontSize: AppTextSize.body)),
+        );
+      }).toList(),
+    );
+  }
+
   /// AI生成コンテンツをhugに送信するダイアログを表示
   Future<void> _showSaveContentDialog(String content, {String? defaultCommandLabel}) async {
     // モニタリング応答の場合は専用ダイアログへ
@@ -1420,6 +1469,8 @@ class _AiChatScreenState extends State<AiChatScreen> {
     final textController = TextEditingController(text: content);
     // 初期日付: 欠席連絡など「欠席日」を含む質問がエリシテーションにあればそれを使う
     DateTime selectedDate = _resolveInitialDateFromElicitation() ?? DateTime.now();
+    TimeOfDay? selectedStartTime;
+    TimeOfDay? selectedEndTime;
     final currentUser = FirebaseAuth.instance.currentUser;
     final staffName = _staffName ?? 'スタッフ';
 
@@ -1546,31 +1597,120 @@ class _AiChatScreenState extends State<AiChatScreen> {
                                     Text(staffName, style: TextStyle(fontSize: AppTextSize.body, color: c.textPrimary, fontWeight: FontWeight.w500))),
                                   Divider(height: 1, color: c.borderLight),
                                   metaRow(Icons.calendar_today_outlined, '日付',
-                                    InkWell(
-                                      borderRadius: BorderRadius.circular(6),
-                                      onTap: () async {
-                                        final picked = await showDatePicker(
-                                          context: ctx,
-                                          initialDate: selectedDate,
-                                          firstDate: DateTime.now().subtract(const Duration(days: 30)),
-                                          lastDate: DateTime.now(),
-                                          locale: const Locale('ja'),
-                                        );
-                                        if (picked != null) {
-                                          setDialogState(() => selectedDate = picked);
-                                        }
-                                      },
-                                      child: Padding(
-                                        padding: const EdgeInsets.symmetric(vertical: 4),
-                                        child: Row(
-                                          children: [
-                                            Text(DateFormat('yyyy/MM/dd (E)', 'ja').format(selectedDate),
-                                              style: TextStyle(fontSize: AppTextSize.body, color: c.aiAccent, fontWeight: FontWeight.w500)),
-                                            const SizedBox(width: 4),
-                                            Icon(Icons.arrow_drop_down, size: 18, color: c.aiAccent),
-                                          ],
+                                    Row(
+                                      children: [
+                                        InkWell(
+                                          borderRadius: BorderRadius.circular(6),
+                                          onTap: () async {
+                                            final picked = await showDatePicker(
+                                              context: ctx,
+                                              initialDate: selectedDate,
+                                              firstDate: DateTime.now().subtract(const Duration(days: 30)),
+                                              lastDate: DateTime.now(),
+                                              locale: const Locale('ja'),
+                                            );
+                                            if (picked != null) {
+                                              setDialogState(() => selectedDate = picked);
+                                            }
+                                          },
+                                          child: Padding(
+                                            padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 2),
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                Text(DateFormat('yyyy/MM/dd (E)', 'ja').format(selectedDate),
+                                                  style: TextStyle(fontSize: AppTextSize.body, color: c.aiAccent, fontWeight: FontWeight.w500)),
+                                                const SizedBox(width: 2),
+                                                Icon(Icons.arrow_drop_down, size: 18, color: c.aiAccent),
+                                              ],
+                                            ),
+                                          ),
                                         ),
-                                      ),
+                                        const SizedBox(width: 12),
+                                        Builder(
+                                          builder: (anchorCtx) => InkWell(
+                                            borderRadius: BorderRadius.circular(6),
+                                            onTap: () async {
+                                              final picked = await _pickTime10min(anchorCtx, selectedStartTime);
+                                              if (picked != null) {
+                                                setDialogState(() {
+                                                  selectedStartTime = picked;
+                                                  // 開始時間を入れたら終了時間は自動で +1h
+                                                  selectedEndTime = TimeOfDay(
+                                                    hour: (picked.hour + 1) % 24,
+                                                    minute: picked.minute,
+                                                  );
+                                                });
+                                              }
+                                            },
+                                            child: Padding(
+                                              padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 2),
+                                              child: Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  Icon(Icons.schedule, size: 14,
+                                                    color: selectedStartTime == null ? c.textTertiary : c.aiAccent),
+                                                  const SizedBox(width: 4),
+                                                  Text(
+                                                    selectedStartTime == null
+                                                        ? '--:--'
+                                                        : '${selectedStartTime!.hour.toString().padLeft(2, '0')}:${selectedStartTime!.minute.toString().padLeft(2, '0')}',
+                                                    style: TextStyle(
+                                                      fontSize: AppTextSize.body,
+                                                      color: selectedStartTime == null ? c.textTertiary : c.aiAccent,
+                                                      fontWeight: FontWeight.w500,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                        Padding(
+                                          padding: const EdgeInsets.symmetric(horizontal: 4),
+                                          child: Text('〜', style: TextStyle(fontSize: AppTextSize.body, color: c.textTertiary)),
+                                        ),
+                                        Builder(
+                                          builder: (anchorCtx) => InkWell(
+                                            borderRadius: BorderRadius.circular(6),
+                                            onTap: () async {
+                                              final hint = selectedEndTime ??
+                                                  (selectedStartTime != null
+                                                      ? TimeOfDay(hour: (selectedStartTime!.hour + 1) % 24, minute: selectedStartTime!.minute)
+                                                      : const TimeOfDay(hour: 11, minute: 0));
+                                              final picked = await _pickTime10min(anchorCtx, hint);
+                                              if (picked != null) {
+                                                setDialogState(() => selectedEndTime = picked);
+                                              }
+                                            },
+                                            child: Padding(
+                                              padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 2),
+                                              child: Text(
+                                                selectedEndTime == null
+                                                    ? '--:--'
+                                                    : '${selectedEndTime!.hour.toString().padLeft(2, '0')}:${selectedEndTime!.minute.toString().padLeft(2, '0')}',
+                                                style: TextStyle(
+                                                  fontSize: AppTextSize.body,
+                                                  color: selectedEndTime == null ? c.textTertiary : c.aiAccent,
+                                                  fontWeight: FontWeight.w500,
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                        if (selectedStartTime != null || selectedEndTime != null)
+                                          IconButton(
+                                            tooltip: '時間をクリア',
+                                            icon: Icon(Icons.close, size: 14, color: c.textTertiary),
+                                            padding: EdgeInsets.zero,
+                                            constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
+                                            splashRadius: 14,
+                                            onPressed: () => setDialogState(() {
+                                              selectedStartTime = null;
+                                              selectedEndTime = null;
+                                            }),
+                                          ),
+                                      ],
                                     ),
                                   ),
                                 ],
@@ -1665,6 +1805,9 @@ class _AiChatScreenState extends State<AiChatScreen> {
           _activeCommandInitialized = true;
         });
       }
+      String? fmtTime(TimeOfDay? t) => t == null
+          ? null
+          : '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
       final payload = <String, dynamic>{
         'category': selectedCategory,
         'studentId': widget.studentId,
@@ -1672,6 +1815,8 @@ class _AiChatScreenState extends State<AiChatScreen> {
         'content': textController.text,
         'date': Timestamp.fromDate(DateTime(
             selectedDate.year, selectedDate.month, selectedDate.day)),
+        'startTime': fmtTime(selectedStartTime),
+        'endTime': fmtTime(selectedEndTime),
         'recorderName': staffName,
         'recorderId': currentUser?.uid ?? '',
       };
