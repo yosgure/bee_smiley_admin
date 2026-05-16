@@ -243,13 +243,23 @@ async function fetchChildFacilityService(cookies, childId, addingChildrenId, int
 }
 
 async function saveToRecordProceedings(cookies, params) {
-  const { hidden, addingChildrenId, childId, recorderStaffId, dateStr, title, content } = params;
+  const { hidden, addingChildrenId, childId, recorderStaffId, dateStr, title, content, startTime, endTime } = params;
 
   const [y, m, d] = dateStr.split('-');
   const interviewDate = `${y}年${m}月${d}日`;
 
   const { fId, sId } = await fetchChildFacilityService(cookies, childId, addingChildrenId, interviewDate);
   console.log(`[recordProceedings] c_id=${childId} → f_id=${fId} s_id=${sId}`);
+
+  // "HH:MM" → ["HH", "MM"]、未指定なら空文字。
+  // HUG 側は hour/minute を別フィールドで受ける（zero-padding は不問）。
+  const splitHM = (s) => {
+    if (!s || typeof s !== 'string' || !s.includes(':')) return ['', ''];
+    const [h, m] = s.split(':');
+    return [h || '', m || ''];
+  };
+  const [startHour, startMin] = splitHM(startTime);
+  const [endHour, endMin] = splitHM(endTime);
 
   const FormData = require('form-data');
   const formData = new FormData();
@@ -270,10 +280,10 @@ async function saveToRecordProceedings(cookies, params) {
   formData.append('recorder', String(recorderStaffId));
   formData.append('interview_staff[]', String(recorderStaffId));
   formData.append('interview_date', interviewDate);
-  formData.append('start_hour', '');
-  formData.append('start_time', '');
-  formData.append('end_hour', '');
-  formData.append('end_time', '');
+  formData.append('start_hour', startHour);
+  formData.append('start_time', startMin);
+  formData.append('end_hour', endHour);
+  formData.append('end_time', endMin);
   formData.append('start_hour2', '');
   formData.append('start_time2', '');
   formData.append('end_hour2', '');
@@ -606,7 +616,13 @@ async function syncToHugCore(contentIds = null) {
         continue;
       }
 
-      if (normalizeName(category).includes('子育てサポート')) {
+      // 加算系カテゴリ → record_proceedings.php（各種加算・議事録管理）
+      // resolveAddingChildrenId が部分一致で HUG 側の「家族支援加算（Ⅰ）」等を引き当てる。
+      const ADDING_CATEGORIES = ['子育てサポート', '家族支援'];
+      const isAddingCategory = ADDING_CATEGORIES.some(
+        (prefix) => normalizeName(category).includes(prefix)
+      );
+      if (isAddingCategory) {
         if (!recordProceedingsForm) {
           recordProceedingsForm = await getRecordProceedingsForm(cookies);
         }
@@ -624,6 +640,8 @@ async function syncToHugCore(contentIds = null) {
           dateStr,
           title: category,
           content,
+          startTime: docData.startTime || '',
+          endTime: docData.endTime || '',
         });
 
         if (success) {
