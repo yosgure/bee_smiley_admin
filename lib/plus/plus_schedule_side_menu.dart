@@ -304,22 +304,11 @@ extension PlusScheduleSideMenu on _PlusScheduleContentState {
               leading: Icon(Icons.event_repeat, color: context.colors.textSecondary),
               title: Text('定期スケジュール展開'),
               subtitle: Text(
-                '7/6〜3/31',
+                '開始日を選択 〜 3/31',
                 style: TextStyle(fontSize: AppTextSize.small, color: context.colors.textTertiary),
               ),
               onTap: () {
                 _deployRegularScheduleToLessons();
-              },
-            ),
-            ListTile(
-              leading: Icon(Icons.delete_sweep, color: context.colors.textSecondary),
-              title: Text('自動展開分リセット'),
-              subtitle: Text(
-                '7/6〜3/31',
-                style: TextStyle(fontSize: AppTextSize.small, color: context.colors.textTertiary),
-              ),
-              onTap: () {
-                _resetAutoDeployedLessons();
               },
             ),
           ],
