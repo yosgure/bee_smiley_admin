@@ -1232,25 +1232,43 @@ Map<String, dynamic>? _getCellMemo(DateTime date, int slotIndex) {
     }
   }
 
-  // ダッシュボードの定期スケジュールを 2026-07-06 〜 2027-03-31 の plus_lessons に一括展開する。
+  // ダッシュボードの定期スケジュールを 指定した日 〜 2027-03-31 の plus_lessons に一括展開する。
   // 冪等。同じ (date, slotIndex, studentName) が既に存在する日はスキップして手動入力を保護する。
   Future<void> _deployRegularScheduleToLessons() async {
-    final start = DateTime(2026, 7, 6);
     final end = DateTime(2027, 3, 31);
     final endInclusive = DateTime(end.year, end.month, end.day, 23, 59, 59);
     const weekDayNames = ['月', '火', '水', '木', '金', '土'];
     const slotKeys = ['9:30〜', '11:00〜', '14:00〜', '15:30〜'];
 
+    // 1) 開始日をユーザーに選んでもらう（例: 新しい生徒が来る日以降）
+    final today = DateTime.now();
+    final pickedStart = await showDatePicker(
+      context: context,
+      helpText: '展開を開始する日を選択',
+      initialDate: DateTime(today.year, today.month, today.day),
+      firstDate: DateTime(2026, 1, 1),
+      lastDate: end,
+      locale: const Locale('ja'),
+    );
+    if (pickedStart == null) return;
+    if (!mounted) return;
+    final start = DateTime(pickedStart.year, pickedStart.month, pickedStart.day);
+
+    final fmt = DateFormat('yyyy年M月d日');
+    final startLabel = fmt.format(start);
+    final endLabel = fmt.format(end);
+
+    // 2) 確認ダイアログ
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('スケジュール一括展開'),
-        content: const Text(
-          '2026年7月6日 〜 2027年3月31日 の期間に、ダッシュボードの定期スケジュールを反映します。\n\n'
+        content: Text(
+          '$startLabel 〜 $endLabel の期間に、ダッシュボードの定期スケジュールを反映します。\n\n'
           '・既に同じ生徒・時間帯のレッスンがある日はスキップします（手動入力は保護）\n'
           '・退会済み・在籍期間外の自動展開レッスンは削除します（手動編集は保護）\n'
           '・休業日設定がある日はスキップします（日曜は自動でスキップ）\n'
-          '・2026年7月6日より前の予定は一切変更しません',
+          '・$startLabel より前の予定は一切変更しません',
         ),
         actions: [
           TextButton(
@@ -1509,100 +1527,6 @@ Map<String, dynamic>? _getCellMemo(DateTime date, int slotIndex) {
       debugPrint('Deploy error: $e');
       if (mounted) Navigator.pop(context);
       if (mounted) AppFeedback.info(context, '展開失敗: $e');
-    }
-  }
-
-  // 自動展開で生成された plus_lessons (autoDeployed:true) を 2026-07-06 〜 2027-03-31 から削除する。
-  // 手動編集レッスン（autoDeployed フラグなし）は一切触らない。
-  Future<void> _resetAutoDeployedLessons() async {
-    final start = DateTime(2026, 7, 6);
-    final end = DateTime(2027, 3, 31);
-    final endInclusive = DateTime(end.year, end.month, end.day, 23, 59, 59);
-
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('自動展開分のリセット'),
-        content: const Text(
-          '2026年7月6日 〜 2027年3月31日 の自動展開レッスン（autoDeployed:true）を削除します。\n\n'
-          '・手動で追加・編集したレッスンは削除されません\n'
-          '・削除後、再度「定期スケジュール展開」を押すと最新のダッシュボードで作り直せます',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('キャンセル'),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('削除する'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true) return;
-    if (!mounted) return;
-
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => const AlertDialog(
-        content: Row(
-          children: [
-            CircularProgressIndicator(),
-            SizedBox(width: 16),
-            Text('削除中...'),
-          ],
-        ),
-      ),
-    );
-
-    try {
-      final snap = await FirebaseFirestore.instance
-          .collection('plus_lessons')
-          .where('date', isGreaterThanOrEqualTo: Timestamp.fromDate(start))
-          .where('date', isLessThanOrEqualTo: Timestamp.fromDate(endInclusive))
-          .get();
-
-      var batch = FirebaseFirestore.instance.batch();
-      int batchOps = 0;
-      int deleted = 0;
-      for (final doc in snap.docs) {
-        if (doc.data()['autoDeployed'] != true) continue;
-        batch.delete(doc.reference);
-        batchOps++;
-        deleted++;
-        if (batchOps >= 450) {
-          await batch.commit();
-          batch = FirebaseFirestore.instance.batch();
-          batchOps = 0;
-        }
-      }
-      if (batchOps > 0) await batch.commit();
-
-      if (mounted) Navigator.pop(context);
-      if (mounted) {
-        await showDialog(
-          context: context,
-          builder: (ctx) => AlertDialog(
-            title: const Text('リセット完了'),
-            content: Text('削除: $deleted件'),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: const Text('OK'),
-              ),
-            ],
-          ),
-        );
-      }
-      await _loadLessonsForWeek(showLoading: false);
-      if (_viewMode == 2) await _loadLessonsForMonth();
-    } catch (e) {
-      debugPrint('Reset error: $e');
-      if (mounted) Navigator.pop(context);
-      if (mounted) AppFeedback.info(context, 'リセット失敗: $e');
     }
   }
 
