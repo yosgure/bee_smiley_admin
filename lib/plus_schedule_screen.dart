@@ -1232,10 +1232,10 @@ Map<String, dynamic>? _getCellMemo(DateTime date, int slotIndex) {
     }
   }
 
-  // ダッシュボードの定期スケジュールを 2026-07-01 〜 2027-03-31 の plus_lessons に一括展開する。
+  // ダッシュボードの定期スケジュールを 2026-07-06 〜 2027-03-31 の plus_lessons に一括展開する。
   // 冪等。同じ (date, slotIndex, studentName) が既に存在する日はスキップして手動入力を保護する。
   Future<void> _deployRegularScheduleToLessons() async {
-    final start = DateTime(2026, 7, 1);
+    final start = DateTime(2026, 7, 6);
     final end = DateTime(2027, 3, 31);
     final endInclusive = DateTime(end.year, end.month, end.day, 23, 59, 59);
     const weekDayNames = ['月', '火', '水', '木', '金', '土'];
@@ -1246,11 +1246,11 @@ Map<String, dynamic>? _getCellMemo(DateTime date, int slotIndex) {
       builder: (ctx) => AlertDialog(
         title: const Text('スケジュール一括展開'),
         content: const Text(
-          '2026年7月1日 〜 2027年3月31日 の期間に、ダッシュボードの定期スケジュールを反映します。\n\n'
+          '2026年7月6日 〜 2027年3月31日 の期間に、ダッシュボードの定期スケジュールを反映します。\n\n'
           '・既に同じ生徒・時間帯のレッスンがある日はスキップします（手動入力は保護）\n'
           '・退会済み・在籍期間外の自動展開レッスンは削除します（手動編集は保護）\n'
           '・休業日設定がある日はスキップします（日曜は自動でスキップ）\n'
-          '・2026年7月1日より前の予定は一切変更しません',
+          '・2026年7月6日より前の予定は一切変更しません',
         ),
         actions: [
           TextButton(
@@ -1512,10 +1512,10 @@ Map<String, dynamic>? _getCellMemo(DateTime date, int slotIndex) {
     }
   }
 
-  // 自動展開で生成された plus_lessons (autoDeployed:true) を 2026-07-01 〜 2027-03-31 から削除する。
+  // 自動展開で生成された plus_lessons (autoDeployed:true) を 2026-07-06 〜 2027-03-31 から削除する。
   // 手動編集レッスン（autoDeployed フラグなし）は一切触らない。
   Future<void> _resetAutoDeployedLessons() async {
-    final start = DateTime(2026, 7, 1);
+    final start = DateTime(2026, 7, 6);
     final end = DateTime(2027, 3, 31);
     final endInclusive = DateTime(end.year, end.month, end.day, 23, 59, 59);
 
@@ -1524,7 +1524,7 @@ Map<String, dynamic>? _getCellMemo(DateTime date, int slotIndex) {
       builder: (ctx) => AlertDialog(
         title: const Text('自動展開分のリセット'),
         content: const Text(
-          '2026年7月1日 〜 2027年3月31日 の自動展開レッスン（autoDeployed:true）を削除します。\n\n'
+          '2026年7月6日 〜 2027年3月31日 の自動展開レッスン（autoDeployed:true）を削除します。\n\n'
           '・手動で追加・編集したレッスンは削除されません\n'
           '・削除後、再度「定期スケジュール展開」を押すと最新のダッシュボードで作り直せます',
         ),
