@@ -66,6 +66,17 @@ class _PlusShiftRequestDialogState extends State<PlusShiftRequestDialog> {
   final Set<DateTime> _myHalfAmDates = <DateTime>{};
   final Set<DateTime> _myHalfPmDates = <DateTime>{};
 
+  // 営業休日（plus_shifts/{yyyy-MM}/holidays）。複数月にまたがる範囲に対応。
+  final Map<String, Set<int>> _holidaysByMonth = {};
+
+  bool _isBusinessHoliday(DateTime date) {
+    final mk = DateFormat('yyyy-MM').format(date);
+    return _holidaysByMonth[mk]?.contains(date.day) ?? false;
+  }
+
+  bool _isOffDay(DateTime date) =>
+      date.weekday == DateTime.sunday || _isBusinessHoliday(date);
+
   String get _monthKey => DateFormat('yyyy-MM').format(widget.targetMonth);
 
   DateTime get _rangeStart => _dateOnly(shiftRangeStart(widget.targetMonth));
@@ -104,6 +115,27 @@ class _PlusShiftRequestDialogState extends State<PlusShiftRequestDialog> {
         if (snap.docs.isNotEmpty) {
           _myStaffId = snap.docs.first.id;
           _myStaffName = (snap.docs.first.data()['name'] ?? '') as String;
+        }
+      }
+
+      // 1.5. 範囲内の各月の営業休日（holidays）を取得
+      final months = <String>{};
+      DateTime cursor = DateTime(_rangeStart.year, _rangeStart.month, 1);
+      final endMonth = DateTime(_rangeEnd.year, _rangeEnd.month, 1);
+      while (!cursor.isAfter(endMonth)) {
+        months.add(DateFormat('yyyy-MM').format(cursor));
+        cursor = DateTime(cursor.year, cursor.month + 1, 1);
+      }
+      for (final mk in months) {
+        final shiftDoc = await FirebaseFirestore.instance
+            .collection('plus_shifts')
+            .doc(mk)
+            .get();
+        if (shiftDoc.exists) {
+          final hList =
+              (shiftDoc.data()?['holidays'] as List<dynamic>?) ?? const [];
+          _holidaysByMonth[mk] =
+              hList.map((e) => int.parse(e.toString())).toSet();
         }
       }
 
@@ -507,6 +539,47 @@ class _PlusShiftRequestDialogState extends State<PlusShiftRequestDialog> {
                   ),
                 );
               }
+              final isOtherMonth = date.month != widget.targetMonth.month;
+              // 日曜 or 営業休日はグレーアウト・操作不可
+              if (_isOffDay(date)) {
+                return Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.all(2),
+                    child: Container(
+                      height: 48,
+                      decoration: BoxDecoration(
+                        color: context.colors.chipBg,
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              isOtherMonth
+                                  ? '${date.month}/${date.day}'
+                                  : '${date.day}',
+                              style: TextStyle(
+                                fontSize: isOtherMonth ? 11.0 : 14.0,
+                                fontWeight: FontWeight.w500,
+                                color: context.colors.textTertiary,
+                              ),
+                            ),
+                            Text(
+                              '休',
+                              style: TextStyle(
+                                fontSize: AppTextSize.xxs,
+                                fontWeight: FontWeight.bold,
+                                color: context.colors.textTertiary,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              }
               final isNg = _myNgDates.contains(date);
               final isStrong = _myNgStrongDates.contains(date);
               final isHalfAm = _myHalfAmDates.contains(date);
@@ -535,7 +608,6 @@ class _PlusShiftRequestDialogState extends State<PlusShiftRequestDialog> {
                 bgColor = context.colors.tagBg;
                 badgeLabel = null;
               }
-              final isOtherMonth = date.month != widget.targetMonth.month;
               final dayLabel =
                   isOtherMonth ? '${date.month}/${date.day}' : '${date.day}';
               final labelFontSize = isOtherMonth ? 11.0 : 14.0;
@@ -811,6 +883,14 @@ class _PlusShiftDecisionDialogState extends State<PlusShiftDecisionDialog> {
   final Map<String, Map<String, dynamic>> _originalDaysByMonth = {};
   final Set<String> _existingShiftDocs = <String>{};
 
+  // 営業休日（plus_shifts/{yyyy-MM}/holidays）。複数月にまたがる範囲に対応。
+  final Map<String, Set<int>> _holidaysByMonth = {};
+
+  bool _isBusinessHoliday(DateTime date) {
+    final mk = DateFormat('yyyy-MM').format(date);
+    return _holidaysByMonth[mk]?.contains(date.day) ?? false;
+  }
+
   String get _monthKey => DateFormat('yyyy-MM').format(_targetMonth);
 
   DateTime get _rangeStart => _dateOnly(shiftRangeStart(_targetMonth));
@@ -849,6 +929,7 @@ class _PlusShiftDecisionDialogState extends State<PlusShiftDecisionDialog> {
       _offDates.clear();
       _originalDaysByMonth.clear();
       _existingShiftDocs.clear();
+      _holidaysByMonth.clear();
     });
     await _load();
   }
@@ -959,8 +1040,12 @@ class _PlusShiftDecisionDialogState extends State<PlusShiftDecisionDialog> {
             .get();
         if (!shiftDoc.exists) continue;
         _existingShiftDocs.add(mk);
-        final days = Map<String, dynamic>.from(shiftDoc.data()?['days'] ?? {});
+        final data = shiftDoc.data() ?? const {};
+        final days = Map<String, dynamic>.from(data['days'] ?? {});
         _originalDaysByMonth[mk] = days;
+        final hList = (data['holidays'] as List<dynamic>?) ?? const [];
+        _holidaysByMonth[mk] =
+            hList.map((e) => int.parse(e.toString())).toSet();
         // 旧実装: ここで days.slots[].isWorking==false を _offDates に追加していたが廃止。
       }
     } catch (e) {
@@ -1569,12 +1654,14 @@ class _PlusShiftDecisionDialogState extends State<PlusShiftDecisionDialog> {
             ? '${date.month}/${date.day}'
             : '${date.day}';
 
-    // 日曜は定休表示
-    if (isSun) {
+    final isHolidayDay = date != null && _isBusinessHoliday(date);
+    // 日曜 or 営業休日はグレーアウト（操作不可）
+    if (isSun || isHolidayDay) {
+      final tagLabel = isSun ? '定休' : '休';
       return Container(
         constraints: const BoxConstraints(minHeight: 80),
         decoration: BoxDecoration(
-          color: isDark ? AppColors.errorDark.withValues(alpha: 0.15) : AppColors.errorBg,
+          color: context.colors.chipBg,
           border: Border.all(color: context.colors.borderMedium),
         ),
         padding: const EdgeInsets.all(4),
@@ -1586,17 +1673,17 @@ class _PlusShiftDecisionDialogState extends State<PlusShiftDecisionDialog> {
                 dayLabel,
                 style: TextStyle(
                   fontSize: AppTextSize.small,
-                  color: (isDark ? AppColors.errorBorder : AppColors.errorBorder)
+                  color: context.colors.textTertiary
                       .withValues(alpha: outOfRange ? 0.4 : 1.0),
                   fontWeight: FontWeight.bold,
                 ),
               ),
             const SizedBox(height: 2),
             Text(
-              '定休',
+              tagLabel,
               style: TextStyle(
                 fontSize: AppTextSize.xxs,
-                color: (isDark ? AppColors.errorBorder : AppColors.errorBorder)
+                color: context.colors.textTertiary
                     .withValues(alpha: outOfRange ? 0.4 : 1.0),
               ),
             ),
