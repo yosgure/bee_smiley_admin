@@ -151,11 +151,7 @@ extension PlusDashboardTable on _PlusDashboardContentState {
               : SingleChildScrollView(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
-                    children: students.asMap().entries.map((entry) {
-                      final index = entry.key;
-                      final student = entry.value;
-                      return _buildStudentItem(day, timeSlot, index, student);
-                    }).toList(),
+                    children: _buildStudentsGrouped(day, timeSlot, students),
                   ),
                 ),
         ),
@@ -163,11 +159,85 @@ extension PlusDashboardTable on _PlusDashboardContentState {
     );
   }
 
+  /// セル内の生徒を groupId でグルーピングし、同じセット（同 gid が 2 人以上）は
+  /// 1 つの Container（左バー1本）にまとめて描画する。
+  List<Widget> _buildStudentsGrouped(
+      String day, String timeSlot, List<Map<String, dynamic>> students) {
+    // 元のインデックスを保持しつつ、同じ groupId が連続するように並び替え
+    final firstIndex = <String, int>{};
+    for (int i = 0; i < students.length; i++) {
+      final gid = students[i]['groupId'] as String?;
+      if (gid != null && gid.isNotEmpty && !firstIndex.containsKey(gid)) {
+        firstIndex[gid] = i;
+      }
+    }
+    final mult = students.length + 1;
+    final sorted = students.asMap().entries.map((e) {
+      final i = e.key;
+      final s = e.value;
+      final gid = s['groupId'] as String?;
+      final eff = (gid != null && gid.isNotEmpty && firstIndex.containsKey(gid))
+          ? firstIndex[gid]!
+          : i;
+      return MapEntry(eff * mult + i, (origIndex: i, student: s));
+    }).toList()
+      ..sort((a, b) => a.key.compareTo(b.key));
+
+    final List<Widget> widgets = [];
+    List<({int origIndex, Map<String, dynamic> student})> currentGroup = [];
+    String? currentGid;
+
+    void flushGroup() {
+      if (currentGroup.isEmpty) return;
+      final isSet = currentGid != null &&
+          currentGid!.isNotEmpty &&
+          currentGroup.length >= 2;
+      if (isSet) {
+        final firstStudent = currentGroup.first.student;
+        final course = firstStudent['course'] as String? ?? '通常';
+        final color = _courseColors[course] ?? AppColors.info;
+        widgets.add(Container(
+          decoration: BoxDecoration(
+            border: Border(left: BorderSide(color: color, width: 2)),
+          ),
+          padding: const EdgeInsets.only(left: 4),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: currentGroup
+                .map((e) =>
+                    _buildStudentItem(day, timeSlot, e.origIndex, e.student))
+                .toList(),
+          ),
+        ));
+      } else {
+        for (final e in currentGroup) {
+          widgets
+              .add(_buildStudentItem(day, timeSlot, e.origIndex, e.student));
+        }
+      }
+      currentGroup = [];
+    }
+
+    for (final entry in sorted) {
+      final s = entry.value;
+      final gid = s.student['groupId'] as String?;
+      if (gid == currentGid && currentGroup.isNotEmpty) {
+        currentGroup.add(s);
+      } else {
+        flushGroup();
+        currentGroup = [s];
+        currentGid = gid;
+      }
+    }
+    flushGroup();
+    return widgets;
+  }
+
   Widget _buildStudentItem(String day, String timeSlot, int index, Map<String, dynamic> student) {
     final name = student['name'] as String;
     final course = student['course'] as String? ?? '通常';
     final scheduleNote = student['note'] as String? ?? '';
-    final color = _PlusDashboardContentState._courseColors[course] ?? AppColors.primary;
+    final color = _courseColors[course] ?? AppColors.info;
 
     final studentNote = _studentNotes.firstWhere(
       (n) => n['studentName'] == name,
@@ -233,6 +303,36 @@ extension PlusDashboardTable on _PlusDashboardContentState {
           ),
       ],
     );
+
+    // セット編集モード中はチェックボックスを左に出し、タップで選択切替
+    // （左バーは _buildStudentsGrouped でグループ全体を 1 つの Container として描画）
+    final studentId = student['id'] as String?;
+    if (widget.setEditMode && studentId != null) {
+      final isSelected = widget.selectedIds.contains(studentId);
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 2),
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () => widget.onToggleSelect?.call(studentId),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Padding(
+                padding: const EdgeInsets.only(right: 4),
+                child: Icon(
+                  isSelected ? Icons.check_box : Icons.check_box_outline_blank,
+                  size: 14,
+                  color: isSelected
+                      ? AppColors.primary
+                      : context.colors.textTertiary,
+                ),
+              ),
+              Expanded(child: IgnorePointer(child: content)),
+            ],
+          ),
+        ),
+      );
+    }
 
     if (!hasAnyNote) {
       return Padding(

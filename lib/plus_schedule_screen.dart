@@ -108,6 +108,11 @@ class _PlusScheduleContentState extends State<PlusScheduleContent> with Automati
     '欠席（加算なし）': AppColors.error,
     '欠席（HUG登録なし）': AppColors.error,
     '策定会議': AppColors.aiAccent,
+    // 短縮形エイリアス（ダッシュボードの旧データ互換）
+    '放': AppColors.primary,
+    '感': AppColors.secondary,
+    '就': AppColors.secondary,
+    'モ': AppColors.info,
   };
 
   // カスタマイズ可能なコース色
@@ -152,6 +157,12 @@ class _PlusScheduleContentState extends State<PlusScheduleContent> with Automati
   // レッスンデータ（Firestoreから取得）
   List<Map<String, dynamic>> _lessons = [];
   bool _isLoadingLessons = true;
+
+  // セット編集モード（同じコマ内の複数レッスンをまとめて「セット」化する）
+  bool _setEditMode = false;
+  final Set<String> _selectedLessonIds = <String>{};
+  // ダッシュボードを再ロードするためのキー
+  int _dashboardReloadKey = 0;
 
   // 週移動時のブランクを避けるための隣接週レッスンキャッシュ。
   // キーは週開始日(yyyy-MM-dd)、値はその週のレッスン配列。
@@ -1086,6 +1097,7 @@ Map<String, dynamic>? _getCellMemo(DateTime date, int slotIndex) {
         'isEvent': data['isEvent'] ?? false,
         'title': data['title'] ?? '',
         'order': data['order'] ?? (data['createdAt'] as Timestamp?)?.millisecondsSinceEpoch ?? 0,
+        'groupId': data['groupId'] as String?,
       });
     }
 
@@ -1220,10 +1232,10 @@ Map<String, dynamic>? _getCellMemo(DateTime date, int slotIndex) {
     }
   }
 
-  // ダッシュボードの定期スケジュールを 2026-06-01 〜 2027-03-31 の plus_lessons に一括展開する。
+  // ダッシュボードの定期スケジュールを 2026-07-01 〜 2027-03-31 の plus_lessons に一括展開する。
   // 冪等。同じ (date, slotIndex, studentName) が既に存在する日はスキップして手動入力を保護する。
   Future<void> _deployRegularScheduleToLessons() async {
-    final start = DateTime(2026, 6, 1);
+    final start = DateTime(2026, 7, 1);
     final end = DateTime(2027, 3, 31);
     final endInclusive = DateTime(end.year, end.month, end.day, 23, 59, 59);
     const weekDayNames = ['月', '火', '水', '木', '金', '土'];
@@ -1234,11 +1246,11 @@ Map<String, dynamic>? _getCellMemo(DateTime date, int slotIndex) {
       builder: (ctx) => AlertDialog(
         title: const Text('スケジュール一括展開'),
         content: const Text(
-          '2026年6月1日 〜 2027年3月31日 の期間に、ダッシュボードの定期スケジュールを反映します。\n\n'
+          '2026年7月1日 〜 2027年3月31日 の期間に、ダッシュボードの定期スケジュールを反映します。\n\n'
           '・既に同じ生徒・時間帯のレッスンがある日はスキップします（手動入力は保護）\n'
           '・退会済み・在籍期間外の自動展開レッスンは削除します（手動編集は保護）\n'
           '・休業日設定がある日はスキップします（日曜は自動でスキップ）\n'
-          '・2026年6月1日より前の予定は一切変更しません',
+          '・2026年7月1日より前の予定は一切変更しません',
         ),
         actions: [
           TextButton(
@@ -1428,7 +1440,7 @@ Map<String, dynamic>? _getCellMemo(DateTime date, int slotIndex) {
             }
 
             final ref = FirebaseFirestore.instance.collection('plus_lessons').doc();
-            batch.set(ref, {
+            final lessonData = <String, dynamic>{
               'date': Timestamp.fromDate(DateTime(d.year, d.month, d.day)),
               'slotIndex': slotIdx,
               'studentName': name,
@@ -1443,7 +1455,13 @@ Map<String, dynamic>? _getCellMemo(DateTime date, int slotIndex) {
               'order': entryIdx,
               'createdAt': FieldValue.serverTimestamp(),
               'autoDeployed': true,
-            });
+            };
+            // 定期スケジュールでセット化していれば groupId をコピー
+            final gid = m['groupId'];
+            if (gid is String && gid.isNotEmpty) {
+              lessonData['groupId'] = gid;
+            }
+            batch.set(ref, lessonData);
             existingKeys.add(key);
             batchOps++;
             created++;
@@ -1494,10 +1512,10 @@ Map<String, dynamic>? _getCellMemo(DateTime date, int slotIndex) {
     }
   }
 
-  // 自動展開で生成された plus_lessons (autoDeployed:true) を 2026-06-01 〜 2027-03-31 から削除する。
+  // 自動展開で生成された plus_lessons (autoDeployed:true) を 2026-07-01 〜 2027-03-31 から削除する。
   // 手動編集レッスン（autoDeployed フラグなし）は一切触らない。
   Future<void> _resetAutoDeployedLessons() async {
-    final start = DateTime(2026, 6, 1);
+    final start = DateTime(2026, 7, 1);
     final end = DateTime(2027, 3, 31);
     final endInclusive = DateTime(end.year, end.month, end.day, 23, 59, 59);
 
@@ -1506,7 +1524,7 @@ Map<String, dynamic>? _getCellMemo(DateTime date, int slotIndex) {
       builder: (ctx) => AlertDialog(
         title: const Text('自動展開分のリセット'),
         content: const Text(
-          '2026年6月1日 〜 2027年3月31日 の自動展開レッスン（autoDeployed:true）を削除します。\n\n'
+          '2026年7月1日 〜 2027年3月31日 の自動展開レッスン（autoDeployed:true）を削除します。\n\n'
           '・手動で追加・編集したレッスンは削除されません\n'
           '・削除後、再度「定期スケジュール展開」を押すと最新のダッシュボードで作り直せます',
         ),
@@ -1873,7 +1891,22 @@ void _goToThisWeek() {
           ? (_isLoadingMonthLessons
               ? const Center(child: CircularProgressIndicator())
               : _buildMonthCalendar())
-          : const PlusDashboardContent(),
+          : PlusDashboardContent(
+              reloadKey: _dashboardReloadKey,
+              setEditMode: _setEditMode,
+              selectedIds: _selectedLessonIds,
+              onToggleSelect: (id) {
+                setState(() {
+                  if (_selectedLessonIds.contains(id)) {
+                    _selectedLessonIds.remove(id);
+                  } else {
+                    _selectedLessonIds.add(id);
+                  }
+                });
+              },
+              onMakeSet: _makeSetForDashboard,
+              onUnmakeSet: _unmakeSetForDashboard,
+            ),
 ),
             ],
           ),
@@ -2180,6 +2213,8 @@ void _goToPage(int page) {
                 ),
               ),
             ),
+          // セット編集ボタン群
+          ..._buildSetEditHeaderButtons(),
           // タブ切り替え
           Container(
             height: 36,
@@ -2248,6 +2283,79 @@ void _goToPage(int page) {
         ),
       ),
     );
+  }
+
+  /// ヘッダー: セット編集モード切替＆操作ボタン群。
+  List<Widget> _buildSetEditHeaderButtons() {
+    ButtonStyle outlinedStyle({Color? fg}) => ButtonStyle(
+          padding: WidgetStateProperty.all(
+              const EdgeInsets.symmetric(horizontal: 10)),
+          side: WidgetStateProperty.all(
+              BorderSide(color: context.colors.borderMedium)),
+          shape: WidgetStateProperty.all(RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(6))),
+          foregroundColor:
+              WidgetStateProperty.all(fg ?? context.colors.textSecondary),
+          backgroundColor: WidgetStateProperty.resolveWith((states) {
+            if (states.contains(WidgetState.hovered)) {
+              return context.colors.chipBg;
+            }
+            return Colors.transparent;
+          }),
+          minimumSize: WidgetStateProperty.all(Size.zero),
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        );
+
+    if (!_setEditMode) {
+      // 通常モードではヘッダーに何も出さない（3点メニューから入る）
+      return const [];
+    }
+    final count = _selectedLessonIds.length;
+    return [
+      Padding(
+        padding: const EdgeInsets.only(right: 4),
+        child: SizedBox(
+          height: 32,
+          child: OutlinedButton(
+            onPressed: count >= 2
+                ? (_viewMode == 1 ? _makeSetForDashboard : _makeSet)
+                : null,
+            style: outlinedStyle(fg: AppColors.primary),
+            child: Text('セット化 ($count)',
+                style: const TextStyle(fontSize: AppTextSize.body)),
+          ),
+        ),
+      ),
+      Padding(
+        padding: const EdgeInsets.only(right: 4),
+        child: SizedBox(
+          height: 32,
+          child: OutlinedButton(
+            onPressed: count >= 1
+                ? (_viewMode == 1 ? _unmakeSetForDashboard : _unmakeSet)
+                : null,
+            style: outlinedStyle(),
+            child: const Text('解除',
+                style: TextStyle(fontSize: AppTextSize.body)),
+          ),
+        ),
+      ),
+      Padding(
+        padding: const EdgeInsets.only(right: 8),
+        child: SizedBox(
+          height: 32,
+          child: OutlinedButton(
+            onPressed: () => setState(() {
+              _setEditMode = false;
+              _selectedLessonIds.clear();
+            }),
+            style: outlinedStyle(),
+            child: const Text('完了',
+                style: TextStyle(fontSize: AppTextSize.body)),
+          ),
+        ),
+      ),
+    ];
   }
 
   /// 右上の「…」メニュー。シフト希望など関連ツールへの入口。
@@ -2399,6 +2507,14 @@ void _goToPage(int page) {
           AppFeedback.info(context, '法定研修のリンクは未設定です。');
         }
         break;
+      case 'set_edit':
+        if (mounted) {
+          setState(() {
+            _setEditMode = true;
+            _selectedLessonIds.clear();
+          });
+        }
+        break;
     }
   }
 
@@ -2461,6 +2577,11 @@ void _goToPage(int page) {
               trailingColor: needsAttention ? AppColors.errorBorder : null,
             ),
             menuItem('shift_decision', Icons.event_available_outlined, 'シフト決定'),
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 6),
+              child: Divider(height: 1, color: border),
+            ),
+            menuItem('set_edit', Icons.link, 'セット編集'),
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 6),
               child: Divider(height: 1, color: border),
@@ -3452,7 +3573,7 @@ void _goToPage(int page) {
               : Builder(
                   builder: (cellContext) {
                     return SingleChildScrollView(
-                      clipBehavior: Clip.none,
+                      clipBehavior: Clip.hardEdge,
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: _buildLessonListWithDropIndicators(lessons, dayIndex, slotIndex, cellContext),
@@ -3738,32 +3859,151 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
   );
 }
 
+  // ===== セット表示用ヘルパー =====
+  String? _groupIdOf(Map<String, dynamic> l) => l['groupId'] as String?;
+
+  /// 同じ groupId のレッスンを連続させる並び替え。
+  /// グループの順序は「最初に出現した groupId の順」。groupId == null は元の位置を保つ。
+  List<Map<String, dynamic>> _sortLessonsByGroupId(
+      List<Map<String, dynamic>> lessons) {
+    if (lessons.length <= 1) return lessons;
+    final firstIndex = <String, int>{};
+    for (int i = 0; i < lessons.length; i++) {
+      final gid = _groupIdOf(lessons[i]);
+      if (gid != null && !firstIndex.containsKey(gid)) {
+        firstIndex[gid] = i;
+      }
+    }
+    final mult = lessons.length + 1;
+    final indexed = <MapEntry<int, Map<String, dynamic>>>[];
+    for (int i = 0; i < lessons.length; i++) {
+      final gid = _groupIdOf(lessons[i]);
+      final eff = (gid != null) ? firstIndex[gid]! : i;
+      indexed.add(MapEntry(eff * mult + i, lessons[i]));
+    }
+    indexed.sort((a, b) => a.key.compareTo(b.key));
+    return indexed.map((e) => e.value).toList();
+  }
+
+  /// セット内の連続するレッスン群を 1 つの Container（左バー1本）でラップ。
+  Widget _wrapGroupColumn(
+      List<Widget> items, Map<String, dynamic> firstLesson) {
+    final course = firstLesson['course'] as String? ?? '通常';
+    final color = _courseColors[course] ?? AppColors.info;
+    return Container(
+      decoration: BoxDecoration(
+        border: Border(left: BorderSide(color: color, width: 2)),
+      ),
+      padding: const EdgeInsets.only(left: 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: items,
+      ),
+    );
+  }
+
+  /// セット編集モード中は左にチェックボックス、タップで選択状態を切替。
+  Widget _wrapWithSetEditCheckbox(
+      Widget item, Map<String, dynamic> lesson) {
+    if (!_setEditMode) return item;
+    final id = lesson['id'] as String?;
+    if (id == null) return item;
+    final isSelected = _selectedLessonIds.contains(id);
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () {
+        setState(() {
+          if (isSelected) {
+            _selectedLessonIds.remove(id);
+          } else {
+            _selectedLessonIds.add(id);
+          }
+        });
+      },
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(right: 4),
+            child: Icon(
+              isSelected ? Icons.check_box : Icons.check_box_outline_blank,
+              size: 14,
+              color: isSelected
+                  ? AppColors.primary
+                  : context.colors.textTertiary,
+            ),
+          ),
+          Expanded(child: IgnorePointer(child: item)),
+        ],
+      ),
+    );
+  }
+
   // レッスンリストを行間ドロップインジケーター付きで構築
   List<Widget> _buildLessonListWithDropIndicators(List<Map<String, dynamic>> lessons, int dayIndex, int slotIndex, [BuildContext? cellContext]) {
-    // ドラッグ中でない場合は通常のリストを返す
+    final sorted = _sortLessonsByGroupId(lessons);
+
+    Widget itemWithCheckbox(Map<String, dynamic> lesson) {
+      return _wrapWithSetEditCheckbox(
+        _buildLessonItem(lesson, cellContext: cellContext),
+        lesson,
+      );
+    }
+
+    // ドラッグ中でない場合は通常のリストを返す（同じ groupId をまとめて 1 Container でラップ）
     final isDraggingInSameCell = _draggingLesson != null &&
         _draggingLesson!['dayIndex'] == dayIndex &&
         _draggingLesson!['slotIndex'] == slotIndex;
-    
+
     if (!isDraggingInSameCell) {
-      return lessons.map((lesson) => _buildLessonItem(lesson, cellContext: cellContext)).toList();
+      final List<Widget> widgets = [];
+      List<Map<String, dynamic>> currentGroup = [];
+      String? currentGid;
+
+      void flushGroup() {
+        if (currentGroup.isEmpty) return;
+        final isSet = currentGid != null && currentGroup.length >= 2;
+        if (isSet) {
+          widgets.add(_wrapGroupColumn(
+            currentGroup.map(itemWithCheckbox).toList(),
+            currentGroup.first,
+          ));
+        } else {
+          widgets.addAll(currentGroup.map(itemWithCheckbox));
+        }
+        currentGroup = [];
+      }
+
+      for (final lesson in sorted) {
+        final gid = _groupIdOf(lesson);
+        if (gid == currentGid && currentGroup.isNotEmpty) {
+          currentGroup.add(lesson);
+        } else {
+          flushGroup();
+          currentGroup = [lesson];
+          currentGid = gid;
+        }
+      }
+      flushGroup();
+
+      return widgets;
     }
-    // ドラッグ中のレッスンの現在位置
-    final currentIndex = lessons.indexWhere((l) => l['id'] == _draggingLesson!['id']);
-    
+    // ドラッグ中のレッスンの現在位置（並び替え後のリスト上）
+    final currentIndex = sorted.indexWhere((l) => l['id'] == _draggingLesson!['id']);
+
     final List<Widget> widgets = [];
-    for (int i = 0; i <= lessons.length; i++) {
+    for (int i = 0; i <= sorted.length; i++) {
       // 自分の位置と直後の位置以外にドロップインジケーターを配置
       if (i != currentIndex && i != currentIndex + 1) {
-        widgets.add(_buildDropIndicator(dayIndex, slotIndex, i, lessons));
+        widgets.add(_buildDropIndicator(dayIndex, slotIndex, i, sorted));
       }
-      
-      // レッスンアイテム
-      if (i < lessons.length) {
-        widgets.add(_buildLessonItem(lessons[i], cellContext: cellContext));
+
+      // レッスンアイテム（ドラッグ中はグループ化を解除して個別表示）
+      if (i < sorted.length) {
+        widgets.add(itemWithCheckbox(sorted[i]));
       }
     }
-    
+
     return widgets;
   }
 
@@ -4418,6 +4658,211 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
     }
     
     return widgets;
+  }
+
+  /// 選択中のレッスンを 1 つのセットにする（同じコマ内のみ）。
+  Future<void> _makeSet() async {
+    final selected = _lessons
+        .where((l) => _selectedLessonIds.contains(l['id'] as String?))
+        .toList();
+    if (selected.length < 2) return;
+
+    // 同一コマ判定（day + slot 一致）
+    final firstDay = selected.first['dayIndex'];
+    final firstSlot = selected.first['slotIndex'];
+    final sameCell = selected.every(
+        (l) => l['dayIndex'] == firstDay && l['slotIndex'] == firstSlot);
+    if (!sameCell) {
+      AppFeedback.warning(context, '同じコマ内のレッスンだけセット化できます');
+      return;
+    }
+
+    // 既存セットを引き継ぐ。選択中に既存 groupId が1種類だけならそれを再利用、
+    // それ以外（混在 or なし）は新規 groupId を発行。
+    final existingGroupIds = selected
+        .map((l) => l['groupId'] as String?)
+        .where((g) => g != null)
+        .toSet();
+    final newGroupId = (existingGroupIds.length == 1)
+        ? existingGroupIds.first!
+        : 'g_${DateTime.now().millisecondsSinceEpoch}';
+
+    try {
+      final batch = FirebaseFirestore.instance.batch();
+      for (final l in selected) {
+        final id = l['id'] as String?;
+        if (id == null) continue;
+        batch.update(
+          FirebaseFirestore.instance.collection('plus_lessons').doc(id),
+          {'groupId': newGroupId},
+        );
+      }
+      await batch.commit();
+
+      setState(() {
+        for (final l in selected) {
+          l['groupId'] = newGroupId;
+        }
+        _selectedLessonIds.clear();
+      });
+      // Firestore からも再取得して、ローカル更新の取りこぼしを防ぐ
+      if (mounted) await _loadLessonsForWeek(showLoading: false);
+      if (mounted) {
+        AppFeedback.success(
+          context,
+          '${selected.length}人を1セットにしました',
+        );
+      }
+    } catch (e) {
+      if (mounted) AppFeedback.error(context, 'セット化に失敗しました: $e');
+    }
+  }
+
+  /// ダッシュボード用: 選択中の生徒 id を plus_regular_schedule 上で 1 セットにする。
+  /// （同じ曜日・時間スロット内のみ可）
+  Future<void> _makeSetForDashboard() async {
+    if (_selectedLessonIds.length < 2) return;
+    try {
+      final docRef = FirebaseFirestore.instance
+          .collection('plus_regular_schedule')
+          .doc('data');
+      final doc = await docRef.get();
+      if (!doc.exists) return;
+      final schedule = Map<String, dynamic>.from(doc.data()?['schedule'] ?? {});
+
+      // 各 student id がどのセル（曜日, スロット）にあるかをまず集める
+      final cellsByStudentId = <String, String>{};
+      schedule.forEach((day, slots) {
+        if (slots is! Map) return;
+        slots.forEach((slot, students) {
+          if (students is! List) return;
+          for (final s in students) {
+            if (s is Map && s['id'] is String) {
+              cellsByStudentId[s['id'] as String] = '$day|$slot';
+            }
+          }
+        });
+      });
+      final cells = _selectedLessonIds
+          .map((id) => cellsByStudentId[id])
+          .where((c) => c != null)
+          .toSet();
+      if (cells.length > 1) {
+        if (mounted) {
+          AppFeedback.warning(context, '同じコマ内の生徒だけセット化できます');
+        }
+        return;
+      }
+
+      // 既存セットを引き継ぐ。選択中に既存 groupId が1種類だけならそれを再利用
+      final existingGroupIds = <String>{};
+      schedule.forEach((day, slots) {
+        if (slots is! Map) return;
+        slots.forEach((slot, students) {
+          if (students is! List) return;
+          for (final s in students) {
+            if (s is Map && _selectedLessonIds.contains(s['id'])) {
+              final g = s['groupId'];
+              if (g is String && g.isNotEmpty) existingGroupIds.add(g);
+            }
+          }
+        });
+      });
+      final newGroupId = (existingGroupIds.length == 1)
+          ? existingGroupIds.first
+          : 'g_${DateTime.now().millisecondsSinceEpoch}';
+
+      int updated = 0;
+      schedule.forEach((day, slots) {
+        if (slots is! Map) return;
+        slots.forEach((slot, students) {
+          if (students is! List) return;
+          for (final s in students) {
+            if (s is Map && _selectedLessonIds.contains(s['id'])) {
+              s['groupId'] = newGroupId;
+              updated++;
+            }
+          }
+        });
+      });
+      if (updated < 2) return;
+      await docRef.update({'schedule': schedule});
+      setState(() {
+        _selectedLessonIds.clear();
+        _dashboardReloadKey++;
+      });
+      if (mounted) {
+        AppFeedback.success(context, '$updated人を1セットにしました');
+      }
+    } catch (e) {
+      if (mounted) AppFeedback.error(context, 'セット化に失敗しました: $e');
+    }
+  }
+
+  /// ダッシュボード用: 選択中の生徒の groupId を解除。
+  Future<void> _unmakeSetForDashboard() async {
+    if (_selectedLessonIds.isEmpty) return;
+    try {
+      final docRef = FirebaseFirestore.instance
+          .collection('plus_regular_schedule')
+          .doc('data');
+      final doc = await docRef.get();
+      if (!doc.exists) return;
+      final schedule = Map<String, dynamic>.from(doc.data()?['schedule'] ?? {});
+      int updated = 0;
+      schedule.forEach((day, slots) {
+        if (slots is! Map) return;
+        slots.forEach((slot, students) {
+          if (students is! List) return;
+          for (final s in students) {
+            if (s is Map && _selectedLessonIds.contains(s['id'])) {
+              s.remove('groupId');
+              updated++;
+            }
+          }
+        });
+      });
+      await docRef.update({'schedule': schedule});
+      setState(() {
+        _selectedLessonIds.clear();
+        _dashboardReloadKey++;
+      });
+      if (mounted) AppFeedback.success(context, 'セットを解除しました');
+    } catch (e) {
+      if (mounted) AppFeedback.error(context, 'セット解除に失敗しました: $e');
+    }
+  }
+
+  /// 選択中のレッスンの groupId を解除（単独に戻す）。
+  Future<void> _unmakeSet() async {
+    final selected = _lessons
+        .where((l) => _selectedLessonIds.contains(l['id'] as String?))
+        .toList();
+    if (selected.isEmpty) return;
+
+    try {
+      final batch = FirebaseFirestore.instance.batch();
+      for (final l in selected) {
+        final id = l['id'] as String?;
+        if (id == null) continue;
+        batch.update(
+          FirebaseFirestore.instance.collection('plus_lessons').doc(id),
+          {'groupId': FieldValue.delete()},
+        );
+      }
+      await batch.commit();
+
+      setState(() {
+        for (final l in selected) {
+          l.remove('groupId');
+        }
+        _selectedLessonIds.clear();
+      });
+      if (mounted) await _loadLessonsForWeek(showLoading: false);
+      if (mounted) AppFeedback.success(context, 'セットを解除しました');
+    } catch (e) {
+      if (mounted) AppFeedback.error(context, 'セット解除に失敗しました: $e');
+    }
   }
 
   // レッスンを指定インデックスに移動（並び替え）

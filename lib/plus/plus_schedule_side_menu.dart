@@ -304,7 +304,7 @@ extension PlusScheduleSideMenu on _PlusScheduleContentState {
               leading: Icon(Icons.event_repeat, color: context.colors.textSecondary),
               title: Text('定期スケジュール展開'),
               subtitle: Text(
-                '6/1〜3/31',
+                '7/1〜3/31',
                 style: TextStyle(fontSize: AppTextSize.small, color: context.colors.textTertiary),
               ),
               onTap: () {
@@ -315,7 +315,7 @@ extension PlusScheduleSideMenu on _PlusScheduleContentState {
               leading: Icon(Icons.delete_sweep, color: context.colors.textSecondary),
               title: Text('自動展開分リセット'),
               subtitle: Text(
-                '6/1〜3/31',
+                '7/1〜3/31',
                 style: TextStyle(fontSize: AppTextSize.small, color: context.colors.textTertiary),
               ),
               onTap: () {

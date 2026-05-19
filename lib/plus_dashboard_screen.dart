@@ -10,7 +10,28 @@ part 'plus/plus_dashboard_table.dart';
 
 /// プラスダッシュボードのコンテンツウィジェット
 class PlusDashboardContent extends StatefulWidget {
-  const PlusDashboardContent({super.key});
+  /// 親から再ロード要求を伝える（値が変わると _loadData が再実行される）
+  final int reloadKey;
+  /// セット編集モード（外部からトグル）
+  final bool setEditMode;
+  /// セット編集モード中に選択された student id 一覧（外部管理）
+  final Set<String> selectedIds;
+  /// 選択トグル時のコールバック
+  final void Function(String studentId)? onToggleSelect;
+  /// 選択中の生徒をセット化する操作（同じ曜日×時間スロット内のみ可）
+  final Future<void> Function()? onMakeSet;
+  /// 選択中の生徒のセットを解除
+  final Future<void> Function()? onUnmakeSet;
+
+  const PlusDashboardContent({
+    super.key,
+    this.reloadKey = 0,
+    this.setEditMode = false,
+    this.selectedIds = const {},
+    this.onToggleSelect,
+    this.onMakeSet,
+    this.onUnmakeSet,
+  });
 
   @override
   State<PlusDashboardContent> createState() => _PlusDashboardContentState();
@@ -23,8 +44,8 @@ class _PlusDashboardContentState extends State<PlusDashboardContent> {
   // 時間帯リスト
   final List<String> _timeSlots = ['9:30〜', '11:00〜', '14:00〜', '15:30〜'];
 
-  // コース色定義
-  static const Map<String, Color> _courseColors = {
+  // コース色定義のデフォルト（plus_settings/course_colors で上書きされる）
+  static const Map<String, Color> _defaultCourseColors = {
     '通常': AppColors.info,
     'モンテッソーリ': AppColors.info,
     '感覚統合': AppColors.secondary,
@@ -36,7 +57,49 @@ class _PlusDashboardContentState extends State<PlusDashboardContent> {
     '欠席': AppColors.error, // 旧データ互換用
     '欠席（加算あり）': AppColors.error,
     '策定会議': AppColors.aiAccent,
+    // 短縮形エイリアス（旧データ互換）
+    '放': AppColors.primary,
+    '感': AppColors.secondary,
+    '就': AppColors.secondary,
+    'モ': AppColors.info,
   };
+
+  // Firestore から読み込んだカスタム色で上書き可能な instance マップ
+  Map<String, Color> _courseColors = Map.from(_defaultCourseColors);
+
+  /// plus_settings/course_colors からカスタム色を読み込み、ダッシュボードの色を
+  /// スケジュール画面と揃える。
+  Future<void> _loadCourseColors() async {
+    try {
+      final doc = await FirebaseFirestore.instance
+          .collection('plus_settings')
+          .doc('course_colors')
+          .get();
+      if (!doc.exists) return;
+      final data = doc.data();
+      final colors = data?['colors'] as Map<String, dynamic>?;
+      if (colors == null) return;
+      final next = Map<String, Color>.from(_defaultCourseColors);
+      for (final entry in colors.entries) {
+        final v = entry.value;
+        if (v is int) next[entry.key] = Color(v);
+      }
+      // 短縮形にもフルネームの色を反映（例: '放' ← '放デイ'）
+      final aliasMap = {
+        '放': '放デイ',
+        '感': '感覚統合',
+        '就': '就学支援',
+        'モ': 'モンテッソーリ',
+      };
+      aliasMap.forEach((alias, full) {
+        final c = next[full];
+        if (c != null) next[alias] = c;
+      });
+      if (mounted) setState(() => _courseColors = next);
+    } catch (e) {
+      debugPrint('Error loading dashboard course colors: $e');
+    }
+  }
 
   final List<String> _courseList = ['通常', 'モンテッソーリ', '感覚統合', '言語', '就学支援', '放デイ', '契約', '体験', '欠席（加算あり）', '策定会議'];
 
@@ -81,12 +144,23 @@ class _PlusDashboardContentState extends State<PlusDashboardContent> {
     _loadData();
   }
 
+  @override
+  void didUpdateWidget(PlusDashboardContent oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.reloadKey != oldWidget.reloadKey) {
+      _loadScheduleFromFirestore().then((_) {
+        if (mounted) setState(() {});
+      });
+    }
+  }
+
   Future<void> _loadData() async {
     await Future.wait([
       _loadScheduleFromFirestore(),
       _loadStudentsFromFirestore(),
       _loadTasksFromFirestore(),
       _loadStudentNotesFromFirestore(),
+      _loadCourseColors(),
     ]);
     if (mounted) {
       setState(() {
@@ -167,20 +241,33 @@ class _PlusDashboardContentState extends State<PlusDashboardContent> {
       if (doc.exists) {
         final data = doc.data();
         final scheduleData = data?['schedule'] as Map<String, dynamic>? ?? {};
-        
+
         _regularSchedule = {};
+        bool generatedAnyId = false;
         for (var day in _weekDays) {
           _regularSchedule[day] = {};
           final dayData = scheduleData[day] as Map<String, dynamic>? ?? {};
           for (var slot in _timeSlots) {
             final slotData = dayData[slot] as List<dynamic>? ?? [];
-            _regularSchedule[day]![slot] = slotData.map((item) {
+            _regularSchedule[day]![slot] = slotData.asMap().entries.map((entry) {
+              final i = entry.key;
+              final item = entry.value;
               if (item is Map<String, dynamic>) {
-                return item;
+                final m = Map<String, dynamic>.from(item);
+                // セット化対象を一意に識別するための id を自動付与（無ければ生成）
+                if (m['id'] == null || (m['id'] as String).isEmpty) {
+                  m['id'] = 'rs_${day}_${slot}_${DateTime.now().microsecondsSinceEpoch}_$i';
+                  generatedAnyId = true;
+                }
+                return m;
               }
               return <String, dynamic>{};
             }).toList();
           }
+        }
+        // 生成した id を即座に永続化する（次回ロードでも安定）
+        if (generatedAnyId) {
+          await _saveScheduleToFirestore();
         }
       } else {
         _initializeEmptySchedule();
