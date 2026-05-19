@@ -8,7 +8,6 @@ part of '../plus_schedule_screen.dart';
 
 extension PlusScheduleTaskDialog on _PlusScheduleContentState {
   void _showTasksForDateDialog(DateTime date, List<Map<String, dynamic>> tasks) {
-    final scaffoldMessenger = ScaffoldMessenger.of(context);
     showDialog(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
@@ -86,9 +85,6 @@ extension PlusScheduleTaskDialog on _PlusScheduleContentState {
                                   await _completeTask(task['id']);
                                   setDialogState(() {});
                                   setState(() {});
-                                  scaffoldMessenger.showSnackBar(
-                                    const SnackBar(content: Text('タスクを完了しました')),
-                                  );
                                 },
                                 icon: const Icon(Icons.check_circle_outline),
                                 color: AppColors.success,
@@ -380,9 +376,7 @@ extension PlusScheduleTaskDialog on _PlusScheduleContentState {
                           Navigator.pop(dialogContext);
                         }
                         if (mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('タスクを追加しました')),
-                          );
+                          AppFeedback.success(context, 'タスクを追加しました');
                         }
                       }
                     : null,

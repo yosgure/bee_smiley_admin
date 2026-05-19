@@ -628,6 +628,7 @@ Map<String, dynamic>? _getCellMemo(DateTime date, int slotIndex) {
         context: context,
         label: 'タスクを完了',
         doneMessage: 'タスクを完了しました',
+        window: const Duration(seconds: 6),
         docRef: FirebaseFirestore.instance
             .collection('plus_tasks')
             .doc(taskId),
