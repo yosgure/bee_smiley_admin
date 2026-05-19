@@ -92,7 +92,7 @@ class AppFeedback {
     final messenger = ScaffoldMessenger.maybeOf(context);
     if (messenger == null) return;
     messenger.hideCurrentSnackBar();
-    messenger.showSnackBar(
+    final controller = messenger.showSnackBar(
       SnackBar(
         backgroundColor: style.background,
         duration: duration,
@@ -117,6 +117,11 @@ class AppFeedback {
         action: action,
       ),
     );
+    Future.delayed(duration, () {
+      try {
+        controller.close();
+      } catch (_) {}
+    });
   }
 
   // ============================================================

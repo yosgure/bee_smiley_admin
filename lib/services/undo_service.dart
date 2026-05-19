@@ -44,33 +44,24 @@ class UndoService {
     await execute();
 
     if (!context.mounted) return;
-    final messenger = ScaffoldMessenger.of(context);
-    messenger.clearSnackBars();
-    messenger.showSnackBar(
-      SnackBar(
-        content: Text(doneMessage ?? '$label を実行しました'),
-        duration: window,
-        action: SnackBarAction(
-          label: '元に戻す',
-          onPressed: () async {
-            try {
-              await undo(snapshot);
-              if (context.mounted) {
-                ScaffoldMessenger.of(context).clearSnackBars();
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('元に戻しました'),
-                    duration: Duration(seconds: 3),
-                  ),
-                );
-              }
-            } catch (e) {
-              if (context.mounted) {
-                AppFeedback.info(context, '復元に失敗しました: $e');
-              }
+    AppFeedback.info(
+      context,
+      doneMessage ?? '$label を実行しました',
+      duration: window,
+      action: SnackBarAction(
+        label: '元に戻す',
+        onPressed: () async {
+          try {
+            await undo(snapshot);
+            if (context.mounted) {
+              AppFeedback.success(context, '元に戻しました');
             }
-          },
-        ),
+          } catch (e) {
+            if (context.mounted) {
+              AppFeedback.error(context, '復元に失敗しました: $e');
+            }
+          }
+        },
       ),
     );
   }
