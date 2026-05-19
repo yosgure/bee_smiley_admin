@@ -288,32 +288,6 @@ extension PlusScheduleSideMenu on _PlusScheduleContentState {
 
   // サイドメニュー：下部メニュー
   Widget _buildSideMenuBottom() {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Column(
-        children: [
-          if (_viewMode == 0) ...[
-            ListTile(
-              leading: Icon(Icons.schedule, color: context.colors.textSecondary),
-              title: Text('スケジュール管理'),
-              onTap: () {
-                _showShiftManagementDialog();
-              },
-            ),
-            ListTile(
-              leading: Icon(Icons.event_repeat, color: context.colors.textSecondary),
-              title: Text('定期スケジュール展開'),
-              subtitle: Text(
-                '開始日を選択 〜 3/31',
-                style: TextStyle(fontSize: AppTextSize.small, color: context.colors.textTertiary),
-              ),
-              onTap: () {
-                _deployRegularScheduleToLessons();
-              },
-            ),
-          ],
-        ],
-      ),
-    );
+    return const SizedBox.shrink();
   }
 }

@@ -2439,6 +2439,11 @@ void _goToPage(int page) {
           });
         }
         break;
+      case 'deploy_schedule':
+        if (mounted) {
+          await _deployRegularScheduleToLessons();
+        }
+        break;
     }
   }
 
@@ -2506,6 +2511,7 @@ void _goToPage(int page) {
               child: Divider(height: 1, color: border),
             ),
             menuItem('set_edit', Icons.link, 'セット編集'),
+            menuItem('deploy_schedule', Icons.event_repeat, '定期スケジュール展開'),
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 6),
               child: Divider(height: 1, color: border),
