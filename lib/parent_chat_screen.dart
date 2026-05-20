@@ -112,22 +112,22 @@ class _ParentChatScreenState extends State<ParentChatScreen> {
         }
       }
 
-      // スタッフが見つからない場合、全スタッフから1人を選択
+      // スタッフが見つからない場合（子供の classroom 未設定など）は全スタッフを追加
+      // 1人だけだと家族チャットに参加できないスタッフが多数発生して、
+      // 一覧から見えなくなる事故が起きるため。
       if (staffUids.isEmpty) {
         final anyStaffQuery = await FirebaseFirestore.instance
             .collection('staffs')
-            .limit(1)
             .get();
-        
-        if (anyStaffQuery.docs.isNotEmpty) {
-          final staffData = anyStaffQuery.docs.first.data();
+
+        for (final doc in anyStaffQuery.docs) {
+          final staffData = doc.data();
           final staffUid = staffData['uid'] as String?;
-          if (staffUid != null) {
-            staffUids.add(staffUid);
-            final name = staffData['name'] ?? 
-                '${(staffData['lastName'] ?? '').toString().trim()} ${(staffData['firstName'] ?? '').toString().trim()}'.trim();
-            staffNames[staffUid] = name.isNotEmpty ? name : '先生';
-          }
+          if (staffUid == null) continue;
+          staffUids.add(staffUid);
+          final name = staffData['name'] ??
+              '${(staffData['lastName'] ?? '').toString().trim()} ${(staffData['firstName'] ?? '').toString().trim()}'.trim();
+          staffNames[staffUid] = name.isNotEmpty ? name : '先生';
         }
       }
 
