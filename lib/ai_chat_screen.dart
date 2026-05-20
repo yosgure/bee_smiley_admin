@@ -2842,7 +2842,10 @@ class _AiChatScreenState extends State<AiChatScreen> {
   /// エリシテーション用の日付/日時ピッカーボタン
   Widget _buildDatePickerButton(String type, String currentAnswer) {
     final hasValue = currentAnswer.isNotEmpty;
-    return InkWell(
+    // _pickTime10min は anchor となる context (= ボタン自身の RenderBox) を
+    // 必要とするため、Builder で包んで InkWell 直下の context を取得する。
+    return Builder(
+      builder: (anchorCtx) => InkWell(
       borderRadius: BorderRadius.circular(12),
       onTap: () async {
         DateTime initial = DateTime.now();
@@ -2864,9 +2867,12 @@ class _AiChatScreenState extends State<AiChatScreen> {
 
         DateTime selected = picked;
         if (type == 'datetime') {
-          final t = await showTimePicker(
-            context: context,
-            initialTime: TimeOfDay(hour: initial.hour, minute: initial.minute),
+          // 標準の showTimePicker (時計UI) ではなく、ファイル内既存の
+          // 10 分刻みドロップダウン (_pickTime10min) を利用する。
+          if (!mounted) return;
+          final t = await _pickTime10min(
+            anchorCtx,
+            TimeOfDay(hour: initial.hour, minute: initial.minute),
           );
           if (t == null) return;
           selected = DateTime(picked.year, picked.month, picked.day, t.hour, t.minute);
@@ -2908,6 +2914,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
             Icon(Icons.arrow_drop_down, size: 20, color: context.colors.textTertiary),
           ],
         ),
+      ),
       ),
     );
   }
