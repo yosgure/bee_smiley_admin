@@ -46,6 +46,11 @@ class CrmLeadSidePanel extends StatefulWidget {
 class _CrmLeadSidePanelState extends State<CrmLeadSidePanel> {
   final FocusNode _focus = FocusNode();
 
+  /// 最後に取得できた有効なスナップショット。
+  /// 他者の編集・markRead() 等で StreamBuilder が一瞬 `hasData == false` を経由する
+  /// 際に CircularProgressIndicator がフラッシュ表示されないようキャッシュする。
+  DocumentSnapshot<Map<String, dynamic>>? _lastSnapshot;
+
   @override
   void initState() {
     super.initState();
@@ -81,20 +86,27 @@ class _CrmLeadSidePanelState extends State<CrmLeadSidePanel> {
         child: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
           stream: widget.leadView.familyRef.snapshots(),
           builder: (context, snap) {
-            if (!snap.hasData) {
+            // 新しい有効データが来たらキャッシュを更新（setState は呼ばない:
+            //   StreamBuilder 自体が build を駆動する）。
+            if (snap.hasData && snap.data!.exists) {
+              _lastSnapshot = snap.data;
+            }
+            // hasData == false の一瞬は前回データを使ってフラッシュを回避する。
+            final effective = snap.data ?? _lastSnapshot;
+            if (effective == null) {
               return const Center(
                   child: Padding(
                       padding: EdgeInsets.all(32),
                       child: CircularProgressIndicator()));
             }
-            if (!snap.data!.exists) {
+            if (!effective.exists) {
               return Center(
                   child: Padding(
                       padding: const EdgeInsets.all(32),
                       child: Text('リードが見つかりません',
                           style: TextStyle(color: c.textSecondary))));
             }
-            final familyData = snap.data!.data();
+            final familyData = effective.data();
             final children = (familyData?['children'] as List? ?? []);
             final idx = widget.leadView.childIndex;
             if (familyData == null || idx < 0 || idx >= children.length) {
@@ -408,7 +420,9 @@ class _BasicInfoSectionState extends State<_BasicInfoSection> {
           _labelCol(context, label),
           Expanded(
             child: _InlineTextEditor(
-              key: ValueKey('$fieldKey:$value'),
+              // key に value を含めない。サーバー側の値変化で State が破棄され、
+              // 編集中のテキストが消えるのを防ぐ。
+              key: ValueKey(fieldKey),
               initialText: value,
               hint: hint.isEmpty ? '未入力' : hint,
               maxLines: 1,
@@ -437,7 +451,7 @@ class _BasicInfoSectionState extends State<_BasicInfoSection> {
           _labelCol(context, label),
           Expanded(
             child: _InlineTextEditor(
-              key: ValueKey('$fieldKey:$value'),
+              key: ValueKey(fieldKey),
               initialText: value,
               hint: hint.isEmpty ? '未入力' : hint,
               onCommit: (text) async {
@@ -466,7 +480,7 @@ class _BasicInfoSectionState extends State<_BasicInfoSection> {
           _labelCol(context, label),
           Expanded(
             child: _InlineTextEditor(
-              key: ValueKey('parentName:$fullName'),
+              key: const ValueKey('parentName'),
               initialText: fullName,
               hint: '姓 名（スペース区切り）',
               maxLines: 1,
@@ -507,7 +521,7 @@ class _BasicInfoSectionState extends State<_BasicInfoSection> {
           _labelCol(context, label),
           Expanded(
             child: _InlineTextEditor(
-              key: ValueKey('parentTel:$tel'),
+              key: const ValueKey('parentTel'),
               initialText: tel,
               hint: '09000000000',
               maxLines: 1,
@@ -558,7 +572,7 @@ class _BasicInfoSectionState extends State<_BasicInfoSection> {
           _labelCol(context, label),
           Expanded(
             child: _InlineTextEditor(
-              key: ValueKey('parentEmail:$email'),
+              key: const ValueKey('parentEmail'),
               initialText: email,
               hint: 'name@example.com',
               maxLines: 1,
@@ -832,8 +846,7 @@ class _BasicInfoSectionState extends State<_BasicInfoSection> {
                         border: Border(right: line(), top: line()),
                       ),
                       child: _InlineTextEditor(
-                        key: ValueKey(
-                            '${items[i].intakeKey}:${items[i].intakeValue}'),
+                        key: ValueKey(items[i].intakeKey),
                         initialText: items[i].intakeValue,
                         hint: '',
                         borderless: true,
@@ -857,8 +870,7 @@ class _BasicInfoSectionState extends State<_BasicInfoSection> {
                         border: Border(top: line()),
                       ),
                       child: _InlineTextEditor(
-                        key: ValueKey(
-                            '${items[i].hearingKey}:${items[i].hearingValue}'),
+                        key: ValueKey(items[i].hearingKey),
                         initialText: items[i].hearingValue,
                         hint: '',
                         borderless: true,
@@ -2352,7 +2364,7 @@ class _ProgressSection extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.fromLTRB(28, 0, 4, 8),
             child: _InlineTextEditor(
-              key: ValueKey('note-${item.id}-${note.hashCode}'),
+              key: ValueKey('note-${item.id}'),
               initialText: note,
               hint: '${item.label}の内容を入力',
               onCommit: (v) => _writeNote(item, v),
@@ -2505,6 +2517,19 @@ class _InlineTextEditorState extends State<_InlineTextEditor> {
     _ctrl = TextEditingController(text: widget.initialText);
     _focus = FocusNode();
     _focus.addListener(_onFocusChanged);
+  }
+
+  @override
+  void didUpdateWidget(covariant _InlineTextEditor oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // フォーカスが当たっていない（編集中でない）時のみ、サーバー側の最新値を反映する。
+    // 別ユーザーの編集や markRead() 等で親の StreamBuilder が再ビルドされても、
+    // フォーカス中の入力テキストを上書きしないようにするためのガード。
+    if (!_focus.hasFocus &&
+        widget.initialText != oldWidget.initialText &&
+        widget.initialText != _ctrl.text) {
+      _ctrl.text = widget.initialText;
+    }
   }
 
   @override
