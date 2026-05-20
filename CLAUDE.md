@@ -4,7 +4,8 @@
 
 1. `git fetch --all` で最新を取得
 2. `git branch -a --no-merged main` で未マージブランチを確認し、すべてmainにマージする
-3. `flutter pub get` → `flutter build web --no-tree-shake-icons` でビルド
+3. `flutter pub get` → `source .env && flutter build web --no-tree-shake-icons --dart-define=VAPID_KEY=$VAPID_KEY` でビルド
+   - **VAPID_KEY を渡さないと Web FCM の通知が無効になり、PCブラウザのスタッフに通知が届かない**ので必須。`.env` に定義済み。
 4. `firebase deploy --only hosting` でデプロイ
 5. Firestoreルール等に変更があれば `firebase deploy --only firestore:rules` も実行
 
