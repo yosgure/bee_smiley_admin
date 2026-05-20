@@ -94,11 +94,21 @@ function getChildClassrooms(child) {
       .map(s => s.name);
     console.log(`  追加するスタッフ: ${addedNames.join(', ')}`);
 
+    // members が 2 名超になる場合、chat_screen.dart の UI 仕様で
+    // groupName が空だと一覧で「グループ」と表示されてしまうため、
+    // 保護者名を groupName にセットする。
+    const update = {
+      members: dedupedMembers,
+      names: newNames,
+    };
+    if (dedupedMembers.length > 2 && !(room.groupName && String(room.groupName).trim().length > 0)) {
+      const parentName = newNames[parentUid] || t.parent;
+      update.groupName = parentName;
+      console.log(`  groupName: null → "${parentName}"`);
+    }
+
     if (APPLY) {
-      await roomRef.update({
-        members: dedupedMembers,
-        names: newNames,
-      });
+      await roomRef.update(update);
       console.log('  → 更新しました ✓');
     }
     console.log('');
