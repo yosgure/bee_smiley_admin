@@ -1266,6 +1266,7 @@ Map<String, dynamic>? _getCellMemo(DateTime date, int slotIndex) {
         content: Text(
           '$startLabel 〜 $endLabel の期間に、ダッシュボードの定期スケジュールを反映します。\n\n'
           '・既に同じ生徒・時間帯のレッスンがある日はスキップします（手動入力は保護）\n'
+          '・ダッシュボードでセット化した生徒は、既存レッスンにも反映します\n'
           '・退会済み・在籍期間外の自動展開レッスンは削除します（手動編集は保護）\n'
           '・休業日設定がある日はスキップします（日曜は自動でスキップ）\n'
           '・$startLabel より前の予定は一切変更しません',
@@ -1379,6 +1380,7 @@ Map<String, dynamic>? _getCellMemo(DateTime date, int slotIndex) {
       int skippedConflict = 0;
       int skippedHoliday = 0;
       int skippedSunday = 0;
+      int updatedGroup = 0;
       var batch = FirebaseFirestore.instance.batch();
       int batchOps = 0;
 
@@ -1386,6 +1388,8 @@ Map<String, dynamic>? _getCellMemo(DateTime date, int slotIndex) {
       //  - autoDeployed:true で validKeys に無い → 削除（退会・在籍期間外）
       //  - それ以外（手動入力 or 在籍中の自動展開分） → existingKeys に登録して再生成スキップ
       final existingKeys = <String>{};
+      final existingByKey =
+          <String, QueryDocumentSnapshot<Map<String, dynamic>>>{};
       for (final doc in existingSnap.docs) {
         final data = doc.data();
         final ts = data['date'];
@@ -1408,6 +1412,7 @@ Map<String, dynamic>? _getCellMemo(DateTime date, int slotIndex) {
           continue;
         }
         existingKeys.add(key);
+        existingByKey[key] = doc;
       }
 
       var d = start;
@@ -1453,6 +1458,27 @@ Map<String, dynamic>? _getCellMemo(DateTime date, int slotIndex) {
 
             final key = '${dateKey}_${slotIdx}_$name';
             if (existingKeys.contains(key)) {
+              // 衝突スキップ。ただし template にセット (groupId) があり、
+              // 既存レッスンに未反映なら同期する。
+              // template が groupId を持たない場合は既存を変更しない
+              // （予定画面側で個別に組んだセットを保護）。
+              final tplGid = m['groupId'];
+              if (tplGid is String && tplGid.isNotEmpty) {
+                final existingDoc = existingByKey[key];
+                if (existingDoc != null) {
+                  final existingGid = existingDoc.data()['groupId'];
+                  if (existingGid != tplGid) {
+                    batch.update(existingDoc.reference, {'groupId': tplGid});
+                    batchOps++;
+                    updatedGroup++;
+                    if (batchOps >= 450) {
+                      await batch.commit();
+                      batch = FirebaseFirestore.instance.batch();
+                      batchOps = 0;
+                    }
+                  }
+                }
+              }
               skippedConflict++;
               continue;
             }
@@ -1506,6 +1532,7 @@ Map<String, dynamic>? _getCellMemo(DateTime date, int slotIndex) {
             title: const Text('展開完了'),
             content: Text(
               '作成: $created件\n'
+              '更新(セット同期): $updatedGroup件\n'
               '削除(在籍期間外): $deleted件\n'
               'スキップ(衝突): $skippedConflict件\n'
               'スキップ(休業日): $skippedHoliday件\n'
@@ -4527,7 +4554,7 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
     // 園訪問
     if (schoolVisit.isNotEmpty) {
       widgets.add(const Text(
-        '【園訪問】',
+        '【園連携】',
         style: TextStyle(fontWeight: FontWeight.bold, fontSize: AppTextSize.small),
       ));
       widgets.add(Text(schoolVisit, style: const TextStyle(fontSize: AppTextSize.small)));
@@ -6107,14 +6134,14 @@ InkWell(
                               children: [
                                 Icon(Icons.school, size: 18, color: AppColors.secondary),
                                 const SizedBox(width: 8),
-                                const Text('園訪問', style: TextStyle(fontWeight: FontWeight.bold, fontSize: AppTextSize.bodyMd)),
+                                const Text('園連携', style: TextStyle(fontWeight: FontWeight.bold, fontSize: AppTextSize.bodyMd)),
                               ],
                             ),
                             const SizedBox(height: 8),
                             TextField(
                               controller: schoolVisitController,
                               decoration: InputDecoration(
-                                hintText: '園訪問の記録や予定を記入',
+                                hintText: '園連携の記録や予定を記入',
                                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
                                 contentPadding: const EdgeInsets.all(12),
                               ),
@@ -7169,14 +7196,14 @@ InkWell(
                               children: [
                                 Icon(Icons.school, size: 18, color: AppColors.secondary),
                                 const SizedBox(width: 8),
-                                const Text('園訪問', style: TextStyle(fontWeight: FontWeight.bold, fontSize: AppTextSize.bodyMd)),
+                                const Text('園連携', style: TextStyle(fontWeight: FontWeight.bold, fontSize: AppTextSize.bodyMd)),
                               ],
                             ),
                             const SizedBox(height: 8),
                             TextField(
                               controller: schoolVisitController,
                               decoration: InputDecoration(
-                                hintText: '園訪問の記録や予定を記入',
+                                hintText: '園連携の記録や予定を記入',
                                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
                                 contentPadding: const EdgeInsets.all(12),
                               ),

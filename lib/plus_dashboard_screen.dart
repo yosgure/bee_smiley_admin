@@ -621,7 +621,7 @@ class _PlusDashboardContentState extends State<PlusDashboardContent> {
           const SizedBox(width: 3),
           _buildTabButton('therapyPlan', '療育', Icons.psychology),
           const SizedBox(width: 3),
-          _buildTabButton('schoolVisit', '園訪問', Icons.school),
+          _buildTabButton('schoolVisit', '園連携', Icons.school),
           const SizedBox(width: 3),
           _buildTabButton('schoolConsultation', '就学', Icons.celebration),
           const SizedBox(width: 3),
@@ -717,12 +717,12 @@ class _PlusDashboardContentState extends State<PlusDashboardContent> {
         .toList();
     
     return _buildNoteListSection(
-      title: '園訪問',
+      title: '園連携',
       icon: Icons.school,
       iconColor: AppColors.secondary,
       notes: notes,
       noteKey: 'schoolVisit',
-      emptyMessage: '園訪問の記録はありません',
+      emptyMessage: '園連携の記録はありません',
     );
   }
 
@@ -915,7 +915,7 @@ class _PlusDashboardContentState extends State<PlusDashboardContent> {
         title = '療育プラン';
         break;
       case 'schoolVisit':
-        title = '園訪問';
+        title = '園連携';
         break;
       case 'schoolConsultation':
         title = '就学相談';
@@ -989,8 +989,8 @@ class _PlusDashboardContentState extends State<PlusDashboardContent> {
         icon = Icons.medical_services;
         break;
       case 'schoolVisit':
-        title = '園訪問';
-        hintText = '園訪問の記録や予定を記入';
+        title = '園連携';
+        hintText = '園連携の記録や予定を記入';
         icon = Icons.school;
         break;
       case 'schoolConsultation':
@@ -1137,8 +1137,8 @@ class _PlusDashboardContentState extends State<PlusDashboardContent> {
         iconColor = AppColors.primary;
         break;
       case 'schoolVisit':
-        title = '園訪問';
-        hintText = '園訪問の記録や予定を記入';
+        title = '園連携';
+        hintText = '園連携の記録や予定を記入';
         icon = Icons.school;
         iconColor = AppColors.secondary;
         break;
@@ -2419,14 +2419,14 @@ InkWell(
                               children: [
                                 const Icon(Icons.school, size: 18, color: AppColors.secondary),
                                 const SizedBox(width: 8),
-                                const Text('園訪問', style: TextStyle(fontWeight: FontWeight.bold, fontSize: AppTextSize.bodyMd)),
+                                const Text('園連携', style: TextStyle(fontWeight: FontWeight.bold, fontSize: AppTextSize.bodyMd)),
                               ],
                             ),
                             const SizedBox(height: 8),
                             TextField(
                               controller: schoolVisitController,
                               decoration: InputDecoration(
-                                hintText: '園訪問について入力',
+                                hintText: '園連携について入力',
                                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
                                 contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                                 isDense: true,
@@ -3077,14 +3077,14 @@ InkWell(
                             children: [
                               const Icon(Icons.school, size: 18, color: AppColors.secondary),
                               const SizedBox(width: 8),
-                              const Text('園訪問', style: TextStyle(fontWeight: FontWeight.bold, fontSize: AppTextSize.bodyMd)),
+                              const Text('園連携', style: TextStyle(fontWeight: FontWeight.bold, fontSize: AppTextSize.bodyMd)),
                             ],
                           ),
                           const SizedBox(height: 8),
                           TextField(
                             controller: schoolVisitController,
                             decoration: InputDecoration(
-                              hintText: '園訪問について入力',
+                              hintText: '園連携について入力',
                               border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
                               contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                               isDense: true,

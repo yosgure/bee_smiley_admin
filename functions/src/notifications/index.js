@@ -1,7 +1,7 @@
 // 通知系 Cloud Functions: チャット・お知らせ・入退室の FCM 配信。
 // staff/family の fcmTokens を集約し、無効トークンを cleanupInvalidTokens で削除する。
 
-const { onDocumentCreated } = require("firebase-functions/v2/firestore");
+const { onDocumentCreated, onDocumentUpdated } = require("firebase-functions/v2/firestore");
 const { db, messaging, FieldValue, cleanupInvalidTokens } = require('../utils/setup');
 
 // ==========================================
@@ -160,6 +160,141 @@ exports.onChatMessageCreated = onDocumentCreated(
         function: 'onChatMessageCreated',
         chatId,
         messageId: event.params.messageId,
+        error: error.message || String(error),
+      }));
+      return null;
+    }
+  }
+);
+
+// ==========================================
+// チャットメッセージにスタンプが付いた時、送信者へ通知
+// ==========================================
+// 既存レガシー: stamps[emoji] が int の場合もある。配列でない場合は空配列扱い。
+exports.onChatStampAdded = onDocumentUpdated(
+  {
+    document: "chat_rooms/{chatId}/messages/{messageId}",
+    region: "asia-northeast1",
+  },
+  async (event) => {
+    const chatId = event.params.chatId;
+    const messageId = event.params.messageId;
+
+    try {
+      const before = event.data.before.data() || {};
+      const after = event.data.after.data() || {};
+      const beforeStamps = before.stamps || {};
+      const afterStamps = after.stamps || {};
+
+      // 新規に追加された (emoji, uid) ペアを抽出
+      const added = [];
+      for (const emoji of Object.keys(afterStamps)) {
+        const afterList = Array.isArray(afterStamps[emoji]) ? afterStamps[emoji] : [];
+        const beforeList = Array.isArray(beforeStamps[emoji]) ? beforeStamps[emoji] : [];
+        for (const uid of afterList) {
+          if (!beforeList.includes(uid)) {
+            added.push({ emoji, uid });
+          }
+        }
+      }
+      if (added.length === 0) return null;
+
+      const senderId = after.senderId;
+      if (!senderId) return null;
+
+      // 自分で自分のメッセージにスタンプを押した分は通知対象外
+      const recipients = added.filter((a) => a.uid !== senderId);
+      if (recipients.length === 0) return null;
+
+      const chatDoc = await db.collection("chat_rooms").doc(chatId).get();
+      if (!chatDoc.exists) return null;
+      const names = chatDoc.data().names || {};
+
+      // 送信者の fcm トークン取得（staffs → families の順に検索）
+      let senderDocRef = null;
+      let senderTokens = [];
+      let senderNotifyChat = true;
+      const senderStaffSnap = await db
+        .collection("staffs")
+        .where("uid", "==", senderId)
+        .limit(1)
+        .get();
+      if (!senderStaffSnap.empty) {
+        const d = senderStaffSnap.docs[0];
+        senderDocRef = d.ref;
+        senderTokens = d.data().fcmTokens || [];
+        senderNotifyChat = d.data().notifyChat !== false;
+      } else {
+        const senderFamilySnap = await db
+          .collection("families")
+          .where("uid", "==", senderId)
+          .limit(1)
+          .get();
+        if (!senderFamilySnap.empty) {
+          const d = senderFamilySnap.docs[0];
+          senderDocRef = d.ref;
+          senderTokens = d.data().fcmTokens || [];
+          senderNotifyChat = d.data().notifyChat !== false;
+        }
+      }
+      if (!senderNotifyChat || senderTokens.length === 0) return null;
+
+      // 同じユーザーが複数 emoji を一度に追加した場合に備えて集約
+      const byUid = new Map();
+      for (const { emoji, uid } of recipients) {
+        if (!byUid.has(uid)) byUid.set(uid, []);
+        byUid.get(uid).push(emoji);
+      }
+
+      const tokenDocMap = senderTokens.map((t) => ({ token: t, docRef: senderDocRef }));
+
+      for (const [reacterUid, emojis] of byUid.entries()) {
+        const reacterName = names[reacterUid] || "誰か";
+        const emojiStr = emojis.join("");
+        const response = await messaging.sendEachForMulticast({
+          tokens: senderTokens,
+          notification: {
+            title: `${reacterName}さん`,
+            body: `あなたのメッセージにスタンプを付けました ${emojiStr}`,
+          },
+          data: {
+            type: "chat_stamp",
+            chatId: chatId,
+            messageId: messageId,
+          },
+          apns: {
+            payload: {
+              aps: {
+                badge: 1,
+                sound: "default",
+              },
+            },
+          },
+          android: {
+            notification: {
+              sound: "default",
+              channelId: "high_importance_channel",
+            },
+          },
+          webpush: {
+            notification: {
+              icon: "/icons/Icon-192.png",
+            },
+            fcmOptions: {
+              link: "https://bee-smiley-admin.web.app",
+            },
+          },
+        });
+        console.log(`スタンプ通知送信: ${response.successCount}件成功, ${response.failureCount}件失敗`);
+        await cleanupInvalidTokens(response, tokenDocMap);
+      }
+
+      return null;
+    } catch (error) {
+      console.error(JSON.stringify({
+        function: 'onChatStampAdded',
+        chatId,
+        messageId,
         error: error.message || String(error),
       }));
       return null;

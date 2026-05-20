@@ -367,7 +367,7 @@ extension PlusDashboardTable on _PlusDashboardContentState {
         widgets.add(const SizedBox(height: 8));
       }
       if (schoolVisit.isNotEmpty) {
-        widgets.add(const Text('【園訪問】', style: TextStyle(fontWeight: FontWeight.bold, fontSize: AppTextSize.small)));
+        widgets.add(const Text('【園連携】', style: TextStyle(fontWeight: FontWeight.bold, fontSize: AppTextSize.small)));
         widgets.add(Text(schoolVisit, style: TextStyle(fontSize: AppTextSize.small)));
         widgets.add(const SizedBox(height: 8));
       }

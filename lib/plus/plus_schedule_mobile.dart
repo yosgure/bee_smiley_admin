@@ -1154,14 +1154,14 @@ extension PlusScheduleMobile on _PlusScheduleContentState {
                               children: [
                                 Icon(Icons.school, size: 18, color: const Color(0xFF00897B)),
                                 const SizedBox(width: 8),
-                                const Text('園訪問', style: TextStyle(fontWeight: FontWeight.bold, fontSize: AppTextSize.bodyMd)),
+                                const Text('園連携', style: TextStyle(fontWeight: FontWeight.bold, fontSize: AppTextSize.bodyMd)),
                               ],
                             ),
                             const SizedBox(height: 8),
                             TextField(
                               controller: schoolVisitController,
                               decoration: InputDecoration(
-                                hintText: '園訪問の記録や予定を記入',
+                                hintText: '園連携の記録や予定を記入',
                                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
                                 contentPadding: const EdgeInsets.all(12),
                               ),
