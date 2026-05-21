@@ -1981,8 +1981,8 @@ Future<void> _showStartOnboardingDialog(
                   onChanged: (v) => setS(() => permitStatus = v ?? 'none'),
                 ),
                 const Divider(height: 28),
-                // ── 1つ目の次のアクション ──
-                sectionTitle('1つ目の次のアクション'),
+                // ── 次のアクション ──
+                sectionTitle('次のアクション'),
                 fieldLabel('クイック選択'),
                 Wrap(
                   spacing: 6,
