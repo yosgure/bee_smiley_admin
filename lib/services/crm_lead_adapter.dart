@@ -53,6 +53,38 @@ class LeadView {
       final child = children[childIndex];
 
       updates.forEach((flatKey, raw) {
+        // ドット表記対応（'bankInfo.bankName' / 'recipientCert.certificateNumber' 等）。
+        // ルートキーで family/child 振り分け → ネスト位置にマージ。
+        if (flatKey.contains('.')) {
+          final parts = flatKey.split('.');
+          final rootKey = parts.first;
+          final restPath = parts.sublist(1);
+          final rootMapping = _flatKeyMapping[rootKey];
+          final rootIsFamily =
+              rootMapping != null && rootMapping.target == _Target.family;
+          final actualRootKey = rootMapping?.actualKey ?? rootKey;
+          final existingRaw =
+              rootIsFamily ? famData[actualRootKey] : child[actualRootKey];
+          final merged = (existingRaw is Map)
+              ? Map<String, dynamic>.from(existingRaw)
+              : <String, dynamic>{};
+          Map<String, dynamic> cursor = merged;
+          for (var i = 0; i < restPath.length - 1; i++) {
+            final k = restPath[i];
+            cursor[k] = (cursor[k] is Map)
+                ? Map<String, dynamic>.from(cursor[k] as Map)
+                : <String, dynamic>{};
+            cursor = cursor[k] as Map<String, dynamic>;
+          }
+          cursor[restPath.last] = raw;
+          if (rootIsFamily) {
+            familyUpdates[actualRootKey] = merged;
+          } else {
+            child[actualRootKey] = merged;
+          }
+          return;
+        }
+
         final mapping = _flatKeyMapping[flatKey];
         // mapping が null なら children[childIndex] にそのキーで書き込む
         final isFamily = mapping != null && mapping.target == _Target.family;
@@ -197,6 +229,17 @@ const Map<String, _KeyMap> _flatKeyMapping = {
   'postalCode': _KeyMap(_Target.family, 'postalCode'),
   'prefecture': _KeyMap(_Target.family, 'prefecture'),
   'city': _KeyMap(_Target.family, 'city'),
+  'addressDetail': _KeyMap(_Target.family, 'addressDetail'),
+  'parentRelation': _KeyMap(_Target.family, 'parentRelation'),
+  'emergencyContacts': _KeyMap(_Target.family, 'emergencyContacts'),
+  'emergencyMemo': _KeyMap(_Target.family, 'emergencyMemo'),
+  'bankInfo': _KeyMap(_Target.family, 'bankInfo'),
+  // 保護者アプリのログイン情報（family レベル）
+  'loginId': _KeyMap(_Target.family, 'loginId'),
+  'uid': _KeyMap(_Target.family, 'uid'),
+  'isInitialPassword': _KeyMap(_Target.family, 'isInitialPassword'),
+  // HUG 連携結果（family/child レベル）
+  'hugParentId': _KeyMap(_Target.family, 'hugParentId'),
   // family レベルの更新メタ
   'updatedAt': _KeyMap(_Target.family, 'updatedAt'),
   'updatedBy': _KeyMap(_Target.family, 'updatedBy'),
@@ -259,6 +302,19 @@ Map<String, dynamic> flattenChildToLeadShape(
     'postalCode': family['postalCode'] ?? '',
     'prefecture': family['prefecture'] ?? '',
     'city': family['city'] ?? '',
+    'addressDetail': family['addressDetail'] ?? '',
+    // 続柄・緊急連絡先・口座・備考（family レベル、HUG 連携用）
+    'parentRelation': family['parentRelation'] ?? '',
+    'emergencyContacts': family['emergencyContacts'] ?? const [],
+    'emergencyMemo': family['emergencyMemo'] ?? '',
+    'bankInfo': family['bankInfo'] ?? const {},
+    // 保護者アプリのログイン情報（family レベル）
+    'loginId': family['loginId'] ?? '',
+    'uid': family['uid'] ?? '',
+    'isInitialPassword': family['isInitialPassword'] == true,
+    // 児童側 HUG 連携詳細（recipientCert は recipientCertificate と別系統）
+    'recipientCert': child['recipientCert'] ?? const {},
+    'hugParentId': family['hugParentId'] ?? '',
     // 児童側 HUG必須項目（recipientCertificate はネスト）
     'allergy': child['allergy'] ?? '',
     'recipientCertificate': child['recipientCertificate'],

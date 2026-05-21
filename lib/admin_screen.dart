@@ -166,16 +166,19 @@ void _navigateTo(BuildContext context, Widget screen) {
                   title: '保護者・児童管理（BS）',
                 ),
               ),
-              _MenuData(
-                title: '保護者・児童（BSP）',
-                icon: Icons.family_restroom,
-                color: AppColors.accent,
-                description: 'ビースマイリープラス（児童発達支援/放デイ）',
-                destination: const StudentManageScreen(
-                  collectionName: 'plus_families',
-                  title: '保護者・児童管理（BSP）',
-                ),
-              ),
+              // 保護者・児童（BSP）は CRM に統合済み。
+              // 編集・ID/PW管理は CRM サイドパネルで実施。
+              // 退会済アーカイブの専用導線が必要になった場合のみ復活させる。
+              // _MenuData(
+              //   title: '保護者・児童（BSP）',
+              //   icon: Icons.family_restroom,
+              //   color: AppColors.accent,
+              //   description: 'ビースマイリープラス（児童発達支援/放デイ）',
+              //   destination: const StudentManageScreen(
+              //     collectionName: 'plus_families',
+              //     title: '保護者・児童管理（BSP）',
+              //   ),
+              // ),
             ],
           ),
           const SizedBox(height: 24),

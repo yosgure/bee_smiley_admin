@@ -324,6 +324,9 @@ class _BasicInfoSectionState extends State<_BasicInfoSection> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          // ── ログイン情報（保護者アプリ用） ──
+          _loginInfoRow(context, lead, leadRef),
+
           // ── 連絡先 ──
           _editableNameRow(context, '保護者',
               lead.parentLastName, lead.parentFirstName, leadRef),
@@ -652,6 +655,178 @@ class _BasicInfoSectionState extends State<_BasicInfoSection> {
         ],
       ),
     );
+  }
+
+  /// 保護者アプリのログイン情報行（ID表示 + ID変更 + PW初期化）
+  Widget _loginInfoRow(
+      BuildContext context, CrmLead lead, LeadViewReference leadRef) {
+    final c = context.colors;
+    final hasAccount = lead.parentUid.isNotEmpty;
+    final loginId = lead.loginId;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          _labelCol(context, 'ログイン'),
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.only(left: 8),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      hasAccount
+                          ? (loginId.isNotEmpty ? loginId : '（ID未設定）')
+                          : '未作成',
+                      style: TextStyle(
+                          fontSize: AppTextSize.body,
+                          color: hasAccount
+                              ? c.textPrimary
+                              : c.textTertiary),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  if (lead.isInitialPassword)
+                    Padding(
+                      padding: const EdgeInsets.only(right: 6),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: context.alerts.warning.background,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text('初期PW',
+                            style: TextStyle(
+                                fontSize: AppTextSize.xs,
+                                color: context.alerts.warning.text)),
+                      ),
+                    ),
+                  if (hasAccount) ...[
+                    TextButton(
+                      onPressed: () => _showChangeLoginIdDialog(
+                          context, lead, leadRef),
+                      style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        minimumSize: const Size(0, 28),
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                      child: const Text('ID変更',
+                          style: TextStyle(fontSize: AppTextSize.caption)),
+                    ),
+                    TextButton(
+                      onPressed: () =>
+                          _showResetPasswordDialog(context, lead),
+                      style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        minimumSize: const Size(0, 28),
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                      child: Text('PW初期化',
+                          style: TextStyle(
+                              fontSize: AppTextSize.caption,
+                              color: context.alerts.urgent.icon)),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _showChangeLoginIdDialog(
+      BuildContext context, CrmLead lead, LeadViewReference leadRef) async {
+    final ctrl = TextEditingController(text: lead.loginId);
+    final newId = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('ログインID変更'),
+        content: SizedBox(
+          width: 360,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('${lead.parentFullName} さんのログインIDを変更します。',
+                  style: const TextStyle(fontSize: AppTextSize.body)),
+              const SizedBox(height: 4),
+              Text(
+                '※ 変更後は新しいIDで保護者アプリにログインしてもらってください（パスワードは変わりません）。',
+                style: TextStyle(
+                    fontSize: AppTextSize.caption,
+                    color: context.alerts.urgent.text),
+              ),
+              const SizedBox(height: 14),
+              TextField(
+                controller: ctrl,
+                autofocus: true,
+                decoration: const InputDecoration(
+                  labelText: '新しいログインID',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.vpn_key),
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('キャンセル')),
+          FilledButton(
+              onPressed: () => Navigator.pop(ctx, ctrl.text.trim()),
+              child: const Text('変更')),
+        ],
+      ),
+    );
+    if (newId == null || newId.isEmpty || newId == lead.loginId) return;
+    try {
+      final callable = FirebaseFunctions.instanceFor(region: 'asia-northeast1')
+          .httpsCallable('updateParentLoginId');
+      await callable.call<Map<String, dynamic>>({
+        'targetUid': lead.parentUid,
+        'familyDocId': leadRef.familyDocId,
+        'newLoginId': newId,
+        'collectionName': 'plus_families',
+      });
+      if (mounted) {
+        AppFeedback.success(context, 'ログインIDを「$newId」に変更しました');
+      }
+    } on FirebaseFunctionsException catch (e) {
+      if (mounted) AppFeedback.error(context, 'エラー: ${e.message ?? e.code}');
+    } catch (e) {
+      if (mounted) AppFeedback.error(context, 'エラー: $e');
+    }
+  }
+
+  Future<void> _showResetPasswordDialog(
+      BuildContext context, CrmLead lead) async {
+    final ok = await AppFeedback.confirm(
+      context,
+      title: 'パスワード初期化',
+      message:
+          '${lead.parentFullName} さんのパスワードを初期パスワードに戻しますか？\n\n次回ログイン時にパスワード変更が求められます。',
+      confirmLabel: '初期化',
+    );
+    if (!ok) return;
+    try {
+      final callable = FirebaseFunctions.instanceFor(region: 'asia-northeast1')
+          .httpsCallable('resetParentPassword');
+      await callable.call<Map<String, dynamic>>({
+        'targetUid': lead.parentUid,
+        'familyDocId': widget.leadRef.familyDocId,
+        'collectionName': 'plus_families',
+      });
+      if (mounted) AppFeedback.success(context, 'パスワードを初期化しました');
+    } on FirebaseFunctionsException catch (e) {
+      if (mounted) AppFeedback.error(context, 'エラー: ${e.message ?? e.code}');
+    } catch (e) {
+      if (mounted) AppFeedback.error(context, 'エラー: $e');
+    }
   }
 
   /// 生年月日: 日付ピッカー

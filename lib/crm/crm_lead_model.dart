@@ -45,6 +45,11 @@ class CrmLead {
   String get parentTel => (raw['parentTel'] as String?) ?? '';
   String get parentEmail => (raw['parentEmail'] as String?) ?? '';
   String get parentLine => (raw['parentLine'] as String?) ?? '';
+
+  // 保護者アプリのログイン情報（plus_families 直下フィールド）
+  String get loginId => (raw['loginId'] as String?) ?? '';
+  String get parentUid => (raw['uid'] as String?) ?? '';
+  bool get isInitialPassword => raw['isInitialPassword'] == true;
   String get preferredChannel =>
       (raw['preferredChannel'] as String?) ?? 'tel';
 
