@@ -26,6 +26,7 @@ import 'hug_mapping_screen.dart';
 import 'app_theme.dart';
 import 'widgets/app_feedback.dart';
 import 'main.dart' show themeNotifier, setThemeMode;
+import 'notification_service.dart';
 
 class AdminScreen extends StatefulWidget {
   // Web版で画面を差し替えるためのコールバック
@@ -63,6 +64,10 @@ class _AdminScreenState extends State<AdminScreen> {
     final confirmed = await AppFeedback.confirm(context, title: 'ログアウト', message: 'ログアウトしますか？', confirmLabel: 'ログアウト', cancelLabel: 'キャンセル', destructive: true);
 
     if (confirmed == true) {
+      // ログアウト前にFCMトークンをFirestoreから削除（同一端末で別アカウントログイン後も古いアカウントに通知が届くのを防ぐ）
+      try {
+        await NotificationService().removeToken();
+      } catch (_) {}
       await FirebaseAuth.instance.signOut();
     }
   }

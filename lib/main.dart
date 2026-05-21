@@ -256,6 +256,10 @@ class _ForceLogoutState extends State<_ForceLogout> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
+      // ログアウト前にFCMトークンをFirestoreから削除（同一端末で別アカウントログイン後も古いアカウントに通知が届くのを防ぐ）
+      try {
+        await NotificationService().removeToken();
+      } catch (_) {}
       await FirebaseAuth.instance.signOut();
     });
   }
