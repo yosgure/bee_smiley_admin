@@ -1,19 +1,18 @@
-import 'dart:async';
-import 'dart:typed_data';
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
-import 'package:record/record.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'app_theme.dart';
+import 'complaint_screen.dart';
+import 'hiyari_screen.dart';
 import 'widgets/app_feedback.dart';
+import 'widgets/audio_minute_recorder.dart';
 import 'main.dart';
+
+enum _DocSection { meetings, hiyari, complaint, legalTraining }
 
 // ============================================================
 // 議事録・研修記録 一覧
@@ -26,6 +25,7 @@ class MeetingMinutesScreen extends StatefulWidget {
 }
 
 class _MeetingMinutesScreenState extends State<MeetingMinutesScreen> {
+  _DocSection _section = _DocSection.meetings;
   String? _categoryFilter;
   String? _selectedDocId;
 
@@ -62,6 +62,16 @@ class _MeetingMinutesScreenState extends State<MeetingMinutesScreen> {
           .collection('plus_cell_memos')
           .orderBy('date', descending: true)
           .snapshots();
+
+  late final Stream<int> _hiyariCountStream = FirebaseFirestore.instance
+      .collection('hiyari_reports')
+      .snapshots()
+      .map((s) => s.size);
+
+  late final Stream<int> _complaintCountStream = FirebaseFirestore.instance
+      .collection('complaint_reports')
+      .snapshots()
+      .map((s) => s.size);
 
   void _close() {
     if (Navigator.canPop(context)) {
@@ -289,27 +299,30 @@ class _MeetingMinutesScreenState extends State<MeetingMinutesScreen> {
             icon: const Icon(Icons.arrow_back_ios, size: 20),
             onPressed: _close),
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () async {
-          await Navigator.push(
-              context,
-              MaterialPageRoute(
-                  builder: (_) => const MeetingMinutesEditScreen()));
-        },
-        backgroundColor: AppColors.primary,
-        icon: const Icon(Icons.add, color: Colors.white),
-        label: const Text('新規作成',
-            style:
-                TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-      ),
+      floatingActionButton: _section == _DocSection.meetings
+          ? FloatingActionButton.extended(
+              onPressed: () async {
+                await Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                        builder: (_) => const MeetingMinutesEditScreen()));
+              },
+              backgroundColor: AppColors.primary,
+              icon: const Icon(Icons.add, color: Colors.white),
+              label: const Text('新規作成',
+                  style: TextStyle(
+                      color: Colors.white, fontWeight: FontWeight.bold)),
+            )
+          : null,
       body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
         stream: _docsStream,
         builder: (context, snap) {
-          if (snap.connectionState == ConnectionState.waiting) {
+          if (snap.connectionState == ConnectionState.waiting &&
+              _section == _DocSection.meetings) {
             return Center(
                 child: CircularProgressIndicator(color: AppColors.primary));
           }
-          if (snap.hasError) {
+          if (snap.hasError && _section == _DocSection.meetings) {
             return Center(
                 child: Text('読み込みエラー: ${snap.error}',
                     style: TextStyle(color: context.colors.textSecondary)));
@@ -356,11 +369,9 @@ class _MeetingMinutesScreenState extends State<MeetingMinutesScreen> {
                 }
               }
 
-              return LayoutBuilder(builder: (context, constraints) {
-                final isWide = constraints.maxWidth >= 900;
-                // コマメモカテゴリは月×週グリッドのカリキュラム表に切り替え
+              Widget meetingsContent(bool isWide) {
                 if (_isCellMemoCategory) {
-                  final curriculum = _CellMemoCurriculumView(
+                  return _CellMemoCurriculumView(
                     title: _cellMemoTitleFromFilter!,
                     fiscalYear: _curriculumFiscalYear,
                     docs: filtered,
@@ -369,55 +380,58 @@ class _MeetingMinutesScreenState extends State<MeetingMinutesScreen> {
                     onCellTap: (doc) =>
                         _showCellMemoEditDialog(context, doc),
                   );
-                  if (isWide) {
-                    return Row(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        SizedBox(
-                          width: 200,
-                          child: _categoryRail(
-                              counts, cellMemoCounts, allDocs.length),
-                        ),
-                        VerticalDivider(
-                            width: 1, color: context.colors.borderLight),
-                        Expanded(child: curriculum),
-                      ],
-                    );
-                  }
-                  return Column(
-                    children: [
-                      _categoryDropdown(),
-                      const Divider(height: 1),
-                      Expanded(child: curriculum),
-                    ],
-                  );
                 }
                 if (isWide) {
                   return Row(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      SizedBox(
-                        width: 200,
-                        child: _categoryRail(
-                            counts, cellMemoCounts, allDocs.length),
-                      ),
-                      VerticalDivider(
-                          width: 1, color: context.colors.borderLight),
-                      SizedBox(
-                        width: 380,
-                        child: _list(filtered),
-                      ),
+                      SizedBox(width: 380, child: _list(filtered)),
                       VerticalDivider(
                           width: 1, color: context.colors.borderLight),
                       Expanded(child: _detail(selectedDoc)),
                     ],
                   );
                 }
+                return _list(filtered, narrow: true);
+              }
+
+              Widget sectionContent(bool isWide) {
+                switch (_section) {
+                  case _DocSection.hiyari:
+                    return const HiyariScreen(embedded: true);
+                  case _DocSection.complaint:
+                    return const ComplaintScreen(embedded: true);
+                  case _DocSection.legalTraining:
+                    return _legalTrainingPlaceholder();
+                  case _DocSection.meetings:
+                    return meetingsContent(isWide);
+                }
+              }
+
+              return LayoutBuilder(builder: (context, constraints) {
+                final isWide = constraints.maxWidth >= 900;
+                if (isWide) {
+                  return Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      SizedBox(
+                        width: 220,
+                        child: _sectionRail(
+                            counts, cellMemoCounts, allDocs.length),
+                      ),
+                      VerticalDivider(
+                          width: 1, color: context.colors.borderLight),
+                      Expanded(child: sectionContent(true)),
+                    ],
+                  );
+                }
                 return Column(
                   children: [
-                    _categoryDropdown(),
+                    _sectionTabs(),
+                    if (_section == _DocSection.meetings)
+                      _categoryDropdown(),
                     const Divider(height: 1),
-                    Expanded(child: _list(filtered, narrow: true)),
+                    Expanded(child: sectionContent(false)),
                   ],
                 );
               });
@@ -428,8 +442,76 @@ class _MeetingMinutesScreenState extends State<MeetingMinutesScreen> {
     );
   }
 
-  // ---- 左ペイン: 種別ナビ ----
-  Widget _categoryRail(
+  Widget _legalTrainingPlaceholder() {
+    final c = context.colors;
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.school_outlined, size: 56, color: c.textTertiary),
+          const SizedBox(height: 12),
+          Text('法定研修（準備中）',
+              style: TextStyle(color: c.textSecondary, fontSize: AppTextSize.bodyMd)),
+          const SizedBox(height: 4),
+          Text('近日中にこの画面で管理できるようになります',
+              style: TextStyle(color: c.textTertiary, fontSize: AppTextSize.small)),
+        ],
+      ),
+    );
+  }
+
+  void _onSectionChange(_DocSection s) {
+    setState(() {
+      _section = s;
+      if (s != _DocSection.meetings) {
+        _categoryFilter = null;
+        _selectedDocId = null;
+      }
+    });
+  }
+
+  Widget _sectionTabs() {
+    final items = <(_DocSection, String, IconData)>[
+      (_DocSection.meetings, '議事録', Icons.description_outlined),
+      (_DocSection.hiyari, '事故ヒヤリハット', Icons.warning_amber_rounded),
+      (_DocSection.complaint, '苦情受付', Icons.inbox_outlined),
+      (_DocSection.legalTraining, '法定研修', Icons.school_outlined),
+    ];
+    return Container(
+      color: context.colors.cardBg,
+      padding: const EdgeInsets.fromLTRB(8, 8, 8, 8),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: [
+            for (final item in items) ...[
+              ChoiceChip(
+                selected: _section == item.$1,
+                onSelected: (_) => _onSectionChange(item.$1),
+                avatar: Icon(item.$3,
+                    size: 16,
+                    color: _section == item.$1
+                        ? AppColors.primary
+                        : context.colors.textSecondary),
+                label: Text(item.$2,
+                    style: TextStyle(
+                      fontSize: AppTextSize.small,
+                      fontWeight: FontWeight.w600,
+                      color: _section == item.$1
+                          ? AppColors.primary
+                          : context.colors.textPrimary,
+                    )),
+              ),
+              const SizedBox(width: 6),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ---- 左ペイン: セクション + 種別ナビ ----
+  Widget _sectionRail(
       Map<String, int> counts, Map<String, int> cellMemoCounts, int total) {
     final c = context.colors;
     final all = MeetingCategory.all;
@@ -438,25 +520,104 @@ class _MeetingMinutesScreenState extends State<MeetingMinutesScreen> {
       child: ListView(
         padding: const EdgeInsets.symmetric(vertical: 8),
         children: [
-          _railTile(label: 'すべて', count: total, value: null),
-          const SizedBox(height: 4),
-          for (final cat in all)
-            _railTile(
-                label: cat.label,
-                count: counts[cat.id] ?? 0,
-                value: cat.id),
-          for (final title in _cellMemoTitles)
-            _railTile(
-                label: title,
-                count: cellMemoCounts[title] ?? 0,
-                value: '$_cellMemoCategoryPrefix$title'),
+          _sectionRailTile(
+              label: '議事録・研修記録',
+              section: _DocSection.meetings,
+              count: total),
+          if (_section == _DocSection.meetings) ...[
+            _railTile(label: 'すべて', count: total, value: null, indent: true),
+            for (final cat in all)
+              _railTile(
+                  label: cat.label,
+                  count: counts[cat.id] ?? 0,
+                  value: cat.id,
+                  indent: true),
+            for (final title in _cellMemoTitles)
+              _railTile(
+                  label: title,
+                  count: cellMemoCounts[title] ?? 0,
+                  value: '$_cellMemoCategoryPrefix$title',
+                  indent: true),
+          ],
+          const SizedBox(height: 8),
+          _sectionRailTile(
+              label: '事故ヒヤリハット',
+              section: _DocSection.hiyari,
+              countStream: _hiyariCountStream),
+          _sectionRailTile(
+              label: '苦情受付',
+              section: _DocSection.complaint,
+              countStream: _complaintCountStream),
+          _sectionRailTile(
+              label: '法定研修', section: _DocSection.legalTraining),
         ],
       ),
     );
   }
 
+  Widget _sectionRailTile({
+    required String label,
+    required _DocSection section,
+    int? count,
+    Stream<int>? countStream,
+  }) {
+    final c = context.colors;
+    final selected = _section == section;
+    Widget countLabel(int? n) {
+      if (n == null) return const SizedBox.shrink();
+      return Text('$n',
+          style: TextStyle(
+              fontSize: AppTextSize.caption,
+              color: selected ? AppColors.primary : c.textTertiary));
+    }
+
+    return InkWell(
+      onTap: () => _onSectionChange(section),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: BoxDecoration(
+          color: selected
+              ? AppColors.primary.withValues(alpha: 0.12)
+              : Colors.transparent,
+          border: Border(
+            left: BorderSide(
+              color: selected ? AppColors.primary : Colors.transparent,
+              width: 3,
+            ),
+          ),
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                label,
+                style: TextStyle(
+                  fontSize: AppTextSize.small,
+                  fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
+                  color: selected ? AppColors.primary : c.textPrimary,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            const SizedBox(width: 6),
+            if (countStream != null)
+              StreamBuilder<int>(
+                stream: countStream,
+                builder: (context, snap) => countLabel(snap.data),
+              )
+            else
+              countLabel(count),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _railTile(
-      {required String label, required int count, required String? value}) {
+      {required String label,
+      required int count,
+      required String? value,
+      bool indent = false}) {
     final c = context.colors;
     final selected = _categoryFilter == value;
     return InkWell(
@@ -465,7 +626,7 @@ class _MeetingMinutesScreenState extends State<MeetingMinutesScreen> {
         _selectedDocId = null;
       }),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
         decoration: BoxDecoration(
           color: selected
               ? AppColors.primary.withValues(alpha: 0.12)
@@ -980,7 +1141,8 @@ class _MeetingDetailView extends StatelessWidget {
 // ============================================================
 class MeetingMinutesEditScreen extends StatefulWidget {
   final QueryDocumentSnapshot<Map<String, dynamic>>? doc;
-  const MeetingMinutesEditScreen({super.key, this.doc});
+  final String? initialCategory;
+  const MeetingMinutesEditScreen({super.key, this.doc, this.initialCategory});
 
   @override
   State<MeetingMinutesEditScreen> createState() => _MeetingMinutesEditScreenState();
@@ -996,14 +1158,6 @@ class _MeetingMinutesEditScreenState extends State<MeetingMinutesEditScreen> {
   final List<_Material> _materials = [];
   bool _saving = false;
   bool _uploading = false;
-
-  // 音声録音 → Gemini で議事録自動生成
-  final AudioRecorder _audioRecorder = AudioRecorder();
-  bool _isRecording = false;
-  bool _isProcessingAudio = false;
-  DateTime? _recordingStartedAt;
-  Timer? _recordingTimer;
-  Duration _recordingDuration = Duration.zero;
 
   List<_Staff> _allStaffs = [];
 
@@ -1022,6 +1176,9 @@ class _MeetingMinutesEditScreenState extends State<MeetingMinutesEditScreen> {
       _noteCtrl.text = d['note'] ?? '';
       final rawMats = List<String>.from(d['materials'] ?? []);
       _materials.addAll(rawMats.map(_Material.fromRaw));
+    } else if (widget.initialCategory != null &&
+        MeetingCategory.all.any((c) => c.id == widget.initialCategory)) {
+      _category = widget.initialCategory!;
     }
   }
 
@@ -1054,171 +1211,17 @@ class _MeetingMinutesEditScreenState extends State<MeetingMinutesEditScreen> {
 
   @override
   void dispose() {
-    _recordingTimer?.cancel();
-    _audioRecorder.dispose();
     for (final c in [_contentCtrl, _noteCtrl, _categoryOtherCtrl]) {
       c.dispose();
     }
     super.dispose();
   }
 
-  String _formatDuration(Duration d) {
-    final m = d.inMinutes.toString().padLeft(2, '0');
-    final s = (d.inSeconds % 60).toString().padLeft(2, '0');
-    return '$m:$s';
-  }
-
-  Future<void> _startRecording() async {
-    try {
-      if (!await _audioRecorder.hasPermission()) {
-        if (mounted) {
-          AppFeedback.error(context, 'マイクの使用が許可されていません');
-        }
-        return;
-      }
-      await _audioRecorder.start(
-        const RecordConfig(
-          encoder: AudioEncoder.opus,
-          bitRate: 32000,
-          sampleRate: 16000,
-          numChannels: 1,
-        ),
-        path: 'morning_meeting.webm',
-      );
-      _recordingStartedAt = DateTime.now();
-      setState(() {
-        _isRecording = true;
-        _recordingDuration = Duration.zero;
-      });
-      _recordingTimer?.cancel();
-      _recordingTimer = Timer.periodic(const Duration(seconds: 1), (_) {
-        if (!mounted || _recordingStartedAt == null) return;
-        setState(() {
-          _recordingDuration = DateTime.now().difference(_recordingStartedAt!);
-        });
-      });
-    } catch (e) {
-      if (mounted) {
-        AppFeedback.error(context, '録音開始失敗: $e');
-      }
-    }
-  }
-
-  Future<void> _cancelRecording() async {
-    try {
-      _recordingTimer?.cancel();
-      if (await _audioRecorder.isRecording()) {
-        await _audioRecorder.stop();
-      }
-    } catch (_) {}
-    if (mounted) {
-      setState(() {
-        _isRecording = false;
-        _recordingDuration = Duration.zero;
-        _recordingStartedAt = null;
-      });
-    }
-  }
-
-  Future<void> _stopRecordingAndGenerate() async {
-    _recordingTimer?.cancel();
-    String? recordedPath;
-    try {
-      recordedPath = await _audioRecorder.stop();
-    } catch (e) {
-      if (mounted) {
-        setState(() => _isRecording = false);
-        AppFeedback.error(context, '録音停止失敗: $e');
-      }
-      return;
-    }
-    setState(() => _isRecording = false);
-
-    if (recordedPath == null) {
-      if (mounted) {
-        AppFeedback.error(context, '録音データが取得できませんでした');
-      }
-      return;
-    }
-
-    // 既存内容があれば上書き確認
-    if (_contentCtrl.text.trim().isNotEmpty) {
-      if (!mounted) return;
-      final overwrite = await AppFeedback.confirm(
-        context,
-        title: '既存の内容を置き換えますか？',
-        message: '生成された議事録で「内容」欄を上書きします。',
-        confirmLabel: '置き換える',
-      );
-      if (!overwrite) {
-        if (!mounted) return;
-        setState(() {
-          _recordingDuration = Duration.zero;
-          _recordingStartedAt = null;
-        });
-        return;
-      }
-    }
-
-    setState(() => _isProcessingAudio = true);
-
-    try {
-      // 録音データを Uint8List として取得
-      Uint8List bytes;
-      if (kIsWeb) {
-        final res = await http.get(Uri.parse(recordedPath));
-        if (res.statusCode != 200) {
-          throw '録音データの取得に失敗 (HTTP ${res.statusCode})';
-        }
-        bytes = res.bodyBytes;
-      } else {
-        // モバイル/デスクトップでは file path
-        final res = await http.get(Uri.parse('file://$recordedPath'));
-        bytes = res.bodyBytes;
-      }
-      if (bytes.isEmpty) {
-        throw '録音データが空です';
-      }
-
-      const mimeType = 'audio/webm';
-      final ts = DateTime.now().millisecondsSinceEpoch;
-      final uid = FirebaseAuth.instance.currentUser?.uid ?? 'anonymous';
-      final audioPath = 'meeting_minutes/audio_${uid}_$ts.webm';
-
-      final storageRef = FirebaseStorage.instance.ref(audioPath);
-      await storageRef.putData(
-        bytes,
-        SettableMetadata(contentType: mimeType),
-      );
-
-      final callable = FirebaseFunctions.instanceFor(region: 'asia-northeast1')
-          .httpsCallable(
-        'generateMorningMeetingMinutes',
-        options: HttpsCallableOptions(timeout: const Duration(minutes: 9)),
-      );
-      final result = await callable.call<Map<String, dynamic>>({
-        'audioPath': audioPath,
-        'mimeType': mimeType,
-        'meetingDate': DateFormat('yyyy/M/d (E)', 'ja').format(_meetingDate),
-        'participants': _participants.map((s) => s.name).toList(),
-      });
-      final minutes = (result.data['minutes'] as String?)?.trim() ?? '';
-      if (minutes.isEmpty) {
-        throw '議事録が生成されませんでした';
-      }
-      if (!mounted) return;
-      setState(() {
-        _contentCtrl.text = minutes;
-        _isProcessingAudio = false;
-        _recordingDuration = Duration.zero;
-        _recordingStartedAt = null;
-      });
-      AppFeedback.success(context, '議事録を生成しました');
-    } catch (e) {
-      if (mounted) {
-        setState(() => _isProcessingAudio = false);
-        AppFeedback.error(context, '議事録生成失敗: $e');
-      }
+  void _close() {
+    if (Navigator.canPop(context)) {
+      Navigator.pop(context);
+    } else {
+      AdminShell.hideOverlay(context);
     }
   }
 
@@ -1250,7 +1253,7 @@ class _MeetingMinutesEditScreenState extends State<MeetingMinutesEditScreen> {
       }
       if (mounted) {
         AppFeedback.success(context, _isEdit ? '更新しました' : '登録しました');
-        Navigator.pop(context);
+        _close();
       }
     } catch (e) {
       if (mounted) {
@@ -1272,7 +1275,7 @@ class _MeetingMinutesEditScreenState extends State<MeetingMinutesEditScreen> {
     if (!ok) return;
     try {
       await widget.doc!.reference.delete();
-      if (mounted) Navigator.pop(context);
+      if (mounted) _close();
     } catch (e) {
       if (mounted) {
         AppFeedback.info(context, '削除失敗: $e');
@@ -1356,7 +1359,7 @@ class _MeetingMinutesEditScreenState extends State<MeetingMinutesEditScreen> {
         backgroundColor: context.colors.cardBg,
         elevation: 0,
         foregroundColor: context.colors.textPrimary,
-        leading: IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(context)),
+        leading: IconButton(icon: const Icon(Icons.close), onPressed: _close),
         actions: [
           if (_isEdit)
             IconButton(icon: Icon(Icons.delete_outline, color: AppColors.errorBorder), onPressed: _delete),
@@ -1477,7 +1480,17 @@ class _MeetingMinutesEditScreenState extends State<MeetingMinutesEditScreen> {
 
             const SizedBox(height: 20),
             _section('音声から議事録を自動生成'),
-            _buildAudioRecorderCard(),
+            AudioMinuteRecorder(
+              documentType: 'morning_meeting',
+              meetingDate: _meetingDate,
+              participants: _participants.map((s) => s.name).toList(),
+              existingContent: _contentCtrl.text,
+              onGenerated: (text) {
+                setState(() {
+                  _contentCtrl.text = text;
+                });
+              },
+            ),
 
             const SizedBox(height: 20),
             _section('内容'),
@@ -1538,121 +1551,6 @@ class _MeetingMinutesEditScreenState extends State<MeetingMinutesEditScreen> {
         ),
       ),
         ),
-      ),
-    );
-  }
-
-  Widget _buildAudioRecorderCard() {
-    final c = context.colors;
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: c.cardBg,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: c.borderMedium),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            children: [
-              Icon(Icons.auto_awesome, size: 16, color: AppColors.primary),
-              const SizedBox(width: 6),
-              Expanded(
-                child: Text(
-                  'マイクで会議を録音すると、AIが議事録として整形して「内容」欄に挿入します。',
-                  style: TextStyle(
-                    fontSize: AppTextSize.caption,
-                    color: c.textSecondary,
-                    height: 1.4,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          if (_isProcessingAudio)
-            Row(
-              children: [
-                const SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    '議事録を生成中…（音声長に応じて10秒〜2分程度かかります）',
-                    style: TextStyle(
-                      fontSize: AppTextSize.body,
-                      color: c.textPrimary,
-                    ),
-                  ),
-                ),
-              ],
-            )
-          else if (_isRecording)
-            Row(
-              children: [
-                Container(
-                  width: 10,
-                  height: 10,
-                  decoration: const BoxDecoration(
-                    color: AppColors.errorBorder,
-                    shape: BoxShape.circle,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  '録音中  ${_formatDuration(_recordingDuration)}',
-                  style: const TextStyle(
-                    fontSize: AppTextSize.bodyMd,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.errorBorder,
-                  ),
-                ),
-                const Spacer(),
-                TextButton(
-                  onPressed: _cancelRecording,
-                  child: Text(
-                    'キャンセル',
-                    style: TextStyle(
-                      fontSize: AppTextSize.body,
-                      color: c.textSecondary,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 4),
-                ElevatedButton.icon(
-                  onPressed: _stopRecordingAndGenerate,
-                  icon: const Icon(Icons.stop, size: 18),
-                  label: const Text('停止して生成'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.errorBorder,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                  ),
-                ),
-              ],
-            )
-          else
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: _startRecording,
-                    icon: const Icon(Icons.mic, size: 18),
-                    label: const Text('録音を開始'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: AppColors.primary,
-                      side: BorderSide(color: AppColors.primary.withValues(alpha: 0.4)),
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-        ],
       ),
     );
   }

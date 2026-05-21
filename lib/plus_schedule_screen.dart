@@ -2139,31 +2139,8 @@ void _goToPage(int page) {
             ),
             const Spacer(),
           ],
-          // 近日の誕生日バナー（ヘッダー内、集計ボタンの左）
+          // 近日の誕生日バナー
           _buildBirthdayHeaderBadge(),
-          // 集計ボタン
-          Padding(
-              padding: const EdgeInsets.only(right: 8),
-              child: SizedBox(
-                height: 32,
-                child: OutlinedButton(
-                  onPressed: _showStatsDialog,
-                  style: ButtonStyle(
-                    padding: WidgetStateProperty.all(const EdgeInsets.symmetric(horizontal: 12)),
-                    side: WidgetStateProperty.all(BorderSide(color: context.colors.borderMedium)),
-                    shape: WidgetStateProperty.all(RoundedRectangleBorder(borderRadius: BorderRadius.circular(6))),
-                    foregroundColor: WidgetStateProperty.all(context.colors.textSecondary),
-                    backgroundColor: WidgetStateProperty.resolveWith((states) {
-                      if (states.contains(WidgetState.hovered)) return context.colors.chipBg;
-                      return Colors.transparent;
-                    }),
-                    minimumSize: WidgetStateProperty.all(Size.zero),
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  ),
-                  child: const Text('集計', style: TextStyle(fontSize: AppTextSize.body)),
-                ),
-              ),
-            ),
           // セット編集ボタン群
           ..._buildSetEditHeaderButtons(),
           // タブ切り替え
@@ -2182,7 +2159,26 @@ void _goToPage(int page) {
             ),
           ),
           const SizedBox(width: 8),
-          // 3点メニュー（シフト希望・CRM・会議録・事故ヒヤリハット・苦情受付・法定研修）
+          // 議事録録音ボタン（朝会クイック作成）
+          Tooltip(
+            message: '朝会を録音して議事録を自動生成',
+            child: SizedBox(
+              height: 36,
+              child: OutlinedButton.icon(
+                onPressed: _openMorningMeetingRecorder,
+                icon: const Icon(Icons.mic_none, size: 16),
+                label: const Text('議事録', style: TextStyle(fontSize: AppTextSize.body)),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.primary,
+                  side: BorderSide(color: AppColors.primary.withValues(alpha: 0.4)),
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          // 3点メニュー
           _buildPlusMenuButton(),
         ],
       ),
@@ -2414,32 +2410,6 @@ void _goToPage(int page) {
           setState(() {});
         }
         break;
-      case 'accident':
-        if (mounted) {
-          final isWide = MediaQuery.of(context).size.width >= 600;
-          if (isWide) {
-            AdminShell.showOverlay(context, const HiyariScreen());
-          } else {
-            await Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const HiyariScreen()),
-            );
-          }
-        }
-        break;
-      case 'complaint':
-        if (mounted) {
-          final isWide = MediaQuery.of(context).size.width >= 600;
-          if (isWide) {
-            AdminShell.showOverlay(context, const ComplaintScreen());
-          } else {
-            await Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const ComplaintScreen()),
-            );
-          }
-        }
-        break;
       case 'meeting':
         if (mounted) {
           final isWide = MediaQuery.of(context).size.width >= 600;
@@ -2453,9 +2423,9 @@ void _goToPage(int page) {
           }
         }
         break;
-      case 'training':
+      case 'stats':
         if (mounted) {
-          AppFeedback.info(context, '法定研修のリンクは未設定です。');
+          await _showStatsDialog();
         }
         break;
       case 'set_edit':
@@ -2525,6 +2495,31 @@ void _goToPage(int page) {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+              child: Text('ドキュメント',
+                  style: TextStyle(
+                    fontSize: AppTextSize.caption,
+                    fontWeight: FontWeight.w700,
+                    color: c.textTertiary,
+                    letterSpacing: 0.5,
+                  )),
+            ),
+            menuItem('meeting', Icons.description_outlined, 'ドキュメント'),
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 6),
+              child: Divider(height: 1, color: border),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 4, 12, 4),
+              child: Text('シフト・予定',
+                  style: TextStyle(
+                    fontSize: AppTextSize.caption,
+                    fontWeight: FontWeight.w700,
+                    color: c.textTertiary,
+                    letterSpacing: 0.5,
+                  )),
+            ),
             menuItem(
               'shift',
               Icons.how_to_vote_outlined,
@@ -2533,20 +2528,23 @@ void _goToPage(int page) {
               trailingColor: needsAttention ? AppColors.errorBorder : null,
             ),
             menuItem('shift_decision', Icons.event_available_outlined, 'シフト決定'),
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 6),
-              child: Divider(height: 1, color: border),
-            ),
             menuItem('set_edit', Icons.link, 'セット編集'),
             menuItem('deploy_schedule', Icons.event_repeat, '定期スケジュール展開'),
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 6),
               child: Divider(height: 1, color: border),
             ),
-            menuItem('meeting', Icons.description_outlined, 'ドキュメント'),
-            menuItem('accident', Icons.warning_amber_outlined, '事故・ヒヤリハット'),
-            menuItem('complaint', Icons.report_gmailerrorred_outlined, '苦情受付'),
-            menuItem('training', Icons.school_outlined, '法定研修'),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 4, 12, 4),
+              child: Text('分析',
+                  style: TextStyle(
+                    fontSize: AppTextSize.caption,
+                    fontWeight: FontWeight.w700,
+                    color: c.textTertiary,
+                    letterSpacing: 0.5,
+                  )),
+            ),
+            menuItem('stats', Icons.bar_chart_outlined, '集計'),
           ],
         ),
       ),
@@ -2774,7 +2772,21 @@ void _goToPage(int page) {
     );
   }
 
-  void _showStatsDialog() async {
+  Future<void> _openMorningMeetingRecorder() async {
+    if (!mounted) return;
+    final isWide = MediaQuery.of(context).size.width >= 600;
+    const screen = MeetingMinutesEditScreen(initialCategory: 'morning_meeting');
+    if (isWide) {
+      AdminShell.showOverlay(context, screen);
+    } else {
+      await Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => screen),
+      );
+    }
+  }
+
+  Future<void> _showStatsDialog() async {
     // 対象スタッフ（フルネーム）と1日あたりの目標コマ数のデフォルト
     final defaultTargets = <String, int>{
       '安保 さゆり': 3,

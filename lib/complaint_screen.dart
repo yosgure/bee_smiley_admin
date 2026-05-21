@@ -12,7 +12,8 @@ import 'main.dart';
 // ============================================================
 class ComplaintScreen extends StatefulWidget {
   final VoidCallback? onClose;
-  const ComplaintScreen({super.key, this.onClose});
+  final bool embedded;
+  const ComplaintScreen({super.key, this.onClose, this.embedded = false});
 
   @override
   State<ComplaintScreen> createState() => _ComplaintScreenState();
@@ -27,61 +28,113 @@ class _ComplaintScreenState extends State<ComplaintScreen> {
     }
   }
 
+  Future<void> _openNew() async {
+    await Navigator.push(
+        context, MaterialPageRoute(builder: (_) => const ComplaintEditScreen()));
+  }
+
+  Widget _buildList() {
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      stream: FirebaseFirestore.instance
+          .collection('complaint_reports')
+          .orderBy('occurredAt', descending: true)
+          .limit(100)
+          .snapshots(),
+      builder: (context, snap) {
+        if (snap.connectionState == ConnectionState.waiting) {
+          return Center(child: CircularProgressIndicator(color: AppColors.primary));
+        }
+        if (snap.hasError) {
+          return Center(
+              child: Text('読み込みエラー: ${snap.error}',
+                  style: TextStyle(color: context.colors.textSecondary)));
+        }
+        final docs = snap.data?.docs ?? [];
+        if (docs.isEmpty) {
+          return Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.inbox_outlined, size: 56, color: context.colors.textTertiary),
+                const SizedBox(height: 12),
+                Text('受付記録はまだありません',
+                    style: TextStyle(
+                        color: context.colors.textSecondary, fontSize: AppTextSize.bodyMd)),
+                const SizedBox(height: 4),
+                Text(widget.embedded ? '上の「新規受付」から記録できます' : '右下の「新規受付」から記録できます',
+                    style: TextStyle(
+                        color: context.colors.textTertiary, fontSize: AppTextSize.small)),
+              ],
+            ),
+          );
+        }
+        return ListView.builder(
+          padding: const EdgeInsets.fromLTRB(12, 10, 12, 88),
+          itemCount: docs.length,
+          itemBuilder: (c, i) => _ComplaintListTile(doc: docs[i]),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (widget.embedded) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Container(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+            decoration: BoxDecoration(
+              color: context.colors.cardBg,
+              border: Border(bottom: BorderSide(color: context.colors.borderLight)),
+            ),
+            child: Row(
+              children: [
+                Text(
+                  '苦情受付',
+                  style: TextStyle(
+                    fontSize: AppTextSize.title,
+                    fontWeight: FontWeight.w600,
+                    color: context.colors.textPrimary,
+                  ),
+                ),
+                const Spacer(),
+                ElevatedButton.icon(
+                  onPressed: _openNew,
+                  icon: const Icon(Icons.add, size: 18, color: Colors.white),
+                  label: const Text('新規受付',
+                      style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Expanded(child: _buildList()),
+        ],
+      );
+    }
     return Scaffold(
       backgroundColor: context.colors.scaffoldBg,
       appBar: AppBar(
-        title: const Text('苦情受付', style: TextStyle(fontSize: AppTextSize.title, fontWeight: FontWeight.w600)),
+        title: const Text('苦情受付',
+            style: TextStyle(fontSize: AppTextSize.title, fontWeight: FontWeight.w600)),
         backgroundColor: context.colors.cardBg,
         elevation: 0,
         foregroundColor: context.colors.textPrimary,
         leading: IconButton(icon: const Icon(Icons.arrow_back_ios, size: 20), onPressed: _close),
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () async {
-          await Navigator.push(context,
-              MaterialPageRoute(builder: (_) => const ComplaintEditScreen()));
-        },
+        onPressed: _openNew,
         backgroundColor: AppColors.primary,
         icon: const Icon(Icons.add, color: Colors.white),
-        label: const Text('新規受付', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        label: const Text('新規受付',
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
       ),
-      body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-        stream: FirebaseFirestore.instance
-            .collection('complaint_reports')
-            .orderBy('occurredAt', descending: true)
-            .limit(100)
-            .snapshots(),
-        builder: (context, snap) {
-          if (snap.connectionState == ConnectionState.waiting) {
-            return Center(child: CircularProgressIndicator(color: AppColors.primary));
-          }
-          if (snap.hasError) {
-            return Center(child: Text('読み込みエラー: ${snap.error}', style: TextStyle(color: context.colors.textSecondary)));
-          }
-          final docs = snap.data?.docs ?? [];
-          if (docs.isEmpty) {
-            return Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.inbox_outlined, size: 56, color: context.colors.textTertiary),
-                  const SizedBox(height: 12),
-                  Text('受付記録はまだありません', style: TextStyle(color: context.colors.textSecondary, fontSize: AppTextSize.bodyMd)),
-                  const SizedBox(height: 4),
-                  Text('右下の「新規受付」から記録できます', style: TextStyle(color: context.colors.textTertiary, fontSize: AppTextSize.small)),
-                ],
-              ),
-            );
-          }
-          return ListView.builder(
-            padding: const EdgeInsets.fromLTRB(12, 10, 12, 88),
-            itemCount: docs.length,
-            itemBuilder: (c, i) => _ComplaintListTile(doc: docs[i]),
-          );
-        },
-      ),
+      body: _buildList(),
     );
   }
 }

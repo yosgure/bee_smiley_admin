@@ -12,7 +12,8 @@ import 'main.dart';
 // ============================================================
 class HiyariScreen extends StatefulWidget {
   final VoidCallback? onClose;
-  const HiyariScreen({super.key, this.onClose});
+  final bool embedded;
+  const HiyariScreen({super.key, this.onClose, this.embedded = false});
 
   @override
   State<HiyariScreen> createState() => _HiyariScreenState();
@@ -29,6 +30,46 @@ class _HiyariScreenState extends State<HiyariScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (widget.embedded) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Container(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+            decoration: BoxDecoration(
+              color: context.colors.cardBg,
+              border: Border(
+                bottom: BorderSide(color: context.colors.borderLight),
+              ),
+            ),
+            child: Row(
+              children: [
+                Text(
+                  '事故・ヒヤリハット',
+                  style: TextStyle(
+                    fontSize: AppTextSize.title,
+                    fontWeight: FontWeight.w600,
+                    color: context.colors.textPrimary,
+                  ),
+                ),
+                const Spacer(),
+                ElevatedButton.icon(
+                  onPressed: _openNewReport,
+                  icon: const Icon(Icons.add, size: 18, color: Colors.white),
+                  label: const Text('新規報告',
+                      style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Expanded(child: _buildList()),
+        ],
+      );
+    }
     return Scaffold(
       backgroundColor: context.colors.scaffoldBg,
       appBar: AppBar(
