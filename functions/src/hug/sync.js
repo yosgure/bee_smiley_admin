@@ -192,6 +192,18 @@ async function getRecordProceedingsForm(cookies) {
 
 function resolveAddingChildrenId(addingMap, categoryLabel) {
   const normalized = normalizeName(categoryLabel);
+
+  // 「関係機関連携」カテゴリは HUG 側に（Ⅰ）と（Ⅱ）が併存する。
+  // 現状の運用要件は（Ⅱ）固定のため、Ⅱ を含むラベルを優先的に選ぶ。
+  if (normalized.includes('関係機関連携')) {
+    for (const [label, id] of Object.entries(addingMap)) {
+      const n = normalizeName(label);
+      if (n.includes('関係機関連携') && (n.includes('Ⅱ') || n.includes('II'))) {
+        return id;
+      }
+    }
+  }
+
   for (const [label, id] of Object.entries(addingMap)) {
     const n = normalizeName(label);
     if (n === normalized) return id;
@@ -618,7 +630,7 @@ async function syncToHugCore(contentIds = null) {
 
       // 加算系カテゴリ → record_proceedings.php（各種加算・議事録管理）
       // resolveAddingChildrenId が部分一致で HUG 側の「家族支援加算（Ⅰ）」等を引き当てる。
-      const ADDING_CATEGORIES = ['子育てサポート', '家族支援'];
+      const ADDING_CATEGORIES = ['子育てサポート', '家族支援', '関係機関連携'];
       const isAddingCategory = ADDING_CATEGORIES.some(
         (prefix) => normalizeName(category).includes(prefix)
       );

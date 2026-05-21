@@ -191,9 +191,10 @@ class _AiChatScreenState extends State<AiChatScreen> {
       if ((type != 'date' && type != 'datetime')) continue;
       if (!label.contains('欠席日') && !label.contains('欠席した日')) continue;
       final ans = _lastElicitationAnswers[i];
-      if (ans.isEmpty) continue;
+      if (ans.length < 10) continue;
       try {
-        return DateFormat(type == 'datetime' ? 'yyyy/MM/dd HH:mm' : 'yyyy/MM/dd').parse(ans);
+        // 日付のみ / 日時 / 日時範囲 のいずれも先頭 10 文字 = yyyy/MM/dd
+        return DateFormat('yyyy/MM/dd').parse(ans.substring(0, 10));
       } catch (_) {}
     }
     return null;
@@ -1454,6 +1455,141 @@ class _AiChatScreenState extends State<AiChatScreen> {
           child: Text(label, style: const TextStyle(fontSize: AppTextSize.body)),
         );
       }).toList(),
+    );
+  }
+
+  /// エリシテーション「日時」回答用: 1 つのダイアログで
+  /// 日付（カレンダー）+ 開始時刻 + 終了時刻 を選ばせる。
+  Future<({DateTime date, TimeOfDay start, TimeOfDay end})?> _pickDateTimeRange({
+    required DateTime initialDate,
+    required TimeOfDay initialStart,
+    required TimeOfDay initialEnd,
+  }) async {
+    DateTime selectedDate = DateTime(initialDate.year, initialDate.month, initialDate.day);
+    TimeOfDay startTime = initialStart;
+    TimeOfDay endTime = initialEnd;
+
+    String fmt(TimeOfDay t) =>
+        '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
+
+    return showDialog<({DateTime date, TimeOfDay start, TimeOfDay end})>(
+      context: context,
+      builder: (dialogCtx) {
+        return StatefulBuilder(
+          builder: (ctx, setSt) {
+            final c = context.colors;
+            Widget timeButton({
+              required String label,
+              required TimeOfDay value,
+              required ValueChanged<TimeOfDay> onPicked,
+            }) {
+              return Builder(
+                builder: (anchorCtx) => InkWell(
+                  borderRadius: BorderRadius.circular(10),
+                  onTap: () async {
+                    final picked = await _pickTime10min(anchorCtx, value);
+                    if (picked != null) onPicked(picked);
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: c.cardBg,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: c.borderMedium),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(label,
+                            style: TextStyle(fontSize: AppTextSize.small, color: c.textSecondary)),
+                        const SizedBox(width: 8),
+                        Text(fmt(value),
+                            style: TextStyle(
+                              fontSize: AppTextSize.bodyMd,
+                              color: c.aiAccent,
+                              fontWeight: FontWeight.w600,
+                            )),
+                        Icon(Icons.arrow_drop_down, size: 18, color: c.textTertiary),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            }
+
+            return AlertDialog(
+              backgroundColor: c.dialogBg,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              contentPadding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+              title: Text('日時を選択',
+                  style: TextStyle(
+                    fontSize: AppTextSize.bodyLarge,
+                    fontWeight: FontWeight.w600,
+                    color: c.textPrimary,
+                  )),
+              content: SizedBox(
+                width: 340,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SizedBox(
+                      height: 320,
+                      child: CalendarDatePicker(
+                        initialDate: selectedDate,
+                        firstDate: DateTime(2020),
+                        lastDate: DateTime(2100),
+                        onDateChanged: (d) => setSt(() => selectedDate = d),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        timeButton(
+                          label: '開始',
+                          value: startTime,
+                          onPicked: (t) => setSt(() {
+                            startTime = t;
+                            // 開始 >= 終了 になったら終了を +1h して整合性を保つ
+                            final s = t.hour * 60 + t.minute;
+                            final e = endTime.hour * 60 + endTime.minute;
+                            if (e <= s) {
+                              final ne = (s + 60) % (24 * 60);
+                              endTime = TimeOfDay(hour: ne ~/ 60, minute: ne % 60);
+                            }
+                          }),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                          child: Text('〜',
+                              style: TextStyle(fontSize: AppTextSize.body, color: c.textTertiary)),
+                        ),
+                        timeButton(
+                          label: '終了',
+                          value: endTime,
+                          onPicked: (t) => setSt(() => endTime = t),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogCtx).pop(null),
+                  child: const Text('キャンセル'),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.of(dialogCtx)
+                      .pop((date: selectedDate, start: startTime, end: endTime)),
+                  child: const Text('OK'),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 
@@ -2842,44 +2978,61 @@ class _AiChatScreenState extends State<AiChatScreen> {
   /// エリシテーション用の日付/日時ピッカーボタン
   Widget _buildDatePickerButton(String type, String currentAnswer) {
     final hasValue = currentAnswer.isNotEmpty;
-    // _pickTime10min は anchor となる context (= ボタン自身の RenderBox) を
-    // 必要とするため、Builder で包んで InkWell 直下の context を取得する。
-    return Builder(
-      builder: (anchorCtx) => InkWell(
+    return InkWell(
       borderRadius: BorderRadius.circular(12),
       onTap: () async {
-        DateTime initial = DateTime.now();
-        // 既存値をパースして初期値に
-        try {
-          if (currentAnswer.isNotEmpty) {
-            initial = DateFormat(type == 'datetime' ? 'yyyy/MM/dd HH:mm' : 'yyyy/MM/dd').parse(currentAnswer);
+        // 既存値の解釈：
+        //   日付のみ        yyyy/MM/dd
+        //   日時 (旧)       yyyy/MM/dd HH:mm
+        //   日時範囲 (新)   yyyy/MM/dd HH:mm〜HH:mm
+        DateTime initialDate = DateTime.now();
+        TimeOfDay initialStart = const TimeOfDay(hour: 10, minute: 0);
+        TimeOfDay initialEnd = const TimeOfDay(hour: 11, minute: 0);
+        if (currentAnswer.isNotEmpty) {
+          try {
+            initialDate = DateFormat('yyyy/MM/dd').parse(currentAnswer.substring(0, 10));
+          } catch (_) {}
+          final timePart = currentAnswer.length > 10 ? currentAnswer.substring(11) : '';
+          final m = RegExp(r'^(\d{1,2}):(\d{2})(?:[〜~～\-](\d{1,2}):(\d{2}))?').firstMatch(timePart);
+          if (m != null) {
+            initialStart = TimeOfDay(hour: int.parse(m.group(1)!), minute: int.parse(m.group(2)!));
+            if (m.group(3) != null && m.group(4) != null) {
+              initialEnd = TimeOfDay(hour: int.parse(m.group(3)!), minute: int.parse(m.group(4)!));
+            } else {
+              initialEnd = TimeOfDay(
+                hour: (initialStart.hour + 1) % 24,
+                minute: initialStart.minute,
+              );
+            }
           }
-        } catch (_) {}
+        }
+
+        if (type == 'datetime') {
+          final picked = await _pickDateTimeRange(
+            initialDate: initialDate,
+            initialStart: initialStart,
+            initialEnd: initialEnd,
+          );
+          if (picked == null) return;
+          final dateStr = DateFormat('yyyy/MM/dd').format(picked.date);
+          final s = '${picked.start.hour.toString().padLeft(2, '0')}:${picked.start.minute.toString().padLeft(2, '0')}';
+          final e = '${picked.end.hour.toString().padLeft(2, '0')}:${picked.end.minute.toString().padLeft(2, '0')}';
+          setState(() {
+            _elicitationAnswers[_elicitationStep] = '$dateStr $s〜$e';
+          });
+          return;
+        }
 
         final picked = await showDatePicker(
           context: context,
-          initialDate: initial,
+          initialDate: initialDate,
           firstDate: DateTime(2020),
           lastDate: DateTime(2100),
           locale: const Locale('ja'),
         );
         if (picked == null) return;
-
-        DateTime selected = picked;
-        if (type == 'datetime') {
-          // 標準の showTimePicker (時計UI) ではなく、ファイル内既存の
-          // 10 分刻みドロップダウン (_pickTime10min) を利用する。
-          if (!mounted) return;
-          final t = await _pickTime10min(
-            anchorCtx,
-            TimeOfDay(hour: initial.hour, minute: initial.minute),
-          );
-          if (t == null) return;
-          selected = DateTime(picked.year, picked.month, picked.day, t.hour, t.minute);
-        }
-        final formatted = DateFormat(type == 'datetime' ? 'yyyy/MM/dd HH:mm' : 'yyyy/MM/dd').format(selected);
         setState(() {
-          _elicitationAnswers[_elicitationStep] = formatted;
+          _elicitationAnswers[_elicitationStep] = DateFormat('yyyy/MM/dd').format(picked);
         });
       },
       child: Container(
@@ -2914,7 +3067,6 @@ class _AiChatScreenState extends State<AiChatScreen> {
             Icon(Icons.arrow_drop_down, size: 20, color: context.colors.textTertiary),
           ],
         ),
-      ),
       ),
     );
   }
@@ -3046,13 +3198,29 @@ class _AiChatScreenState extends State<AiChatScreen> {
                             return Text('プラス所属スタッフが見つかりません',
                               style: TextStyle(fontSize: AppTextSize.body, color: context.colors.textTertiary));
                           }
+                          // 複数選択：「、」区切りで保持
+                          final selectedSet = currentAnswer.isEmpty
+                              ? <String>{}
+                              : currentAnswer.split('、').map((s) => s.trim()).where((s) => s.isNotEmpty).toSet();
                           return Wrap(
                             spacing: 6,
                             runSpacing: 6,
                             children: staffList.map((opt) {
-                              final isSelected = currentAnswer == opt;
+                              final isSelected = selectedSet.contains(opt);
                               return GestureDetector(
-                                onTap: () => _answerElicitation(opt),
+                                onTap: () {
+                                  final next = {...selectedSet};
+                                  if (isSelected) {
+                                    next.remove(opt);
+                                  } else {
+                                    next.add(opt);
+                                  }
+                                  // staffList の表示順に揃えてから join
+                                  final ordered = staffList.where(next.contains).toList();
+                                  setState(() {
+                                    _elicitationAnswers[_elicitationStep] = ordered.join('、');
+                                  });
+                                },
                                 child: Container(
                                   padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                                   decoration: BoxDecoration(
@@ -3062,13 +3230,22 @@ class _AiChatScreenState extends State<AiChatScreen> {
                                       color: isSelected ? context.colors.aiAccent : context.colors.borderMedium,
                                     ),
                                   ),
-                                  child: Text(
-                                    opt,
-                                    style: TextStyle(
-                                      fontSize: AppTextSize.body,
-                                      color: isSelected ? Colors.white : context.colors.textPrimary,
-                                      fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
-                                    ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      if (isSelected) ...[
+                                        const Icon(Icons.check_rounded, size: 14, color: Colors.white),
+                                        const SizedBox(width: 4),
+                                      ],
+                                      Text(
+                                        opt,
+                                        style: TextStyle(
+                                          fontSize: AppTextSize.body,
+                                          color: isSelected ? Colors.white : context.colors.textPrimary,
+                                          fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 ),
                               );
@@ -3271,7 +3448,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
                           ),
                         const Spacer(),
                         // 次へ / 送信ボタン（上矢印）
-                        if (type == 'text' || type == 'select_or_text' || type == 'date' || type == 'datetime' || isLast) ...[
+                        if (type == 'text' || type == 'select_or_text' || type == 'date' || type == 'datetime' || type == 'plus_staff' || isLast) ...[
                           if (!isLast)
                             // 次へボタン
                             GestureDetector(
