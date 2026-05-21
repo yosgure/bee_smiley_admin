@@ -52,6 +52,9 @@ dependencies:
   # Video
   video_player: ^2.9.2
 
+  # Audio recording (for morning meeting minutes auto-generation)
+  record: ^5.1.2
+
   # Share & HTTP
   share_plus: ^10.1.4
   http: ^1.2.0

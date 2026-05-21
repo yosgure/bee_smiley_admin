@@ -15,4 +15,5 @@ module.exports = {
   ...require('./src/hug/recipient_sync'),
   ...require('./src/monitoring'),
   ...require('./src/intake/form_intake'),
+  ...require('./src/morning_meeting'),
 };
