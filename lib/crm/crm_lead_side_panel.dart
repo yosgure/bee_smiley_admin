@@ -2710,8 +2710,8 @@ class _HugInfoSectionState extends State<_HugInfoSection> {
     final certOk = lead.permitStatus == 'have';
     final allOk = missing.isEmpty && certOk;
     return _SectionCard(
-      icon: Icons.cloud_sync_outlined,
-      title: 'HUG連携情報',
+      icon: Icons.assignment_outlined,
+      title: '詳細情報',
       titleColor: allOk ? AppColors.success : null,
       trailing: _statusBadge(context, allOk, missing.length, certOk),
       child: Column(
