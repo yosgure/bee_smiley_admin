@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -1340,6 +1341,19 @@ class _CrmDashboardViewState extends State<_CrmDashboardView> {
               inquiryToTrialDays.length,
               '件の体験実績から算出'),
 
+          const SizedBox(height: 16),
+          _sectionTitle(context, '月次トレンド（過去12ヶ月）'),
+          const SizedBox(height: 8),
+          _MonthlyTrendChart(
+            months: _last12Months(now),
+            inquirySeries:
+                _monthlySeries(widget.docs, now, 'inquiredAt'),
+            wonSeries:
+                _monthlySeries(widget.docs, now, 'enrolledAt'),
+            lostSeries:
+                _monthlySeries(widget.docs, now, 'lostAt'),
+          ),
+
           if (lossReasonCount.isNotEmpty) ...[
             const SizedBox(height: 16),
             _sectionTitle(context, '失注理由ランキング'),
@@ -1783,6 +1797,252 @@ class _CrmDashboardViewState extends State<_CrmDashboardView> {
         ),
       ),
     );
+  }
+}
+
+// ============================================================
+// 月次トレンドチャート用ヘルパー
+// ============================================================
+
+/// 直近12ヶ月の月初DateTime（古い順）
+List<DateTime> _last12Months(DateTime now) {
+  final start = DateTime(now.year, now.month - 11, 1);
+  return List.generate(12, (i) => DateTime(start.year, start.month + i, 1));
+}
+
+/// 各リードの指定フィールド（inquiredAt等）の Timestamp を月単位で集計し、
+/// 直近12ヶ月分のカウント配列を返す（古い→新しい順）。
+List<int> _monthlySeries(List<LeadView> docs, DateTime now, String fieldKey) {
+  final months = _last12Months(now);
+  final keys = months.map((m) => m.year * 100 + m.month).toList();
+  final out = List<int>.filled(12, 0);
+  for (final d in docs) {
+    final ts = d.data()[fieldKey];
+    if (ts is! Timestamp) continue;
+    final dt = ts.toDate();
+    final k = dt.year * 100 + dt.month;
+    final idx = keys.indexOf(k);
+    if (idx >= 0) out[idx]++;
+  }
+  return out;
+}
+
+class _MonthlyTrendChart extends StatelessWidget {
+  final List<DateTime> months;
+  final List<int> inquirySeries;
+  final List<int> wonSeries;
+  final List<int> lostSeries;
+  const _MonthlyTrendChart({
+    required this.months,
+    required this.inquirySeries,
+    required this.wonSeries,
+    required this.lostSeries,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    final hasData = [...inquirySeries, ...wonSeries, ...lostSeries]
+        .any((v) => v > 0);
+    if (!hasData) {
+      return Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: c.cardBg,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: c.borderLight),
+        ),
+        child: Text(
+          'データがまだありません。',
+          style: TextStyle(
+              fontSize: AppTextSize.body, color: c.textSecondary),
+        ),
+      );
+    }
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: c.cardBg,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: c.borderLight),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              _legendDot(context, AppColors.info, '問い合わせ'),
+              const SizedBox(width: 10),
+              _legendDot(context, AppColors.success, '入会'),
+              const SizedBox(width: 10),
+              _legendDot(context, AppColors.error, '失注'),
+            ],
+          ),
+          const SizedBox(height: 6),
+          SizedBox(
+            height: 220,
+            child: LayoutBuilder(builder: (ctx, constraints) {
+              return CustomPaint(
+                size: Size(constraints.maxWidth, constraints.maxHeight),
+                painter: _TrendChartPainter(
+                  months: months,
+                  series: [
+                    (data: inquirySeries, color: AppColors.info),
+                    (data: wonSeries, color: AppColors.success),
+                    (data: lostSeries, color: AppColors.error),
+                  ],
+                  axisColor: c.borderMedium,
+                  gridColor: c.borderLight,
+                  textColor: c.textSecondary,
+                ),
+              );
+            }),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _legendDot(BuildContext context, Color color, String label) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 10,
+          height: 10,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 4),
+        Text(label,
+            style: TextStyle(
+                fontSize: AppTextSize.caption,
+                color: context.colors.textSecondary)),
+      ],
+    );
+  }
+}
+
+typedef _Series = ({List<int> data, Color color});
+
+class _TrendChartPainter extends CustomPainter {
+  final List<DateTime> months;
+  final List<_Series> series;
+  final Color axisColor;
+  final Color gridColor;
+  final Color textColor;
+
+  _TrendChartPainter({
+    required this.months,
+    required this.series,
+    required this.axisColor,
+    required this.gridColor,
+    required this.textColor,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    const padLeft = 28.0;
+    const padBottom = 22.0;
+    const padTop = 6.0;
+    const padRight = 8.0;
+    final chartW = size.width - padLeft - padRight;
+    final chartH = size.height - padTop - padBottom;
+
+    final maxValRaw = series
+        .expand((s) => s.data)
+        .fold<int>(0, (a, b) => a > b ? a : b);
+    final maxVal = maxValRaw == 0 ? 1 : maxValRaw;
+    // Y軸目盛り段数（4区切り）
+    final yStep = (maxVal / 4).ceil().clamp(1, 100000);
+    final yMax = yStep * 4;
+
+    // 軸＋グリッド
+    final gridPaint = Paint()
+      ..color = gridColor
+      ..strokeWidth = 0.5;
+    final axisPaint = Paint()
+      ..color = axisColor
+      ..strokeWidth = 0.8;
+
+    for (int i = 0; i <= 4; i++) {
+      final y = padTop + chartH * (1 - i / 4);
+      canvas.drawLine(Offset(padLeft, y),
+          Offset(padLeft + chartW, y), gridPaint);
+      _drawText(canvas, '${yStep * i}',
+          Offset(padLeft - 4, y),
+          textColor: textColor, alignRight: true, alignMiddle: true);
+    }
+    canvas.drawLine(Offset(padLeft, padTop),
+        Offset(padLeft, padTop + chartH), axisPaint);
+    canvas.drawLine(Offset(padLeft, padTop + chartH),
+        Offset(padLeft + chartW, padTop + chartH), axisPaint);
+
+    final n = months.length;
+    final stepX = n > 1 ? chartW / (n - 1) : chartW;
+
+    // X 軸ラベル: 月（毎月 or 隔月）
+    for (int i = 0; i < n; i++) {
+      final m = months[i];
+      // 6ヶ月以上ある場合は奇数月のみ表示
+      final showLabel = n <= 6 || i % 2 == n % 2;
+      if (!showLabel) continue;
+      final x = padLeft + stepX * i;
+      _drawText(canvas, '${m.month}月',
+          Offset(x, padTop + chartH + 4),
+          textColor: textColor, alignCenter: true);
+    }
+
+    // 系列ごとに折れ線＋ドット
+    for (final s in series) {
+      final path = Path();
+      final dotPaint = Paint()..color = s.color;
+      final linePaint = Paint()
+        ..color = s.color
+        ..strokeWidth = 2.0
+        ..style = PaintingStyle.stroke;
+      for (int i = 0; i < n; i++) {
+        final v = i < s.data.length ? s.data[i] : 0;
+        final x = padLeft + stepX * i;
+        final y = padTop + chartH * (1 - v / yMax);
+        if (i == 0) {
+          path.moveTo(x, y);
+        } else {
+          path.lineTo(x, y);
+        }
+        canvas.drawCircle(Offset(x, y), 2.6, dotPaint);
+      }
+      canvas.drawPath(path, linePaint);
+    }
+  }
+
+  void _drawText(Canvas canvas, String text, Offset anchor,
+      {required Color textColor,
+      bool alignCenter = false,
+      bool alignRight = false,
+      bool alignMiddle = false}) {
+    final tp = TextPainter(
+      text: TextSpan(
+          text: text,
+          style: TextStyle(
+              fontSize: AppTextSize.xs, color: textColor)),
+      textDirection: ui.TextDirection.ltr,
+    )..layout();
+    var dx = anchor.dx;
+    if (alignCenter) dx -= tp.width / 2;
+    if (alignRight) dx -= tp.width;
+    var dy = anchor.dy;
+    if (alignMiddle) dy -= tp.height / 2;
+    tp.paint(canvas, Offset(dx, dy));
+  }
+
+  @override
+  bool shouldRepaint(covariant _TrendChartPainter old) {
+    return old.months != months ||
+        old.series != series ||
+        old.axisColor != axisColor ||
+        old.gridColor != gridColor ||
+        old.textColor != textColor;
   }
 }
 
