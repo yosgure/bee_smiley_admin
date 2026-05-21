@@ -613,7 +613,10 @@ class _BasicInfoSectionState extends State<_BasicInfoSection> {
         children: [
           _labelCol(context, label),
           Expanded(
-            child: DropdownButtonHideUnderline(
+            child: Padding(
+              // _InlineTextEditor の contentPadding(horizontal:8) と揃える
+              padding: const EdgeInsets.only(left: 8),
+              child: DropdownButtonHideUnderline(
               child: DropdownButton<String>(
                 value: options.any((o) => o.id == value) ? value : null,
                 isDense: true,
@@ -636,6 +639,7 @@ class _BasicInfoSectionState extends State<_BasicInfoSection> {
                     AppFeedback.success(context, '媒体を保存しました');
                   }
                 },
+              ),
               ),
             ),
           ),
@@ -1885,78 +1889,137 @@ Future<void> _showStartOnboardingDialog(
   final ok = await showDialog<bool>(
     context: context,
     builder: (ctx) => StatefulBuilder(builder: (ctx, setS) {
+      final c = ctx.colors;
+      // ── ローカルヘルパー（フォントサイズ・余白を全項目で統一）──
+      Widget sectionTitle(String t) => Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Text(t,
+                style: TextStyle(
+                    fontSize: AppTextSize.bodyLarge,
+                    fontWeight: FontWeight.w700,
+                    color: c.textPrimary)),
+          );
+      Widget fieldLabel(String t) => Padding(
+            padding: const EdgeInsets.only(bottom: 4),
+            child: Text(t,
+                style: TextStyle(
+                    fontSize: AppTextSize.caption,
+                    color: c.textSecondary)),
+          );
+      Widget dateButton(DateTime d, String pattern, VoidCallback onTap) =>
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              style: OutlinedButton.styleFrom(
+                alignment: Alignment.centerLeft,
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                textStyle: const TextStyle(fontSize: AppTextSize.body),
+              ),
+              icon: const Icon(Icons.event, size: 16),
+              label: Text(DateFormat(pattern, 'ja').format(d)),
+              onPressed: onTap,
+            ),
+          );
+      const inputContentPadding =
+          EdgeInsets.symmetric(horizontal: 12, vertical: 10);
+
       return AlertDialog(
-        title: const Text('入会手続きを開始'),
+        title: Text('入会手続きを開始',
+            style: TextStyle(
+                fontSize: AppTextSize.title,
+                fontWeight: FontWeight.w700)),
         content: SizedBox(
-          width: 400,
+          width: 420,
           child: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Text('契約予定日',
-                    style: TextStyle(fontSize: AppTextSize.caption)),
-                OutlinedButton.icon(
-                  icon: const Icon(Icons.event, size: 16),
-                  label: Text(DateFormat('yyyy/M/d (E)', 'ja').format(contractDate)),
-                  onPressed: () async {
-                    final d = await showDatePicker(
-                        context: ctx,
-                        initialDate: contractDate,
-                        firstDate: DateTime(2024, 1, 1),
-                        lastDate: DateTime(2030, 12, 31));
-                    if (d != null) setS(() => contractDate = d);
-                  },
-                ),
-                const SizedBox(height: 12),
+                // ── 契約情報 ──
+                sectionTitle('契約情報'),
+                fieldLabel('契約予定日'),
+                dateButton(contractDate, 'yyyy/M/d (E)', () async {
+                  final d = await showDatePicker(
+                      context: ctx,
+                      initialDate: contractDate,
+                      firstDate: DateTime(2024, 1, 1),
+                      lastDate: DateTime(2030, 12, 31));
+                  if (d != null) setS(() => contractDate = d);
+                }),
+                const SizedBox(height: 14),
+                fieldLabel('希望通所開始日'),
                 TextField(
                   controller: preferredStart,
+                  style: const TextStyle(fontSize: AppTextSize.body),
                   decoration: const InputDecoration(
-                      labelText: '希望通所開始日', hintText: '6月から / 4/15 など',
-                      border: OutlineInputBorder(), isDense: true),
+                    hintText: '6月から / 4/15 など',
+                    hintStyle: TextStyle(fontSize: AppTextSize.body),
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                    contentPadding: inputContentPadding,
+                  ),
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 14),
+                fieldLabel('受給者証ステータス'),
                 DropdownButtonFormField<String>(
                   initialValue: permitStatus,
+                  style: TextStyle(
+                      fontSize: AppTextSize.body, color: c.textPrimary),
                   decoration: const InputDecoration(
-                      labelText: '受給者証ステータス',
-                      border: OutlineInputBorder(), isDense: true),
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                    contentPadding: inputContentPadding,
+                  ),
                   items: CrmOptions.permitStatus
-                      .map((s) =>
-                          DropdownMenuItem(value: s.id, child: Text(s.label)))
+                      .map((s) => DropdownMenuItem(
+                            value: s.id,
+                            child: Text(s.label,
+                                style: const TextStyle(
+                                    fontSize: AppTextSize.body)),
+                          ))
                       .toList(),
                   onChanged: (v) => setS(() => permitStatus = v ?? 'none'),
                 ),
-                const Divider(height: 24),
-                Text('1 つ目の次のアクション', style: TextStyle(fontSize: AppTextSize.caption)),
+                const Divider(height: 28),
+                // ── 1つ目の次のアクション ──
+                sectionTitle('1つ目の次のアクション'),
+                fieldLabel('クイック選択'),
                 Wrap(
                   spacing: 6,
+                  runSpacing: 6,
                   children: ['契約書送付', '契約日確定の連絡', '受給者証申請サポート']
-                      .map((s) => ActionChip(
-                            label: Text(s, style: const TextStyle(fontSize: AppTextSize.caption)),
-                            onPressed: () => setS(() => nextActionNote.text = s),
+                      .map((s) => ChoiceChip(
+                            label: Text(s,
+                                style: const TextStyle(
+                                    fontSize: AppTextSize.caption)),
+                            selected: nextActionNote.text.trim() == s,
+                            onSelected: (_) =>
+                                setS(() => nextActionNote.text = s),
                           ))
                       .toList(),
                 ),
-                const SizedBox(height: 6),
-                OutlinedButton.icon(
-                  icon: const Icon(Icons.event, size: 16),
-                  label: Text(DateFormat('M/d (E)', 'ja').format(nextActionAt)),
-                  onPressed: () async {
-                    final d = await showDatePicker(
-                        context: ctx,
-                        initialDate: nextActionAt,
-                        firstDate: DateTime(2024, 1, 1),
-                        lastDate: DateTime(2030, 12, 31));
-                    if (d == null) return;
-                    setS(() => nextActionAt = DateTime(d.year, d.month, d.day));
-                  },
-                ),
-                const SizedBox(height: 6),
+                const SizedBox(height: 14),
+                fieldLabel('期日'),
+                dateButton(nextActionAt, 'M/d (E)', () async {
+                  final d = await showDatePicker(
+                      context: ctx,
+                      initialDate: nextActionAt,
+                      firstDate: DateTime(2024, 1, 1),
+                      lastDate: DateTime(2030, 12, 31));
+                  if (d == null) return;
+                  setS(() => nextActionAt =
+                      DateTime(d.year, d.month, d.day));
+                }),
+                const SizedBox(height: 14),
+                fieldLabel('内容'),
                 TextField(
                   controller: nextActionNote,
+                  style: const TextStyle(fontSize: AppTextSize.body),
                   decoration: const InputDecoration(
-                      labelText: '内容', border: OutlineInputBorder(), isDense: true),
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                    contentPadding: inputContentPadding,
+                  ),
                 ),
               ],
             ),
