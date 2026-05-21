@@ -33,6 +33,7 @@ class _IntakeFormScreenState extends State<IntakeFormScreen> {
   final _parentFirstNameKanaCtrl = TextEditingController();
   final _emailCtrl = TextEditingController();
   final _phoneCtrl = TextEditingController();
+  final _postalCodeCtrl = TextEditingController();
   final _addressCtrl = TextEditingController();
 
   // 児童
@@ -72,6 +73,7 @@ class _IntakeFormScreenState extends State<IntakeFormScreen> {
       _parentFirstNameKanaCtrl,
       _emailCtrl,
       _phoneCtrl,
+      _postalCodeCtrl,
       _addressCtrl,
       _childLastNameCtrl,
       _childFirstNameCtrl,
@@ -118,6 +120,7 @@ class _IntakeFormScreenState extends State<IntakeFormScreen> {
           ? ''
           : DateFormat('yyyy/MM/dd').format(_childBirthDate!),
       'childGender': _childGender,
+      'postalCode': _postalCodeCtrl.text.trim(),
       'address': _addressCtrl.text.trim(),
       'email': _emailCtrl.text.trim(),
       'phone': _phoneCtrl.text.trim(),
@@ -230,8 +233,12 @@ class _IntakeFormScreenState extends State<IntakeFormScreen> {
                       keyboard: TextInputType.phone,
                       required: true,
                       hint: '09000000000'),
-                  _input('ご住所（郵便番号から）', _addressCtrl,
-                      hint: '〒251-0042 神奈川県藤沢市…',
+                  _input('郵便番号', _postalCodeCtrl,
+                      keyboard: TextInputType.number,
+                      required: true,
+                      hint: '例: 251-0042'),
+                  _input('ご住所', _addressCtrl,
+                      hint: '例: 神奈川県藤沢市辻堂…',
                       required: true,
                       maxLines: 2),
                 ]),
@@ -587,7 +594,9 @@ class _IntakeFormScreenState extends State<IntakeFormScreen> {
       'HP',
       '紹介',
       'チラシ',
-      'SNS',
+      'リタリコ',
+      '園',
+      '市役所',
       'その他',
     ];
     return InputDecorator(
