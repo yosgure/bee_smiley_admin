@@ -148,6 +148,99 @@ class CrmLead {
   String get permitStatus =>
       (raw['permitStatus'] as String?) ?? 'none';
 
+  // ============================================================
+  // HUG 連携用フィールド（入会手続中ステージで入力、入会完了時にHUGへ送信）
+  // 詳細は CLAUDE.md / HUG プロフィール画面参照。
+  // ============================================================
+
+  // 住所詳細
+  String get postalCode => (raw['postalCode'] as String?) ?? '';
+  String get prefecture => (raw['prefecture'] as String?) ?? '';
+  String get city => (raw['city'] as String?) ?? '';
+  String get addressDetail => (raw['addressDetail'] as String?) ?? '';
+
+  // 保護者続柄（児童から見て父・母・祖父母など）
+  String get parentRelation => (raw['parentRelation'] as String?) ?? '';
+
+  // 緊急連絡先（最大2件 + 備考）
+  List<EmergencyContact> get emergencyContacts {
+    final list = (raw['emergencyContacts'] as List?) ?? const [];
+    return list
+        .whereType<Map>()
+        .map((m) => EmergencyContact.fromMap(Map<String, dynamic>.from(m)))
+        .toList();
+  }
+  String get emergencyMemo => (raw['emergencyMemo'] as String?) ?? '';
+
+  // 口座情報
+  Map<String, dynamic> get bankInfo {
+    final m = raw['bankInfo'];
+    return (m is Map) ? Map<String, dynamic>.from(m) : const {};
+  }
+  String get bankName => (bankInfo['bankName'] as String?) ?? '';
+  String get branchName => (bankInfo['branchName'] as String?) ?? '';
+  String get bankNameKana => (bankInfo['bankNameKana'] as String?) ?? '';
+  String get branchNameKana => (bankInfo['branchNameKana'] as String?) ?? '';
+  String get bankCode => (bankInfo['bankCode'] as String?) ?? '';
+  String get branchCode => (bankInfo['branchCode'] as String?) ?? '';
+  String get accountType => (bankInfo['accountType'] as String?) ?? '';
+  String get accountNumber => (bankInfo['accountNumber'] as String?) ?? '';
+
+  // 受給者証詳細
+  Map<String, dynamic> get recipientCert {
+    final m = raw['recipientCert'];
+    return (m is Map) ? Map<String, dynamic>.from(m) : const {};
+  }
+  String get certificateNumber =>
+      (recipientCert['certificateNumber'] as String?) ?? '';
+  DateTime? get certificateStartDate =>
+      (recipientCert['startDate'] as Timestamp?)?.toDate();
+  String get certificateCity =>
+      (recipientCert['city'] as String?) ?? '';
+  String get certificateService =>
+      (recipientCert['service'] as String?) ?? '';
+  String get disabilityType =>
+      (recipientCert['disabilityType'] as String?) ?? '';
+  bool get specialSupport => recipientCert['specialSupport'] == true;
+  bool get cochlearImplant => recipientCert['cochlearImplant'] == true;
+  bool get severeDisability => recipientCert['severeDisability'] == true;
+  int? get monthlyDays {
+    final v = recipientCert['monthlyDays'];
+    if (v is int) return v;
+    if (v is num) return v.toInt();
+    return null;
+  }
+  DateTime? get certPeriodStart =>
+      (recipientCert['periodStart'] as Timestamp?)?.toDate();
+  DateTime? get certPeriodEnd =>
+      (recipientCert['periodEnd'] as Timestamp?)?.toDate();
+
+  /// HUG連携に必要な項目で未入力のリストを返す（ロック判定・進捗表示用）。
+  /// 受給者証「無」「申請中」は別ロック（permitStatus != 'have'）。
+  List<String> get hugMissingFields {
+    final missing = <String>[];
+    if (postalCode.isEmpty) missing.add('郵便番号');
+    if (prefecture.isEmpty) missing.add('都道府県');
+    if (city.isEmpty) missing.add('市町村');
+    if (addressDetail.isEmpty) missing.add('番地');
+    if (parentRelation.isEmpty) missing.add('児童との続柄');
+    if (emergencyContacts.isEmpty ||
+        emergencyContacts.first.phone.isEmpty) {
+      missing.add('緊急連絡先1');
+    }
+    if (bankName.isEmpty) missing.add('金融機関名');
+    if (accountNumber.isEmpty) missing.add('口座番号');
+    if (certificateNumber.isEmpty) missing.add('受給者証番号');
+    if (certificateStartDate == null) missing.add('受給者証利用開始日');
+    if (certificateService.isEmpty) missing.add('利用サービス');
+    if (monthlyDays == null) missing.add('給付支給量');
+    return missing;
+  }
+
+  /// HUG連携可能か（入会完了ボタンのロック判定）
+  bool get canCompleteEnrollment =>
+      permitStatus == 'have' && hugMissingFields.isEmpty;
+
   // 対応履歴（配列フィールド。Phase 1 では subcollection 化しない）
   List<CrmActivity> get activities {
     final list = (raw['activities'] as List?) ?? const [];
@@ -178,6 +271,28 @@ class CrmLead {
     if (base == null) return null;
     return (now ?? DateTime.now()).difference(base);
   }
+}
+
+/// 緊急連絡先（HUG 連携用）。
+class EmergencyContact {
+  final String name;
+  final String phone;
+  final String relation;
+  const EmergencyContact({
+    required this.name,
+    required this.phone,
+    this.relation = '',
+  });
+  factory EmergencyContact.fromMap(Map<String, dynamic> m) => EmergencyContact(
+        name: (m['name'] as String?) ?? '',
+        phone: (m['phone'] as String?) ?? '',
+        relation: (m['relation'] as String?) ?? '',
+      );
+  Map<String, dynamic> toMap() => {
+        'name': name,
+        'phone': phone,
+        'relation': relation,
+      };
 }
 
 /// 対応履歴の1エントリ。既存 `activities` 配列要素のラッパー。

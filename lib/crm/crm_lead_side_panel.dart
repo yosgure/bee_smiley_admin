@@ -165,6 +165,11 @@ class _PanelBody extends StatelessWidget {
                 const SizedBox(height: 12),
                 // v2.1+: 児童プロフィール（ケア情報含む）は基本情報セクションに集約済み。
                 _BasicInfoSection(lead: lead, leadRef: leadRef),
+                // 入会手続中ステージのみ：HUG 連携必須項目の入力UI
+                if (lead.stage == 'onboarding') ...[
+                  const SizedBox(height: 12),
+                  _HugInfoSection(lead: lead, leadRef: leadRef),
+                ],
               ],
             ),
           ),
@@ -1144,7 +1149,10 @@ class _StageAdvanceButton extends StatelessWidget {
       case 'onboarding':
         label = '入会完了';
         icon = Icons.check_circle_outline;
-        primary = () => _showWonDialog(context, lead, leadRef);
+        // HUG連携に必要な情報が揃わない場合は入会完了ボタンをロック。
+        primary = lead.canCompleteEnrollment
+            ? () => _showWonDialog(context, lead, leadRef)
+            : null;
         break;
       case 'won':
         label = '退会処理';
@@ -1162,16 +1170,31 @@ class _StageAdvanceButton extends StatelessWidget {
         primary = null;
     }
 
+    // ロック理由（onboarding ステージで入会完了が押せない場合のツールチップ）
+    String? lockReason;
+    if (stage == 'onboarding' && primary == null) {
+      final reasons = <String>[];
+      if (lead.permitStatus != 'have') reasons.add('受給者証が未取得');
+      final missing = lead.hugMissingFields;
+      if (missing.isNotEmpty) {
+        reasons.add('未入力: ${missing.join(' / ')}');
+      }
+      lockReason = reasons.join(' / ');
+    }
+
     return Row(
       children: [
         Expanded(
-          child: FilledButton.icon(
-            onPressed: primary,
-            icon: Icon(icon, size: 16),
-            label: Text(label, overflow: TextOverflow.ellipsis),
-            style: FilledButton.styleFrom(
-              padding: const EdgeInsets.symmetric(vertical: 10),
-              textStyle: const TextStyle(fontSize: AppTextSize.small),
+          child: Tooltip(
+            message: lockReason ?? '',
+            child: FilledButton.icon(
+              onPressed: primary,
+              icon: Icon(icon, size: 16),
+              label: Text(label, overflow: TextOverflow.ellipsis),
+              style: FilledButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                textStyle: const TextStyle(fontSize: AppTextSize.small),
+              ),
             ),
           ),
         ),
@@ -2661,3 +2684,632 @@ class _InlineTextEditorState extends State<_InlineTextEditor> {
   }
 }
 
+// ============================================================
+// HUG 連携情報セクション（入会手続中ステージのみ表示）
+// ----------------------------------------------------------------
+// 入会完了時にHUGの保護者・児童プロフィールに自動登録するため、
+// HUG側で必須となる項目を入会手続中に入力させる。
+// 全項目入力＋受給者証「有」が揃うと入会完了ボタンが押せるようになる。
+// ============================================================
+class _HugInfoSection extends StatefulWidget {
+  final CrmLead lead;
+  final LeadViewReference leadRef;
+  const _HugInfoSection({required this.lead, required this.leadRef});
+
+  @override
+  State<_HugInfoSection> createState() => _HugInfoSectionState();
+}
+
+class _HugInfoSectionState extends State<_HugInfoSection> {
+  CrmLead get lead => widget.lead;
+  LeadViewReference get leadRef => widget.leadRef;
+
+  @override
+  Widget build(BuildContext context) {
+    final missing = lead.hugMissingFields;
+    final certOk = lead.permitStatus == 'have';
+    final allOk = missing.isEmpty && certOk;
+    return _SectionCard(
+      icon: Icons.cloud_sync_outlined,
+      title: 'HUG連携情報',
+      titleColor: allOk ? AppColors.success : null,
+      trailing: _statusBadge(context, allOk, missing.length, certOk),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            margin: const EdgeInsets.only(bottom: 12),
+            decoration: BoxDecoration(
+              color: (allOk
+                      ? context.alerts.success.background
+                      : context.alerts.warning.background),
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Text(
+              allOk
+                  ? '入会完了時にHUGへ自動登録されます。'
+                  : '入会完了ボタンを押すには、下記の項目を全て入力してください。',
+              style: TextStyle(
+                  fontSize: AppTextSize.caption,
+                  color: allOk
+                      ? context.alerts.success.text
+                      : context.alerts.warning.text),
+            ),
+          ),
+
+          // ─── 住所詳細 ───
+          _subHeader(context, '住所詳細', missing: _hasMissing(
+              ['郵便番号', '都道府県', '市町村', '番地'], missing)),
+          _row(context, '郵便番号', lead.postalCode, 'postalCode',
+              hint: '例: 251-0042',
+              keyboard: TextInputType.text),
+          _row(context, '都道府県', lead.prefecture, 'prefecture',
+              hint: '例: 神奈川県'),
+          _row(context, '市町村', lead.city, 'city',
+              hint: '例: 藤沢市'),
+          _row(context, '番地・建物', lead.addressDetail, 'addressDetail',
+              hint: '例: 辻堂東海岸 1-2-3'),
+
+          const SizedBox(height: 14),
+
+          // ─── 保護者情報 ───
+          _subHeader(context, '保護者情報', missing: _hasMissing(
+              ['児童との続柄'], missing)),
+          _row(context, '児童との続柄', lead.parentRelation, 'parentRelation',
+              hint: '例: 父 / 母 / 祖父 / 祖母'),
+
+          const SizedBox(height: 14),
+
+          // ─── 緊急連絡先 ───
+          _subHeader(context, '緊急連絡先', missing: _hasMissing(
+              ['緊急連絡先1'], missing)),
+          _emergencyContactRow(context, 0, '緊急連絡先1'),
+          _emergencyContactRow(context, 1, '緊急連絡先2'),
+          _multilineRow(context, '備考', lead.emergencyMemo, 'emergencyMemo',
+              hint: '例: 平日10〜15時は緊急連絡先1へ'),
+
+          const SizedBox(height: 14),
+
+          // ─── 口座情報 ───
+          _subHeader(context, '口座情報', missing: _hasMissing(
+              ['金融機関名', '口座番号'], missing)),
+          _bankRow(context, '金融機関名', lead.bankName, 'bankName'),
+          _bankRow(context, '支店名', lead.branchName, 'branchName'),
+          _bankRow(context, '金融機関名カナ', lead.bankNameKana, 'bankNameKana',
+              hint: '例: ハグ'),
+          _bankRow(context, '支店名カナ', lead.branchNameKana, 'branchNameKana',
+              hint: '例: カナヤマシテン'),
+          _bankRow(context, '金融機関番号', lead.bankCode, 'bankCode',
+              hint: '例: 1234（半角4桁）',
+              keyboard: TextInputType.number),
+          _bankRow(context, '店舗番号', lead.branchCode, 'branchCode',
+              hint: '例: 567（半角3桁）',
+              keyboard: TextInputType.number),
+          _bankTypeRow(context),
+          _bankRow(context, '口座番号', lead.accountNumber, 'accountNumber',
+              hint: '例: 1234567（半角数字）',
+              keyboard: TextInputType.number),
+
+          const SizedBox(height: 14),
+
+          // ─── 受給者証 ───
+          _subHeader(context, '受給者証',
+              missing: !certOk || _hasMissing(
+                  ['受給者証番号', '受給者証利用開始日', '利用サービス', '給付支給量'],
+                  missing)),
+          if (!certOk)
+            Container(
+              padding: const EdgeInsets.all(8),
+              margin: const EdgeInsets.only(bottom: 8),
+              decoration: BoxDecoration(
+                color: context.alerts.urgent.background,
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Text(
+                '受給者証ステータスを「有」に変更してください（基本情報セクション）。',
+                style: TextStyle(
+                    fontSize: AppTextSize.caption,
+                    color: context.alerts.urgent.text),
+              ),
+            ),
+          _certRow(context, '受給者証番号', lead.certificateNumber,
+              'certificateNumber',
+              hint: '半角数字10桁',
+              keyboard: TextInputType.number),
+          _certDateRow(context, '利用開始日', lead.certificateStartDate,
+              'startDate'),
+          _certRow(context, '支給市町村', lead.certificateCity, 'city',
+              hint: '例: 藤沢市'),
+          _certServiceRow(context),
+          _certRow(context, '障がい児種別', lead.disabilityType, 'disabilityType',
+              hint: '例: 障害児 / 指標該当児'),
+          _certCheckRow(context, '特別支援加算を算定する',
+              lead.specialSupport, 'specialSupport'),
+          _certCheckRow(context, '人工内耳装用児支援加算を算定する',
+              lead.cochlearImplant, 'cochlearImplant'),
+          _certCheckRow(context, '受給者証に強度行動障害児の記載あり',
+              lead.severeDisability, 'severeDisability'),
+          _certRow(context, '給付支給量（日数）',
+              lead.monthlyDays?.toString() ?? '', 'monthlyDays',
+              hint: '半角数字',
+              keyboard: TextInputType.number),
+          _certDateRow(context, '給付決定期間 開始', lead.certPeriodStart,
+              'periodStart'),
+          _certDateRow(context, '給付決定期間 終了', lead.certPeriodEnd,
+              'periodEnd'),
+        ],
+      ),
+    );
+  }
+
+  // ── ヘルパー ──
+
+  Widget _statusBadge(BuildContext context, bool allOk, int missingCount,
+      bool certOk) {
+    if (allOk) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        decoration: BoxDecoration(
+          color: context.alerts.success.background,
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Text('完了',
+            style: TextStyle(
+                fontSize: AppTextSize.caption,
+                fontWeight: FontWeight.w600,
+                color: context.alerts.success.text)),
+      );
+    }
+    final label = !certOk
+        ? '受給者証未取得'
+        : '未入力 $missingCount件';
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: context.alerts.warning.background,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Text(label,
+          style: TextStyle(
+              fontSize: AppTextSize.caption,
+              fontWeight: FontWeight.w600,
+              color: context.alerts.warning.text)),
+    );
+  }
+
+  bool _hasMissing(List<String> keys, List<String> missing) =>
+      keys.any(missing.contains);
+
+  Widget _subHeader(BuildContext context, String title,
+      {bool missing = false}) {
+    final c = context.colors;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6, top: 2),
+      child: Row(
+        children: [
+          Text(title,
+              style: TextStyle(
+                  fontSize: AppTextSize.body,
+                  fontWeight: FontWeight.w700,
+                  color: c.textPrimary)),
+          if (missing) ...[
+            const SizedBox(width: 6),
+            Container(
+              width: 6,
+              height: 6,
+              decoration: BoxDecoration(
+                color: context.alerts.warning.icon,
+                shape: BoxShape.circle,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _labelCol(BuildContext context, String label) {
+    final c = context.colors;
+    return SizedBox(
+      width: 110,
+      child: Text(label,
+          style: TextStyle(
+              fontSize: AppTextSize.caption, color: c.textSecondary)),
+    );
+  }
+
+  /// family レベルの単純なフィールド更新行
+  Widget _row(BuildContext context, String label, String value, String key,
+      {String hint = '未入力',
+      TextInputType? keyboard,
+      int? maxLines}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          _labelCol(context, label),
+          Expanded(
+            child: _InlineTextEditor(
+              key: ValueKey('hug_$key'),
+              initialText: value,
+              hint: hint,
+              maxLines: maxLines ?? 1,
+              keyboardType: keyboard,
+              onCommit: (text) async {
+                if (text == value) return;
+                await leadRef.update({key: text});
+                if (mounted) AppFeedback.success(context, '$label を保存しました');
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _multilineRow(BuildContext context, String label, String value,
+      String key,
+      {String hint = '未入力'}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: _labelCol(context, label),
+          ),
+          Expanded(
+            child: _InlineTextEditor(
+              key: ValueKey('hug_$key'),
+              initialText: value,
+              hint: hint,
+              maxLines: 3,
+              minLines: 2,
+              onCommit: (text) async {
+                if (text == value) return;
+                await leadRef.update({key: text});
+                if (mounted) AppFeedback.success(context, '$label を保存しました');
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 緊急連絡先（名前 + 電話 を1行表示、配列インデックス指定で書き込み）
+  Widget _emergencyContactRow(
+      BuildContext context, int index, String label) {
+    final contacts = lead.emergencyContacts;
+    final ec = index < contacts.length
+        ? contacts[index]
+        : const EmergencyContact(name: '', phone: '');
+    Future<void> write(EmergencyContact newEc) async {
+      final list = List<EmergencyContact>.from(contacts);
+      while (list.length <= index) {
+        list.add(const EmergencyContact(name: '', phone: ''));
+      }
+      list[index] = newEc;
+      // 末尾の空エントリを除去
+      while (list.isNotEmpty &&
+          list.last.name.isEmpty &&
+          list.last.phone.isEmpty) {
+        list.removeLast();
+      }
+      await leadRef.update({
+        'emergencyContacts': list.map((e) => e.toMap()).toList()
+      });
+      if (mounted) AppFeedback.success(context, '$label を保存しました');
+    }
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          _labelCol(context, label),
+          Expanded(
+            flex: 3,
+            child: _InlineTextEditor(
+              key: ValueKey('hug_ec_${index}_name'),
+              initialText: ec.name,
+              hint: '名前',
+              maxLines: 1,
+              onCommit: (text) async {
+                if (text == ec.name) return;
+                await write(EmergencyContact(
+                    name: text, phone: ec.phone, relation: ec.relation));
+              },
+            ),
+          ),
+          const SizedBox(width: 6),
+          Expanded(
+            flex: 3,
+            child: _InlineTextEditor(
+              key: ValueKey('hug_ec_${index}_phone'),
+              initialText: ec.phone,
+              hint: '電話',
+              maxLines: 1,
+              keyboardType: TextInputType.phone,
+              onCommit: (text) async {
+                if (text == ec.phone) return;
+                await write(EmergencyContact(
+                    name: ec.name, phone: text, relation: ec.relation));
+              },
+            ),
+          ),
+          const SizedBox(width: 6),
+          Expanded(
+            flex: 2,
+            child: _InlineTextEditor(
+              key: ValueKey('hug_ec_${index}_rel'),
+              initialText: ec.relation,
+              hint: '続柄',
+              maxLines: 1,
+              onCommit: (text) async {
+                if (text == ec.relation) return;
+                await write(EmergencyContact(
+                    name: ec.name, phone: ec.phone, relation: text));
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 口座情報の各フィールド（bankInfo オブジェクト下のキー）
+  Widget _bankRow(BuildContext context, String label, String value, String key,
+      {String hint = '未入力', TextInputType? keyboard}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          _labelCol(context, label),
+          Expanded(
+            child: _InlineTextEditor(
+              key: ValueKey('hug_bank_$key'),
+              initialText: value,
+              hint: hint,
+              maxLines: 1,
+              keyboardType: keyboard,
+              onCommit: (text) async {
+                if (text == value) return;
+                await leadRef.update({'bankInfo.$key': text});
+                if (mounted) AppFeedback.success(context, '$label を保存しました');
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 預金種目（普通 / 当座）
+  Widget _bankTypeRow(BuildContext context) {
+    const options = [('普通', '普通'), ('当座', '当座')];
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          _labelCol(context, '預金種目'),
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.only(left: 8),
+              child: Wrap(
+                spacing: 6,
+                children: [
+                  for (final o in options)
+                    ChoiceChip(
+                      label: Text(o.$2,
+                          style: const TextStyle(
+                              fontSize: AppTextSize.caption)),
+                      selected: lead.accountType == o.$1,
+                      onSelected: (s) async {
+                        if (!s) return;
+                        await leadRef
+                            .update({'bankInfo.accountType': o.$1});
+                        if (mounted) {
+                          AppFeedback.success(context, '預金種目 を保存しました');
+                        }
+                      },
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 受給者証の各テキストフィールド（recipientCert オブジェクト下）
+  Widget _certRow(BuildContext context, String label, String value, String key,
+      {String hint = '未入力', TextInputType? keyboard}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          _labelCol(context, label),
+          Expanded(
+            child: _InlineTextEditor(
+              key: ValueKey('hug_cert_$key'),
+              initialText: value,
+              hint: hint,
+              maxLines: 1,
+              keyboardType: keyboard,
+              onCommit: (text) async {
+                if (text == value) return;
+                if (key == 'monthlyDays') {
+                  final n = int.tryParse(text);
+                  await leadRef
+                      .update({'recipientCert.monthlyDays': n});
+                } else {
+                  await leadRef.update({'recipientCert.$key': text});
+                }
+                if (mounted) AppFeedback.success(context, '$label を保存しました');
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 受給者証の日付フィールド
+  Widget _certDateRow(BuildContext context, String label, DateTime? value,
+      String key) {
+    final c = context.colors;
+    final display = value == null
+        ? '未設定'
+        : DateFormat('yyyy/M/d', 'ja').format(value);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          _labelCol(context, label),
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.only(left: 8),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(4),
+                onTap: () async {
+                  final picked = await showDatePicker(
+                    context: context,
+                    initialDate: value ?? DateTime.now(),
+                    firstDate: DateTime(2015),
+                    lastDate: DateTime(2035, 12, 31),
+                  );
+                  if (picked == null) return;
+                  await leadRef.update({
+                    'recipientCert.$key': Timestamp.fromDate(picked)
+                  });
+                  if (mounted) {
+                    AppFeedback.success(context, '$label を保存しました');
+                  }
+                },
+                child: Row(
+                  children: [
+                    Icon(Icons.event,
+                        size: 14,
+                        color: value == null
+                            ? c.textTertiary
+                            : c.textSecondary),
+                    const SizedBox(width: 4),
+                    Text(display,
+                        style: TextStyle(
+                            fontSize: AppTextSize.body,
+                            color: value == null
+                                ? c.textTertiary
+                                : c.textPrimary)),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 利用サービス（ChoiceChip）
+  Widget _certServiceRow(BuildContext context) {
+    const services = [
+      '放課後等デイサービス',
+      '児童発達支援',
+      '保育所等訪問支援',
+    ];
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          _labelCol(context, '利用サービス'),
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.only(left: 8),
+              child: Wrap(
+                spacing: 6,
+                runSpacing: 4,
+                children: [
+                  for (final s in services)
+                    ChoiceChip(
+                      label: Text(s,
+                          style: const TextStyle(
+                              fontSize: AppTextSize.caption)),
+                      selected: lead.certificateService == s,
+                      onSelected: (sel) async {
+                        if (!sel) return;
+                        await leadRef
+                            .update({'recipientCert.service': s});
+                        if (mounted) {
+                          AppFeedback.success(context, '利用サービス を保存しました');
+                        }
+                      },
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 受給者証関連のチェックボックス
+  Widget _certCheckRow(
+      BuildContext context, String label, bool value, String key) {
+    final c = context.colors;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: InkWell(
+        onTap: () async {
+          await leadRef.update({'recipientCert.$key': !value});
+          if (mounted) AppFeedback.success(context, '$label を保存しました');
+        },
+        borderRadius: BorderRadius.circular(4),
+        child: Row(
+          children: [
+            SizedBox(
+              width: 110,
+              child: Text(label,
+                  style: TextStyle(
+                      fontSize: AppTextSize.caption,
+                      color: c.textSecondary)),
+            ),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.only(left: 8),
+                child: Row(
+                  children: [
+                    Icon(
+                      value
+                          ? Icons.check_box
+                          : Icons.check_box_outline_blank,
+                      size: 18,
+                      color: value
+                          ? AppColors.primary
+                          : c.textTertiary,
+                    ),
+                    const SizedBox(width: 6),
+                    Text(value ? '算定する / 該当' : '算定しない / 非該当',
+                        style: TextStyle(
+                            fontSize: AppTextSize.body,
+                            color: c.textPrimary)),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
