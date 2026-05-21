@@ -190,34 +190,62 @@ class _ParentChatScreenState extends State<ParentChatScreen> {
           .doc(familyRoomId)
           .snapshots(),
       builder: (context, snapshot) {
+        // Stream の初回接続待ち（接続が確立してドキュメントの有無が判明するまで）。
+        // ドキュメントが存在しない場合も snapshot.hasData は true になるので、
+        // hasData だけでローディング判定すると未作成ルームで永遠にクルクル回る。
+        final isWaitingFirstSnapshot =
+            !snapshot.hasData && snapshot.connectionState != ConnectionState.active;
+
         Map<String, dynamic> names = {};
         List<String> members = [];
-        final roomReady = snapshot.hasData && snapshot.data!.exists;
-        if (roomReady) {
+        final roomExists = snapshot.hasData && snapshot.data!.exists;
+        if (roomExists) {
           final room = snapshot.data!.data() as Map<String, dynamic>;
           names = Map<String, dynamic>.from(room['names'] ?? {});
           members = List<String>.from(room['members'] ?? []);
         }
         final isGroup = members.length > 2;
 
+        Widget body;
+        if (isWaitingFirstSnapshot) {
+          body = Container(
+            color: context.colors.scaffoldBgAlt,
+            child: const Center(child: CircularProgressIndicator()),
+          );
+        } else if (roomExists) {
+          body = _ChatMessageList(
+            roomId: familyRoomId,
+            myUid: currentUser!.uid,
+            isGroup: isGroup,
+            memberNames: names,
+          );
+        } else {
+          // ルーム未作成（初めてチャットを開いたケース）。
+          // _ensureRoom が裏で部屋を作るが、失敗しても入力欄から送信すれば
+          // ensureRoom が再度呼ばれるので UX 上ブロックしない。
+          body = Container(
+            color: context.colors.scaffoldBgAlt,
+            child: Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.chat_bubble_outline,
+                      size: 48, color: context.colors.textSecondary),
+                  const SizedBox(height: 16),
+                  Text('メッセージを送信してみましょう',
+                      style: TextStyle(color: context.colors.textSecondary)),
+                ],
+              ),
+            ),
+          );
+        }
+
         return GestureDetector(
           onTap: () => FocusScope.of(context).unfocus(),
           child: Column(
             children: [
               _buildHeader('チャット'),
-              Expanded(
-                child: roomReady
-                    ? _ChatMessageList(
-                        roomId: familyRoomId,
-                        myUid: currentUser!.uid,
-                        isGroup: isGroup,
-                        memberNames: names,
-                      )
-                    : Container(
-                        color: context.colors.scaffoldBgAlt,
-                        child: const Center(child: CircularProgressIndicator()),
-                      ),
-              ),
+              Expanded(child: body),
               _ChatInputArea(
                 roomId: familyRoomId,
                 myName: _myDisplayName,
