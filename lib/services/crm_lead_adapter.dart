@@ -162,6 +162,8 @@ class LeadViewReference {
   Future<void> delete() => _lv.delete();
   Future<void> markRead() => _lv.markRead();
   String get id => _lv.id;
+  String get familyDocId => _lv.familyDocId;
+  int get childIndex => _lv.childIndex;
 }
 
 enum _Target { child, family }

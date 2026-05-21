@@ -14,6 +14,7 @@
 // 旧実装は crm_lead_side_panel_legacy.dart に退避（無参照、1 ヶ月後物理削除）。
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -2082,18 +2083,57 @@ Future<void> _showStartOnboardingDialog(
 }
 
 /// 入会完了
+/// 1. 入会日選択
+/// 2. HUG へ保護者・児童を自動登録（hugRegisterFamily Cloud Function）
+/// 3. 成功時に stage=won + 入会日を書き込み
+/// 4. HUG 登録失敗時はリトライ可能なエラー表示
 Future<void> _showWonDialog(
     BuildContext context, CrmLead lead, LeadViewReference leadRef) async {
   DateTime wonDate = DateTime.now();
+  bool busy = false;
+  String? lastError;
+
   final ok = await showDialog<bool>(
     context: context,
+    barrierDismissible: false,
     builder: (ctx) => StatefulBuilder(builder: (ctx, setS) {
+      Future<void> run() async {
+        setS(() {
+          busy = true;
+          lastError = null;
+        });
+        try {
+          final callable = FirebaseFunctions.instanceFor(region: 'asia-northeast1')
+              .httpsCallable('hugRegisterFamily');
+          await callable.call<Map<String, dynamic>>({
+            'familyId': leadRef.familyDocId,
+            'childIndex': leadRef.childIndex,
+          });
+          await leadRef.update({
+            'stage': 'won',
+            'enrolledAt': Timestamp.fromDate(wonDate),
+          });
+          if (ctx.mounted) Navigator.pop(ctx, true);
+        } on FirebaseFunctionsException catch (e) {
+          setS(() {
+            busy = false;
+            lastError = e.message ?? e.code;
+          });
+        } catch (e) {
+          setS(() {
+            busy = false;
+            lastError = e.toString();
+          });
+        }
+      }
+
       return AlertDialog(
         title: const Text('入会完了'),
         content: SizedBox(
-          width: 320,
+          width: 380,
           child: Column(
             mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Text('入会日を選択してください',
                   style: TextStyle(fontSize: AppTextSize.caption)),
@@ -2101,34 +2141,87 @@ Future<void> _showWonDialog(
               OutlinedButton.icon(
                 icon: const Icon(Icons.event, size: 16),
                 label: Text(DateFormat('yyyy/M/d (E)', 'ja').format(wonDate)),
-                onPressed: () async {
-                  final d = await showDatePicker(
-                      context: ctx,
-                      initialDate: wonDate,
-                      firstDate: DateTime(2024, 1, 1),
-                      lastDate: DateTime(2030, 12, 31));
-                  if (d != null) setS(() => wonDate = d);
-                },
+                onPressed: busy
+                    ? null
+                    : () async {
+                        final d = await showDatePicker(
+                            context: ctx,
+                            initialDate: wonDate,
+                            firstDate: DateTime(2024, 1, 1),
+                            lastDate: DateTime(2030, 12, 31));
+                        if (d != null) setS(() => wonDate = d);
+                      },
               ),
+              const SizedBox(height: 14),
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: ctx.alerts.info.background,
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  '入会完了と同時にHUGへ保護者・児童を自動登録します。',
+                  style: TextStyle(
+                      fontSize: AppTextSize.caption,
+                      color: ctx.alerts.info.text),
+                ),
+              ),
+              if (lastError != null) ...[
+                const SizedBox(height: 10),
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: ctx.alerts.urgent.background,
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: ctx.alerts.urgent.border),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('HUG登録に失敗しました',
+                          style: TextStyle(
+                              fontSize: AppTextSize.body,
+                              fontWeight: FontWeight.w700,
+                              color: ctx.alerts.urgent.text)),
+                      const SizedBox(height: 4),
+                      Text(lastError!,
+                          style: TextStyle(
+                              fontSize: AppTextSize.caption,
+                              color: ctx.alerts.urgent.text)),
+                    ],
+                  ),
+                ),
+              ],
+              if (busy) ...[
+                const SizedBox(height: 12),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2)),
+                    const SizedBox(width: 10),
+                    Text('HUG に登録中…',
+                        style: TextStyle(fontSize: AppTextSize.caption)),
+                  ],
+                ),
+              ],
             ],
           ),
         ),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
+              onPressed: busy ? null : () => Navigator.pop(ctx, false),
               child: const Text('キャンセル')),
           FilledButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('入会完了')),
+              onPressed: busy ? null : run,
+              child: Text(lastError == null ? '入会完了' : '再試行')),
         ],
       );
     }),
   );
   if (ok != true) return;
-  await leadRef.update({
-    'stage': 'won',
-    'enrolledAt': Timestamp.fromDate(wonDate),
-  });
   if (context.mounted) AppFeedback.success(context, '入会を完了しました');
 }
 
