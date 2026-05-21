@@ -39,9 +39,18 @@ service cloud.firestore {
       }
     }
     match /chat_rooms/{roomId} {
+      // roomId が family_{自分のuid} の場合はドキュメント未作成でも read を許可。
+      // これが無いと初回ログイン時に「自分の家族ルームを読む → 存在しない →
+      // resource.data.members が参照できず permission-denied」というデッドロックで、
+      // 保護者がチャット画面で永遠にローディング表示になる。
       allow read: if isStaff()
-                  || (isAuthenticated() && uid() in resource.data.members);
-      allow create: if isAuthenticated();
+                  || (isAuthenticated() && resource != null && uid() in resource.data.members)
+                  || (isAuthenticated() && roomId == 'family_' + uid());
+      // 保護者は自分の家族ルーム(family_{uid})のみ作成可能、かつ members に自分が含まれること。
+      allow create: if isStaff()
+                    || (isAuthenticated()
+                        && roomId == 'family_' + uid()
+                        && uid() in request.resource.data.members);
       allow delete: if isStaff();
       allow update: if isStaff()
                     || (isAuthenticated() && uid() in resource.data.members);
