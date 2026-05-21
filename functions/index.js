@@ -13,6 +13,7 @@ module.exports = {
   ...require('./src/hug/sync'),
   ...require('./src/hug/docs'),
   ...require('./src/hug/recipient_sync'),
+  ...require('./src/hug/inspect_forms'),
   ...require('./src/monitoring'),
   ...require('./src/intake/form_intake'),
   ...require('./src/morning_meeting'),
