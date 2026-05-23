@@ -5,6 +5,8 @@ import 'app_theme.dart';
 import 'widgets/app_feedback.dart';
 import 'classroom_utils.dart';
 import 'student_profile_dialog.dart';
+import 'plus/move_request.dart';
+import 'plus/move_request_editor.dart';
 
 part 'plus/plus_dashboard_table.dart';
 
@@ -329,14 +331,16 @@ class _PlusDashboardContentState extends State<PlusDashboardContent> {
           'therapyPlan': data['therapyPlan'] ?? '',
           'schoolVisit': data['schoolVisit'] ?? '',
           'schoolConsultation': data['schoolConsultation'] ?? '',
-          'moveRequest': data['moveRequest'] ?? '',
+          // moveRequest は新旧両形式に対応するため raw のまま保持し、
+          // 利用側で MoveRequest.fromRaw() を通す。
+          'moveRequest': data['moveRequest'],
         };
       }).where((note) {
         // 何か入力があるものだけ
         return (note['therapyPlan'] as String).isNotEmpty ||
                (note['schoolVisit'] as String).isNotEmpty ||
                (note['schoolConsultation'] as String).isNotEmpty ||
-               (note['moveRequest'] as String).isNotEmpty;
+               MoveRequest.fromRaw(note['moveRequest']).hasContent;
       }).toList();
       
       // 生徒名でソート
@@ -743,11 +747,12 @@ class _PlusDashboardContentState extends State<PlusDashboardContent> {
   }
 
   // 移動希望セクション
+  // 期限切れは自動的に非表示。表示順は優先度＋直近期限。
   Widget _buildMoveRequestSection() {
     final notes = _studentNotes
-        .where((n) => (n['moveRequest'] as String).isNotEmpty)
+        .where((n) => MoveRequest.fromRaw(n['moveRequest']).isVisible)
         .toList();
-    
+
     return _buildNoteListSection(
       title: '移動希望',
       icon: Icons.swap_horiz,
@@ -827,7 +832,13 @@ class _PlusDashboardContentState extends State<PlusDashboardContent> {
           ),
           // 追加ボタン
           InkWell(
-            onTap: () => _showAddNoteDialog(noteKey, iconColor),
+            onTap: () {
+              if (noteKey == 'moveRequest') {
+                _showAddMoveRequestDialog();
+              } else {
+                _showAddNoteDialog(noteKey, iconColor);
+              }
+            },
             child: Container(
               padding: const EdgeInsets.symmetric(vertical: 12),
               decoration: BoxDecoration(
@@ -858,10 +869,23 @@ class _PlusDashboardContentState extends State<PlusDashboardContent> {
   // メモアイテム
   Widget _buildNoteItem(Map<String, dynamic> note, String noteKey, Color accentColor) {
     final studentName = note['studentName'] as String;
-    final content = note[noteKey] as String;
-    
+    final isMoveRequest = noteKey == 'moveRequest';
+    final rawContent = note[noteKey];
+
+    // moveRequest は構造化データ、それ以外は String
+    final MoveRequest? moveReq =
+        isMoveRequest ? MoveRequest.fromRaw(rawContent) : null;
+    final String stringContent =
+        isMoveRequest ? '' : (rawContent as String? ?? '');
+
     return InkWell(
-      onTap: () => _showEditNoteDialog(studentName, noteKey, content),
+      onTap: () {
+        if (isMoveRequest) {
+          _showEditMoveRequestDialog(studentName, moveReq!);
+        } else {
+          _showEditNoteDialog(studentName, noteKey, stringContent);
+        }
+      },
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         decoration: BoxDecoration(
@@ -884,15 +908,17 @@ class _PlusDashboardContentState extends State<PlusDashboardContent> {
             const SizedBox(width: 12),
             // 内容
             Expanded(
-              child: Text(
-                content,
-                style: TextStyle(
-                  fontSize: AppTextSize.body,
-                  color: context.colors.textPrimary,
-                ),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
+              child: isMoveRequest
+                  ? MoveRequestDisplay(value: moveReq!)
+                  : Text(
+                      stringContent,
+                      style: TextStyle(
+                        fontSize: AppTextSize.body,
+                        color: context.colors.textPrimary,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
             ),
             // 削除ボタン
             IconButton(
@@ -949,8 +975,15 @@ class _PlusDashboardContentState extends State<PlusDashboardContent> {
                 
                 if (doc.exists) {
                   final currentData = Map<String, dynamic>.from(doc.data() ?? {});
-                  currentData[noteKey] = '';
-                  
+                  // moveRequest は構造化データなので status を cancelled に
+                  if (noteKey == 'moveRequest') {
+                    final cleared = MoveRequest.fromRaw(currentData['moveRequest'])
+                        .copyWith(status: 'cancelled');
+                    currentData['moveRequest'] = cleared.toMap();
+                  } else {
+                    currentData[noteKey] = '';
+                  }
+
                   await FirebaseFirestore.instance
                       .collection('plus_student_notes')
                       .doc(studentName)
@@ -1232,6 +1265,167 @@ class _PlusDashboardContentState extends State<PlusDashboardContent> {
     );
   }
 
+
+  // ===== 移動希望（構造化）ダイアログ =====
+
+  static const List<String> _moveRequestTimeSlots = [
+    '9:30',
+    '11:00',
+    '14:00',
+    '15:30',
+  ];
+
+  void _showAddMoveRequestDialog() {
+    String? selectedStudent;
+    final controller = MoveRequestEditController();
+    _openMoveRequestDialog(
+      titleLabel: '移動希望を追加',
+      studentName: null,
+      onStudentTap: (setDialogState) {
+        _showStudentSelectionDialog((student) {
+          setDialogState(() => selectedStudent = student['name']);
+        });
+      },
+      getSelectedStudent: () => selectedStudent,
+      controller: controller,
+      onSave: () async {
+        final name = selectedStudent;
+        if (name == null || !controller.value.hasContent) return;
+        await _saveMoveRequest(name, controller.value);
+      },
+    );
+  }
+
+  void _showEditMoveRequestDialog(String studentName, MoveRequest initial) {
+    final controller = MoveRequestEditController(initial);
+    _openMoveRequestDialog(
+      titleLabel: '$studentName - 移動希望',
+      studentName: studentName,
+      onStudentTap: null,
+      getSelectedStudent: () => studentName,
+      controller: controller,
+      onSave: () async {
+        await _saveMoveRequest(studentName, controller.value);
+      },
+    );
+  }
+
+  void _openMoveRequestDialog({
+    required String titleLabel,
+    required String? studentName,
+    required void Function(StateSetter setDialogState)? onStudentTap,
+    required String? Function() getSelectedStudent,
+    required MoveRequestEditController controller,
+    required Future<void> Function() onSave,
+  }) {
+    showDialog(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) => AlertDialog(
+          backgroundColor: context.colors.cardBg,
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12)),
+          title: Row(
+            children: [
+              Icon(Icons.swap_horiz, size: 20, color: AppColors.aiAccent),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(titleLabel,
+                    style: const TextStyle(fontSize: AppTextSize.titleSm)),
+              ),
+            ],
+          ),
+          content: SizedBox(
+            width: 460,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (onStudentTap != null) ...[
+                    InkWell(
+                      onTap: () => onStudentTap(setDialogState),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 12),
+                        decoration: BoxDecoration(
+                          border: Border.all(
+                              color: context.colors.borderMedium),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                getSelectedStudent() ?? '生徒を選択',
+                                style: TextStyle(
+                                  fontSize: AppTextSize.bodyMd,
+                                  color: getSelectedStudent() != null
+                                      ? context.colors.textPrimary
+                                      : context.colors.textSecondary,
+                                ),
+                              ),
+                            ),
+                            Icon(Icons.arrow_drop_down,
+                                color: context.colors.textSecondary),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+                  MoveRequestEditor(
+                    controller: controller,
+                    timeSlots: _moveRequestTimeSlots,
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('キャンセル'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                try {
+                  await onSave();
+                  await _loadStudentNotesFromFirestore();
+                  if (dialogContext.mounted) Navigator.pop(dialogContext);
+                  if (mounted) setState(() {});
+                } catch (e) {
+                  debugPrint('Error saving move request: $e');
+                }
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8)),
+              ),
+              child: const Text('保存'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _saveMoveRequest(String studentName, MoveRequest value) async {
+    final doc = await FirebaseFirestore.instance
+        .collection('plus_student_notes')
+        .doc(studentName)
+        .get();
+    final current = doc.exists
+        ? Map<String, dynamic>.from(doc.data() ?? {})
+        : <String, dynamic>{};
+    current['moveRequest'] = value.toMap();
+    await FirebaseFirestore.instance
+        .collection('plus_student_notes')
+        .doc(studentName)
+        .set(current);
+  }
 
   // ===== タスクセクション =====
 
@@ -1974,7 +2168,7 @@ class _PlusDashboardContentState extends State<PlusDashboardContent> {
     final therapyController = TextEditingController();
     final schoolVisitController = TextEditingController();
     final consultationController = TextEditingController();
-    final moveRequestController = TextEditingController();
+    final moveRequestController = MoveRequestEditController();
     
     // タスク用
     final newTaskController = TextEditingController();
@@ -2007,7 +2201,8 @@ class _PlusDashboardContentState extends State<PlusDashboardContent> {
                   therapyController.text = notes['therapyPlan'] ?? '';
                   schoolVisitController.text = notes['schoolVisit'] ?? '';
                   consultationController.text = notes['schoolConsultation'] ?? '';
-                  moveRequestController.text = notes['moveRequest'] ?? '';
+                  moveRequestController.setValue(
+                      MoveRequest.fromRaw(notes['moveRequest']));
                 });
               }
             });
@@ -2469,17 +2664,9 @@ InkWell(
                               ],
                             ),
                             const SizedBox(height: 8),
-                            TextField(
+                            MoveRequestEditor(
                               controller: moveRequestController,
-                              decoration: InputDecoration(
-                                hintText: '曜日や時間の変更希望を記入',
-                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                                isDense: true,
-                              ),
-                              style: TextStyle(fontSize: AppTextSize.body),
-                              maxLines: 3,
-                              minLines: 2,
+                              timeSlots: _moveRequestTimeSlots,
                             ),
                           ],
                           const SizedBox(height: 20),
@@ -2519,7 +2706,7 @@ InkWell(
                                     therapyController.text,
                                     schoolVisitController.text,
                                     consultationController.text,
-                                    moveRequestController.text,
+                                    moveRequestController.value,
                                   );
                                 } else {
                                   // イベントモード
@@ -2720,7 +2907,7 @@ void _showStudentSelectionDialog(Function(Map<String, dynamic>) onSelect) {
     final therapyController = TextEditingController();
     final schoolVisitController = TextEditingController();
     final consultationController = TextEditingController();
-    final moveRequestController = TextEditingController();
+    final moveRequestController = MoveRequestEditController();
     
     // タスク用
     final newTaskController = TextEditingController();
@@ -2744,7 +2931,8 @@ void _showStudentSelectionDialog(Function(Map<String, dynamic>) onSelect) {
                   therapyController.text = notes['therapyPlan'] ?? '';
                   schoolVisitController.text = notes['schoolVisit'] ?? '';
                   consultationController.text = notes['schoolConsultation'] ?? '';
-                  moveRequestController.text = notes['moveRequest'] ?? '';
+                  moveRequestController.setValue(
+                      MoveRequest.fromRaw(notes['moveRequest']));
                 });
               }
             });
@@ -3127,17 +3315,9 @@ InkWell(
                             ],
                           ),
                           const SizedBox(height: 8),
-                          TextField(
+                          MoveRequestEditor(
                             controller: moveRequestController,
-                            decoration: InputDecoration(
-                              hintText: '曜日や時間の変更希望を記入',
-                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                              isDense: true,
-                            ),
-                            style: TextStyle(fontSize: AppTextSize.body),
-                            maxLines: 3,
-                            minLines: 2,
+                            timeSlots: _moveRequestTimeSlots,
                           ),
 
                           const SizedBox(height: 16),
@@ -3269,7 +3449,7 @@ InkWell(
       therapyController.text,
       schoolVisitController.text,
       consultationController.text,
-      moveRequestController.text,
+      moveRequestController.value,
     );
     
     if (dialogContext.mounted) {
@@ -3295,20 +3475,21 @@ InkWell(
   }
   
   // 編集用の生徒メモ読み込み
-  Future<Map<String, String>> _loadStudentNotesForEdit(String studentName) async {
+  // moveRequest は raw のまま返し、呼び出し側で MoveRequest.fromRaw() する
+  Future<Map<String, dynamic>> _loadStudentNotesForEdit(String studentName) async {
     try {
       final doc = await FirebaseFirestore.instance
           .collection('plus_student_notes')
           .doc(studentName)
           .get();
-      
+
       if (doc.exists) {
         final data = doc.data()!;
         return {
           'therapyPlan': data['therapyPlan'] as String? ?? '',
           'schoolVisit': data['schoolVisit'] as String? ?? '',
           'schoolConsultation': data['schoolConsultation'] as String? ?? '',
-          'moveRequest': data['moveRequest'] as String? ?? '',
+          'moveRequest': data['moveRequest'],
         };
       }
     } catch (e) {
@@ -3316,14 +3497,14 @@ InkWell(
     }
     return {};
   }
-  
-  // 編集用の生徒メモ保存
+
+  // 編集用の生徒メモ保存（構造化された moveRequest を受け取る）
   Future<void> _saveStudentNotesFromEdit(
     String studentName,
     String therapyPlan,
     String schoolVisit,
     String schoolConsultation,
-    String moveRequest,
+    MoveRequest moveRequest,
   ) async {
     try {
       await FirebaseFirestore.instance
@@ -3333,9 +3514,9 @@ InkWell(
         'therapyPlan': therapyPlan,
         'schoolVisit': schoolVisit,
         'schoolConsultation': schoolConsultation,
-        'moveRequest': moveRequest,
+        'moveRequest': moveRequest.toMap(),
       }, SetOptions(merge: true));
-      
+
       // ローカルデータも更新
       await _loadStudentNotesFromFirestore();
     } catch (e) {

@@ -21,6 +21,8 @@ import 'meeting_minutes_screen.dart';
 import 'crm_lead_screen.dart';
 import 'absence_record_dialog.dart';
 import 'services/undo_service.dart';
+import 'plus/move_request.dart';
+import 'plus/move_request_editor.dart';
 
 part 'plus/plus_schedule_task_dialog.dart';
 part 'plus/plus_schedule_calendar.dart';
@@ -541,14 +543,15 @@ Map<String, dynamic>? _getCellMemo(DateTime date, int slotIndex) {
         'therapyPlan': data['therapyPlan'] ?? '',
         'schoolVisit': data['schoolVisit'] ?? '',
         'schoolConsultation': data['schoolConsultation'] ?? '',
-        'moveRequest': data['moveRequest'] ?? '',
+        // moveRequest は raw のまま渡し、利用側で MoveRequest.fromRaw() する
+        'moveRequest': data['moveRequest'],
       };
-      
+
       _studentNotes[studentName] = notes;
       return notes;
     } catch (e) {
       debugPrint('Error loading student notes: $e');
-      return {'therapyPlan': '', 'schoolVisit': '', 'schoolConsultation': '', 'moveRequest': ''};
+      return {'therapyPlan': '', 'schoolVisit': '', 'schoolConsultation': '', 'moveRequest': null};
     }
   }
   
@@ -910,7 +913,7 @@ Map<String, dynamic>? _getCellMemo(DateTime date, int slotIndex) {
       if ((notes['therapyPlan'] ?? '').isNotEmpty) return true;
       if ((notes['schoolVisit'] ?? '').isNotEmpty) return true;
       if ((notes['schoolConsultation'] ?? '').isNotEmpty) return true;
-      if ((notes['moveRequest'] ?? '').isNotEmpty) return true;
+      if (MoveRequest.fromRaw(notes['moveRequest']).hasContent) return true;
     }
     if (tasks.isNotEmpty) return true;
     
@@ -4270,14 +4273,14 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
     final therapyPlan = notes?['therapyPlan'] as String? ?? '';
     final schoolVisit = notes?['schoolVisit'] as String? ?? '';
     final schoolConsultation = notes?['schoolConsultation'] as String? ?? '';
-    final moveRequest = notes?['moveRequest'] as String? ?? '';
-    
+    final moveRequest = MoveRequest.fromRaw(notes?['moveRequest']);
+
     // 何か情報があるかチェック
-    final hasInfo = note.isNotEmpty || 
-        therapyPlan.isNotEmpty || 
-        schoolVisit.isNotEmpty || 
-        schoolConsultation.isNotEmpty || 
-        moveRequest.isNotEmpty ||
+    final hasInfo = note.isNotEmpty ||
+        therapyPlan.isNotEmpty ||
+        schoolVisit.isNotEmpty ||
+        schoolConsultation.isNotEmpty ||
+        moveRequest.hasContent ||
         tasks.isNotEmpty;
     
     if (!hasInfo) {
@@ -4544,11 +4547,11 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
 
   // ホバーポップアップの内容を構築
   List<Widget> _buildHoverContent(
-    String note, 
-    String therapyPlan, 
-    String schoolVisit, 
-    String schoolConsultation, 
-    String moveRequest,
+    String note,
+    String therapyPlan,
+    String schoolVisit,
+    String schoolConsultation,
+    MoveRequest moveRequest,
     List<Map<String, dynamic>> tasks
   ) {
     final widgets = <Widget>[];
@@ -4584,12 +4587,12 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
     }
     
     // 移動希望
-    if (moveRequest.isNotEmpty) {
+    if (moveRequest.hasContent) {
       widgets.add(const Text(
         '【移動希望】',
         style: TextStyle(fontWeight: FontWeight.bold, fontSize: AppTextSize.small),
       ));
-      widgets.add(Text(moveRequest, style: const TextStyle(fontSize: AppTextSize.small)));
+      widgets.add(MoveRequestDisplay(value: moveRequest, compact: true));
       widgets.add(const SizedBox(height: 8));
     }
     
@@ -5487,13 +5490,13 @@ for (var staff in _staffList.where((s) => s['showInSchedule'] != false)) {
     final therapyController = TextEditingController();
     final schoolVisitController = TextEditingController();
     final consultationController = TextEditingController();
-    final moveRequestController = TextEditingController();
-    
+    final moveRequestController = MoveRequestEditController();
+
     // タスク用
     List<Map<String, dynamic>> studentTasks = [];
     final newTaskController = TextEditingController();
     DateTime? newTaskDueDate;
-    
+
     // 生徒選択時にデータをロード
     String? lastLoadedStudent;
     
@@ -5548,14 +5551,15 @@ for (var staff in _staffList.where((s) => s['showInSchedule'] != false)) {
                   therapyController.text = notes['therapyPlan'] ?? '';
                   schoolVisitController.text = notes['schoolVisit'] ?? '';
                   consultationController.text = notes['schoolConsultation'] ?? '';
-                  moveRequestController.text = notes['moveRequest'] ?? '';
+                  moveRequestController.setValue(
+                      MoveRequest.fromRaw(notes['moveRequest']));
                   studentTasks = _getTasksForStudent(title);
                 });
               }
             });
           }
-          
-          final bool canSave = inputMode == 'memo' 
+
+          final bool canSave = inputMode == 'memo'
     ? memoTitleController.text.trim().isNotEmpty
     : title.isNotEmpty;
           
@@ -6194,16 +6198,9 @@ InkWell(
                               ],
                             ),
                             const SizedBox(height: 8),
-                            TextField(
+                            MoveRequestEditor(
                               controller: moveRequestController,
-                              decoration: InputDecoration(
-                                hintText: '曜日や時間の変更希望を記入',
-                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                                contentPadding: const EdgeInsets.all(12),
-                              ),
-                              maxLines: 3,
-                              minLines: 2,
-                              style: const TextStyle(fontSize: AppTextSize.body),
+                              timeSlots: const ['9:30', '11:00', '14:00', '15:30'],
                             ),
                           ],
                           const SizedBox(height: 16),
@@ -6211,7 +6208,7 @@ InkWell(
                       ),
                     ),
                   ),
-                  
+
                   // ボタン
                   Padding(
                     padding: const EdgeInsets.all(16),
@@ -6278,7 +6275,7 @@ final lessonData = {
                                       'therapyPlan': therapyController.text,
                                       'schoolVisit': schoolVisitController.text,
                                       'schoolConsultation': consultationController.text,
-                                      'moveRequest': moveRequestController.text,
+                                      'moveRequest': moveRequestController.value.toMap(),
                                     });
                                   }
                                   
@@ -6619,7 +6616,7 @@ await _loadLessonsForWeek(showLoading: false);
     final therapyController = TextEditingController();
     final schoolVisitController = TextEditingController();
     final consultationController = TextEditingController();
-    final moveRequestController = TextEditingController();
+    final moveRequestController = MoveRequestEditController();
 
     // タスク用
     List<Map<String, dynamic>> studentTasks = [];
@@ -6668,7 +6665,8 @@ await _loadLessonsForWeek(showLoading: false);
                   therapyController.text = notes['therapyPlan'] ?? '';
                   schoolVisitController.text = notes['schoolVisit'] ?? '';
                   consultationController.text = notes['schoolConsultation'] ?? '';
-                  moveRequestController.text = notes['moveRequest'] ?? '';
+                  moveRequestController.setValue(
+                      MoveRequest.fromRaw(notes['moveRequest']));
                   studentTasks = _getTasksForStudent(studentName);
                 });
               }
@@ -7256,16 +7254,9 @@ InkWell(
                               ],
                             ),
                             const SizedBox(height: 8),
-                            TextField(
+                            MoveRequestEditor(
                               controller: moveRequestController,
-                              decoration: InputDecoration(
-                                hintText: '曜日や時間の変更希望を記入',
-                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                                contentPadding: const EdgeInsets.all(12),
-                              ),
-                              maxLines: 3,
-                              minLines: 2,
-                              style: const TextStyle(fontSize: AppTextSize.body),
+                              timeSlots: const ['9:30', '11:00', '14:00', '15:30'],
                             ),
                           ],
                         ],
@@ -7337,7 +7328,7 @@ InkWell(
                                   'therapyPlan': therapyController.text,
                                   'schoolVisit': schoolVisitController.text,
                                   'schoolConsultation': consultationController.text,
-                                  'moveRequest': moveRequestController.text,
+                                  'moveRequest': moveRequestController.value.toMap(),
                                 });
                               }
                               
