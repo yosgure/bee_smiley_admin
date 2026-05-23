@@ -1282,8 +1282,15 @@ class _PlusDashboardContentState extends State<PlusDashboardContent> {
       titleLabel: '移動希望を追加',
       studentName: null,
       onStudentTap: (setDialogState) {
-        _showStudentSelectionDialog((student) {
-          setDialogState(() => selectedStudent = student['name']);
+        _showStudentSelectionDialog((student) async {
+          final name = student['name'] as String?;
+          if (name == null) return;
+          // 既存の移動希望データがあれば読み込む（上書き事故を防ぐ）
+          final notes = await _loadStudentNotesForEdit(name);
+          setDialogState(() {
+            selectedStudent = name;
+            controller.setValue(MoveRequest.fromRaw(notes['moveRequest']));
+          });
         });
       },
       getSelectedStudent: () => selectedStudent,
