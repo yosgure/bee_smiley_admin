@@ -258,7 +258,7 @@ class _IntakeFormScreenState extends State<IntakeFormScreen> {
                       hint: '通っていない場合は空欄'),
                   _input('学年', _gradeCtrl, hint: '例: 年中、小1'),
                   _permitSelector(),
-                  _input('診断名', _diagnosisCtrl,
+                  _input('診断名（あれば）', _diagnosisCtrl,
                       hint: 'ある場合のみ。なければ空欄'),
                 ]),
                 _section('体験について', [

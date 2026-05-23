@@ -246,7 +246,7 @@ extension PlusDashboardTable on _PlusDashboardContentState {
     final therapyPlan = studentNote['therapyPlan'] as String? ?? '';
     final schoolVisit = studentNote['schoolVisit'] as String? ?? '';
     final schoolConsultation = studentNote['schoolConsultation'] as String? ?? '';
-    final moveRequest = studentNote['moveRequest'] as String? ?? '';
+    final moveRequest = MoveRequest.fromRaw(studentNote['moveRequest']);
 
     final hasTask = _tasks.any((t) => t['studentName'] == name && t['completed'] != true);
 
@@ -254,7 +254,7 @@ extension PlusDashboardTable on _PlusDashboardContentState {
         therapyPlan.isNotEmpty ||
         schoolVisit.isNotEmpty ||
         schoolConsultation.isNotEmpty ||
-        moveRequest.isNotEmpty ||
+        moveRequest.hasContent ||
         hasTask;
 
     final textColor = course == '通常' ? context.colors.textPrimary : color;
@@ -376,9 +376,9 @@ extension PlusDashboardTable on _PlusDashboardContentState {
         widgets.add(Text(schoolConsultation, style: TextStyle(fontSize: AppTextSize.small)));
         widgets.add(const SizedBox(height: 8));
       }
-      if (moveRequest.isNotEmpty) {
+      if (moveRequest.hasContent) {
         widgets.add(const Text('【移動希望】', style: TextStyle(fontWeight: FontWeight.bold, fontSize: AppTextSize.small)));
-        widgets.add(Text(moveRequest, style: TextStyle(fontSize: AppTextSize.small)));
+        widgets.add(MoveRequestDisplay(value: moveRequest, compact: true));
         widgets.add(const SizedBox(height: 8));
       }
       final studentTasks = _tasks.where((t) => t['studentName'] == name && t['completed'] != true).toList();
