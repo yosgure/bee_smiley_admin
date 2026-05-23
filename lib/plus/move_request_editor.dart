@@ -76,8 +76,8 @@ class _MoveRequestEditorState extends State<MoveRequestEditor> {
         ? 1
         : (next.map((c) => c.priority).reduce((a, b) => a > b ? a : b)) + 1;
     next.add(MoveRequestCandidate(
-      weekday: 3,
-      startTime: widget.timeSlots.isNotEmpty ? widget.timeSlots.first : '9:30',
+      weekdays: const [],
+      startTimes: const [],
       priority: nextPriority,
     ));
     _update(_v.copyWith(candidates: next));
@@ -89,20 +89,21 @@ class _MoveRequestEditorState extends State<MoveRequestEditor> {
     final reindexed = <MoveRequestCandidate>[];
     for (var i = 0; i < next.length; i++) {
       reindexed.add(MoveRequestCandidate(
-        weekday: next[i].weekday,
-        startTime: next[i].startTime,
+        weekdays: next[i].weekdays,
+        startTimes: next[i].startTimes,
         priority: i + 1,
       ));
     }
     _update(_v.copyWith(candidates: reindexed));
   }
 
-  void _updateCandidate(int index, {int? weekday, String? startTime}) {
+  void _updateCandidate(int index,
+      {List<int>? weekdays, List<String>? startTimes}) {
     final next = [..._v.candidates];
     final c = next[index];
     next[index] = MoveRequestCandidate(
-      weekday: weekday ?? c.weekday,
-      startTime: startTime ?? c.startTime,
+      weekdays: weekdays ?? c.weekdays,
+      startTimes: startTimes ?? c.startTimes,
       priority: c.priority,
     );
     _update(_v.copyWith(candidates: next));
@@ -143,14 +144,14 @@ class _MoveRequestEditorState extends State<MoveRequestEditor> {
             final i = entry.key;
             final c = entry.value;
             return Padding(
-              padding: const EdgeInsets.only(bottom: 6),
+              padding: const EdgeInsets.only(bottom: 8),
               child: _CandidateRow(
                 candidate: c,
                 timeSlots: widget.timeSlots,
-                onChanged: (weekday, startTime) => _updateCandidate(
+                onChanged: (weekdays, startTimes) => _updateCandidate(
                   i,
-                  weekday: weekday,
-                  startTime: startTime,
+                  weekdays: weekdays,
+                  startTimes: startTimes,
                 ),
                 onRemove: () => _removeCandidate(i),
               ),
@@ -244,7 +245,7 @@ class _MoveRequestEditorState extends State<MoveRequestEditor> {
 class _CandidateRow extends StatelessWidget {
   final MoveRequestCandidate candidate;
   final List<String> timeSlots;
-  final void Function(int? weekday, String? startTime) onChanged;
+  final void Function(List<int>? weekdays, List<String>? startTimes) onChanged;
   final VoidCallback onRemove;
 
   const _CandidateRow({
@@ -254,74 +255,203 @@ class _CandidateRow extends StatelessWidget {
     required this.onRemove,
   });
 
+  static const _weekdayChips = [
+    (1, '月'),
+    (2, '火'),
+    (3, '水'),
+    (4, '木'),
+    (5, '金'),
+    (6, '土'),
+  ];
+
+  void _toggleWeekday(int wd) {
+    final next = [...candidate.weekdays];
+    if (next.contains(wd)) {
+      next.remove(wd);
+    } else {
+      next.add(wd);
+    }
+    next.sort();
+    onChanged(next, null);
+  }
+
+  void _toggleStartTime(String time) {
+    final next = [...candidate.startTimes];
+    if (next.contains(time)) {
+      next.remove(time);
+    } else {
+      next.add(time);
+    }
+    onChanged(null, next);
+  }
+
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(
         color: context.colors.borderLight.withValues(alpha: 0.4),
         borderRadius: BorderRadius.circular(8),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // 優先度バッジ
-          Container(
-            width: 22,
-            height: 22,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: AppColors.primary,
-              shape: BoxShape.circle,
-            ),
-            child: Text(
-              '${candidate.priority}',
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: AppTextSize.small,
-                fontWeight: FontWeight.bold,
+          // ヘッダ行: 優先度バッジ + 削除
+          Row(
+            children: [
+              Container(
+                width: 22,
+                height: 22,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: AppColors.primary,
+                  shape: BoxShape.circle,
+                ),
+                child: Text(
+                  '${candidate.priority}',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: AppTextSize.small,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  '第${candidate.priority}希望',
+                  style: TextStyle(
+                    fontSize: AppTextSize.small,
+                    color: context.colors.textSecondary,
+                  ),
+                ),
+              ),
+              IconButton(
+                icon: Icon(Icons.delete_outline,
+                    size: 18, color: context.colors.iconMuted),
+                padding: EdgeInsets.zero,
+                constraints:
+                    const BoxConstraints(minWidth: 28, minHeight: 28),
+                onPressed: onRemove,
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          // 曜日チップ
+          Row(
+            children: [
+              SizedBox(
+                width: 44,
+                child: Text(
+                  '曜日',
+                  style: TextStyle(
+                    fontSize: AppTextSize.small,
+                    color: context.colors.textSecondary,
+                  ),
+                ),
+              ),
+              Expanded(
+                child: Wrap(
+                  spacing: 4,
+                  runSpacing: 4,
+                  children: [
+                    for (final (wd, label) in _weekdayChips)
+                      _ToggleChip(
+                        label: label,
+                        selected: candidate.weekdays.contains(wd),
+                        onTap: () => _toggleWeekday(wd),
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          // 時間チップ
+          Row(
+            children: [
+              SizedBox(
+                width: 44,
+                child: Text(
+                  '時間',
+                  style: TextStyle(
+                    fontSize: AppTextSize.small,
+                    color: context.colors.textSecondary,
+                  ),
+                ),
+              ),
+              Expanded(
+                child: Wrap(
+                  spacing: 4,
+                  runSpacing: 4,
+                  children: [
+                    for (final t in timeSlots)
+                      _ToggleChip(
+                        label: t,
+                        selected: candidate.startTimes.contains(t),
+                        onTap: () => _toggleStartTime(t),
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          // ヒント表示
+          if (candidate.weekdays.isEmpty || candidate.startTimes.isEmpty) ...[
+            const SizedBox(height: 6),
+            Text(
+              candidate.weekdays.isEmpty && candidate.startTimes.isEmpty
+                  ? '※ どちらも未選択 = どの枠でもOK'
+                  : candidate.weekdays.isEmpty
+                      ? '※ 曜日未選択 = どの曜日でもOK'
+                      : '※ 時間未選択 = どの時間でもOK',
+              style: TextStyle(
+                fontSize: AppTextSize.small - 1,
+                color: context.colors.textTertiary,
               ),
             ),
-          ),
-          const SizedBox(width: 10),
-          // 曜日
-          DropdownButton<int>(
-            value: candidate.weekday,
-            isDense: true,
-            underline: const SizedBox.shrink(),
-            items: const [
-              DropdownMenuItem(value: 1, child: Text('月')),
-              DropdownMenuItem(value: 2, child: Text('火')),
-              DropdownMenuItem(value: 3, child: Text('水')),
-              DropdownMenuItem(value: 4, child: Text('木')),
-              DropdownMenuItem(value: 5, child: Text('金')),
-              DropdownMenuItem(value: 6, child: Text('土')),
-            ],
-            onChanged: (v) => onChanged(v, null),
-          ),
-          const SizedBox(width: 12),
-          // 時間
-          DropdownButton<String>(
-            value: timeSlots.contains(candidate.startTime)
-                ? candidate.startTime
-                : null,
-            isDense: true,
-            underline: const SizedBox.shrink(),
-            hint: Text(candidate.startTime),
-            items: timeSlots
-                .map((t) => DropdownMenuItem(value: t, child: Text(t)))
-                .toList(),
-            onChanged: (v) => onChanged(null, v),
-          ),
-          const Spacer(),
-          IconButton(
-            icon: Icon(Icons.delete_outline,
-                size: 18, color: context.colors.iconMuted),
-            padding: EdgeInsets.zero,
-            constraints:
-                const BoxConstraints(minWidth: 28, minHeight: 28),
-            onPressed: onRemove,
-          ),
+          ],
         ],
+      ),
+    );
+  }
+}
+
+class _ToggleChip extends StatelessWidget {
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _ToggleChip({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        decoration: BoxDecoration(
+          color: selected
+              ? AppColors.primary
+              : context.colors.cardBg,
+          border: Border.all(
+            color: selected ? AppColors.primary : context.colors.borderMedium,
+          ),
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: AppTextSize.small,
+            color: selected ? Colors.white : context.colors.textPrimary,
+            fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
+          ),
+        ),
       ),
     );
   }
