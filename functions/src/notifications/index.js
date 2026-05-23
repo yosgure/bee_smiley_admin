@@ -258,7 +258,7 @@ exports.onChatStampAdded = onDocumentUpdated(
             body: `あなたのメッセージにスタンプを付けました ${emojiStr}`,
           },
           data: {
-            type: "chat_stamp",
+            type: "chat",
             chatId: chatId,
             messageId: messageId,
           },
