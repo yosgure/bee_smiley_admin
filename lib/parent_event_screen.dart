@@ -48,14 +48,12 @@ class _ParentEventScreenState extends State<ParentEventScreen> {
   }
 
   Widget _buildEventList() {
-    // 今日以降のイベントのみ表示
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
 
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
           .collection('events')
-          .where('eventDate', isGreaterThanOrEqualTo: Timestamp.fromDate(today))
           .orderBy('eventDate', descending: false)
           .snapshots(),
       builder: (context, snapshot) {
@@ -87,12 +85,27 @@ class _ParentEventScreenState extends State<ParentEventScreen> {
           );
         }
 
-        // classroomフィルタリング（classroomが指定されているイベントは該当クラスのみ表示）
         final docs = snapshot.data!.docs.where((doc) {
           final data = doc.data() as Map<String, dynamic>;
+
+          // 公開予約: publishAt 未到達は非表示
+          final publishAt = data['publishAt'];
+          if (publishAt is Timestamp && publishAt.toDate().isAfter(now)) {
+            return false;
+          }
+
+          // 終了済み除外: (endDate ?? eventDate) が今日より前のものは非表示
+          final endDate = data['endDate'];
+          final eventDate = data['eventDate'];
+          final Timestamp? lastDayTs = (endDate is Timestamp) ? endDate : (eventDate is Timestamp ? eventDate : null);
+          if (lastDayTs != null && lastDayTs.toDate().isBefore(today)) {
+            return false;
+          }
+
+          // classroomフィルタリング
           final eventClassroom = data['classroom'] as String?;
-          if (eventClassroom == null || eventClassroom.isEmpty) return true; // 全体イベント
-          return eventClassroom == widget.classroom; // 該当クラスのみ
+          if (eventClassroom == null || eventClassroom.isEmpty) return true;
+          return eventClassroom == widget.classroom;
         }).toList();
 
         if (docs.isEmpty) {
@@ -124,8 +137,7 @@ class _ParentEventScreenState extends State<ParentEventScreen> {
   Widget _buildEventCard(Map<String, dynamic> data) {
     final title = data['title'] ?? 'イベント';
     final eventDate = data['eventDate'];
-    final startTime = data['startTime'] as String? ?? '';
-    final endTime = data['endTime'] as String? ?? '';
+    final endDate = data['endDate'];
     final location = data['location'] as String?;
     final address = data['address'] as String?;
     final detail = data['detail'] as String?;
@@ -133,24 +145,44 @@ class _ParentEventScreenState extends State<ParentEventScreen> {
     final deadline = data['deadline'];
     final link = data['link'] as String?;
 
-    // 日付フォーマット
+    // 日付フォーマット（複数日対応）
     String dateStr = '';
-    if (eventDate != null && eventDate is Timestamp) {
-      final date = eventDate.toDate();
-      dateStr = DateFormat('M月d日(E)', 'ja').format(date);
-    }
-
-    // 時間フォーマット
-    String timeStr = '';
-    if (startTime.isNotEmpty) {
-      if (endTime.isNotEmpty) {
-        timeStr = '$startTime〜$endTime';
+    if (eventDate is Timestamp) {
+      final start = eventDate.toDate();
+      if (endDate is Timestamp) {
+        final end = endDate.toDate();
+        final sameDay = start.year == end.year && start.month == end.month && start.day == end.day;
+        dateStr = sameDay
+            ? DateFormat('M月d日(E)', 'ja').format(start)
+            : '${DateFormat('M月d日(E)', 'ja').format(start)} 〜 ${DateFormat('M月d日(E)', 'ja').format(end)}';
       } else {
-        timeStr = startTime;
+        dateStr = DateFormat('M月d日(E)', 'ja').format(start);
       }
     }
 
-    // 日時まとめ
+    // 時間フォーマット（sessions[] 優先、フォールバック startTime/endTime）
+    String timeStr = '';
+    final dynamic rawSessions = data['sessions'];
+    if (rawSessions is List && rawSessions.isNotEmpty) {
+      final parts = <String>[];
+      for (final s in rawSessions) {
+        if (s is Map) {
+          final st = (s['start'] ?? '').toString();
+          final en = (s['end'] ?? '').toString();
+          if (st.isEmpty && en.isEmpty) continue;
+          parts.add('${st.isNotEmpty ? '$st〜' : ''}${en.isNotEmpty ? en : ''}');
+        }
+      }
+      timeStr = parts.join(' / ');
+    }
+    if (timeStr.isEmpty) {
+      final startTime = (data['startTime'] as String?) ?? '';
+      final endTime = (data['endTime'] as String?) ?? '';
+      if (startTime.isNotEmpty || endTime.isNotEmpty) {
+        timeStr = '${startTime.isNotEmpty ? '$startTime〜' : ''}${endTime.isNotEmpty ? endTime : ''}';
+      }
+    }
+
     String dateTimeStr = dateStr;
     if (timeStr.isNotEmpty) {
       dateTimeStr = '$dateStr $timeStr';
