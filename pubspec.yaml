@@ -2,7 +2,7 @@ name: bee_smiley_admin
 description: "A new Flutter project."
 publish_to: 'none'
 
-version: 1.1.5+107
+version: 1.1.6+108
 
 environment:
   sdk: ^3.10.0
@@ -67,6 +67,11 @@ dependencies:
 
   # App Info
   package_info_plus: ^8.0.0
+
+dependency_overrides:
+  # record_linux 0.7.2 は record_platform_interface 1.5.0 と非互換でビルド失敗するため新版に固定
+  # Android/iOS には影響しないが、コンパイル時に解決が必要
+  record_linux: ^1.3.0
 
 dev_dependencies:
   flutter_test:
