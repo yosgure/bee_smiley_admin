@@ -275,7 +275,9 @@ class _ParentMainScreenState extends State<ParentMainScreen> {
         },
       ),
       ParentChatScreen(familyData: _familyData),
-      const ParentNotificationScreen(),
+      ParentNotificationScreen(
+        classroom: _currentChild != null ? getChildClassrooms(_currentChild!).isNotEmpty ? getChildClassrooms(_currentChild!).first : null : null,
+      ),
       ParentEventScreen(
         childId: _currentChildId,
         classroom: _currentChild != null ? getChildClassrooms(_currentChild!).isNotEmpty ? getChildClassrooms(_currentChild!).first : null : null,

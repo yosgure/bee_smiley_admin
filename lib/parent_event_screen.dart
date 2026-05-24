@@ -102,10 +102,20 @@ class _ParentEventScreenState extends State<ParentEventScreen> {
             return false;
           }
 
-          // classroomフィルタリング
-          final eventClassroom = data['classroom'] as String?;
-          if (eventClassroom == null || eventClassroom.isEmpty) return true;
-          return eventClassroom == widget.classroom;
+          // 対象教室フィルタ（target=specific の場合のみ targetClassrooms と照合）
+          final target = data['target']?.toString() ?? 'all';
+          if (target == 'specific') {
+            final list = (data['targetClassrooms'] as List?)?.cast<dynamic>().map((e) => e.toString()).toList() ?? [];
+            if (widget.classroom == null || widget.classroom!.isEmpty) return false;
+            if (!list.contains(widget.classroom)) return false;
+          } else {
+            // 旧スキーマ（classroom 単一）の互換
+            final eventClassroom = data['classroom'] as String?;
+            if (eventClassroom != null && eventClassroom.isNotEmpty) {
+              if (eventClassroom != widget.classroom) return false;
+            }
+          }
+          return true;
         }).toList();
 
         if (docs.isEmpty) {

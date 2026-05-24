@@ -9,6 +9,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:intl/intl.dart';
 import 'package:image/image.dart' as img;
 import 'app_theme.dart';
+import 'main.dart';
 import 'widgets/app_feedback.dart';
 import 'time_list_picker.dart';
 
@@ -155,10 +156,7 @@ class _EventScreenState extends State<EventScreen> with SingleTickerProviderStat
       floatingActionButton: FloatingActionButton(
         heroTag: null,
         onPressed: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (context) => const EventCreateScreen()),
-          );
+          AdminShell.showOverlay(context, const EventCreateScreen());
         },
         backgroundColor: context.colors.cardBg,
         elevation: 4,
@@ -273,38 +271,30 @@ class _EventScreenState extends State<EventScreen> with SingleTickerProviderStat
                         ),
                       ),
                     ),
-                    IconButton(
-                      icon: Icon(Icons.edit_outlined, color: context.colors.iconMuted, size: 20),
-                      tooltip: '編集',
-                      onPressed: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => EventCreateScreen(docId: docId, initialData: event),
-                        ),
-                      ),
+                    PopupMenuButton<String>(
+                      icon: Icon(Icons.more_vert, color: context.colors.iconMuted, size: 20),
+                      tooltip: '操作',
                       padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(),
-                    ),
-                    const SizedBox(width: 12),
-                    IconButton(
-                      icon: Icon(Icons.copy_outlined, color: context.colors.iconMuted, size: 20),
-                      tooltip: '複製して新規作成',
-                      onPressed: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => EventCreateScreen(initialData: event),
-                        ),
-                      ),
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(),
-                    ),
-                    const SizedBox(width: 12),
-                    IconButton(
-                      icon: Icon(Icons.delete_outline, color: context.colors.iconMuted, size: 20),
-                      tooltip: '削除',
-                      onPressed: () => _deleteEvent(docId, event['title']),
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(),
+                      onSelected: (value) {
+                        if (value == 'edit') {
+                          AdminShell.showOverlay(
+                            context,
+                            EventCreateScreen(docId: docId, initialData: event),
+                          );
+                        } else if (value == 'duplicate') {
+                          AdminShell.showOverlay(
+                            context,
+                            EventCreateScreen(initialData: event),
+                          );
+                        } else if (value == 'delete') {
+                          _deleteEvent(docId, event['title']);
+                        }
+                      },
+                      itemBuilder: (_) => const [
+                        PopupMenuItem(value: 'edit', child: ListTile(leading: Icon(Icons.edit_outlined), title: Text('編集'), dense: true)),
+                        PopupMenuItem(value: 'duplicate', child: ListTile(leading: Icon(Icons.copy_outlined), title: Text('複製して新規作成'), dense: true)),
+                        PopupMenuItem(value: 'delete', child: ListTile(leading: Icon(Icons.delete_outline, color: AppColors.error), title: Text('削除', style: TextStyle(color: AppColors.error)), dense: true)),
+                      ],
                     ),
                   ],
                 ),
@@ -494,6 +484,12 @@ class _EventCreateScreenState extends State<EventCreateScreen> {
   // 時間帯リスト（同日複数部対応）
   final List<_Session> _sessions = [];
 
+  // 対象教室
+  String _targetType = 'all'; // 'all' | 'specific'
+  final Set<String> _selectedClassrooms = {};
+  List<String> _classroomOptions = [];
+  bool _isLoadingClassrooms = true;
+
   Uint8List? _imageBytes;
   String? _existingImageUrl;
   bool _isUploading = false;
@@ -545,6 +541,17 @@ class _EventCreateScreenState extends State<EventCreateScreen> {
             ? init['imageUrl'] as String
             : null;
       }
+
+      // 対象教室
+      _targetType = (init['target']?.toString() ?? 'all');
+      final rawClassrooms = init['targetClassrooms'];
+      if (rawClassrooms is List) {
+        _selectedClassrooms.addAll(rawClassrooms.map((e) => e.toString()));
+      } else if (init['classroom'] is String && (init['classroom'] as String).isNotEmpty) {
+        // 旧スキーマ（単一）からの引き継ぎ
+        _targetType = 'specific';
+        _selectedClassrooms.add(init['classroom'] as String);
+      }
     } else {
       _eventDate = DateTime.now().add(const Duration(days: 7));
       _deadlineDate = DateTime.now().add(const Duration(days: 6));
@@ -555,6 +562,35 @@ class _EventCreateScreenState extends State<EventCreateScreen> {
         start: const TimeOfDay(hour: 10, minute: 0),
         end: const TimeOfDay(hour: 11, minute: 0),
       ));
+    }
+
+    _fetchClassrooms();
+  }
+
+  Future<void> _fetchClassrooms() async {
+    try {
+      final snapshot = await FirebaseFirestore.instance.collection('classrooms').get();
+      final list = <String>[];
+      for (final d in snapshot.docs) {
+        final name = d.data()['name'];
+        if (name is String && name.isNotEmpty) list.add(name);
+      }
+      if (list.isEmpty) {
+        list.addAll(['ビースマイリー湘南藤沢教室', 'ビースマイリー湘南台教室']);
+      }
+      if (mounted) {
+        setState(() {
+          _classroomOptions = list.toSet().toList();
+          _isLoadingClassrooms = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _classroomOptions = ['ビースマイリー湘南藤沢教室', 'ビースマイリー湘南台教室'];
+          _isLoadingClassrooms = false;
+        });
+      }
     }
   }
 
@@ -671,6 +707,10 @@ class _EventCreateScreenState extends State<EventCreateScreen> {
       AppFeedback.info(context, '締め切り日はイベント開始日より前に設定してください');
       return;
     }
+    if (_targetType == 'specific' && _selectedClassrooms.isEmpty) {
+      AppFeedback.info(context, '対象教室を選択してください');
+      return;
+    }
 
     setState(() => _isUploading = true);
 
@@ -713,6 +753,8 @@ class _EventCreateScreenState extends State<EventCreateScreen> {
         'detail': _detailController.text,
         'link': _linkController.text,
         'imageUrl': imageUrl,
+        'target': _targetType,
+        'targetClassrooms': _targetType == 'specific' ? _selectedClassrooms.toList() : [],
       };
 
       final col = FirebaseFirestore.instance.collection('events');
@@ -725,7 +767,7 @@ class _EventCreateScreenState extends State<EventCreateScreen> {
       }
 
       if (mounted) {
-        Navigator.pop(context);
+        AdminShell.hideOverlay(context);
         AppFeedback.info(context, _isEdit ? 'イベントを更新しました' : 'イベントを公開しました');
       }
     } catch (e) {
@@ -746,7 +788,7 @@ class _EventCreateScreenState extends State<EventCreateScreen> {
         elevation: 0,
         leading: IconButton(
           icon: Icon(Icons.close, color: context.colors.textPrimary),
-          onPressed: () => Navigator.pop(context),
+          onPressed: () => AdminShell.hideOverlay(context),
         ),
         actions: [
           Padding(
@@ -954,6 +996,61 @@ class _EventCreateScreenState extends State<EventCreateScreen> {
                           ),
                         ],
                       ),
+
+                _buildLabel('配信対象'),
+                Row(
+                  children: [
+                    Radio<String>(
+                      value: 'all',
+                      groupValue: _targetType,
+                      activeColor: AppColors.primary,
+                      onChanged: (v) => setState(() => _targetType = v ?? 'all'),
+                    ),
+                    const Text('全体に公開'),
+                    const SizedBox(width: 16),
+                    Radio<String>(
+                      value: 'specific',
+                      groupValue: _targetType,
+                      activeColor: AppColors.primary,
+                      onChanged: (v) => setState(() => _targetType = v ?? 'all'),
+                    ),
+                    const Text('教室を指定'),
+                  ],
+                ),
+                if (_targetType == 'specific') ...[
+                  const SizedBox(height: 8),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: context.colors.inputFill,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: context.colors.borderLight),
+                    ),
+                    child: _isLoadingClassrooms
+                        ? const Center(child: CircularProgressIndicator())
+                        : Column(
+                            children: _classroomOptions.map((name) {
+                              return CheckboxListTile(
+                                value: _selectedClassrooms.contains(name),
+                                title: Text(name),
+                                activeColor: AppColors.primary,
+                                contentPadding: EdgeInsets.zero,
+                                controlAffinity: ListTileControlAffinity.leading,
+                                onChanged: (v) {
+                                  setState(() {
+                                    if (v == true) {
+                                      _selectedClassrooms.add(name);
+                                    } else {
+                                      _selectedClassrooms.remove(name);
+                                    }
+                                  });
+                                },
+                              );
+                            }).toList(),
+                          ),
+                  ),
+                ],
 
                 _buildLabel('場所名'),
                 _buildTextField(_locationController, '例：近所の農園'),

@@ -6,7 +6,8 @@ import 'package:url_launcher/url_launcher.dart';
 import 'app_theme.dart';
 
 class ParentNotificationScreen extends StatefulWidget {
-  const ParentNotificationScreen({super.key});
+  final String? classroom;
+  const ParentNotificationScreen({super.key, this.classroom});
 
   @override
   State<ParentNotificationScreen> createState() => _ParentNotificationScreenState();
@@ -88,7 +89,36 @@ class _ParentNotificationScreenState extends State<ParentNotificationScreen> {
           );
         }
 
-        final docs = snapshot.data!.docs;
+        final now = DateTime.now();
+        final docs = snapshot.data!.docs.where((doc) {
+          final data = doc.data() as Map<String, dynamic>;
+
+          // 公開予約未到達は非表示
+          final publishAt = data['publishAt'];
+          if (publishAt is Timestamp && publishAt.toDate().isAfter(now)) return false;
+
+          // 対象教室フィルタ
+          final target = data['target']?.toString() ?? 'all';
+          if (target == 'specific') {
+            final list = (data['targetClassrooms'] as List?)?.cast<dynamic>().map((e) => e.toString()).toList() ?? [];
+            if (widget.classroom == null || widget.classroom!.isEmpty) return false;
+            if (!list.contains(widget.classroom)) return false;
+          }
+          return true;
+        }).toList();
+
+        if (docs.isEmpty) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.notifications_off_outlined, size: 64, color: context.colors.textSecondary),
+                const SizedBox(height: 16),
+                Text('お知らせはありません', style: TextStyle(color: context.colors.textSecondary)),
+              ],
+            ),
+          );
+        }
 
         return ListView.builder(
           padding: const EdgeInsets.all(16),
@@ -107,11 +137,13 @@ class _ParentNotificationScreenState extends State<ParentNotificationScreen> {
     final title = data['title'] ?? 'タイトルなし';
     final body = data['body'] ?? '';
     final createdAt = data['createdAt'] as Timestamp?;
+    final publishAt = data['publishAt'] as Timestamp?;
+    final displayTs = publishAt ?? createdAt;
     final hasAttachment = data['attachmentUrl'] != null && data['attachmentUrl'].toString().isNotEmpty;
 
     String dateStr = '';
-    if (createdAt != null) {
-      dateStr = DateFormat('yyyy/MM/dd HH:mm').format(createdAt.toDate());
+    if (displayTs != null) {
+      dateStr = DateFormat('yyyy/MM/dd HH:mm').format(displayTs.toDate());
     }
 
     return Card(
@@ -181,12 +213,14 @@ class _ParentNotificationScreenState extends State<ParentNotificationScreen> {
         final title = data['title'] ?? 'タイトルなし';
         final body = data['body'] ?? '';
         final createdAt = data['createdAt'] as Timestamp?;
+        final publishAt = data['publishAt'] as Timestamp?;
+        final displayTs = publishAt ?? createdAt;
         final attachmentUrl = data['attachmentUrl'] as String?;
         final attachmentName = data['attachmentName'] as String?;
 
         String dateStr = '';
-        if (createdAt != null) {
-          dateStr = DateFormat('yyyy年M月d日 HH:mm').format(createdAt.toDate());
+        if (displayTs != null) {
+          dateStr = DateFormat('yyyy年M月d日 HH:mm').format(displayTs.toDate());
         }
 
         return Column(
