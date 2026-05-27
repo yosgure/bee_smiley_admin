@@ -531,7 +531,14 @@ Map<String, dynamic>? _getCellMemo(DateTime date, int slotIndex) {
     if (_studentNotes.containsKey(studentName)) {
       return _studentNotes[studentName]!;
     }
-    
+    final empty = {'therapyPlan': '', 'schoolVisit': '', 'schoolConsultation': '', 'moveRequest': null};
+    // 児童名に "/" が含まれていると Firestore のドキュメントパスが壊れてクラッシュするため
+    // 安全のため空メモを返す（園連携イベント等でタイトルが studentName 欄に入っているケース対策）
+    if (studentName.isEmpty || studentName.contains('/')) {
+      _studentNotes[studentName] = empty;
+      return empty;
+    }
+
     try {
       final doc = await FirebaseFirestore.instance
           .collection('plus_student_notes')
@@ -557,6 +564,10 @@ Map<String, dynamic>? _getCellMemo(DateTime date, int slotIndex) {
   
   // 生徒メモを保存
   Future<void> _saveStudentNotes(String studentName, Map<String, dynamic> notes) async {
+    if (studentName.isEmpty || studentName.contains('/')) {
+      debugPrint('Skip saving notes: invalid studentName "$studentName"');
+      return;
+    }
     try {
       await FirebaseFirestore.instance
           .collection('plus_student_notes')
