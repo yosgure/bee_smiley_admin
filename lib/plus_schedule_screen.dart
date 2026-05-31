@@ -3497,7 +3497,9 @@ void _goToPage(int page) {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      '6/1〜累計  一番入っている人を基準(0)とした相対不足',
+                      showWithFuture
+                          ? '6/1〜${DateFormat('M/d').format(scheduleHorizon)}（予定の入っている最終日まで）  一番入っている人を基準(0)とした相対不足'
+                          : '6/1〜${DateFormat('M/d').format(endDate)}（実績）  一番入っている人を基準(0)とした相対不足',
                       style: TextStyle(fontSize: AppTextSize.small, color: context.colors.textSecondary),
                     ),
                     const SizedBox(height: 12),
