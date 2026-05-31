@@ -199,7 +199,11 @@ class _PlusScheduleContentState extends State<PlusScheduleContent> with Automati
   // 期限日ごとのタスク（カレンダー表示用）
   Map<String, List<Map<String, dynamic>>> _tasksByDueDate = {};
   Map<String, Map<String, dynamic>> _cellMemos = {};
-  
+
+  // 移動希望アラート（欠席で空いたコマに移動希望者がいる場合のバッジ用）
+  // key: '{yyyy-MM-dd}_{slotIndex}' / value: { matches: [{studentName, priority, note}], ... }
+  Map<String, Map<String, dynamic>> _moveAlerts = {};
+
   // ホバーポップアップ用のオーバーレイエントリ（グローバル管理）
   OverlayEntry? _currentOverlay;
   
@@ -406,6 +410,337 @@ Future<void> _loadCellMemosForWeek() async {
   } catch (e) {
     debugPrint('Error loading cell memos: $e');
   }
+}
+
+// コマ時刻（'9:30〜'）を移動希望の時刻表記（'9:30'）に正規化
+String _slotStartTime(int slotIndex) {
+  if (slotIndex < 0 || slotIndex >= _timeSlots.length) return '';
+  return _timeSlots[slotIndex].replaceAll('〜', '').trim();
+}
+
+// 移動希望アラートを週単位で読み込み（status == 'open' のみ）
+Future<void> _loadMoveAlertsForWeek() async {
+  try {
+    final targetWeekStart = _weekStart;
+    final start = Timestamp.fromDate(targetWeekStart);
+    final end = Timestamp.fromDate(targetWeekStart.add(const Duration(days: 6)));
+
+    final snapshot = await FirebaseFirestore.instance
+        .collection('plus_move_alerts')
+        .where('date', isGreaterThanOrEqualTo: start)
+        .where('date', isLessThan: end)
+        .get();
+
+    if (targetWeekStart != _weekStart) return;
+
+    final alerts = <String, Map<String, dynamic>>{};
+    for (final doc in snapshot.docs) {
+      final data = doc.data();
+      if ((data['status'] ?? 'open') != 'open') continue;
+      alerts[doc.id] = {'id': doc.id, ...data};
+    }
+
+    if (mounted) {
+      setState(() {
+        _moveAlerts = alerts;
+      });
+    }
+  } catch (e) {
+    debugPrint('Error loading move alerts: $e');
+  }
+}
+
+Map<String, dynamic>? _getMoveAlert(DateTime date, int slotIndex) {
+  final docId = '${DateFormat('yyyy-MM-dd').format(date)}_$slotIndex';
+  return _moveAlerts[docId];
+}
+
+// 欠席で空いたコマに、その枠を厳密に待っている移動希望者がいるか突合する。
+// ヒットしたら即時ダイアログ表示＋ plus_move_alerts に保存（予定グリッドのバッジ用）。
+Future<void> _checkMoveRequestMatch(
+    DateTime date, int slotIndex, String absentStudent) async {
+  final weekday = date.weekday; // 月=1..日=7（コマは1-6）
+  debugPrint('[MOVEMATCH] called: date=$date weekday=$weekday slot=$slotIndex absent=$absentStudent');
+  if (weekday < 1 || weekday > 6) {
+    debugPrint('[MOVEMATCH] abort: weekday out of range');
+    return;
+  }
+  final startTime = _slotStartTime(slotIndex);
+  debugPrint('[MOVEMATCH] startTime="$startTime"');
+  if (startTime.isEmpty) {
+    debugPrint('[MOVEMATCH] abort: empty startTime');
+    return;
+  }
+
+  try {
+    final snapshot = await FirebaseFirestore.instance
+        .collection('plus_student_notes')
+        .where('moveRequest.status', isEqualTo: 'active')
+        .get();
+    debugPrint('[MOVEMATCH] active moveRequest docs=${snapshot.docs.length}');
+
+    final matches = <Map<String, dynamic>>[];
+    for (final doc in snapshot.docs) {
+      final name = doc.id;
+      if (name == absentStudent) continue;
+      final mr = MoveRequest.fromRaw(doc.data()['moveRequest']);
+      final hits = mr.strictMatchingCandidates(
+          weekday: weekday, startTime: startTime);
+      debugPrint('[MOVEMATCH]  - $name candidates=${mr.candidates.map((c) => "${c.weekdays}/${c.startTimes}").toList()} hits=${hits.length}');
+      if (hits.isEmpty) continue;
+      matches.add({
+        'studentName': name,
+        'priority': hits.first.priority,
+        'note': mr.note,
+      });
+    }
+    debugPrint('[MOVEMATCH] total matches=${matches.length}');
+    if (matches.isEmpty) return;
+
+    matches.sort((a, b) =>
+        (a['priority'] as int).compareTo(b['priority'] as int));
+
+    // 即時ダイアログは永続化の成否に関わらず必ず出す
+    if (mounted) _showMoveMatchDialog(date, slotIndex, matches);
+
+    // バッジ用に保存（ルール未デプロイ等で失敗しても通知は出す）
+    final docId = '${DateFormat('yyyy-MM-dd').format(date)}_$slotIndex';
+    final alertData = {
+      'date': Timestamp.fromDate(DateTime(date.year, date.month, date.day)),
+      'slotIndex': slotIndex,
+      'weekday': weekday,
+      'startTime': startTime,
+      'absentStudent': absentStudent,
+      'matches': matches,
+      'status': 'open',
+      'createdAt': FieldValue.serverTimestamp(),
+    };
+    try {
+      await FirebaseFirestore.instance
+          .collection('plus_move_alerts')
+          .doc(docId)
+          .set(alertData);
+      if (mounted) {
+        setState(() {
+          _moveAlerts[docId] = {'id': docId, ...alertData};
+        });
+      }
+    } catch (e) {
+      debugPrint('[MOVEMATCH] persist failed (rules not deployed?): $e');
+    }
+  } catch (e) {
+    debugPrint('Error checking move request match: $e');
+  }
+}
+
+void _showMoveMatchDialog(
+    DateTime date, int slotIndex, List<Map<String, dynamic>> matches) {
+  final weekdayLabel = ['', '月', '火', '水', '木', '金', '土', '日'][date.weekday];
+  final slotLabel = '${DateFormat('M/d').format(date)}($weekdayLabel) ${_timeSlots[slotIndex]}';
+  showDialog(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      backgroundColor: context.colors.cardBg,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      title: Row(
+        children: [
+          Icon(Icons.swap_horiz, color: context.alerts.info.icon, size: 22),
+          const SizedBox(width: 8),
+          const Expanded(
+            child: Text('移動希望が叶うコマです',
+                style: TextStyle(fontSize: AppTextSize.titleSm)),
+          ),
+        ],
+      ),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('$slotLabel が欠席で空きました。\nこの枠を希望している児童:',
+              style: const TextStyle(fontSize: AppTextSize.body)),
+          const SizedBox(height: 12),
+          ...matches.map((m) => Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      width: 20,
+                      height: 20,
+                      alignment: Alignment.center,
+                      decoration: const BoxDecoration(
+                          color: AppColors.primary, shape: BoxShape.circle),
+                      child: Text('${m['priority']}',
+                          style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: AppTextSize.small,
+                              fontWeight: FontWeight.bold)),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('${m['studentName']}',
+                              style: const TextStyle(
+                                  fontSize: AppTextSize.body,
+                                  fontWeight: FontWeight.w600)),
+                          if ((m['note'] as String?)?.isNotEmpty ?? false)
+                            Text('${m['note']}',
+                                style: TextStyle(
+                                    fontSize: AppTextSize.small,
+                                    color: context.colors.textSecondary)),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              )),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(ctx),
+          child: const Text('閉じる'),
+        ),
+      ],
+    ),
+  );
+}
+
+// バッジから開く一覧。対応済みでアラートを resolve（バッジ消去）。
+void _showMoveAlertDetail(DateTime date, int slotIndex) {
+  final alert = _getMoveAlert(date, slotIndex);
+  if (alert == null) return;
+  final matches = ((alert['matches'] as List?) ?? [])
+      .cast<Map<String, dynamic>>();
+  final docId = alert['id'] as String;
+  final weekdayLabel = ['', '月', '火', '水', '木', '金', '土', '日'][date.weekday];
+  final slotLabel = '${DateFormat('M/d').format(date)}($weekdayLabel) ${_timeSlots[slotIndex]}';
+  showDialog(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      backgroundColor: context.colors.cardBg,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      title: Row(
+        children: [
+          Icon(Icons.swap_horiz, color: context.alerts.info.icon, size: 22),
+          const SizedBox(width: 8),
+          const Expanded(
+            child: Text('このコマの移動希望者',
+                style: TextStyle(fontSize: AppTextSize.titleSm)),
+          ),
+        ],
+      ),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('$slotLabel（欠席で空き）',
+              style: TextStyle(
+                  fontSize: AppTextSize.small,
+                  color: context.colors.textSecondary)),
+          const SizedBox(height: 12),
+          ...matches.map((m) => Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      width: 20,
+                      height: 20,
+                      alignment: Alignment.center,
+                      decoration: const BoxDecoration(
+                          color: AppColors.primary, shape: BoxShape.circle),
+                      child: Text('${m['priority']}',
+                          style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: AppTextSize.small,
+                              fontWeight: FontWeight.bold)),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('${m['studentName']}',
+                              style: const TextStyle(
+                                  fontSize: AppTextSize.body,
+                                  fontWeight: FontWeight.w600)),
+                          if ((m['note'] as String?)?.isNotEmpty ?? false)
+                            Text('${m['note']}',
+                                style: TextStyle(
+                                    fontSize: AppTextSize.small,
+                                    color: context.colors.textSecondary)),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              )),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(ctx),
+          child: const Text('閉じる'),
+        ),
+        TextButton(
+          onPressed: () async {
+            Navigator.pop(ctx);
+            await _resolveMoveAlert(docId);
+          },
+          style: TextButton.styleFrom(foregroundColor: AppColors.success),
+          child: const Text('対応済みにする'),
+        ),
+      ],
+    ),
+  );
+}
+
+Future<void> _resolveMoveAlert(String docId) async {
+  try {
+    await FirebaseFirestore.instance
+        .collection('plus_move_alerts')
+        .doc(docId)
+        .set({'status': 'resolved', 'resolvedAt': FieldValue.serverTimestamp()},
+            SetOptions(merge: true));
+  } catch (e) {
+    debugPrint('Error resolving move alert: $e');
+  }
+  if (mounted) {
+    setState(() {
+      _moveAlerts.remove(docId);
+    });
+  }
+}
+
+// 欠席を通常に戻した等でコマが再び埋まったらアラートを消去する。
+// そのコマの欠席本人（absentStudent）が戻った場合のみ消す（別要因のアラートは保持）。
+// Firestore を直接読むことで、保存直後の再読み込みとの競合を避ける。
+Future<void> _clearMoveAlertForStudent(
+    DateTime date, int slotIndex, String studentName) async {
+  final docId = '${DateFormat('yyyy-MM-dd').format(date)}_$slotIndex';
+  try {
+    final ref = FirebaseFirestore.instance
+        .collection('plus_move_alerts')
+        .doc(docId);
+    final snap = await ref.get();
+    if (!snap.exists) {
+      if (mounted) setState(() => _moveAlerts.remove(docId));
+      return;
+    }
+    final data = snap.data() ?? {};
+    // 別要因のアラート（欠席本人が違う）は保持
+    if (data['absentStudent'] != studentName) return;
+    await ref.set(
+      {'status': 'resolved', 'resolvedAt': FieldValue.serverTimestamp()},
+      SetOptions(merge: true),
+    );
+  } catch (e) {
+    debugPrint('[MOVEMATCH] clear failed: $e');
+  }
+  if (mounted) setState(() => _moveAlerts.remove(docId));
 }
 
 // ★追加★ コマメモを保存
@@ -632,13 +967,7 @@ Map<String, dynamic>? _getCellMemo(DateTime date, int slotIndex) {
       
       // エラーメッセージを表示
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('タスクの追加に失敗しました: $e'),
-            duration: const Duration(seconds: 3),
-            backgroundColor: AppColors.error,
-          ),
-        );
+        AppFeedback.error(context, 'タスクの追加に失敗しました: $e');
       }
       
       return null;
@@ -1150,6 +1479,7 @@ Map<String, dynamic>? _getCellMemo(DateTime date, int slotIndex) {
 
       _preloadStudentNotes(lessons);
       _loadCellMemosForWeek();
+      _loadMoveAlertsForWeek();
     } catch (e) {
       debugPrint('Error loading lessons: $e');
       if (mounted) {
@@ -2153,6 +2483,8 @@ void _goToPage(int page) {
             ),
             const Spacer(),
           ],
+          // 移動希望アラート（欠席で空いた枠に希望者）— 誕生日チップの左
+          ..._buildMoveAlertHeaderBadges(),
           // 近日の誕生日バナー
           _buildBirthdayHeaderBadge(),
           // セット編集ボタン群
@@ -2565,6 +2897,83 @@ void _goToPage(int page) {
     );
   }
 
+  /// ヘッダー内の移動希望アラートチップ群（欠席で空いた枠に希望者がいる）。
+  /// 各チップはタップで詳細、✕で消去（対応済み）。
+  List<Widget> _buildMoveAlertHeaderBadges() {
+    if (_moveAlerts.isEmpty) return const [];
+    final alerts = _moveAlerts.values.toList();
+    alerts.sort((a, b) {
+      final da = (a['date'] as Timestamp?)?.toDate() ?? DateTime(2100);
+      final db = (b['date'] as Timestamp?)?.toDate() ?? DateTime(2100);
+      final c = da.compareTo(db);
+      if (c != 0) return c;
+      return (a['slotIndex'] as int? ?? 0).compareTo(b['slotIndex'] as int? ?? 0);
+    });
+    final info = context.alerts.info;
+    return alerts.map((alert) {
+      final date = (alert['date'] as Timestamp?)?.toDate() ?? DateTime.now();
+      final slotIndex = alert['slotIndex'] as int? ?? 0;
+      final docId = alert['id'] as String;
+      final matches =
+          ((alert['matches'] as List?) ?? []).cast<Map<String, dynamic>>();
+      final wlabel = ['', '月', '火', '水', '木', '金', '土', '日'][date.weekday];
+      final slot = (slotIndex >= 0 && slotIndex < _timeSlots.length)
+          ? _timeSlots[slotIndex]
+          : '';
+      final firstName =
+          matches.isNotEmpty ? (matches.first['studentName'] ?? '') : '';
+      final extra = matches.length > 1 ? ' 他${matches.length - 1}' : '';
+      return Padding(
+        padding: const EdgeInsets.only(right: 8),
+        child: Tooltip(
+          message: matches
+              .map((m) => '${m['priority']}. ${m['studentName']}')
+              .join('\n'),
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: () => _showMoveAlertDetail(date, slotIndex),
+              borderRadius: BorderRadius.circular(14),
+              child: Container(
+                height: 28,
+                padding: const EdgeInsets.only(left: 10, right: 4),
+                decoration: BoxDecoration(
+                  color: info.background,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: info.border),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.swap_horiz, size: 14, color: info.icon),
+                    const SizedBox(width: 4),
+                    Text(
+                      '${date.month}/${date.day}($wlabel) $slot$firstName$extra',
+                      style: TextStyle(
+                        fontSize: AppTextSize.small,
+                        color: info.text,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(width: 2),
+                    InkWell(
+                      onTap: () => _resolveMoveAlert(docId),
+                      borderRadius: BorderRadius.circular(10),
+                      child: Padding(
+                        padding: const EdgeInsets.all(3),
+                        child: Icon(Icons.close, size: 14, color: info.icon),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    }).toList();
+  }
+
   /// ヘッダー内に表示するコンパクトな誕生日バッジ（1行表示）
   Widget _buildBirthdayHeaderBadge() {
     if (_allStudents.isEmpty) return const SizedBox.shrink();
@@ -2809,6 +3218,12 @@ void _goToPage(int page) {
       '松永 智栄': 3,
     };
 
+    // 相対の前期繰越オフセット（6/1リセット時点で持ち越す相対不足）。
+    // 安保さゆりのみ前期から相対3コマ不足を引き継ぐ（他は0スタート）。
+    final relativeCarryover = <String, int>{
+      '安保 さゆり': 3,
+    };
+
     // _staffList から対象スタッフのidを引く（名前マッチング）
     // staffIdベースで集計する（plus_shiftsのname表記揺れに依存しないため）
     final targetStaff = <String, Map<String, dynamic>>{}; // staffId -> {name, slotTarget}
@@ -2830,11 +3245,13 @@ void _goToPage(int page) {
         'name': fullName,
         'furigana': staff['furigana'] ?? fullName,
         'slotTarget': slotTarget,
+        'carryover': relativeCarryover[fullName] ?? 0,
       };
     }
 
-    // 集計期間: 2026年3月31日 〜 昨日（実績）/ 未来（予定込み）
-    final startDate = DateTime(2026, 3, 31);
+    // 集計期間: 2026年6月1日 〜 昨日（実績）/ 未来（予定込み）
+    // 6/1で実績/目標/差分はリセット。相対のみ前期繰越（relativeCarryover）を持ち越す。
+    final startDate = DateTime(2026, 6, 1);
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final endDate = today.subtract(const Duration(days: 1)); // 昨日
@@ -2990,6 +3407,10 @@ void _goToPage(int page) {
     final futureLessonsByStaff = <String, int>{for (final id in targetStaff.keys) id: 0};
     // 未来の目標（slotTarget × 出勤日数）も別途計算
     final futureTargetByStaff = <String, int>{for (final id in targetStaff.keys) id: 0};
+    // 未来の日数内訳（出勤/半休/休）— 予定タブの内訳表示用
+    final fullDaysFuture = <String, int>{for (final id in targetStaff.keys) id: 0};
+    final halfDaysFuture = <String, int>{for (final id in targetStaff.keys) id: 0};
+    final offDaysFuture = <String, int>{for (final id in targetStaff.keys) id: 0};
     {
       var fd = today;
       while (!fd.isAfter(scheduleHorizon)) {
@@ -3004,6 +3425,13 @@ void _goToPage(int page) {
           final fullNameNormalized = (info['name'] as String).replaceAll(RegExp(r'[\s\u3000]'), '');
           final slotTarget = info['slotTarget'] as int;
           final status = _getShiftStatus(staffId, fd);
+          if (status == 'off') {
+            offDaysFuture[staffId] = offDaysFuture[staffId]! + 1;
+          } else if (status == 'half') {
+            halfDaysFuture[staffId] = halfDaysFuture[staffId]! + 1;
+          } else {
+            fullDaysFuture[staffId] = fullDaysFuture[staffId]! + 1;
+          }
           if (status != 'off') {
             final dayTarget = status == 'half' ? (slotTarget - 1) : slotTarget;
             if (dayTarget > 0) {
@@ -3038,16 +3466,18 @@ void _goToPage(int page) {
               });
 
             // 相対不足を計算: 最小不足者を基準(0)にする
+            // 6/1リセット分の不足に前期繰越（carryover）を加算してから正規化する。
             final rawShortages = <String, int>{};
             final rawShortagesWithFuture = <String, int>{};
             for (final staffId in sortedStaffIds) {
               final actual = actualCounts[staffId] ?? 0;
               final target = targetCounts[staffId] ?? 0;
               final futureSlots = futureLessonsByStaff[staffId] ?? 0;
-              rawShortages[staffId] = target - actual;
+              final carryover = (targetStaff[staffId]!['carryover'] as int?) ?? 0;
+              rawShortages[staffId] = (target - actual) + carryover;
               final futureTarget = futureTargetByStaff[staffId] ?? 0;
-              // 予定込み: (目標+未来目標) - (実績+実際の予定コマ数)
-              rawShortagesWithFuture[staffId] = (target + futureTarget) - (actual + futureSlots);
+              // 予定込み: (目標+未来目標) - (実績+実際の予定コマ数) + 前期繰越
+              rawShortagesWithFuture[staffId] = (target + futureTarget) - (actual + futureSlots) + carryover;
             }
             final minShortage = rawShortages.values.isEmpty ? 0 : rawShortages.values.reduce((a, b) => a < b ? a : b);
             final minShortageWithFuture = rawShortagesWithFuture.values.isEmpty ? 0 : rawShortagesWithFuture.values.reduce((a, b) => a < b ? a : b);
@@ -3067,7 +3497,7 @@ void _goToPage(int page) {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      '3/31〜累計  一番入っている人を基準(0)とした相対不足',
+                      '6/1〜累計  一番入っている人を基準(0)とした相対不足',
                       style: TextStyle(fontSize: AppTextSize.small, color: context.colors.textSecondary),
                     ),
                     const SizedBox(height: 12),
@@ -3222,11 +3652,14 @@ void _goToPage(int page) {
                                       ),
                                     ],
                                   ),
-                                  // 出勤 / 半休 / 休 の日数内訳（実績期間ベース）
+                                  // 出勤 / 半休 / 休 の日数内訳
+                                  // 予定タブは実績＋予定、現在タブは実績のみ
                                   Padding(
                                     padding: const EdgeInsets.only(top: 2),
                                     child: Text(
-                                      '出勤${fullDays[staffId] ?? 0} 半休${halfDays[staffId] ?? 0} 休${offDays[staffId] ?? 0}',
+                                      '出勤${(fullDays[staffId] ?? 0) + (showWithFuture ? (fullDaysFuture[staffId] ?? 0) : 0)} '
+                                      '半休${(halfDays[staffId] ?? 0) + (showWithFuture ? (halfDaysFuture[staffId] ?? 0) : 0)} '
+                                      '休${(offDays[staffId] ?? 0) + (showWithFuture ? (offDaysFuture[staffId] ?? 0) : 0)}',
                                       style: TextStyle(
                                         fontSize: AppTextSize.caption,
                                         color: context.colors.textTertiary,
@@ -3674,7 +4107,6 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
   String selectedTitle = isPreset ? initialTitle : (initialTitle.isNotEmpty ? _cellMemoTitleOther : '');
   final customTitleController = TextEditingController(text: isPreset ? '' : initialTitle);
   final commentController = TextEditingController(text: memo['comment'] ?? '');
-  final scaffoldMessenger = ScaffoldMessenger.of(context);
 
   showDialog(
     context: context,
@@ -3830,7 +4262,7 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
             onPressed: effectiveTitle.isEmpty ? null : () async {
               await _saveCellMemo(date, slotIndex, effectiveTitle, commentController.text.trim());
               if (dialogContext.mounted) Navigator.pop(dialogContext);
-              scaffoldMessenger.showSnackBar(const SnackBar(content: Text('メモを保存しました')));
+              if (mounted) AppFeedback.success(context, 'メモを保存しました');
             },
             style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, foregroundColor: context.colors.textOnPrimary),
             child: const Text('保存'),
@@ -5510,9 +5942,7 @@ for (var staff in _staffList.where((s) => s['showInSchedule'] != false)) {
 
     // 生徒選択時にデータをロード
     String? lastLoadedStudent;
-    
-    final scaffoldMessenger = ScaffoldMessenger.of(context);
-    
+
     // ダイアログの表示位置を計算
     final screenWidth = MediaQuery.of(context).size.width;
     const dialogWidth = 500.0;
@@ -6235,9 +6665,7 @@ InkWell(
           await _saveCellMemo(date, slotIndex, memoTitle, memoCommentController.text.trim());
           if (!dialogContext.mounted) return;
           Navigator.pop(dialogContext);
-          scaffoldMessenger.showSnackBar(
-            const SnackBar(content: Text('メモを保存しました')),
-          );
+          if (mounted) AppFeedback.success(context, 'メモを保存しました');
           return;
         }
                                 final saveDate = DateTime(date.year, date.month, date.day, 12, 0, 0);
@@ -6289,19 +6717,23 @@ final lessonData = {
                                       'moveRequest': moveRequestController.value.toMap(),
                                     });
                                   }
-                                  
+
                                   if (!dialogContext.mounted) return;
                                   Navigator.pop(dialogContext);
 await _loadLessonsForWeek(showLoading: false);
                                   if (mounted) {
-                                    scaffoldMessenger.showSnackBar(
-                                      const SnackBar(content: Text('追加しました')),
-                                    );
+                                    AppFeedback.success(context, '追加しました');
+                                  }
+
+                                  // 欠席で空いたコマに移動希望者がいないか突合
+                                  // （ダイアログを閉じた後に実行 — 重なり回避）
+                                  if (selectedCourse.startsWith('欠席') && studentName.isNotEmpty) {
+                                    _checkMoveRequestMatch(date, slotIndex, studentName);
                                   }
                                 } catch (e) {
                                   debugPrint('Error adding lesson: $e');
                                   if (mounted) {
-                                    scaffoldMessenger.showSnackBar(SnackBar(content: Text('エラー: $e')));
+                                    AppFeedback.error(context, 'エラー: $e');
                                   }
                                 }
                               }
@@ -6636,8 +7068,7 @@ await _loadLessonsForWeek(showLoading: false);
     
     // 初期データ読み込み
     bool isLoading = true;
-    final scaffoldMessenger = ScaffoldMessenger.of(context);
-    
+
     // ダイアログの表示位置を計算
     final screenWidth = MediaQuery.of(context).size.width;
     const dialogWidth = 500.0;
@@ -7342,22 +7773,41 @@ InkWell(
                                   'moveRequest': moveRequestController.value.toMap(),
                                 });
                               }
-                              
+
+                              // 欠席→通常等に戻したらアラート消去（再読み込みより前に確定させる）
+                              if (!selectedCourse.startsWith('欠席') &&
+                                  studentName.isNotEmpty &&
+                                  lesson['date'] is DateTime) {
+                                await _clearMoveAlertForStudent(
+                                  lesson['date'] as DateTime,
+                                  lesson['slotIndex'] as int,
+                                  studentName,
+                                );
+                              }
+
                               if (!dialogContext.mounted) return;
                               Navigator.pop(dialogContext);
 await _loadLessonsForWeek(showLoading: false);
-                              
+
                               if (mounted) {
-                                scaffoldMessenger.showSnackBar(
-                                  const SnackBar(content: Text('保存しました')),
+                                AppFeedback.success(context, '保存しました');
+                              }
+
+                              // 欠席で空いたコマに移動希望者がいないか突合
+                              // （サイドパネルを閉じた後に実行 — ダイアログ重なり回避）
+                              if (selectedCourse.startsWith('欠席') &&
+                                  studentName.isNotEmpty &&
+                                  lesson['date'] is DateTime) {
+                                _checkMoveRequestMatch(
+                                  lesson['date'] as DateTime,
+                                  lesson['slotIndex'] as int,
+                                  studentName,
                                 );
                               }
                             } catch (e) {
                               debugPrint('Error updating lesson: $e');
                               if (mounted) {
-                                scaffoldMessenger.showSnackBar(
-                                  SnackBar(content: Text('エラー: $e')),
-                                );
+                                AppFeedback.error(context, 'エラー: $e');
                               }
                             }
                           },
@@ -7776,13 +8226,7 @@ await _loadLessonsForWeek(showLoading: false);
 
       if (successCount > 0) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('$studentName さんの$categoryをHUGに送信しました'),
-              backgroundColor: AppColors.success,
-              duration: const Duration(seconds: 2),
-            ),
-          );
+          AppFeedback.success(context, '$studentName さんの$categoryをHUGに送信しました');
         }
       } else {
         final errs = (resultData['errors'] as List?)?.cast<Map<String, dynamic>>() ?? [];
@@ -7814,13 +8258,7 @@ await _loadLessonsForWeek(showLoading: false);
         'error': error,
       });
     });
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('HUG送信に失敗しました: $error'),
-        backgroundColor: AppColors.error,
-        duration: const Duration(seconds: 3),
-      ),
-    );
+    AppFeedback.error(context, 'HUG送信に失敗しました: $error');
   }
 
   Future<void> _retryFailedAbsence(int index) async {
@@ -8265,7 +8703,6 @@ void _showColorPickerDialog(String course, Color currentColor, Function(Color) o
   }
 
   void _showDeleteConfirmDialog(Map<String, dynamic> lesson) {
-    final scaffoldMessenger = ScaffoldMessenger.of(context);
     
     showDialog(
       context: context,
@@ -8312,9 +8749,7 @@ void _showColorPickerDialog(String course, Color currentColor, Function(Color) o
               } catch (e) {
                 debugPrint('Error deleting lesson: $e');
                 if (mounted) {
-                  scaffoldMessenger.showSnackBar(
-                    SnackBar(content: Text('エラー: $e')),
-                  );
+                  AppFeedback.error(context, 'エラー: $e');
                 }
               }
             },
