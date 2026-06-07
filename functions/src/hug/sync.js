@@ -405,9 +405,22 @@ async function findAttendanceRecord(cookies, childId, dateStr) {
 }
 
 async function saveToAttendance(cookies, params) {
-  const { childId, dateStr, content, recorderStaffId } = params;
+  const { childId, dateStr, content, recorderStaffId, startTime, endTime } = params;
   const attendValue = params.attendValue || '2';
   const FormData = require('form-data');
+
+  // コマ時刻（'15:30'）を HUG select 値（ゼロ埋めなし: hour='15', min='30'）に変換
+  const parseTime = (t) => {
+    if (!t || typeof t !== 'string') return null;
+    const parts = t.split(':');
+    if (parts.length !== 2) return null;
+    const h = parseInt(parts[0], 10);
+    const mi = parseInt(parts[1], 10);
+    if (Number.isNaN(h) || Number.isNaN(mi)) return null;
+    return { hour: String(h), min: String(mi) };
+  };
+  const startT = parseTime(startTime);
+  const endT = parseTime(endTime);
 
   const MAX_CYCLES = 3;
   let lastCheckedAttend = null;
@@ -456,22 +469,29 @@ async function saveToAttendance(cookies, params) {
 
     const formData = new FormData();
     const skipKeys = new Set(['attend', 'attend_flg', 'absence_note', 'absence_note_staff', 'absence_note3', 'absence_note_staff3']);
+    // 時刻を渡された場合のみ入室/退室時間を上書き（未指定ならHUGの既定値を保持）
+    if (startT) { skipKeys.add('s_hour'); skipKeys.add('s_min'); }
+    if (endT) { skipKeys.add('e_hour'); skipKeys.add('e_min'); }
     for (const [key, value] of Object.entries(fields)) {
       if (skipKeys.has(key)) continue;
       formData.append(key, value);
     }
     formData.append('attend', attendValue);
     formData.append('attend_flg', attendValue);
-    if (attendValue === '3') {
-      formData.append('absence_note_staff', '');
-      formData.append('absence_note', '');
-      formData.append('absence_note_staff3', '');
-      formData.append('absence_note3', '');
-    } else {
+    if (startT) { formData.append('s_hour', startT.hour); formData.append('s_min', startT.min); }
+    if (endT) { formData.append('e_hour', endT.hour); formData.append('e_min', endT.min); }
+    if (attendValue === '2') {
+      // 欠席（連絡あり）のみ欠席メモを記録
       formData.append('absence_note_staff', String(recorderStaffId || ''));
       formData.append('absence_note', content || '');
       formData.append('absence_note_staff3', String(recorderStaffId || ''));
       formData.append('absence_note3', content || '');
+    } else {
+      // 出席(1) / 欠席（加算なし）(3) は欠席メモ無し
+      formData.append('absence_note_staff', '');
+      formData.append('absence_note', '');
+      formData.append('absence_note_staff3', '');
+      formData.append('absence_note3', '');
     }
 
     const postUrl = editUrl;
@@ -579,6 +599,38 @@ async function syncToHugCore(contentIds = null) {
       const hugChildId = findMapping(childMapping, studentName);
       if (!hugChildId) {
         throw new Error(`児童「${studentName}」のhugマッピングが未設定です。hug_settings/child_mappingに登録してください。`);
+      }
+
+      // 出席登録（attend=1）。記録者マッピングは任意（HUGの記録者欄は空でも可）。
+      // その日の出席表に既に児童の行がある前提（振替/スポット等で行が無い場合は失敗扱い）。
+      if (normalizeName(category) === '出席') {
+        const attendStaffId = findMapping(staffMapping, recorderName);
+        try {
+          const success = await saveToAttendance(cookies, {
+            childId: hugChildId,
+            dateStr,
+            content: '',
+            recorderStaffId: attendStaffId || '',
+            attendValue: '1',
+            startTime: docData.startTime || '',
+            endTime: docData.endTime || '',
+          });
+          if (success) {
+            await (docRef.delete ? docRef.delete() : db.collection('saved_ai_contents').doc(docId).delete());
+            successCount++;
+            console.log(`[attendance:present] synced: ${studentName} ${dateStr}`);
+          } else {
+            failCount++;
+            errors.push({ docId, studentName, error: 'HUG（出席表）への保存に失敗しました' });
+          }
+        } catch (e) {
+          const raw = e.message || '';
+          const friendly = /出席レコードが|出席表が見つかりません/.test(raw)
+            ? `${studentName} さんはHUGの ${dateStr} の出席表に未登録です。振替・スポット利用などはHUG側で「児童を追加」してから再試行してください。`
+            : raw;
+          throw new Error(friendly);
+        }
+        continue;
       }
 
       const isNoAddAbsence =

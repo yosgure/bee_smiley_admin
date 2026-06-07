@@ -129,6 +129,16 @@ class _PlusScheduleContentState extends State<PlusScheduleContent> with Automati
     '欠席（HUG登録なし）',
   ];
 
+  // 通常の療育コース（生徒追加時に「HUGに出席登録しますか？」を出す対象）
+  static const Set<String> _attendanceCourses = {
+    '通常',
+    'モンテッソーリ',
+    '感覚統合',
+    '言語',
+    '就学支援',
+    '放デイ',
+  };
+
   static const List<String> _cellMemoTitleOptions = [
     '放デイ',
     '就学支援',
@@ -6732,6 +6742,25 @@ await _loadLessonsForWeek(showLoading: false);
                                   if (selectedCourse.startsWith('欠席') && studentName.isNotEmpty) {
                                     _checkMoveRequestMatch(date, slotIndex, studentName);
                                   }
+
+                                  // 通常の療育コースで生徒を追加 → HUG出席登録を確認
+                                  if (inputMode == 'student' &&
+                                      _attendanceCourses.contains(selectedCourse) &&
+                                      studentName.isNotEmpty &&
+                                      mounted) {
+                                    final startTime = _slotStartTime(slotIndex);
+                                    final endTime = _slotEndTime(startTime);
+                                    final ok = await _confirmAttendance(
+                                        studentName, date, _timeSlots[slotIndex]);
+                                    if (ok) {
+                                      await _sendAttendanceToHug(
+                                        studentName: studentName,
+                                        date: date,
+                                        startTime: startTime,
+                                        endTime: endTime,
+                                      );
+                                    }
+                                  }
                                 } catch (e) {
                                   debugPrint('Error adding lesson: $e');
                                   if (mounted) {
@@ -8252,6 +8281,128 @@ await _loadLessonsForWeek(showLoading: false);
     }
   }
 
+  /// コマ開始時刻（'15:30'）に1時間足して退室時刻（'16:30'）を返す。
+  /// HUGの利用枠は全て1時間のため固定で +1h。
+  String _slotEndTime(String startTime) {
+    final parts = startTime.split(':');
+    if (parts.length != 2) return '';
+    final h = int.tryParse(parts[0]);
+    final m = int.tryParse(parts[1]);
+    if (h == null || m == null) return '';
+    return '${h + 1}:${m.toString().padLeft(2, '0')}';
+  }
+
+  /// 生徒追加時にHUGの出席表へ「出席」を登録する確認ダイアログ。
+  Future<bool> _confirmAttendance(String studentName, DateTime date, String slotLabel) async {
+    final df = DateFormat('yyyy/MM/dd (E)', 'ja');
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: context.colors.cardBg,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        title: const Text('HUGに出席登録', style: TextStyle(fontSize: AppTextSize.titleSm)),
+        content: Text(
+          '$studentName さんを ${df.format(date)} $slotLabel の出席としてHUGに登録しますか？',
+          style: const TextStyle(fontSize: AppTextSize.body),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text('スキップ', style: TextStyle(color: context.colors.textSecondary)),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('登録'),
+          ),
+        ],
+      ),
+    );
+    return result == true;
+  }
+
+  /// saved_ai_contents に出席ドキュメントを作成→syncToHug Cloud Function を呼ぶ。
+  /// startTime/endTime はコマ時刻（HUGの入室・退室時間として送る）。
+  Future<void> _sendAttendanceToHug({
+    required String studentName,
+    required DateTime date,
+    required String startTime,
+    required String endTime,
+  }) async {
+    // 現在ログイン中スタッフ名を取得
+    String recorderName = 'スタッフ';
+    final currentUser = FirebaseAuth.instance.currentUser;
+    if (currentUser != null) {
+      try {
+        final staffSnap = await FirebaseFirestore.instance
+            .collection('staffs')
+            .where('uid', isEqualTo: currentUser.uid)
+            .limit(1)
+            .get();
+        if (staffSnap.docs.isNotEmpty) {
+          recorderName = (staffSnap.docs.first.data()['name'] ?? 'スタッフ') as String;
+        }
+      } catch (_) {}
+    }
+
+    final payload = <String, dynamic>{
+      'category': '出席',
+      'studentId': studentName,
+      'studentName': studentName,
+      'content': '',
+      'date': Timestamp.fromDate(DateTime(date.year, date.month, date.day)),
+      'startTime': startTime,
+      'endTime': endTime,
+      'recorderName': recorderName,
+      'recorderId': currentUser?.uid ?? '',
+    };
+
+    String? tempDocId;
+    try {
+      final docRef = await FirebaseFirestore.instance
+          .collection('saved_ai_contents')
+          .add({
+        ...payload,
+        'createdAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+      tempDocId = docRef.id;
+
+      final callable = FirebaseFunctions.instanceFor(region: 'asia-northeast1')
+          .httpsCallable('syncToHug');
+      final result = await callable.call({'contentIds': [tempDocId]});
+      final resultData = result.data as Map<String, dynamic>;
+      final successCount = resultData['successCount'] ?? 0;
+
+      if (successCount > 0) {
+        if (mounted) {
+          AppFeedback.success(context, '$studentName さんの出席をHUGに登録しました');
+        }
+      } else {
+        final errs = (resultData['errors'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+        final errorMsg = errs.isNotEmpty ? (errs.first['error'] ?? '不明なエラー') : '不明なエラー';
+        await FirebaseFirestore.instance
+            .collection('saved_ai_contents')
+            .doc(tempDocId)
+            .delete()
+            .catchError((_) {});
+        _addFailedAbsenceBanner(payload, errorMsg.toString());
+      }
+    } catch (e) {
+      if (tempDocId != null) {
+        await FirebaseFirestore.instance
+            .collection('saved_ai_contents')
+            .doc(tempDocId)
+            .delete()
+            .catchError((_) {});
+      }
+      _addFailedAbsenceBanner(payload, e.toString());
+    }
+  }
+
   void _addFailedAbsenceBanner(Map<String, dynamic> payload, String error) {
     if (!mounted) return;
     setState(() {
@@ -8269,9 +8420,19 @@ await _loadLessonsForWeek(showLoading: false);
     item.remove('error');
     setState(() => _failedAbsenceSends.removeAt(index));
     final dateTs = item['date'] as Timestamp?;
+    final date = dateTs?.toDate() ?? DateTime.now();
+    if ((item['category'] as String?) == '出席') {
+      await _sendAttendanceToHug(
+        studentName: item['studentName'] as String? ?? '',
+        date: date,
+        startTime: item['startTime'] as String? ?? '',
+        endTime: item['endTime'] as String? ?? '',
+      );
+      return;
+    }
     await _sendAbsenceToHug(
       studentName: item['studentName'] as String? ?? '',
-      absenceDate: dateTs?.toDate() ?? DateTime.now(),
+      absenceDate: date,
       category: item['category'] as String? ?? '欠席連絡',
       content: item['content'] as String? ?? '',
     );
