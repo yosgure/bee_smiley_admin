@@ -29,6 +29,11 @@ class _MeetingMinutesScreenState extends State<MeetingMinutesScreen> {
   String? _categoryFilter;
   String? _selectedDocId;
 
+  // ドキュメント全体（議事録・コマメモ・ヒヤリ・苦情）の横断検索クエリ。
+  // 空なら通常表示、入力があれば全種横断の検索結果リストに切り替わる。
+  String _searchQuery = '';
+  final TextEditingController _searchCtrl = TextEditingController();
+
   static const List<String> _cellMemoTitles = ['放デイ', '就学支援', '感覚統合', 'イベント'];
   static const String _cellMemoTitleOther = 'その他';
   static const String _cellMemoCategoryPrefix = 'cell_memo:';
@@ -63,15 +68,26 @@ class _MeetingMinutesScreenState extends State<MeetingMinutesScreen> {
           .orderBy('date', descending: true)
           .snapshots();
 
-  late final Stream<int> _hiyariCountStream = FirebaseFirestore.instance
-      .collection('hiyari_reports')
-      .snapshots()
-      .map((s) => s.size);
+  // ヒヤリ・苦情は通常はカウントのみだが、横断検索のため本文ごと購読する。
+  late final Stream<QuerySnapshot<Map<String, dynamic>>> _hiyariStream =
+      FirebaseFirestore.instance
+          .collection('hiyari_reports')
+          .orderBy('occurredAt', descending: true)
+          .limit(300)
+          .snapshots();
 
-  late final Stream<int> _complaintCountStream = FirebaseFirestore.instance
-      .collection('complaint_reports')
-      .snapshots()
-      .map((s) => s.size);
+  late final Stream<QuerySnapshot<Map<String, dynamic>>> _complaintStream =
+      FirebaseFirestore.instance
+          .collection('complaint_reports')
+          .orderBy('occurredAt', descending: true)
+          .limit(300)
+          .snapshots();
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
 
   void _close() {
     if (Navigator.canPop(context)) {
@@ -317,12 +333,16 @@ class _MeetingMinutesScreenState extends State<MeetingMinutesScreen> {
       body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
         stream: _docsStream,
         builder: (context, snap) {
+          final searching = _searchQuery.trim().isNotEmpty;
           if (snap.connectionState == ConnectionState.waiting &&
-              _section == _DocSection.meetings) {
+              _section == _DocSection.meetings &&
+              !searching) {
             return Center(
                 child: CircularProgressIndicator(color: AppColors.primary));
           }
-          if (snap.hasError && _section == _DocSection.meetings) {
+          if (snap.hasError &&
+              _section == _DocSection.meetings &&
+              !searching) {
             return Center(
                 child: Text('読み込みエラー: ${snap.error}',
                     style: TextStyle(color: context.colors.textSecondary)));
@@ -330,111 +350,149 @@ class _MeetingMinutesScreenState extends State<MeetingMinutesScreen> {
           return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
             stream: _cellMemosStream,
             builder: (context, cmSnap) {
-              final allDocs = snap.data?.docs ?? [];
-              final cellMemoDocs = cmSnap.data?.docs ?? [];
+              return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                stream: _hiyariStream,
+                builder: (context, hiyariSnap) {
+                  return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                    stream: _complaintStream,
+                    builder: (context, complaintSnap) {
+                      final allDocs = snap.data?.docs ?? [];
+                      final cellMemoDocs = cmSnap.data?.docs ?? [];
+                      final hiyariDocs = hiyariSnap.data?.docs ?? [];
+                      final complaintDocs = complaintSnap.data?.docs ?? [];
 
-              final counts = <String, int>{};
-              for (final d in allDocs) {
-                final c = d.data()['category'] as String? ?? 'other';
-                counts[c] = (counts[c] ?? 0) + 1;
-              }
+                      final counts = <String, int>{};
+                      for (final d in allDocs) {
+                        final c = d.data()['category'] as String? ?? 'other';
+                        counts[c] = (counts[c] ?? 0) + 1;
+                      }
 
-              final cellMemoCounts = <String, int>{};
-              for (final d in cellMemoDocs) {
-                final t = d.data()['title'] as String? ?? '';
-                if (t.isNotEmpty) {
-                  cellMemoCounts[t] = (cellMemoCounts[t] ?? 0) + 1;
-                }
-              }
+                      final cellMemoCounts = <String, int>{};
+                      for (final d in cellMemoDocs) {
+                        final t = d.data()['title'] as String? ?? '';
+                        if (t.isNotEmpty) {
+                          cellMemoCounts[t] = (cellMemoCounts[t] ?? 0) + 1;
+                        }
+                      }
 
-              final List<QueryDocumentSnapshot<Map<String, dynamic>>> filtered;
-              if (_isCellMemoCategory) {
-                final title = _cellMemoTitleFromFilter!;
-                filtered = cellMemoDocs
-                    .where((d) => d.data()['title'] == title)
-                    .toList();
-              } else if (_categoryFilter == null) {
-                filtered = allDocs;
-              } else {
-                filtered = allDocs
-                    .where((d) => d.data()['category'] == _categoryFilter)
-                    .toList();
-              }
+                      final List<QueryDocumentSnapshot<Map<String, dynamic>>>
+                          filtered;
+                      if (_isCellMemoCategory) {
+                        final title = _cellMemoTitleFromFilter!;
+                        filtered = cellMemoDocs
+                            .where((d) => d.data()['title'] == title)
+                            .toList();
+                      } else if (_categoryFilter == null) {
+                        filtered = allDocs;
+                      } else {
+                        filtered = allDocs
+                            .where(
+                                (d) => d.data()['category'] == _categoryFilter)
+                            .toList();
+                      }
 
-              QueryDocumentSnapshot<Map<String, dynamic>>? selectedDoc;
-              for (final d in filtered) {
-                if (d.id == _selectedDocId) {
-                  selectedDoc = d;
-                  break;
-                }
-              }
+                      QueryDocumentSnapshot<Map<String, dynamic>>? selectedDoc;
+                      for (final d in filtered) {
+                        if (d.id == _selectedDocId) {
+                          selectedDoc = d;
+                          break;
+                        }
+                      }
 
-              Widget meetingsContent(bool isWide) {
-                if (_isCellMemoCategory) {
-                  return _CellMemoCurriculumView(
-                    title: _cellMemoTitleFromFilter!,
-                    fiscalYear: _curriculumFiscalYear,
-                    docs: filtered,
-                    onYearChange: (y) =>
-                        setState(() => _curriculumFiscalYear = y),
-                    onCellTap: (doc) =>
-                        _showCellMemoEditDialog(context, doc),
+                      final hits = searching
+                          ? _computeDocHits(allDocs, cellMemoDocs, hiyariDocs,
+                              complaintDocs, _searchQuery.trim())
+                          : const <_DocHit>[];
+
+                      Widget meetingsContent(bool isWide) {
+                        if (_isCellMemoCategory) {
+                          return _CellMemoCurriculumView(
+                            title: _cellMemoTitleFromFilter!,
+                            fiscalYear: _curriculumFiscalYear,
+                            docs: filtered,
+                            onYearChange: (y) =>
+                                setState(() => _curriculumFiscalYear = y),
+                            onCellTap: (doc) =>
+                                _showCellMemoEditDialog(context, doc),
+                          );
+                        }
+                        if (isWide) {
+                          return Row(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              SizedBox(width: 380, child: _list(filtered)),
+                              VerticalDivider(
+                                  width: 1,
+                                  color: context.colors.borderLight),
+                              Expanded(child: _detail(selectedDoc)),
+                            ],
+                          );
+                        }
+                        return _list(filtered, narrow: true);
+                      }
+
+                      Widget sectionContent(bool isWide) {
+                        switch (_section) {
+                          case _DocSection.hiyari:
+                            return const HiyariScreen(embedded: true);
+                          case _DocSection.complaint:
+                            return const ComplaintScreen(embedded: true);
+                          case _DocSection.legalTraining:
+                            return _legalTrainingPlaceholder();
+                          case _DocSection.meetings:
+                            return meetingsContent(isWide);
+                        }
+                      }
+
+                      Widget mainArea(bool isWide) => searching
+                          ? _searchResults(hits)
+                          : sectionContent(isWide);
+
+                      return LayoutBuilder(builder: (context, constraints) {
+                        final isWide = constraints.maxWidth >= 900;
+                        if (isWide) {
+                          return Row(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              SizedBox(
+                                width: 220,
+                                child: _sectionRail(
+                                    counts,
+                                    cellMemoCounts,
+                                    allDocs.length,
+                                    hiyariDocs.length,
+                                    complaintDocs.length),
+                              ),
+                              VerticalDivider(
+                                  width: 1,
+                                  color: context.colors.borderLight),
+                              Expanded(
+                                child: Column(
+                                  children: [
+                                    _searchBar(),
+                                    const Divider(height: 1),
+                                    Expanded(child: mainArea(true)),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          );
+                        }
+                        return Column(
+                          children: [
+                            _sectionTabs(),
+                            _searchBar(),
+                            if (_section == _DocSection.meetings && !searching)
+                              _categoryDropdown(),
+                            const Divider(height: 1),
+                            Expanded(child: mainArea(false)),
+                          ],
+                        );
+                      });
+                    },
                   );
-                }
-                if (isWide) {
-                  return Row(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      SizedBox(width: 380, child: _list(filtered)),
-                      VerticalDivider(
-                          width: 1, color: context.colors.borderLight),
-                      Expanded(child: _detail(selectedDoc)),
-                    ],
-                  );
-                }
-                return _list(filtered, narrow: true);
-              }
-
-              Widget sectionContent(bool isWide) {
-                switch (_section) {
-                  case _DocSection.hiyari:
-                    return const HiyariScreen(embedded: true);
-                  case _DocSection.complaint:
-                    return const ComplaintScreen(embedded: true);
-                  case _DocSection.legalTraining:
-                    return _legalTrainingPlaceholder();
-                  case _DocSection.meetings:
-                    return meetingsContent(isWide);
-                }
-              }
-
-              return LayoutBuilder(builder: (context, constraints) {
-                final isWide = constraints.maxWidth >= 900;
-                if (isWide) {
-                  return Row(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      SizedBox(
-                        width: 220,
-                        child: _sectionRail(
-                            counts, cellMemoCounts, allDocs.length),
-                      ),
-                      VerticalDivider(
-                          width: 1, color: context.colors.borderLight),
-                      Expanded(child: sectionContent(true)),
-                    ],
-                  );
-                }
-                return Column(
-                  children: [
-                    _sectionTabs(),
-                    if (_section == _DocSection.meetings)
-                      _categoryDropdown(),
-                    const Divider(height: 1),
-                    Expanded(child: sectionContent(false)),
-                  ],
-                );
-              });
+                },
+              );
             },
           );
         },
@@ -511,8 +569,9 @@ class _MeetingMinutesScreenState extends State<MeetingMinutesScreen> {
   }
 
   // ---- 左ペイン: セクション + 種別ナビ ----
-  Widget _sectionRail(
-      Map<String, int> counts, Map<String, int> cellMemoCounts, int total) {
+  Widget _sectionRail(Map<String, int> counts,
+      Map<String, int> cellMemoCounts, int total, int hiyariCount,
+      int complaintCount) {
     final c = context.colors;
     final all = MeetingCategory.all;
     return Container(
@@ -543,11 +602,11 @@ class _MeetingMinutesScreenState extends State<MeetingMinutesScreen> {
           _sectionRailTile(
               label: '事故ヒヤリハット',
               section: _DocSection.hiyari,
-              countStream: _hiyariCountStream),
+              count: hiyariCount),
           _sectionRailTile(
               label: '苦情受付',
               section: _DocSection.complaint,
-              countStream: _complaintCountStream),
+              count: complaintCount),
           _sectionRailTile(
               label: '法定研修', section: _DocSection.legalTraining),
         ],
@@ -702,6 +761,126 @@ class _MeetingMinutesScreenState extends State<MeetingMinutesScreen> {
     );
   }
 
+  // ---- 横断検索バー（常時表示） ----
+  Widget _searchBar() {
+    final c = context.colors;
+    return Container(
+      color: c.cardBg,
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+      child: SizedBox(
+        height: 40,
+        child: TextField(
+          controller: _searchCtrl,
+          onChanged: (v) => setState(() => _searchQuery = v),
+          textInputAction: TextInputAction.search,
+          style: TextStyle(fontSize: AppTextSize.body, color: c.textPrimary),
+          decoration: InputDecoration(
+            hintText: 'ドキュメントを横断検索（本文・メモ・参加者・氏名…）',
+            hintStyle:
+                TextStyle(fontSize: AppTextSize.body, color: c.textHint),
+            prefixIcon:
+                Icon(Icons.search, size: 20, color: c.textSecondary),
+            suffixIcon: _searchQuery.isEmpty
+                ? null
+                : IconButton(
+                    icon: Icon(Icons.close, size: 18, color: c.textSecondary),
+                    tooltip: 'クリア',
+                    onPressed: () {
+                      _searchCtrl.clear();
+                      setState(() => _searchQuery = '');
+                    },
+                  ),
+            isDense: true,
+            filled: true,
+            fillColor: c.inputFill,
+            contentPadding:
+                const EdgeInsets.symmetric(vertical: 0, horizontal: 12),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: BorderSide.none,
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: BorderSide.none,
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: const BorderSide(color: AppColors.primary, width: 1.2),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ---- 横断検索の結果リスト ----
+  Widget _searchResults(List<_DocHit> hits) {
+    final c = context.colors;
+    final query = _searchQuery.trim();
+    if (hits.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.search_off, size: 56, color: c.textTertiary),
+            const SizedBox(height: 12),
+            Text('「$query」に一致する記録はありません',
+                style: TextStyle(
+                    color: c.textSecondary, fontSize: AppTextSize.bodyMd)),
+          ],
+        ),
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
+          child: Text('「$query」の検索結果  ${hits.length}件',
+              style: TextStyle(
+                  fontSize: AppTextSize.small,
+                  color: c.textSecondary,
+                  fontWeight: FontWeight.w600)),
+        ),
+        Expanded(
+          child: ListView.builder(
+            padding: const EdgeInsets.fromLTRB(12, 2, 12, 88),
+            itemCount: hits.length,
+            itemBuilder: (ctx, i) => _SearchResultTile(
+              hit: hits[i],
+              query: query,
+              onTap: () => _openHit(hits[i]),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _openHit(_DocHit hit) {
+    switch (hit.kind) {
+      case _HitKind.meeting:
+        Navigator.push(
+            context,
+            MaterialPageRoute(
+                builder: (_) => MeetingMinutesEditScreen(doc: hit.doc)));
+        break;
+      case _HitKind.cellMemo:
+        _showCellMemoEditDialog(context, hit.doc);
+        break;
+      case _HitKind.hiyari:
+        Navigator.push(context,
+            MaterialPageRoute(builder: (_) => HiyariEditScreen(doc: hit.doc)));
+        break;
+      case _HitKind.complaint:
+        Navigator.push(
+            context,
+            MaterialPageRoute(
+                builder: (_) => ComplaintEditScreen(doc: hit.doc)));
+        break;
+    }
+  }
+
   // ---- 中央ペイン: 一覧 ----
   Widget _list(List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
       {bool narrow = false}) {
@@ -788,6 +967,355 @@ class _MeetingMinutesScreenState extends State<MeetingMinutesScreen> {
       );
     }
     return _MeetingDetailView(doc: doc);
+  }
+}
+
+// ============================================================
+// 横断検索（議事録・コマメモ・ヒヤリ・苦情）
+// ============================================================
+enum _HitKind { meeting, cellMemo, hiyari, complaint }
+
+class _DocHit {
+  final _HitKind kind;
+  final QueryDocumentSnapshot<Map<String, dynamic>> doc;
+  final DateTime? date;
+  final String typeLabel; // 種別タグ（朝会 / 放デイ / 事故ヒヤリハット 等）
+  final String title; // 主要行
+  final String snippet; // 補足行（一致箇所。空なら非表示）
+  const _DocHit({
+    required this.kind,
+    required this.doc,
+    required this.date,
+    required this.typeLabel,
+    required this.title,
+    required this.snippet,
+  });
+}
+
+IconData _hitIcon(_HitKind kind) {
+  switch (kind) {
+    case _HitKind.meeting:
+      return Icons.description_outlined;
+    case _HitKind.cellMemo:
+      return Icons.event_note_outlined;
+    case _HitKind.hiyari:
+      return Icons.warning_amber_rounded;
+    case _HitKind.complaint:
+      return Icons.inbox_outlined;
+  }
+}
+
+// 一致箇所の前後を切り出してスニペット化する。
+String _windowAround(String text, String qLower,
+    {int before = 24, int maxLen = 160}) {
+  final idx = text.toLowerCase().indexOf(qLower);
+  if (idx < 0) {
+    return text.length > maxLen ? '${text.substring(0, maxLen)}…' : text;
+  }
+  var start = idx - before;
+  var prefix = '';
+  if (start > 0) {
+    prefix = '…';
+  } else {
+    start = 0;
+  }
+  var windowed = text.substring(start);
+  if (windowed.length > maxLen) {
+    windowed = '${windowed.substring(0, maxLen)}…';
+  }
+  return '$prefix$windowed';
+}
+
+// クエリ一致部分を強調した TextSpan 列を作る（大文字小文字無視）。
+List<TextSpan> _highlightSpans(
+    String text, String qLower, TextStyle base, TextStyle highlight) {
+  if (qLower.isEmpty) return [TextSpan(text: text, style: base)];
+  final spans = <TextSpan>[];
+  final lc = text.toLowerCase();
+  var start = 0;
+  while (true) {
+    final i = lc.indexOf(qLower, start);
+    if (i < 0) {
+      spans.add(TextSpan(text: text.substring(start), style: base));
+      break;
+    }
+    if (i > start) {
+      spans.add(TextSpan(text: text.substring(start, i), style: base));
+    }
+    spans.add(TextSpan(
+        text: text.substring(i, i + qLower.length), style: highlight));
+    start = i + qLower.length;
+  }
+  return spans;
+}
+
+List<_DocHit> _computeDocHits(
+  List<QueryDocumentSnapshot<Map<String, dynamic>>> meetings,
+  List<QueryDocumentSnapshot<Map<String, dynamic>>> cellMemos,
+  List<QueryDocumentSnapshot<Map<String, dynamic>>> hiyari,
+  List<QueryDocumentSnapshot<Map<String, dynamic>>> complaints,
+  String rawQuery,
+) {
+  final q = rawQuery.toLowerCase();
+  if (q.isEmpty) return const [];
+  final hits = <_DocHit>[];
+  bool has(String s) => s.toLowerCase().contains(q);
+
+  // --- 議事録・研修記録 ---
+  for (final doc in meetings) {
+    final d = doc.data();
+    final category = d['category'] as String? ?? 'other';
+    final categoryOther = (d['categoryOther'] as String? ?? '').trim();
+    final note = (d['note'] as String? ?? '').trim();
+    final content = (d['content'] as String? ?? '').trim();
+    final participants = List<String>.from(d['participantNames'] ?? []);
+    final participantsText =
+        participants.isEmpty ? '' : '参加: ${participants.join('、')}';
+    final categoryLabel = category == 'other' && categoryOther.isNotEmpty
+        ? categoryOther
+        : MeetingCategory.labelOf(category);
+
+    if (![categoryLabel, note, content, participantsText].any(has)) continue;
+
+    String snippet = '';
+    for (final f in [content, participantsText]) {
+      if (f.isNotEmpty && has(f)) {
+        snippet = f;
+        break;
+      }
+    }
+    if (snippet.isEmpty) snippet = content;
+
+    hits.add(_DocHit(
+      kind: _HitKind.meeting,
+      doc: doc,
+      date: (d['meetingDate'] as Timestamp?)?.toDate(),
+      typeLabel: categoryLabel,
+      title: note.isNotEmpty ? note : categoryLabel,
+      snippet: snippet,
+    ));
+  }
+
+  // --- コマメモ（放デイ・就学支援・感覚統合・イベント） ---
+  for (final doc in cellMemos) {
+    final d = doc.data();
+    final title = (d['title'] as String? ?? '').trim();
+    final comment = (d['comment'] as String? ?? '').trim();
+    if (![title, comment].any(has)) continue;
+    hits.add(_DocHit(
+      kind: _HitKind.cellMemo,
+      doc: doc,
+      date: (d['date'] as Timestamp?)?.toDate(),
+      typeLabel: title.isEmpty ? 'コマメモ' : title,
+      title: comment.isEmpty ? '（コメントなし）' : comment,
+      snippet: '',
+    ));
+  }
+
+  // --- 事故ヒヤリハット ---
+  for (final doc in hiyari) {
+    final d = doc.data();
+    final situation = (d['situation'] as String? ?? '').trim();
+    final factor = (d['factorAnalysis'] as String? ?? '').trim();
+    final prevention = (d['preventiveMeasures'] as String? ?? '').trim();
+    final reporter = (d['reporterName'] as String? ?? '').trim();
+    final childNames = List<String>.from(d['childNames'] ?? []);
+    final childText =
+        childNames.isEmpty ? '' : '対象: ${childNames.join('、')}';
+    final location = d['location'] as String? ?? '';
+    final activity = d['activityType'] as String? ?? '';
+    final riskTags = List<String>.from(d['riskTags'] ?? []);
+    final locationLabel = location.isEmpty
+        ? ''
+        : HiyariOptions.labelOf(HiyariOptions.location, location);
+    final activityLabel = activity.isEmpty
+        ? ''
+        : HiyariOptions.labelOf(HiyariOptions.activity, activity);
+    final riskText = riskTags
+        .map((t) => HiyariOptions.labelOf(HiyariOptions.riskTag, t))
+        .join('、');
+
+    if (![
+      situation,
+      factor,
+      prevention,
+      reporter,
+      childText,
+      locationLabel,
+      activityLabel,
+      riskText,
+    ].any(has)) {
+      continue;
+    }
+
+    String snippet = '';
+    for (final f in [factor, prevention, childText]) {
+      if (f.isNotEmpty && has(f)) {
+        snippet = f;
+        break;
+      }
+    }
+
+    hits.add(_DocHit(
+      kind: _HitKind.hiyari,
+      doc: doc,
+      date: (d['occurredAt'] as Timestamp?)?.toDate(),
+      typeLabel: '事故ヒヤリハット',
+      title: situation.isEmpty ? '（状況未入力）' : situation,
+      snippet: snippet,
+    ));
+  }
+
+  // --- 苦情受付 ---
+  for (final doc in complaints) {
+    final d = doc.data();
+    final claimant = (d['claimantName'] as String? ?? '').trim();
+    final childName = (d['childName'] as String? ?? '').trim();
+    final content = (d['content'] as String? ?? '').trim();
+    final category = d['category'] as String? ?? '';
+    final categoryLabel = category.isEmpty
+        ? ''
+        : ComplaintOptions.labelOf(ComplaintOptions.category, category);
+    if (![claimant, childName, content, categoryLabel].any(has)) continue;
+    hits.add(_DocHit(
+      kind: _HitKind.complaint,
+      doc: doc,
+      date: (d['occurredAt'] as Timestamp?)?.toDate(),
+      typeLabel: '苦情受付',
+      title:
+          '申出人: $claimant${childName.isNotEmpty ? '　利用児: $childName' : ''}',
+      snippet: content,
+    ));
+  }
+
+  hits.sort((a, b) {
+    final ad = a.date, bd = b.date;
+    if (ad == null && bd == null) return 0;
+    if (ad == null) return 1;
+    if (bd == null) return -1;
+    return bd.compareTo(ad);
+  });
+  return hits;
+}
+
+class _SearchResultTile extends StatelessWidget {
+  final _DocHit hit;
+  final String query;
+  final VoidCallback onTap;
+  const _SearchResultTile(
+      {required this.hit, required this.query, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    final qLower = query.toLowerCase();
+    final dateStr = hit.date != null
+        ? DateFormat('yyyy/M/d (E)', 'ja').format(hit.date!)
+        : '';
+    // スニペットが主要行と同一なら重複表示しない。
+    final snippetDisplay = (hit.snippet.isEmpty || hit.snippet == hit.title)
+        ? ''
+        : _windowAround(hit.snippet, qLower);
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      decoration: BoxDecoration(
+        color: c.cardBg,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: c.borderLight, width: 0.5),
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Flexible(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: c.chipBg,
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(_hitIcon(hit.kind),
+                              size: 12, color: c.textSecondary),
+                          const SizedBox(width: 4),
+                          Flexible(
+                            child: Text(hit.typeLabel,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                    fontSize: AppTextSize.caption,
+                                    color: c.textSecondary,
+                                    fontWeight: FontWeight.w700)),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(dateStr,
+                      style: TextStyle(
+                          fontSize: AppTextSize.caption,
+                          color: c.textTertiary)),
+                ],
+              ),
+              const SizedBox(height: 6),
+              RichText(
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                text: TextSpan(
+                  children: _highlightSpans(
+                    hit.title,
+                    qLower,
+                    TextStyle(
+                        fontSize: AppTextSize.body,
+                        color: c.textPrimary,
+                        fontWeight: FontWeight.w600),
+                    TextStyle(
+                        fontSize: AppTextSize.body,
+                        color: c.textPrimary,
+                        fontWeight: FontWeight.w700,
+                        backgroundColor:
+                            AppColors.primary.withValues(alpha: 0.26)),
+                  ),
+                ),
+              ),
+              if (snippetDisplay.isNotEmpty) ...[
+                const SizedBox(height: 4),
+                RichText(
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  text: TextSpan(
+                    children: _highlightSpans(
+                      snippetDisplay,
+                      qLower,
+                      TextStyle(
+                          fontSize: AppTextSize.small,
+                          color: c.textSecondary,
+                          height: 1.4),
+                      TextStyle(
+                          fontSize: AppTextSize.small,
+                          color: c.textPrimary,
+                          height: 1.4,
+                          backgroundColor:
+                              AppColors.primary.withValues(alpha: 0.26)),
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
 
