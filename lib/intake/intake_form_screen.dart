@@ -57,6 +57,7 @@ class _IntakeFormScreenState extends State<IntakeFormScreen> {
   final _medicalHistoryCtrl = TextEditingController();
   final _allergyCtrl = TextEditingController();
   final _severeSymptomsCtrl = TextEditingController();
+  final _hospitalNameCtrl = TextEditingController();
   final _doctorNameCtrl = TextEditingController();
   final _trialAttendeeCtrl = TextEditingController();
   String _source = '';
@@ -95,6 +96,7 @@ class _IntakeFormScreenState extends State<IntakeFormScreen> {
       _medicalHistoryCtrl,
       _allergyCtrl,
       _severeSymptomsCtrl,
+      _hospitalNameCtrl,
       _doctorNameCtrl,
       _trialAttendeeCtrl,
       _memoCtrl,
@@ -146,6 +148,7 @@ class _IntakeFormScreenState extends State<IntakeFormScreen> {
       'medicalHistory': _medicalHistoryCtrl.text.trim(),
       'allergy': _allergyCtrl.text.trim(),
       'severeSymptoms': _severeSymptomsCtrl.text.trim(),
+      'hospitalName': _hospitalNameCtrl.text.trim(),
       'doctorName': _doctorNameCtrl.text.trim(),
       'trialAttendee': _trialAttendeeCtrl.text.trim(),
       'source': _source,
@@ -288,8 +291,11 @@ class _IntakeFormScreenState extends State<IntakeFormScreen> {
                   _labelHint('てんかん・ひきつけ・喘息などの発作',
                       '急に起きて重症となる発作・症状があればご記入ください'),
                   _input('', _severeSymptomsCtrl, maxLines: 3),
-                  _input('かかりつけ医・医師名', _doctorNameCtrl,
-                      hint: 'お分かりになれば'),
+                  _row2(
+                      _input('かかりつけ病院名', _hospitalNameCtrl,
+                          hint: 'お分かりになれば'),
+                      _input('医師名', _doctorNameCtrl,
+                          hint: 'お分かりになれば')),
                 ]),
                 _section('体験について', [
                   _labelHint('体験を希望される理由', 'お困りごと、不安なことなど',

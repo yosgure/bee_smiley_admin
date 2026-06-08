@@ -404,8 +404,10 @@ class _BasicInfoSectionState extends State<_BasicInfoSection> {
               'allergy', '食物・薬・その他', leadRef),
           _editableMultiline(context, '発作', lead.severeSymptoms,
               'severeSymptoms', 'てんかん・ひきつけ・喘息など', leadRef),
+          _editableSinglelineRow(context, '病院', lead.hospitalName,
+              'hospitalName', 'かかりつけ病院名', leadRef),
           _editableSinglelineRow(context, '医師名', lead.doctorName,
-              'doctorName', 'かかりつけ医', leadRef),
+              'doctorName', '担当医師名', leadRef),
 
           const SizedBox(height: 8),
           Divider(height: 1, color: c.borderLight),

@@ -149,6 +149,7 @@ class CrmLead {
   String get allergy => (raw['allergy'] as String?) ?? '';
   /// てんかん・ひきつけ・喘息など、急に重症化しうる発作・症状
   String get severeSymptoms => (raw['severeSymptoms'] as String?) ?? '';
+  String get hospitalName => (raw['hospitalName'] as String?) ?? '';
   String get doctorName => (raw['doctorName'] as String?) ?? '';
   String get trialNotes => (raw['trialNotes'] as String?) ?? '';
   String get kindergarten => (raw['kindergarten'] as String?) ?? '';

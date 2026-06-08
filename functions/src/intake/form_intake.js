@@ -176,6 +176,7 @@ async function upsertFromForm(p) {
     medicalHistory: s(p.medicalHistory),
     allergy: s(p.allergy),
     severeSymptoms: s(p.severeSymptoms),
+    hospitalName: s(p.hospitalName),
     doctorName: s(p.doctorName),
     diagnosis: s(p.diagnosis),
     trialAttendee: s(p.trialAttendee),
