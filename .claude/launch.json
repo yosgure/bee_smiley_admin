@@ -18,6 +18,12 @@
       "runtimeExecutable": "/opt/homebrew/bin/flutter",
       "runtimeArgs": ["run", "-d", "chrome", "--web-port=8083"],
       "port": 8083
+    },
+    {
+      "name": "flutter-web-server",
+      "runtimeExecutable": "/opt/homebrew/bin/flutter",
+      "runtimeArgs": ["run", "-d", "web-server", "--web-port=8085"],
+      "port": 8085
     }
   ]
 }

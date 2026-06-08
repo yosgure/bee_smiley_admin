@@ -44,6 +44,8 @@ class _IntakeFormScreenState extends State<IntakeFormScreen> {
   DateTime? _childBirthDate;
   String _childGender = '';
   final _kindergartenCtrl = TextEditingController();
+  final _classNameCtrl = TextEditingController();
+  final _homeroomTeacherCtrl = TextEditingController();
   final _gradeCtrl = TextEditingController();
 
   // ヒアリング系
@@ -53,6 +55,9 @@ class _IntakeFormScreenState extends State<IntakeFormScreen> {
   final _likesCtrl = TextEditingController();
   final _dislikesCtrl = TextEditingController();
   final _medicalHistoryCtrl = TextEditingController();
+  final _allergyCtrl = TextEditingController();
+  final _severeSymptomsCtrl = TextEditingController();
+  final _doctorNameCtrl = TextEditingController();
   final _trialAttendeeCtrl = TextEditingController();
   String _source = '';
   final _memoCtrl = TextEditingController();
@@ -80,12 +85,17 @@ class _IntakeFormScreenState extends State<IntakeFormScreen> {
       _childLastNameKanaCtrl,
       _childFirstNameKanaCtrl,
       _kindergartenCtrl,
+      _classNameCtrl,
+      _homeroomTeacherCtrl,
       _gradeCtrl,
       _diagnosisCtrl,
       _mainConcernCtrl,
       _likesCtrl,
       _dislikesCtrl,
       _medicalHistoryCtrl,
+      _allergyCtrl,
+      _severeSymptomsCtrl,
+      _doctorNameCtrl,
       _trialAttendeeCtrl,
       _memoCtrl,
       _honeypotCtrl,
@@ -127,11 +137,16 @@ class _IntakeFormScreenState extends State<IntakeFormScreen> {
       'permitStatus': _permitStatus,
       'diagnosis': _diagnosisCtrl.text.trim(),
       'kindergarten': _kindergartenCtrl.text.trim(),
+      'className': _classNameCtrl.text.trim(),
+      'homeroomTeacher': _homeroomTeacherCtrl.text.trim(),
       'grade': _gradeCtrl.text.trim(),
       'mainConcern': _mainConcernCtrl.text.trim(),
       'likes': _likesCtrl.text.trim(),
       'dislikes': _dislikesCtrl.text.trim(),
       'medicalHistory': _medicalHistoryCtrl.text.trim(),
+      'allergy': _allergyCtrl.text.trim(),
+      'severeSymptoms': _severeSymptomsCtrl.text.trim(),
+      'doctorName': _doctorNameCtrl.text.trim(),
       'trialAttendee': _trialAttendeeCtrl.text.trim(),
       'source': _source,
       'memo': _memoCtrl.text.trim(),
@@ -256,10 +271,25 @@ class _IntakeFormScreenState extends State<IntakeFormScreen> {
                   _genderSelector(),
                   _input('幼稚園・保育園・学校名', _kindergartenCtrl,
                       hint: '通っていない場合は空欄'),
+                  _row2(
+                      _input('クラス名', _classNameCtrl, hint: '例: ひまわり組'),
+                      _input('担任の先生', _homeroomTeacherCtrl,
+                          hint: '例: 山田先生')),
                   _input('学年', _gradeCtrl, hint: '例: 年中、小1'),
                   _permitSelector(),
+                ]),
+                _section('健康・医療について', [
                   _input('診断名（あれば）', _diagnosisCtrl,
                       hint: 'ある場合のみ。なければ空欄'),
+                  _labelHint('既往歴', 'ある場合はできるだけ詳しく'),
+                  _input('', _medicalHistoryCtrl, maxLines: 3),
+                  _labelHint('アレルギー', '食物・薬・その他。なければ空欄'),
+                  _input('', _allergyCtrl, maxLines: 2),
+                  _labelHint('てんかん・ひきつけ・喘息などの発作',
+                      '急に起きて重症となる発作・症状があればご記入ください'),
+                  _input('', _severeSymptomsCtrl, maxLines: 3),
+                  _input('かかりつけ医・医師名', _doctorNameCtrl,
+                      hint: 'お分かりになれば'),
                 ]),
                 _section('体験について', [
                   _labelHint('体験を希望される理由', 'お困りごと、不安なことなど',
@@ -272,8 +302,6 @@ class _IntakeFormScreenState extends State<IntakeFormScreen> {
                   _labelHint(
                       'お子さまの嫌いなこと、苦手なこと', '苦手な刺激・困りやすい場面など'),
                   _input('', _dislikesCtrl, maxLines: 3),
-                  _labelHint('既往歴', 'ある場合はできるだけ詳しく'),
-                  _input('', _medicalHistoryCtrl, maxLines: 3),
                   _labelHint('体験当日の来所予定の方', '例: 母'),
                   _input('', _trialAttendeeCtrl),
                 ]),

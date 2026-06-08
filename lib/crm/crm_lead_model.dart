@@ -145,8 +145,15 @@ class CrmLead {
       (raw['medicalHistoryHearing'] as String?) ?? '';
   String get diagnosis => (raw['diagnosis'] as String?) ?? '';
   String get diagnosisHearing => (raw['diagnosisHearing'] as String?) ?? '';
+  // 健康・医療（アンケート由来、単層）
+  String get allergy => (raw['allergy'] as String?) ?? '';
+  /// てんかん・ひきつけ・喘息など、急に重症化しうる発作・症状
+  String get severeSymptoms => (raw['severeSymptoms'] as String?) ?? '';
+  String get doctorName => (raw['doctorName'] as String?) ?? '';
   String get trialNotes => (raw['trialNotes'] as String?) ?? '';
   String get kindergarten => (raw['kindergarten'] as String?) ?? '';
+  String get className => (raw['className'] as String?) ?? '';
+  String get homeroomTeacher => (raw['homeroomTeacher'] as String?) ?? '';
   String get grade => (raw['grade'] as String?) ?? '';
   String get trialAttendee => (raw['trialAttendee'] as String?) ?? '';
   String? get childGender => raw['childGender'] as String?;

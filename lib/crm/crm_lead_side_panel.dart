@@ -344,6 +344,10 @@ class _BasicInfoSectionState extends State<_BasicInfoSection> {
           _editableGenderRow(context, '性別', lead.childGender ?? '', leadRef),
           _editableSinglelineRow(context, '園', lead.kindergarten,
               'kindergarten', '◯◯幼稚園', leadRef),
+          _editableSinglelineRow(context, 'クラス', lead.className,
+              'className', 'ひまわり組', leadRef),
+          _editableSinglelineRow(context, '担任', lead.homeroomTeacher,
+              'homeroomTeacher', '山田先生', leadRef),
           _editableSinglelineRow(context, '学年', lead.grade,
               'grade', '年中', leadRef),
 
@@ -390,6 +394,18 @@ class _BasicInfoSectionState extends State<_BasicInfoSection> {
               hearingKey: 'diagnosisHearing',
             ),
           ]),
+
+          const SizedBox(height: 8),
+          Divider(height: 1, color: c.borderLight),
+          const SizedBox(height: 8),
+
+          // ── 健康・医療（アンケート由来、単層） ──
+          _editableMultiline(context, 'アレルギー', lead.allergy,
+              'allergy', '食物・薬・その他', leadRef),
+          _editableMultiline(context, '発作', lead.severeSymptoms,
+              'severeSymptoms', 'てんかん・ひきつけ・喘息など', leadRef),
+          _editableSinglelineRow(context, '医師名', lead.doctorName,
+              'doctorName', 'かかりつけ医', leadRef),
 
           const SizedBox(height: 8),
           Divider(height: 1, color: c.borderLight),
