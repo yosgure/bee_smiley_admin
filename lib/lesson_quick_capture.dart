@@ -196,10 +196,19 @@ Future<int> quickCapturePhoto({
   // ignore: use_build_context_synchronously
   final messenger = ScaffoldMessenger.of(context);
   final picker = ImagePicker();
-  final XFile? file = await picker.pickImage(
-    source: ImageSource.camera,
-    imageQuality: 90,
-  );
+  final XFile? file;
+  try {
+    file = await picker.pickImage(
+      source: ImageSource.camera,
+      imageQuality: 90,
+    );
+  } catch (e) {
+    messenger.hideCurrentSnackBar();
+    messenger.showSnackBar(
+      SnackBar(content: Text('カメラを起動できませんでした: $e')),
+    );
+    return 0;
+  }
   if (file == null) return 0;
   messenger.hideCurrentSnackBar();
   messenger.showSnackBar(
