@@ -53,4 +53,49 @@ platform :ios do
       }
     )
   end
+
+  desc "App Store版の枠(バージョン)を作成しリリースノートを設定。使い方: fastlane ios prepare_version version:1.1.8"
+  lane :prepare_version do |options|
+    load_asc_api_key
+    Spaceship::ConnectAPI.token = Spaceship::ConnectAPI::Token.create(
+      key_id: ASC_KEY_ID, issuer_id: ASC_ISSUER_ID, filepath: File.expand_path(ASC_KEY_PATH)
+    )
+    version_string = options[:version].to_s
+    app = Spaceship::ConnectAPI::App.find("com.beesmiley.admin")
+    UI.user_error!("アプリが見つかりません (com.beesmiley.admin)") if app.nil?
+    platform = Spaceship::ConnectAPI::Platform::IOS
+    app.ensure_version!(version_string, platform: platform)
+    edit_version = app.get_edit_app_store_version(platform: platform)
+    UI.user_error!("編集可能なバージョンを作成できませんでした") if edit_version.nil?
+    UI.success("編集中バージョン #{edit_version.version_string} を準備しました")
+    locs = edit_version.get_app_store_version_localizations
+    locs.each do |loc|
+      note = loc.locale.to_s.start_with?("ja") ? "軽微な不具合を修正し、アプリの安定性を向上しました。" : "Minor bug fixes and stability improvements."
+      loc.update(attributes: { whatsNew: note })
+      UI.message("リリースノート設定: #{loc.locale}")
+    end
+    UI.success("リリースノート設定完了")
+  end
+
+  desc "アップロード済みビルドを審査提出（バイナリ再アップロードなし）。使い方: fastlane ios submit build:110"
+  lane :submit do |options|
+    api_key = load_asc_api_key
+    deliver(
+      api_key: api_key,
+      build_number: options[:build].to_s,
+      submit_for_review: true,
+      automatic_release: true,
+      force: true,
+      skip_binary_upload: true,
+      skip_metadata: true,
+      skip_screenshots: true,
+      skip_app_version_update: false,
+      precheck_include_in_app_purchases: false,
+      submission_information: {
+        add_id_info_uses_idfa: false,
+        export_compliance_uses_encryption: false,
+        export_compliance_encryption_updated: false
+      }
+    )
+  end
 end
