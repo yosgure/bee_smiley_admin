@@ -115,6 +115,9 @@ service cloud.firestore {
     match /plus_cell_memos/{docId} {
       allow read, write: if isStaff();
     }
+    match /plus_move_alerts/{docId} {
+      allow read, write: if isStaff();
+    }
     match /plus_student_notes/{docId} {
       allow read, write: if isStaff();
     }

@@ -104,6 +104,12 @@ class MoveRequestCandidate {
     final stOk = startTimes.isEmpty || startTimes.contains(startTime);
     return wdOk && stOk;
   }
+
+  /// 厳密マッチ: 曜日・時間の両方を具体指定していて、かつ両方一致する場合のみ true。
+  /// 欠席で空いたコマの自動通知に使う（「どの枠でも」のゆるい候補は対象外）。
+  bool matchesStrict({required int weekday, required String startTime}) {
+    return weekdays.contains(weekday) && startTimes.contains(startTime);
+  }
 }
 
 class MoveRequest {
@@ -136,6 +142,20 @@ class MoveRequest {
 
   /// 表示対象か（コンテンツがあり、期限切れでなく、active のみ）
   bool get isVisible => hasContent && !isExpired && status == 'active';
+
+  /// 指定の曜日・時間（空いたコマ）を厳密に待っている候補を優先度順で返す。
+  /// active かつ期限内のときのみ。空なら「この空きを待つ希望なし」。
+  List<MoveRequestCandidate> strictMatchingCandidates({
+    required int weekday,
+    required String startTime,
+  }) {
+    if (status != 'active' || isExpired) return const [];
+    final hits = candidates
+        .where((c) => c.matchesStrict(weekday: weekday, startTime: startTime))
+        .toList();
+    hits.sort((a, b) => a.priority.compareTo(b.priority));
+    return hits;
+  }
 
   /// 優先度順にソートした候補
   List<MoveRequestCandidate> get sortedCandidates {

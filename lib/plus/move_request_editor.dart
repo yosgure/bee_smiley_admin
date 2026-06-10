@@ -400,14 +400,11 @@ class _CandidateRow extends StatelessWidget {
           if (candidate.weekdays.isEmpty || candidate.startTimes.isEmpty) ...[
             const SizedBox(height: 6),
             Text(
-              candidate.weekdays.isEmpty && candidate.startTimes.isEmpty
-                  ? '※ どちらも未選択 = どの枠でもOK'
-                  : candidate.weekdays.isEmpty
-                      ? '※ 曜日未選択 = どの曜日でもOK'
-                      : '※ 時間未選択 = どの時間でもOK',
+              '※ 欠席で空いた時の自動通知には、曜日と時間を両方指定してください'
+              '（未指定はゆるい希望として一覧表示のみ）',
               style: TextStyle(
                 fontSize: AppTextSize.small - 1,
-                color: context.colors.textTertiary,
+                color: context.colors.textSecondary,
               ),
             ),
           ],
