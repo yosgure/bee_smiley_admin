@@ -120,14 +120,16 @@ class _AbsenceRecordDialogState extends State<AbsenceRecordDialog> {
     b.writeln('【欠席の連絡のあった日】');
     b.writeln(_contactDate != null ? df.format(_contactDate!) : '');
     b.writeln();
+    final caller = _callerController.text.trim();
     b.writeln('【誰が電話してきたか】');
-    b.writeln(_callerController.text.trim());
+    b.writeln(caller.isNotEmpty ? '$callerより連絡あり。' : '');
     b.writeln();
     b.writeln('【連絡を受けた対応者】');
     b.writeln(_responder ?? '');
     b.writeln();
+    final reason = _reasonController.text.trim();
     b.writeln('【欠席の理由】');
-    b.writeln(_reasonController.text.trim());
+    b.writeln(reason.isNotEmpty ? '$reasonのため欠席。' : '');
     b.writeln();
     b.writeln('【当日のご本人の様子】');
     b.writeln(_conditionController.text.trim());
@@ -201,7 +203,8 @@ class _AbsenceRecordDialogState extends State<AbsenceRecordDialog> {
                       label: '誰が電話してきたか',
                       options: _callerOptions,
                       controller: _callerController,
-                      hint: 'その他（自由入力）',
+                      hint: '',
+                      showTextField: false,
                     ),
                     const SizedBox(height: 12),
                     _responderField(),
@@ -316,6 +319,7 @@ class _AbsenceRecordDialogState extends State<AbsenceRecordDialog> {
     required List<String> options,
     required TextEditingController controller,
     required String hint,
+    bool showTextField = true,
   }) {
     final c = context.colors;
     return Column(
@@ -352,27 +356,29 @@ class _AbsenceRecordDialogState extends State<AbsenceRecordDialog> {
             );
           }).toList(),
         ),
-        const SizedBox(height: 6),
-        TextField(
-          controller: controller,
-          style: const TextStyle(fontSize: AppTextSize.bodyMd),
-          onChanged: (_) => setState(() {}),
-          decoration: InputDecoration(
-            hintText: hint,
-            hintStyle: TextStyle(fontSize: AppTextSize.body, color: c.textHint),
-            filled: true,
-            fillColor: c.tagBg,
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(10),
-              borderSide: BorderSide(color: c.borderMedium),
+        if (showTextField) ...[
+          const SizedBox(height: 6),
+          TextField(
+            controller: controller,
+            style: const TextStyle(fontSize: AppTextSize.bodyMd),
+            onChanged: (_) => setState(() {}),
+            decoration: InputDecoration(
+              hintText: hint,
+              hintStyle: TextStyle(fontSize: AppTextSize.body, color: c.textHint),
+              filled: true,
+              fillColor: c.tagBg,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: BorderSide(color: c.borderMedium),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: BorderSide(color: c.aiAccent),
+              ),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(10),
-              borderSide: BorderSide(color: c.aiAccent),
-            ),
-            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           ),
-        ),
+        ],
       ],
     );
   }
