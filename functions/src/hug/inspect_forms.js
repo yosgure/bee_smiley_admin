@@ -11,6 +11,7 @@
 // 認証: body の magic フィールドが一致した時のみ実行。
 
 const cheerio = require('cheerio');
+const FormData = require('form-data');
 const { onRequest } = require('firebase-functions/v2/https');
 const { hugUsername, hugPassword } = require('../utils/setup');
 const {
@@ -367,39 +368,64 @@ exports.hugTestRegisterChild = onRequest(
       });
       console.log('[hugTestRegisterChild] base field count:', Object.keys(baseData).length);
 
-      // 最小限の児童データ（fault_flg=0 で受給者証関連を省略）
-      // 全ラジオボタンに既定値を設定（未選択だとサーバー側でエラーになる可能性）
+      // HUG バリデーション要件:
+      //  - fault_flg=1 だと acceptance_date/fault_no が必須 → ダミーで埋める
+      //  - none_allergy をチェック (アレルギーなし) するとアレルギーエラー回避
       const formData = {
         ...baseData,
         realname: '★HUG連携テスト★児童ダミー',
         furigana: 'てすとだみー',
         sex: '1',
         birth_y: '2020',
-        birth_m: '4',
+        birth_m: '1',
         birth_d: '1',
         parent: parentId,
-        fault_flg: '0',
+        fault_flg: '1',
+        acceptance_date: '2026/04/01',
+        fault_no: '1234567890',
+        use_services: '1',
+        failure_type: '1',
         round_type: '1',
         manage_facility_type: '0',
         upper_limit_setting: '0',
+        none_allergy: '1',
       };
-      // 空文字の日付テキストフィールドを POST から除外（HUG 側のバリデーション回避）
-      const dateFields = ['acceptance_date', 'payment_start', 'payment_end',
-        'hoiku_payment_start', 'hoiku_payment_end', 'provide_start', 'provide_end',
-        'supply_start', 'supply_end', 'free_of_charge_start', 'free_of_charge_end',
-        'school_history[0][start_date]', 'school_history[0][end_date]',
-        'medical_care_score', 'strength_action_score', 'original_money',
-        'koube_money', 'grant_ratio', 'fault_no'];
-      for (const k of dateFields) {
-        if (formData[k] === '') delete formData[k];
+      // 実ブラウザの POST に合わせて HUG select の sentinel デフォルト値を補完
+      // （ブラウザ DevTools 観察より）
+      const selectDefaults = {
+        p_id: parentId,
+        medical_score_kubun: '1',
+        meal_offer_adding: '0',
+        supply_amount1: '0',
+        supply_amount2: '-99',
+        hoiku_supply_amount1: '0',
+        hoiku_supply_amount2: '-99',
+        period_flg: '1',
+      };
+      for (const [k, v] of Object.entries(selectDefaults)) {
+        if (formData[k] === undefined || formData[k] === '') formData[k] = v;
       }
       console.log('[hugTestRegisterChild] POST keys:', Object.keys(formData).join(','));
 
+      // ブラウザ準拠で multipart/form-data として POST
+      const fd = new FormData();
+      for (const [k, v] of Object.entries(formData)) {
+        fd.append(k, v == null ? '' : String(v));
+      }
+      // form action 属性に合わせる: profile_children.php?mode=detail&id=insert
+      // p_id は body にのみ含める（ブラウザの実 POST と同じ）
       const postUrl = `${HUG_BASE_URL}/profile_children.php?mode=detail&id=insert`;
       const postRes = await hugFetch(postUrl, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams(formData).toString(),
+        headers: {
+          ...fd.getHeaders(),
+          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+          'Accept-Language': 'ja,en;q=0.9',
+          'Origin': 'https://www.hug-beesmiley.link',
+          'Referer': `${HUG_BASE_URL}/profile_children.php?mode=edit&p_id=${parentId}`,
+        },
+        body: fd,
       }, cookies);
       const postHtml = await postRes.text();
       const $$ = cheerio.load(postHtml);
@@ -417,13 +443,47 @@ exports.hugTestRegisterChild = onRequest(
         }
       });
 
+      // ボディ内のエラー位置を探す
+      const errorPatterns = ['必須', 'エラー', '入力してください', '不正', '失敗', '禁止', 'must', 'required'];
+      const errorContext = [];
+      for (const pat of errorPatterns) {
+        const idx = bodyText.indexOf(pat);
+        if (idx >= 0) {
+          errorContext.push({
+            pattern: pat,
+            context: bodyText.substring(Math.max(0, idx - 50), idx + 100),
+          });
+        }
+      }
+
+      // 入力エラーマーカーが付いた要素を探す
+      const errorElements = [];
+      $$('.error_msg, .error-message, .form-error, .required-error, .has-error, [class*="error"]').each((_, el) => {
+        const t = $$(el).text().trim().replace(/\s+/g, ' ');
+        if (t && t.length < 200) errorElements.push(t);
+      });
+
+      // POST が現れる form 周辺の input value をダンプ（フォーム再描画判定）
+      const formEchoes = {};
+      $$('form input[type="text"], form input[type="hidden"]').slice(0, 50).each((_, el) => {
+        const name = $$(el).attr('name');
+        const value = $$(el).attr('value') || '';
+        if (name) formEchoes[name] = value;
+      });
+
       res.json({
         status: postRes.status,
         responseUrl: postRes.url || '',
         success,
         echoedRealname,
+        bodyLength: bodyText.length,
+        sentFieldCount: Object.keys(formData).length,
+        sentKeys: Object.keys(formData),
+        errorContext,
+        errorElements: errorElements.slice(0, 10),
+        formEchoes,
         linkCandidates: linkCandidates.slice(0, 30),
-        bodyTextSnippet: bodyText.substring(0, 2500),
+        bodyTextSnippet: bodyText.substring(0, 8000),
       });
     } catch (err) {
       console.error('[hugTestRegisterChild] error:', err);
