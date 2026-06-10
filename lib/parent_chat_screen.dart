@@ -1472,6 +1472,12 @@ class _ChatInputAreaState extends State<_ChatInputArea> {
           final url = await ref.getDownloadURL();
           await _sendMessage(type: 'video', url: url, fileName: name);
         } else {
+          if (bytes.length > 50 * 1024 * 1024) {
+            if (mounted) {
+              AppFeedback.info(context, 'ファイルサイズが大きすぎます (50MBまで)');
+            }
+            continue;
+          }
           await ref.putData(bytes);
           final url = await ref.getDownloadURL();
           await _sendMessage(type: 'file', url: url, fileName: name);

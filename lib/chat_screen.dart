@@ -2572,6 +2572,12 @@ class _ChatDetailViewState extends State<ChatDetailView> {
             fileSize: bytes.length,
           );
         } else {
+          if (bytes.length > 50 * 1024 * 1024) {
+            if (mounted) {
+              AppFeedback.info(context, 'ファイルサイズが大きすぎます (50MBまで)');
+            }
+            continue;
+          }
           await ref.putData(bytes);
           final url = await ref.getDownloadURL();
           await _sendMessage(
@@ -2643,6 +2649,12 @@ class _ChatDetailViewState extends State<ChatDetailView> {
           _textController.clear();
           _clearPersistedDraft();
         } else {
+          if (bytes.length > 50 * 1024 * 1024) {
+            if (mounted) {
+              AppFeedback.info(context, 'ファイルサイズが大きすぎます (50MBまで)');
+            }
+            continue;
+          }
           await ref.putData(bytes);
           final url = await ref.getDownloadURL();
           await _sendMessage(
