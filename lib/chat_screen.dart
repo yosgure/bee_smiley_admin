@@ -766,6 +766,8 @@ class _RoomListTile extends StatefulWidget {
 }
 
 class _RoomListTileState extends State<_RoomListTile> {
+  // フェッチ結果を画面再訪問でも使い回す（peerId → info）。開き直すたびのスケルトン表示を防ぐ
+  static final Map<String, Map<String, dynamic>> _peerInfoCache = {};
   Future<Map<String, dynamic>>? _peerInfoFuture;
   String? _cachedPeerId;
 
@@ -872,6 +874,7 @@ class _RoomListTileState extends State<_RoomListTile> {
     if (_peerInfoFuture == null || _cachedPeerId != peerId) {
       _cachedPeerId = peerId;
       _peerInfoFuture = _fetchPeerInfo(peerId).then((info) {
+        _peerInfoCache[peerId] = info;
         // names mapの名前が古い場合、Firestoreを同期更新
         final currentName = memberNames[peerId]?.toString() ?? '';
         final fetchedName = info['name']?.toString() ?? '';
@@ -883,9 +886,18 @@ class _RoomListTileState extends State<_RoomListTile> {
     }
     return FutureBuilder<Map<String, dynamic>>(
       future: _peerInfoFuture,
+      initialData: _peerInfoCache[peerId],
       builder: (context, snapshot) {
-        if (!snapshot.hasData) {
-          // フェッチ完了まではスケルトン表示（names mapの古いデータでチラつくのを防止）
+        var peerData = snapshot.data;
+        if (peerData == null) {
+          // フェッチ完了までは names マップの名前で仮表示（写真・スタッフ判定はフェッチ後に反映）
+          final fallbackName = (memberNames[peerId] ?? '').toString().trim();
+          if (fallbackName.isNotEmpty) {
+            peerData = {'name': fallbackName, 'photoUrl': null, 'isStaff': false};
+          }
+        }
+        if (peerData == null) {
+          // names マップにも名前が無い新規ルームのみスケルトン表示
           return ListTile(
             contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
             leading: CircleAvatar(backgroundColor: context.colors.borderLight),
@@ -894,7 +906,6 @@ class _RoomListTileState extends State<_RoomListTile> {
             trailing: _buildTrailing(roomId, timeStr),
           );
         }
-        final peerData = snapshot.data!;
         final name = (peerData['name'] ?? '不明').toString().trim().replaceAll(RegExp(r'\s+'), ' ');
         final photoUrl = peerData['photoUrl'] as String?;
         final isStaff = peerData['isStaff'] == true;
