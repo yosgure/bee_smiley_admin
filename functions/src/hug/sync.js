@@ -404,6 +404,82 @@ async function findAttendanceRecord(cookies, childId, dateStr) {
   return match;
 }
 
+/**
+ * HUGの「児童を追加」(attendance.php?mode=add) で出席表に行を作成する。
+ * 振替・スポット利用や未来日など、その日の出席表に行が無い児童向け。
+ * 追加された行はHUG側で自動的に「出席」になる（時刻は未設定のため、
+ * 呼び出し側で saveToAttendance により時刻を設定する）。
+ */
+async function addAttendanceRow(cookies, { childId, dateStr }) {
+  const addUrl = `${HUG_BASE_URL}/attendance.php?mode=add&date=${dateStr}&f_id=1`;
+  const res = await hugFetch(addUrl, {}, cookies);
+  const html = await res.text();
+  const $ = cheerio.load(html);
+
+  const forms = $('form').filter((_, f) => $(f).find('input[name="mode"][value="regist_add"]').length > 0);
+  if (forms.length === 0) {
+    throw new Error(`HUGの「児童を追加」フォームが開けません (${dateStr})`);
+  }
+  const form = forms.first();
+
+  const childOpt = form.find('select[name="children"] option').filter(
+    (_, o) => String($(o).attr('value')) === String(childId)
+  );
+  if (childOpt.length === 0) {
+    throw new Error(`c_id=${childId} がHUGの「児童を追加」の児童リストにありません (${dateStr})`);
+  }
+
+  const fields = {};
+  form.find('input[type="hidden"], input[type="text"]').each((_, el) => {
+    const name = $(el).attr('name');
+    if (name) fields[name] = $(el).attr('value') || '';
+  });
+  form.find('input[type="radio"]:checked').each((_, el) => {
+    const name = $(el).attr('name');
+    if (name) fields[name] = $(el).attr('value') || '';
+  });
+  form.find('select').each((_, el) => {
+    const name = $(el).attr('name');
+    if (!name) return;
+    const selected = $(el).find('option[selected]').attr('value');
+    // ブラウザは未選択でも先頭optionの値を送信するため、selectedが無ければ先頭値で補完
+    fields[name] = selected !== undefined ? selected : ($(el).find('option').first().attr('value') || '');
+  });
+  fields['children'] = String(childId);
+
+  // CSRFトークンのサーバー側検証（login / monitoring と同じ事前フライト。失敗しても続行）
+  try {
+    const csrfToken = fields['csrf_token_from_client'] || '';
+    const modeToken = fields['mode_token'] || 'add';
+    const tokenUrl = `${HUG_BASE_URL}/ajax/ajax_token.php?token=${encodeURIComponent(csrfToken)}&mode=${encodeURIComponent(modeToken)}&hug_page_url=attendance.php`;
+    await hugFetch(tokenUrl, {}, cookies);
+  } catch (e) {
+    console.warn('[attendance:add] token check failed:', e.message);
+  }
+
+  const FormData = require('form-data');
+  const fd = new FormData();
+  for (const [k, v] of Object.entries(fields)) {
+    fd.append(k, v == null ? '' : String(v));
+  }
+
+  console.log(`[attendance:add] POST regist_add c_id=${childId} date=${dateStr}`);
+  const postRes = await fetch(`${HUG_BASE_URL}/attendance.php`, {
+    method: 'POST',
+    headers: { ...fd.getHeaders(), 'Cookie': cookies },
+    body: fd,
+    redirect: 'manual',
+  });
+  await postRes.text();
+  console.log(`[attendance:add] response status=${postRes.status} Location=${postRes.headers.get('location')}`);
+  if (postRes.status !== 302 && postRes.status !== 200) {
+    throw new Error(`HUG「児童を追加」のPOSTに失敗しました (status=${postRes.status})`);
+  }
+
+  // 反映確認: 行が実際に作成されたか（作成されていなければ throw）
+  return findAttendanceRecord(cookies, childId, dateStr);
+}
+
 async function saveToAttendance(cookies, params) {
   const { childId, dateStr, content, recorderStaffId, startTime, endTime } = params;
   const attendValue = params.attendValue || '2';
@@ -602,19 +678,29 @@ async function syncToHugCore(contentIds = null) {
       }
 
       // 出席登録（attend=1）。記録者マッピングは任意（HUGの記録者欄は空でも可）。
-      // その日の出席表に既に児童の行がある前提（振替/スポット等で行が無い場合は失敗扱い）。
+      // 出席表に行が無い場合（振替/スポット/未来日）は「児童を追加」で行を作成してから時刻を設定する。
       if (normalizeName(category) === '出席') {
         const attendStaffId = findMapping(staffMapping, recorderName);
+        const attendanceParams = {
+          childId: hugChildId,
+          dateStr,
+          content: '',
+          recorderStaffId: attendStaffId || '',
+          attendValue: '1',
+          startTime: docData.startTime || '',
+          endTime: docData.endTime || '',
+        };
         try {
-          const success = await saveToAttendance(cookies, {
-            childId: hugChildId,
-            dateStr,
-            content: '',
-            recorderStaffId: attendStaffId || '',
-            attendValue: '1',
-            startTime: docData.startTime || '',
-            endTime: docData.endTime || '',
-          });
+          let success = false;
+          try {
+            success = await saveToAttendance(cookies, attendanceParams);
+          } catch (e) {
+            if (!/出席レコードが|出席表が見つかりません/.test(e.message || '')) throw e;
+            // 行が無い → HUGの「児童を追加」で行を作成してから再試行
+            console.log(`[attendance:present] row not found → adding child row: ${studentName} ${dateStr}`);
+            await addAttendanceRow(cookies, { childId: hugChildId, dateStr });
+            success = await saveToAttendance(cookies, attendanceParams);
+          }
           if (success) {
             await (docRef.delete ? docRef.delete() : db.collection('saved_ai_contents').doc(docId).delete());
             successCount++;
@@ -625,8 +711,8 @@ async function syncToHugCore(contentIds = null) {
           }
         } catch (e) {
           const raw = e.message || '';
-          const friendly = /出席レコードが|出席表が見つかりません/.test(raw)
-            ? `${studentName} さんはHUGの ${dateStr} の出席表に未登録です。振替・スポット利用などはHUG側で「児童を追加」してから再試行してください。`
+          const friendly = /児童リストにありません/.test(raw)
+            ? `${studentName} さんがHUGの「児童を追加」の児童リストに見つかりません。HUG側の契約状況を確認してください。`
             : raw;
           throw new Error(friendly);
         }
@@ -917,3 +1003,9 @@ exports.syncToHugScheduled = onSchedule(
     }
   }
 );
+
+// ローカル検証用（test_attendance_add_flow.js から HUG_LOCAL_TEST=1 で使用。
+// 通常時は export しないため index.js 経由のデプロイ対象には現れない）
+if (process.env.HUG_LOCAL_TEST) {
+  exports.__test__ = { addAttendanceRow, saveToAttendance, findAttendanceRecord };
+}
