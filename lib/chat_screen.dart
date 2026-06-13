@@ -27,6 +27,7 @@ import 'notification_service.dart';
 import 'classroom_utils.dart';
 import 'utils/recent_emojis.dart';
 import 'widgets/emoji_stamp_picker.dart';
+import 'services/custom_stamps.dart';
 
 // ==========================================
 // 1. メイン画面 (ChatListScreen)
@@ -1265,6 +1266,7 @@ class _ChatDetailViewState extends State<ChatDetailView> {
   @override
   void initState() {
     super.initState();
+    CustomStampsService.instance.start();
     if (widget.initialDraft.isNotEmpty) {
       _textController.text = widget.initialDraft;
     }
@@ -1627,6 +1629,12 @@ class _ChatDetailViewState extends State<ChatDetailView> {
                           tooltip: '添付',
                           onPressed: _isUploading ? null : _showAttachmentMenu,
                         ),
+                        IconButton(
+                          icon: Icon(Icons.emoji_emotions_outlined, color: context.colors.textSecondary, size: 24),
+                          constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+                          tooltip: 'スタンプ',
+                          onPressed: _showStampPickerForSend,
+                        ),
                         const Spacer(),
                         // 送信ボタン（青丸）
                         GestureDetector(
@@ -1671,6 +1679,13 @@ class _ChatDetailViewState extends State<ChatDetailView> {
               padding: EdgeInsets.zero,
               tooltip: '添付',
               onPressed: _isUploading ? null : _showAttachmentMenu,
+            ),
+            IconButton(
+              icon: Icon(Icons.emoji_emotions_outlined, color: context.colors.textSecondary, size: 24),
+              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+              padding: EdgeInsets.zero,
+              tooltip: 'スタンプ',
+              onPressed: _showStampPickerForSend,
             ),
             const SizedBox(width: 4),
             Expanded(
@@ -1899,8 +1914,20 @@ class _ChatDetailViewState extends State<ChatDetailView> {
 
     Widget content;
     final bool isEmojiOnly = type == 'text' && isEmojiOnlyMessage(text);
-    final bool isImageOnly = (type == 'image' || type == 'video') && text.isEmpty;
-    if (type == 'image') {
+    final bool isImageOnly = (type == 'image' || type == 'video' || type == 'stamp') && text.isEmpty;
+    if (type == 'stamp') {
+      final String sUrl = (msg['url'] ?? '') as String;
+      content = sUrl.isEmpty
+          ? const SizedBox.shrink()
+          : CachedNetworkImage(
+              imageUrl: sUrl,
+              width: 120,
+              height: 120,
+              fit: BoxFit.contain,
+              placeholder: (c, u) => const SizedBox(width: 120, height: 120),
+              errorWidget: (c, u, e) => const Icon(Icons.broken_image, size: 48),
+            );
+    } else if (type == 'image') {
       content = Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         GestureDetector(onTap: () => _showImagePreview(msg['url']), child: ClipRRect(borderRadius: BorderRadius.circular(12), child: CachedNetworkImage(imageUrl: msg['url'], width: 200, fit: BoxFit.cover, placeholder: (c, u) => Container(width: 200, height: 150, decoration: BoxDecoration(color: context.colors.borderLight, borderRadius: BorderRadius.circular(12)), child: Center(child: SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2)))), errorWidget: (c, u, e) => Icon(Icons.broken_image)))),
         if (text.isNotEmpty) ...[const SizedBox(height: 8), SelectionArea(child: Text.rich(TextSpan(children: _buildTextSpansWithLinks(text, ctx: context))))]
@@ -2147,6 +2174,20 @@ class _ChatDetailViewState extends State<ChatDetailView> {
     if (stamp == 'bee') {
       // ロゴは絵文字より大きめに表示（絵文字は周囲に余白があるため）
       return Image.asset('assets/logo_beesmileymark.png', width: size * 1.4, height: size * 1.4);
+    }
+    // オリジナル画像スタンプ（stamp:{docId}）
+    if (stamp.startsWith('stamp:')) {
+      final dim = size * 1.4;
+      final url = CustomStampsService.instance.urlFor(stamp.substring('stamp:'.length));
+      if (url == null || url.isEmpty) return SizedBox(width: dim, height: dim);
+      return CachedNetworkImage(
+        imageUrl: url,
+        width: dim,
+        height: dim,
+        fit: BoxFit.contain,
+        placeholder: (c, u) => SizedBox(width: dim, height: dim),
+        errorWidget: (c, u, e) => Icon(Icons.broken_image, size: size),
+      );
     }
     // canvaskit 環境では Theme の NotoSansJP が絵文字をモノクロで描画してしまい
     // 自動フォールバック（Noto Color Emoji）が効かない。inherit:false で
@@ -2715,6 +2756,7 @@ class _ChatDetailViewState extends State<ChatDetailView> {
     if (type == 'image') lastMsg = '画像を送信しました';
     if (type == 'file') lastMsg = 'ファイルを送信しました';
     if (type == 'video') lastMsg = '動画を送信しました';
+    if (type == 'stamp') lastMsg = 'スタンプを送信しました';
     await roomRef.update({'lastMessage': lastMsg, 'lastMessageTime': FieldValue.serverTimestamp()});
     // 返信・メンション状態をクリア
     if (_replyTo != null || _mentionedUids.isNotEmpty) {
@@ -2750,6 +2792,24 @@ class _ChatDetailViewState extends State<ChatDetailView> {
     showEmojiStampPicker(
       context: context,
       onSelected: (emoji) => _toggleReaction(msgId, emoji),
+    );
+  }
+
+  // 入力欄のスタンプボタン: 選んだスタンプ/絵文字をメッセージとして送信する。
+  void _showStampPickerForSend() {
+    showEmojiStampPicker(
+      context: context,
+      onSelected: (value) {
+        if (value.startsWith('stamp:')) {
+          final url = CustomStampsService.instance.urlFor(value.substring('stamp:'.length));
+          if (url != null && url.isNotEmpty) {
+            _sendMessage(type: 'stamp', url: url, text: '');
+          }
+        } else {
+          // 絵文字は単独メッセージとして送信（絵文字のみは大きく表示される）
+          _sendMessage(type: 'text', text: value);
+        }
+      },
     );
   }
 

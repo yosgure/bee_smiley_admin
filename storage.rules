@@ -14,6 +14,13 @@ service firebase.storage {
                    && request.resource.size < 50 * 1024 * 1024;
     }
 
+    // chat_stamps: チャット用オリジナルスタンプ（認証ユーザーは誰でも追加可、最大5MB）
+    match /chat_stamps/{fileName} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null
+                   && request.resource.size < 5 * 1024 * 1024;
+    }
+
     // staff_photos: スタッフ写真（スタッフのみ書込）
     match /staff_photos/{fileName} {
       allow read: if request.auth != null;
