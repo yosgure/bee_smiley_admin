@@ -1533,7 +1533,7 @@ Future<void> _saveDisplayDate(DateTime date) async {
               // 誕生日は何もしない
             } else {
               if (first.id is DocumentSnapshot) {
-                _showRichAppointmentDetail(first.id as DocumentSnapshot);
+                _showRichAppointmentDetail(first.id as DocumentSnapshot, occurrenceDate: details.date);
               }
             }
           }
@@ -1589,7 +1589,7 @@ Future<void> _saveDisplayDate(DateTime date) async {
           // 誕生日クリック時は何もしない（または詳細表示を追加可能）
         } else {
           if (target.id is DocumentSnapshot) {
-            _showRichAppointmentDetail(target.id as DocumentSnapshot);
+            _showRichAppointmentDetail(target.id as DocumentSnapshot, occurrenceDate: details.date);
           }
         }
       }
@@ -1919,7 +1919,7 @@ Future<void> _saveDisplayDate(DateTime date) async {
     );
   }
 
-  void _showRichAppointmentDetail(DocumentSnapshot doc) {
+  void _showRichAppointmentDetail(DocumentSnapshot doc, {DateTime? occurrenceDate}) {
     final outerContext = context; // AdminShellが見えるcontext
     showDialog(
       context: context,
@@ -1979,7 +1979,7 @@ Future<void> _saveDisplayDate(DateTime date) async {
                           IconButton(
                             icon: Icon(Icons.delete_outline, size: 22, color: context.colors.textSecondary),
                             tooltip: '削除',
-                            onPressed: () => _confirmDelete(doc),
+                            onPressed: () => _confirmDelete(doc, occurrenceDate: occurrenceDate),
                           ),
                           const SizedBox(width: 4),
                         ],
@@ -2132,17 +2132,17 @@ Future<void> _saveDisplayDate(DateTime date) async {
   }
   
 
-  void _confirmDelete(DocumentSnapshot doc) {
+  void _confirmDelete(DocumentSnapshot doc, {DateTime? occurrenceDate}) {
     final data = doc.data() as Map<String, dynamic>;
     final recurrenceRule = data['recurrenceRule'];
     final recurrenceGroupId = data['recurrenceGroupId'];
     final startTime = (data['startTime'] as Timestamp).toDate();
-    
-    final isRecurring = (recurrenceRule != null && recurrenceRule.toString().isNotEmpty) || 
+
+    final isRecurring = (recurrenceRule != null && recurrenceRule.toString().isNotEmpty) ||
                         (recurrenceGroupId != null && recurrenceGroupId.toString().isNotEmpty);
-    
+
     if (isRecurring) {
-      _showRecurringDeleteDialog(doc, data, startTime);
+      _showRecurringDeleteDialog(doc, data, startTime, occurrenceDate: occurrenceDate);
     } else {
       _showSimpleDeleteDialog(doc.id);
     }
@@ -2170,7 +2170,7 @@ Future<void> _saveDisplayDate(DateTime date) async {
     );
   }
 
-  void _showRecurringDeleteDialog(DocumentSnapshot doc, Map<String, dynamic> data, DateTime startTime) {
+  void _showRecurringDeleteDialog(DocumentSnapshot doc, Map<String, dynamic> data, DateTime startTime, {DateTime? occurrenceDate}) {
     final recurrenceGroupId = data['recurrenceGroupId'];
     String selectedOption = 'this';
     
@@ -2215,7 +2215,7 @@ Future<void> _saveDisplayDate(DateTime date) async {
               onPressed: () async {
                 Navigator.pop(ctx);
                 Navigator.pop(context);
-                await _executeRecurringDelete(doc, data, startTime, selectedOption, recurrenceGroupId);
+                await _executeRecurringDelete(doc, data, startTime, selectedOption, recurrenceGroupId, occurrenceDate: occurrenceDate);
               },
               style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
               child: const Text('OK', style: TextStyle(color: Colors.white)),
@@ -2226,10 +2226,49 @@ Future<void> _saveDisplayDate(DateTime date) async {
     );
   }
 
-  Future<void> _executeRecurringDelete(DocumentSnapshot doc, Map<String, dynamic> data, DateTime startTime, String option, String? recurrenceGroupId) async {
-    // 'this' は単一削除。Undo を付ける。
+  Future<void> _executeRecurringDelete(DocumentSnapshot doc, Map<String, dynamic> data, DateTime startTime, String option, String? recurrenceGroupId, {DateTime? occurrenceDate}) async {
+    final recurrenceRule = data['recurrenceRule'] as String?;
+    final isRruleSeries = (recurrenceGroupId == null || recurrenceGroupId.toString().isEmpty) &&
+        recurrenceRule != null && recurrenceRule.isNotEmpty;
+
+    // RRULE 方式は親1件しか無く、タップした回が判別できないと初回日基準になってしまう。
+    // タップした回の暦日 + 親の開始時刻 を「この回の開始日時」として扱う。
+    final effectiveStart = occurrenceDate != null
+        ? DateTime(occurrenceDate.year, occurrenceDate.month, occurrenceDate.day,
+            startTime.hour, startTime.minute, startTime.second)
+        : startTime;
+
+    // 'this' = この回だけ削除。
     if (option == 'this') {
       if (!mounted) return;
+
+      // RRULE 方式（毎週/毎日/毎月/毎年）は親ドキュメント1件で全回を表現しているため、
+      // ドキュメントを消すと全回が消える。その回の日付を exceptionDates に追加して
+      // その回だけ非表示にする（描画側は recurrenceExceptionDates で対応済み）。
+      if (isRruleSeries) {
+        // その回の開始日時を exceptionDates に追加してその回だけ非表示にする。
+        // Syncfusion の例外日は「回の開始日時」と一致する必要があるため effectiveStart を使う。
+        final exTimestamp = Timestamp.fromDate(effectiveStart);
+        await UndoService.run<void>(
+          context: context,
+          label: 'この回の予定を削除',
+          doneMessage: 'この回の予定を削除しました',
+          captureSnapshot: () async {},
+          execute: () async {
+            await doc.reference.update({
+              'exceptionDates': FieldValue.arrayUnion([exTimestamp]),
+            });
+          },
+          undo: (_) async {
+            await doc.reference.update({
+              'exceptionDates': FieldValue.arrayRemove([exTimestamp]),
+            });
+          },
+        );
+        return;
+      }
+
+      // recurrenceGroupId 方式は各回が独立ドキュメントなので、そのまま単一削除。
       await UndoService.deleteDoc(
         context: context,
         label: '予定を削除',
@@ -2303,9 +2342,8 @@ Future<void> _saveDisplayDate(DateTime date) async {
               }
               await batch.commit();
             } else {
-              final recurrenceRule = data['recurrenceRule'] as String?;
               if (recurrenceRule != null) {
-                final untilDate = startTime.subtract(const Duration(days: 1));
+                final untilDate = effectiveStart.subtract(const Duration(days: 1));
                 final untilStr =
                     '${untilDate.year}${untilDate.month.toString().padLeft(2, '0')}${untilDate.day.toString().padLeft(2, '0')}T235959Z';
                 String newRule = recurrenceRule.contains('UNTIL=')
