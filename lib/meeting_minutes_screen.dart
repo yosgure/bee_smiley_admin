@@ -300,6 +300,219 @@ class _MeetingMinutesScreenState extends State<MeetingMinutesScreen> {
     );
   }
 
+  // コマメモを新規作成（カリキュラム表の空セルタップ／「追加」ボタンから）
+  Future<void> _showCellMemoCreateDialog(BuildContext context,
+      {required DateTime defaultDate}) async {
+    DateTime selectedDate =
+        DateTime(defaultDate.year, defaultDate.month, defaultDate.day);
+    final defaultTitle = _cellMemoTitleFromFilter ?? '';
+    String selectedTitle =
+        _cellMemoTitles.contains(defaultTitle) ? defaultTitle : '';
+    final customTitleController = TextEditingController();
+    final commentController = TextEditingController();
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
+
+    Widget label(String text) => Text(
+          text,
+          style: TextStyle(
+            fontSize: AppTextSize.bodyMd,
+            color: context.colors.textSecondary,
+            fontWeight: FontWeight.w500,
+          ),
+        );
+
+    await showDialog(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) => AlertDialog(
+          backgroundColor: context.colors.cardBg,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          titlePadding: const EdgeInsets.fromLTRB(20, 16, 12, 0),
+          contentPadding: const EdgeInsets.fromLTRB(20, 12, 20, 4),
+          actionsPadding: const EdgeInsets.fromLTRB(20, 8, 16, 12),
+          title: Row(
+            children: [
+              Icon(Icons.add_circle_outline,
+                  color: context.colors.textSecondary, size: 22),
+              const SizedBox(width: 8),
+              const Expanded(
+                child: Text('メモを追加',
+                    style: TextStyle(fontSize: AppTextSize.titleLg)),
+              ),
+              IconButton(
+                icon: Icon(Icons.close,
+                    color: context.colors.textSecondary, size: 20),
+                tooltip: '閉じる',
+                onPressed: () => Navigator.pop(dialogContext),
+              ),
+            ],
+          ),
+          content: SizedBox(
+            width: 380,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                label('日付'),
+                const SizedBox(height: 8),
+                InkWell(
+                  borderRadius: BorderRadius.circular(8),
+                  onTap: () async {
+                    final picked = await showDatePicker(
+                      context: dialogContext,
+                      initialDate: selectedDate,
+                      firstDate: DateTime(selectedDate.year - 2),
+                      lastDate: DateTime(selectedDate.year + 2, 12, 31),
+                    );
+                    if (picked != null) {
+                      setDialogState(() => selectedDate = picked);
+                    }
+                  },
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: context.colors.borderMedium),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.calendar_today,
+                            size: 16, color: context.colors.textSecondary),
+                        const SizedBox(width: 8),
+                        Text(
+                          DateFormat('yyyy年M月d日 (E)', 'ja')
+                              .format(selectedDate),
+                          style: TextStyle(
+                              fontSize: AppTextSize.bodyMd,
+                              color: context.colors.textPrimary),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                label('タイトル'),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    ..._cellMemoTitles.map((t) => ChoiceChip(
+                          label: Text(t),
+                          selected: selectedTitle == t,
+                          onSelected: (s) {
+                            if (s) setDialogState(() => selectedTitle = t);
+                          },
+                        )),
+                    ChoiceChip(
+                      label: const Text(_cellMemoTitleOther),
+                      selected: selectedTitle == _cellMemoTitleOther,
+                      onSelected: (s) {
+                        if (s) {
+                          setDialogState(
+                              () => selectedTitle = _cellMemoTitleOther);
+                        }
+                      },
+                    ),
+                  ],
+                ),
+                if (selectedTitle == _cellMemoTitleOther) ...[
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: customTitleController,
+                    decoration: InputDecoration(
+                      hintText: 'タイトルを入力',
+                      border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8)),
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 10),
+                    ),
+                    onChanged: (_) => setDialogState(() {}),
+                  ),
+                ],
+                const SizedBox(height: 20),
+                label('コメント'),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: commentController,
+                  decoration: InputDecoration(
+                    hintText: '例：今日の活動内容、注意事項など',
+                    border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8)),
+                    contentPadding: const EdgeInsets.all(12),
+                  ),
+                  maxLines: 5,
+                  minLines: 3,
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('キャンセル')),
+            Builder(builder: (_) {
+              final effectiveTitle = selectedTitle == _cellMemoTitleOther
+                  ? customTitleController.text.trim()
+                  : selectedTitle;
+              return ElevatedButton(
+                onPressed: effectiveTitle.isEmpty
+                    ? null
+                    : () async {
+                        // 同じ日の使用済みスロットを避けて空きを採番（衝突防止）
+                        final dayStart = DateTime(selectedDate.year,
+                            selectedDate.month, selectedDate.day);
+                        final dayEnd =
+                            dayStart.add(const Duration(days: 1));
+                        final daySnap = await FirebaseFirestore.instance
+                            .collection('plus_cell_memos')
+                            .where('date',
+                                isGreaterThanOrEqualTo:
+                                    Timestamp.fromDate(dayStart))
+                            .where('date',
+                                isLessThan: Timestamp.fromDate(dayEnd))
+                            .get();
+                        final used = daySnap.docs
+                            .map((d) =>
+                                (d.data()['slotIndex'] as int?) ?? 0)
+                            .toSet();
+                        int slot = 0;
+                        while (used.contains(slot)) {
+                          slot++;
+                        }
+                        final dateStr =
+                            DateFormat('yyyy-MM-dd').format(dayStart);
+                        final docId = '${dateStr}_$slot';
+                        await FirebaseFirestore.instance
+                            .collection('plus_cell_memos')
+                            .doc(docId)
+                            .set({
+                          'title': effectiveTitle,
+                          'comment': commentController.text.trim(),
+                          'date': Timestamp.fromDate(dayStart),
+                          'slotIndex': slot,
+                          'createdAt': FieldValue.serverTimestamp(),
+                          'updatedAt': FieldValue.serverTimestamp(),
+                        });
+                        if (dialogContext.mounted) {
+                          Navigator.pop(dialogContext);
+                        }
+                        scaffoldMessenger.showSnackBar(
+                            const SnackBar(content: Text('メモを追加しました')));
+                      },
+                style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: context.colors.textOnPrimary),
+                child: const Text('追加'),
+              );
+            }),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -414,6 +627,9 @@ class _MeetingMinutesScreenState extends State<MeetingMinutesScreen> {
                                 setState(() => _curriculumFiscalYear = y),
                             onCellTap: (doc) =>
                                 _showCellMemoEditDialog(context, doc),
+                            onAddCell: (date) => _showCellMemoCreateDialog(
+                                context,
+                                defaultDate: date),
                           );
                         }
                         if (isWide) {
@@ -2546,6 +2762,7 @@ class _CellMemoCurriculumView extends StatelessWidget {
   final List<QueryDocumentSnapshot<Map<String, dynamic>>> docs;
   final ValueChanged<int> onYearChange;
   final void Function(QueryDocumentSnapshot<Map<String, dynamic>>) onCellTap;
+  final ValueChanged<DateTime> onAddCell;
 
   const _CellMemoCurriculumView({
     required this.title,
@@ -2553,9 +2770,34 @@ class _CellMemoCurriculumView extends StatelessWidget {
     required this.docs,
     required this.onYearChange,
     required this.onCellTap,
+    required this.onAddCell,
   });
 
   static const List<int> _fiscalMonths = [4, 5, 6, 7, 8, 9, 10, 11, 12, 1, 2, 3];
+
+  // 月+週インデックスから新規追加時のデフォルト日付（その週の月曜頃）を求める
+  DateTime _defaultDateFor(int month, int weekIndex) {
+    final year = month >= 4 ? fiscalYear : fiscalYear + 1;
+    final firstOfMonth = DateTime(year, month, 1);
+    final daysToFirstMonday =
+        (DateTime.monday - firstOfMonth.weekday + 7) % 7;
+    final firstMondayDay = 1 + daysToFirstMonday;
+    int day = weekIndex == 0 ? 1 : firstMondayDay + (weekIndex - 1) * 7;
+    final lastDay = DateTime(year, month + 1, 0).day;
+    if (day > lastDay) day = lastDay;
+    if (day < 1) day = 1;
+    return DateTime(year, month, day);
+  }
+
+  // ヘッダーの「追加」ボタン用デフォルト日付（年度内なら今日、外なら4/1）
+  DateTime _defaultAddDate() {
+    final now = DateTime.now();
+    final nowFiscal = now.month >= 4 ? now.year : now.year - 1;
+    if (nowFiscal == fiscalYear) {
+      return DateTime(now.year, now.month, now.day);
+    }
+    return DateTime(fiscalYear, 4, 1);
+  }
 
   // 月の第N週（月曜始まり）
   // 月初〜月の最初の月曜の前日 = 1W
@@ -2645,6 +2887,14 @@ class _CellMemoCurriculumView extends StatelessWidget {
                   tooltip: '次年度',
                   onPressed: () => onYearChange(fiscalYear + 1),
                 ),
+                const Spacer(),
+                TextButton.icon(
+                  onPressed: () => onAddCell(_defaultAddDate()),
+                  icon: const Icon(Icons.add, size: 18),
+                  label: const Text('追加'),
+                  style: TextButton.styleFrom(
+                      foregroundColor: AppColors.primary),
+                ),
               ],
             ),
           ),
@@ -2692,7 +2942,8 @@ class _CellMemoCurriculumView extends StatelessWidget {
                       children: [
                         _monthCell('$month月', c),
                         for (int w = 0; w < 5; w++)
-                          _bodyCell(grid[month]?[w] ?? const [], c),
+                          _bodyCell(grid[month]?[w] ?? const [], c,
+                              _defaultDateFor(month, w)),
                       ],
                     ),
                 ],
@@ -2738,16 +2989,28 @@ class _CellMemoCurriculumView extends StatelessWidget {
 
   Widget _bodyCell(
       List<QueryDocumentSnapshot<Map<String, dynamic>>> entries,
-      AppColorScheme c) {
-    return Padding(
-      padding: const EdgeInsets.all(6),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          for (final doc in entries)
-            _entryTile(doc, c),
-          if (entries.isEmpty) const SizedBox(height: 32),
-        ],
+      AppColorScheme c,
+      DateTime defaultDate) {
+    // セル全体をタップで新規追加。既存メモは内側の InkWell が編集を優先処理。
+    return InkWell(
+      onTap: () => onAddCell(defaultDate),
+      child: Padding(
+        padding: const EdgeInsets.all(6),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            for (final doc in entries) _entryTile(doc, c),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Padding(
+                padding: const EdgeInsets.only(top: 2),
+                child: Icon(Icons.add,
+                    size: 14, color: c.textTertiary.withValues(alpha: 0.6)),
+              ),
+            ),
+            if (entries.isEmpty) const SizedBox(height: 16),
+          ],
+        ),
       ),
     );
   }
