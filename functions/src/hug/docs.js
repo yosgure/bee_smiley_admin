@@ -319,26 +319,35 @@ async function fetchHugCareRecordBodyImpl(cookies, bookId, cId, sId) {
 }
 
 async function buildStudentNameIndex() {
-  const snap = await db.collection('families').get();
   const index = {};
-  for (const doc of snap.docs) {
-    const data = doc.data();
-    const lastName = (data.lastName || '').replace(/\s+/g, '');
-    const familyUid = data.uid || doc.id;
-    const children = data.children || [];
-    for (const child of children) {
-      const firstName = (child.firstName || '').replace(/\s+/g, '');
-      if (!firstName) continue;
-      const classrooms = child.classrooms || (child.classroom ? [child.classroom] : []);
-      const inScope = classrooms.some((c) => typeof c === 'string' && c.includes('湘南藤沢'));
-      if (!inScope) continue;
-      const fullName = `${lastName}${firstName}`;
-      const studentId = child.studentId || `${familyUid}_${firstName}`;
-      index[fullName] = {
-        studentId,
-        studentName: `${data.lastName || ''} ${child.firstName || ''}`.trim(),
-        familyUid,
-      };
+  // plus_families を優先してインデックスを構築する。
+  // スケジュール画面UI(plus_schedule_screen)は plus_families から
+  // studentId(`uid||docId` + firstName)を解決するため、同期の書き込み先を
+  // それに一致させないと「名前クリックでHUGに飛ばない」ズレが生じる。
+  // families は plus_families に存在しない旧データ児童の補完にのみ使う（先勝ち）。
+  for (const coll of ['plus_families', 'families']) {
+    const snap = await db.collection(coll).get();
+    for (const doc of snap.docs) {
+      const data = doc.data();
+      if (data._compat === true) continue; // 互換用シャドードキュメントは除外
+      const lastName = (data.lastName || '').replace(/\s+/g, '');
+      const familyUid = data.uid || doc.id;
+      const children = data.children || [];
+      for (const child of children) {
+        const firstName = (child.firstName || '').replace(/\s+/g, '');
+        if (!firstName) continue;
+        const classrooms = child.classrooms || (child.classroom ? [child.classroom] : []);
+        const inScope = classrooms.some((c) => typeof c === 'string' && c.includes('湘南藤沢'));
+        if (!inScope) continue;
+        const fullName = `${lastName}${firstName}`;
+        if (index[fullName]) continue; // 既出（plus_families 優先）はスキップ
+        const studentId = child.studentId || `${familyUid}_${firstName}`;
+        index[fullName] = {
+          studentId,
+          studentName: `${data.lastName || ''} ${child.firstName || ''}`.trim(),
+          familyUid,
+        };
+      }
     }
   }
   return index;
