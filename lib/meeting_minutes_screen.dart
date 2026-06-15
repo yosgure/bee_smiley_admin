@@ -300,6 +300,174 @@ class _MeetingMinutesScreenState extends State<MeetingMinutesScreen> {
     );
   }
 
+  // コマメモ系タブ（イベント/放デイ/就学支援/感覚統合）の「新規作成」FABから呼ぶ追加ダイアログ。
+  // タイトルは現在のタブのカテゴリに固定し、日付と内容のみ入力する。
+  Future<void> _showCellMemoCreateDialog(BuildContext context) async {
+    final category = _cellMemoTitleFromFilter;
+    if (category == null) return;
+    final now = DateTime.now();
+    DateTime selectedDate = DateTime(now.year, now.month, now.day);
+    final commentController = TextEditingController();
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
+    bool saving = false;
+
+    await showDialog(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) => AlertDialog(
+          backgroundColor: context.colors.cardBg,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          titlePadding: const EdgeInsets.fromLTRB(20, 16, 12, 0),
+          contentPadding: const EdgeInsets.fromLTRB(20, 12, 20, 4),
+          actionsPadding: const EdgeInsets.fromLTRB(20, 8, 16, 12),
+          title: Row(
+            children: [
+              Icon(Icons.add_circle_outline,
+                  color: context.colors.textSecondary, size: 22),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text('$categoryを追加',
+                    style: const TextStyle(fontSize: AppTextSize.titleLg)),
+              ),
+              IconButton(
+                icon: Icon(Icons.close,
+                    color: context.colors.textSecondary, size: 20),
+                tooltip: '閉じる',
+                onPressed: () => Navigator.pop(dialogContext),
+              ),
+            ],
+          ),
+          content: SizedBox(
+            width: 380,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('日付',
+                    style: TextStyle(
+                        fontSize: AppTextSize.bodyMd,
+                        color: context.colors.textSecondary,
+                        fontWeight: FontWeight.w500)),
+                const SizedBox(height: 8),
+                InkWell(
+                  borderRadius: BorderRadius.circular(8),
+                  onTap: () async {
+                    final picked = await showDatePicker(
+                      context: dialogContext,
+                      initialDate: selectedDate,
+                      firstDate: DateTime(selectedDate.year - 2),
+                      lastDate: DateTime(selectedDate.year + 2, 12, 31),
+                    );
+                    if (picked != null) {
+                      setDialogState(() => selectedDate = picked);
+                    }
+                  },
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: context.colors.borderMedium),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.calendar_today,
+                            size: 16, color: context.colors.textSecondary),
+                        const SizedBox(width: 8),
+                        Text(
+                          DateFormat('yyyy年M月d日 (E)', 'ja')
+                              .format(selectedDate),
+                          style: TextStyle(
+                              fontSize: AppTextSize.bodyMd,
+                              color: context.colors.textPrimary),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                Text('内容',
+                    style: TextStyle(
+                        fontSize: AppTextSize.bodyMd,
+                        color: context.colors.textSecondary,
+                        fontWeight: FontWeight.w500)),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: commentController,
+                  autofocus: true,
+                  decoration: InputDecoration(
+                    hintText: '例：砂鉄、シーモンスター など',
+                    border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8)),
+                    contentPadding: const EdgeInsets.all(12),
+                  ),
+                  maxLines: 5,
+                  minLines: 3,
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('キャンセル')),
+            ElevatedButton(
+              onPressed: saving
+                  ? null
+                  : () async {
+                      final text = commentController.text.trim();
+                      if (text.isEmpty) return;
+                      setDialogState(() => saving = true);
+                      // 同じ日の使用済みスロットを避けて空きを採番（衝突防止）
+                      final dayStart = DateTime(selectedDate.year,
+                          selectedDate.month, selectedDate.day);
+                      final dayEnd = dayStart.add(const Duration(days: 1));
+                      final snap = await FirebaseFirestore.instance
+                          .collection('plus_cell_memos')
+                          .where('date',
+                              isGreaterThanOrEqualTo:
+                                  Timestamp.fromDate(dayStart))
+                          .where('date',
+                              isLessThan: Timestamp.fromDate(dayEnd))
+                          .get();
+                      final used = snap.docs
+                          .map((e) => (e.data()['slotIndex'] as int?) ?? 0)
+                          .toSet();
+                      int slot = 0;
+                      while (used.contains(slot)) {
+                        slot++;
+                      }
+                      final dateStr =
+                          DateFormat('yyyy-MM-dd').format(dayStart);
+                      final docId = '${dateStr}_$slot';
+                      await FirebaseFirestore.instance
+                          .collection('plus_cell_memos')
+                          .doc(docId)
+                          .set({
+                        'title': category,
+                        'comment': text,
+                        'date': Timestamp.fromDate(dayStart),
+                        'slotIndex': slot,
+                        'createdAt': FieldValue.serverTimestamp(),
+                        'updatedAt': FieldValue.serverTimestamp(),
+                      });
+                      if (dialogContext.mounted) {
+                        Navigator.pop(dialogContext);
+                      }
+                      scaffoldMessenger.showSnackBar(
+                          SnackBar(content: Text('$categoryを追加しました')));
+                    },
+              style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  foregroundColor: context.colors.textOnPrimary),
+              child: const Text('追加'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -318,6 +486,12 @@ class _MeetingMinutesScreenState extends State<MeetingMinutesScreen> {
       floatingActionButton: _section == _DocSection.meetings
           ? FloatingActionButton.extended(
               onPressed: () async {
+                // イベント等のコマメモ系タブでは議事録作成ではなく
+                // そのカテゴリのメモ追加（日付＋内容）を開く
+                if (_isCellMemoCategory) {
+                  await _showCellMemoCreateDialog(context);
+                  return;
+                }
                 await Navigator.push(
                     context,
                     MaterialPageRoute(
@@ -325,8 +499,11 @@ class _MeetingMinutesScreenState extends State<MeetingMinutesScreen> {
               },
               backgroundColor: AppColors.primary,
               icon: const Icon(Icons.add, color: Colors.white),
-              label: const Text('新規作成',
-                  style: TextStyle(
+              label: Text(
+                  _isCellMemoCategory
+                      ? '${_cellMemoTitleFromFilter ?? ''}を追加'
+                      : '新規作成',
+                  style: const TextStyle(
                       color: Colors.white, fontWeight: FontWeight.bold)),
             )
           : null,
@@ -1689,6 +1866,10 @@ class _MeetingMinutesEditScreenState extends State<MeetingMinutesEditScreen> {
 
   bool get _isEdit => widget.doc != null;
 
+  // 「イベント」を種類として選んだ場合は議事録ではなくカレンダー(コマメモ)として保存する。
+  static const String _eventCategoryId = '__event__';
+  bool get _isEventCategory => _category == _eventCategoryId;
+
   @override
   void initState() {
     super.initState();
@@ -1755,6 +1936,11 @@ class _MeetingMinutesEditScreenState extends State<MeetingMinutesEditScreen> {
 
   Future<void> _submit() async {
     if (!_canSubmit) return;
+    // 「イベント」種類はカレンダー(コマメモ)として保存する
+    if (_isEventCategory) {
+      await _submitEvent();
+      return;
+    }
     setState(() => _saving = true);
     final user = FirebaseAuth.instance.currentUser;
     final now = FieldValue.serverTimestamp();
@@ -1779,6 +1965,53 @@ class _MeetingMinutesEditScreenState extends State<MeetingMinutesEditScreen> {
       }
       if (mounted) {
         AppFeedback.success(context, _isEdit ? '更新しました' : '登録しました');
+        _close();
+      }
+    } catch (e) {
+      if (mounted) {
+        AppFeedback.error(context, '保存失敗: $e');
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  // 「イベント」を plus_cell_memos（カレンダー）として保存。
+  // 実施日を日付、内容をコメントに対応させ、同日の空きスロットを自動採番する。
+  Future<void> _submitEvent() async {
+    if (!_canSubmit) return;
+    setState(() => _saving = true);
+    try {
+      final dayStart =
+          DateTime(_meetingDate.year, _meetingDate.month, _meetingDate.day);
+      final dayEnd = dayStart.add(const Duration(days: 1));
+      final snap = await FirebaseFirestore.instance
+          .collection('plus_cell_memos')
+          .where('date', isGreaterThanOrEqualTo: Timestamp.fromDate(dayStart))
+          .where('date', isLessThan: Timestamp.fromDate(dayEnd))
+          .get();
+      final used = snap.docs
+          .map((e) => (e.data()['slotIndex'] as int?) ?? 0)
+          .toSet();
+      int slot = 0;
+      while (used.contains(slot)) {
+        slot++;
+      }
+      final dateStr = DateFormat('yyyy-MM-dd').format(dayStart);
+      final docId = '${dateStr}_$slot';
+      await FirebaseFirestore.instance
+          .collection('plus_cell_memos')
+          .doc(docId)
+          .set({
+        'title': 'イベント',
+        'comment': _contentCtrl.text.trim(),
+        'date': Timestamp.fromDate(dayStart),
+        'slotIndex': slot,
+        'createdAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+      if (mounted) {
+        AppFeedback.success(context, 'イベントを登録しました');
         _close();
       }
     } catch (e) {
@@ -1914,12 +2147,17 @@ class _MeetingMinutesEditScreenState extends State<MeetingMinutesEditScreen> {
                   isExpanded: true,
                   icon: Icon(Icons.expand_more, color: context.colors.textSecondary),
                   style: TextStyle(fontSize: AppTextSize.bodyMd, color: context.colors.textPrimary),
-                  items: MeetingCategory.all
-                      .map((c) => DropdownMenuItem<String>(
-                            value: c.id,
-                            child: Text(c.label),
-                          ))
-                      .toList(),
+                  items: [
+                    ...MeetingCategory.all.map((c) => DropdownMenuItem<String>(
+                          value: c.id,
+                          child: Text(c.label),
+                        )),
+                    if (!_isEdit)
+                      const DropdownMenuItem<String>(
+                        value: _eventCategoryId,
+                        child: Text('イベント'),
+                      ),
+                  ],
                   onChanged: (v) {
                     if (v != null) setState(() => _category = v);
                   },
@@ -1966,6 +2204,7 @@ class _MeetingMinutesEditScreenState extends State<MeetingMinutesEditScreen> {
               ),
             ),
 
+            if (!_isEventCategory) ...[
             const SizedBox(height: 20),
             _section('参加者'),
             InkWell(
@@ -2017,6 +2256,7 @@ class _MeetingMinutesEditScreenState extends State<MeetingMinutesEditScreen> {
                 });
               },
             ),
+            ],
 
             const SizedBox(height: 20),
             _section('内容'),
@@ -2027,6 +2267,7 @@ class _MeetingMinutesEditScreenState extends State<MeetingMinutesEditScreen> {
               decoration: _decoration(null, hint: '研修内容・議事内容'),
             ),
 
+            if (!_isEventCategory) ...[
             const SizedBox(height: 20),
             _section('資料'),
             ..._materials.asMap().entries.map((e) => _materialTile(e.key, e.value)),
@@ -2058,6 +2299,7 @@ class _MeetingMinutesEditScreenState extends State<MeetingMinutesEditScreen> {
               onChanged: (_) => setState(() {}),
               decoration: _decoration(null, hint: '一覧で表示するメモ'),
             ),
+            ],
 
             const SizedBox(height: 24),
             ElevatedButton(
