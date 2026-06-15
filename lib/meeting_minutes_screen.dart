@@ -300,219 +300,6 @@ class _MeetingMinutesScreenState extends State<MeetingMinutesScreen> {
     );
   }
 
-  // コマメモを新規作成（カリキュラム表の空セルタップ／「追加」ボタンから）
-  Future<void> _showCellMemoCreateDialog(BuildContext context,
-      {required DateTime defaultDate}) async {
-    DateTime selectedDate =
-        DateTime(defaultDate.year, defaultDate.month, defaultDate.day);
-    final defaultTitle = _cellMemoTitleFromFilter ?? '';
-    String selectedTitle =
-        _cellMemoTitles.contains(defaultTitle) ? defaultTitle : '';
-    final customTitleController = TextEditingController();
-    final commentController = TextEditingController();
-    final scaffoldMessenger = ScaffoldMessenger.of(context);
-
-    Widget label(String text) => Text(
-          text,
-          style: TextStyle(
-            fontSize: AppTextSize.bodyMd,
-            color: context.colors.textSecondary,
-            fontWeight: FontWeight.w500,
-          ),
-        );
-
-    await showDialog(
-      context: context,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (dialogContext, setDialogState) => AlertDialog(
-          backgroundColor: context.colors.cardBg,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          titlePadding: const EdgeInsets.fromLTRB(20, 16, 12, 0),
-          contentPadding: const EdgeInsets.fromLTRB(20, 12, 20, 4),
-          actionsPadding: const EdgeInsets.fromLTRB(20, 8, 16, 12),
-          title: Row(
-            children: [
-              Icon(Icons.add_circle_outline,
-                  color: context.colors.textSecondary, size: 22),
-              const SizedBox(width: 8),
-              const Expanded(
-                child: Text('メモを追加',
-                    style: TextStyle(fontSize: AppTextSize.titleLg)),
-              ),
-              IconButton(
-                icon: Icon(Icons.close,
-                    color: context.colors.textSecondary, size: 20),
-                tooltip: '閉じる',
-                onPressed: () => Navigator.pop(dialogContext),
-              ),
-            ],
-          ),
-          content: SizedBox(
-            width: 380,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                label('日付'),
-                const SizedBox(height: 8),
-                InkWell(
-                  borderRadius: BorderRadius.circular(8),
-                  onTap: () async {
-                    final picked = await showDatePicker(
-                      context: dialogContext,
-                      initialDate: selectedDate,
-                      firstDate: DateTime(selectedDate.year - 2),
-                      lastDate: DateTime(selectedDate.year + 2, 12, 31),
-                    );
-                    if (picked != null) {
-                      setDialogState(() => selectedDate = picked);
-                    }
-                  },
-                  child: Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                    decoration: BoxDecoration(
-                      border: Border.all(color: context.colors.borderMedium),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(Icons.calendar_today,
-                            size: 16, color: context.colors.textSecondary),
-                        const SizedBox(width: 8),
-                        Text(
-                          DateFormat('yyyy年M月d日 (E)', 'ja')
-                              .format(selectedDate),
-                          style: TextStyle(
-                              fontSize: AppTextSize.bodyMd,
-                              color: context.colors.textPrimary),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 20),
-                label('タイトル'),
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    ..._cellMemoTitles.map((t) => ChoiceChip(
-                          label: Text(t),
-                          selected: selectedTitle == t,
-                          onSelected: (s) {
-                            if (s) setDialogState(() => selectedTitle = t);
-                          },
-                        )),
-                    ChoiceChip(
-                      label: const Text(_cellMemoTitleOther),
-                      selected: selectedTitle == _cellMemoTitleOther,
-                      onSelected: (s) {
-                        if (s) {
-                          setDialogState(
-                              () => selectedTitle = _cellMemoTitleOther);
-                        }
-                      },
-                    ),
-                  ],
-                ),
-                if (selectedTitle == _cellMemoTitleOther) ...[
-                  const SizedBox(height: 8),
-                  TextField(
-                    controller: customTitleController,
-                    decoration: InputDecoration(
-                      hintText: 'タイトルを入力',
-                      border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8)),
-                      contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 10),
-                    ),
-                    onChanged: (_) => setDialogState(() {}),
-                  ),
-                ],
-                const SizedBox(height: 20),
-                label('コメント'),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: commentController,
-                  decoration: InputDecoration(
-                    hintText: '例：今日の活動内容、注意事項など',
-                    border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8)),
-                    contentPadding: const EdgeInsets.all(12),
-                  ),
-                  maxLines: 5,
-                  minLines: 3,
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-                onPressed: () => Navigator.pop(dialogContext),
-                child: const Text('キャンセル')),
-            Builder(builder: (_) {
-              final effectiveTitle = selectedTitle == _cellMemoTitleOther
-                  ? customTitleController.text.trim()
-                  : selectedTitle;
-              return ElevatedButton(
-                onPressed: effectiveTitle.isEmpty
-                    ? null
-                    : () async {
-                        // 同じ日の使用済みスロットを避けて空きを採番（衝突防止）
-                        final dayStart = DateTime(selectedDate.year,
-                            selectedDate.month, selectedDate.day);
-                        final dayEnd =
-                            dayStart.add(const Duration(days: 1));
-                        final daySnap = await FirebaseFirestore.instance
-                            .collection('plus_cell_memos')
-                            .where('date',
-                                isGreaterThanOrEqualTo:
-                                    Timestamp.fromDate(dayStart))
-                            .where('date',
-                                isLessThan: Timestamp.fromDate(dayEnd))
-                            .get();
-                        final used = daySnap.docs
-                            .map((d) =>
-                                (d.data()['slotIndex'] as int?) ?? 0)
-                            .toSet();
-                        int slot = 0;
-                        while (used.contains(slot)) {
-                          slot++;
-                        }
-                        final dateStr =
-                            DateFormat('yyyy-MM-dd').format(dayStart);
-                        final docId = '${dateStr}_$slot';
-                        await FirebaseFirestore.instance
-                            .collection('plus_cell_memos')
-                            .doc(docId)
-                            .set({
-                          'title': effectiveTitle,
-                          'comment': commentController.text.trim(),
-                          'date': Timestamp.fromDate(dayStart),
-                          'slotIndex': slot,
-                          'createdAt': FieldValue.serverTimestamp(),
-                          'updatedAt': FieldValue.serverTimestamp(),
-                        });
-                        if (dialogContext.mounted) {
-                          Navigator.pop(dialogContext);
-                        }
-                        scaffoldMessenger.showSnackBar(
-                            const SnackBar(content: Text('メモを追加しました')));
-                      },
-                style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primary,
-                    foregroundColor: context.colors.textOnPrimary),
-                child: const Text('追加'),
-              );
-            }),
-          ],
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -625,11 +412,6 @@ class _MeetingMinutesScreenState extends State<MeetingMinutesScreen> {
                             docs: filtered,
                             onYearChange: (y) =>
                                 setState(() => _curriculumFiscalYear = y),
-                            onCellTap: (doc) =>
-                                _showCellMemoEditDialog(context, doc),
-                            onAddCell: (date) => _showCellMemoCreateDialog(
-                                context,
-                                defaultDate: date),
                           );
                         }
                         if (isWide) {
@@ -2761,16 +2543,12 @@ class _CellMemoCurriculumView extends StatelessWidget {
   final int fiscalYear;
   final List<QueryDocumentSnapshot<Map<String, dynamic>>> docs;
   final ValueChanged<int> onYearChange;
-  final void Function(QueryDocumentSnapshot<Map<String, dynamic>>) onCellTap;
-  final ValueChanged<DateTime> onAddCell;
 
   const _CellMemoCurriculumView({
     required this.title,
     required this.fiscalYear,
     required this.docs,
     required this.onYearChange,
-    required this.onCellTap,
-    required this.onAddCell,
   });
 
   static const List<int> _fiscalMonths = [4, 5, 6, 7, 8, 9, 10, 11, 12, 1, 2, 3];
@@ -2787,16 +2565,6 @@ class _CellMemoCurriculumView extends StatelessWidget {
     if (day > lastDay) day = lastDay;
     if (day < 1) day = 1;
     return DateTime(year, month, day);
-  }
-
-  // ヘッダーの「追加」ボタン用デフォルト日付（年度内なら今日、外なら4/1）
-  DateTime _defaultAddDate() {
-    final now = DateTime.now();
-    final nowFiscal = now.month >= 4 ? now.year : now.year - 1;
-    if (nowFiscal == fiscalYear) {
-      return DateTime(now.year, now.month, now.day);
-    }
-    return DateTime(fiscalYear, 4, 1);
   }
 
   // 月の第N週（月曜始まり）
@@ -2888,12 +2656,10 @@ class _CellMemoCurriculumView extends StatelessWidget {
                   onPressed: () => onYearChange(fiscalYear + 1),
                 ),
                 const Spacer(),
-                TextButton.icon(
-                  onPressed: () => onAddCell(_defaultAddDate()),
-                  icon: const Icon(Icons.add, size: 18),
-                  label: const Text('追加'),
-                  style: TextButton.styleFrom(
-                      foregroundColor: AppColors.primary),
+                Text(
+                  'セルをクリックして入力',
+                  style: TextStyle(
+                      fontSize: AppTextSize.caption, color: c.textTertiary),
                 ),
               ],
             ),
@@ -2942,8 +2708,12 @@ class _CellMemoCurriculumView extends StatelessWidget {
                       children: [
                         _monthCell('$month月', c),
                         for (int w = 0; w < 5; w++)
-                          _bodyCell(grid[month]?[w] ?? const [], c,
-                              _defaultDateFor(month, w)),
+                          _CurriculumCell(
+                            key: ValueKey('$title-$fiscalYear-$month-$w'),
+                            entries: grid[month]?[w] ?? const [],
+                            defaultDate: _defaultDateFor(month, w),
+                            categoryTitle: title,
+                          ),
                       ],
                     ),
                 ],
@@ -2987,35 +2757,163 @@ class _CellMemoCurriculumView extends StatelessWidget {
     );
   }
 
-  Widget _bodyCell(
-      List<QueryDocumentSnapshot<Map<String, dynamic>>> entries,
-      AppColorScheme c,
-      DateTime defaultDate) {
-    // セル全体をタップで新規追加。既存メモは内側の InkWell が編集を優先処理。
-    return InkWell(
-      onTap: () => onAddCell(defaultDate),
+}
+
+// ============================================================
+// カリキュラム表の1セル（インライン編集対応）
+// クリックでテキスト入力欄に切り替わり、複数イベントも縦に並べられる。
+// ============================================================
+class _CurriculumCell extends StatefulWidget {
+  final List<QueryDocumentSnapshot<Map<String, dynamic>>> entries;
+  final DateTime defaultDate;
+  final String categoryTitle;
+
+  const _CurriculumCell({
+    super.key,
+    required this.entries,
+    required this.defaultDate,
+    required this.categoryTitle,
+  });
+
+  @override
+  State<_CurriculumCell> createState() => _CurriculumCellState();
+}
+
+class _CurriculumCellState extends State<_CurriculumCell> {
+  static const _newKey = '__new__';
+
+  // 編集中の対象: null=なし / entry.id=既存編集 / _newKey=新規追加
+  String? _editing;
+  bool _hover = false;
+  bool _saving = false;
+  final _controller = TextEditingController();
+  final _focusNode = FocusNode();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    _focusNode.dispose();
+    super.dispose();
+  }
+
+  void _startEditExisting(QueryDocumentSnapshot<Map<String, dynamic>> doc) {
+    setState(() {
+      _editing = doc.id;
+      _controller.text = (doc.data()['comment'] as String? ?? '');
+    });
+  }
+
+  void _startAdd() {
+    setState(() {
+      _editing = _newKey;
+      _controller.clear();
+    });
+  }
+
+  void _cancel() => setState(() => _editing = null);
+
+  Future<void> _saveExisting(String docId) async {
+    if (_saving) return;
+    setState(() => _saving = true);
+    final text = _controller.text.trim();
+    final ref =
+        FirebaseFirestore.instance.collection('plus_cell_memos').doc(docId);
+    try {
+      if (text.isEmpty) {
+        await ref.delete();
+      } else {
+        await ref.set({
+          'comment': text,
+          'updatedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _editing = null;
+          _saving = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _saveNew() async {
+    if (_saving) return;
+    final text = _controller.text.trim();
+    if (text.isEmpty) {
+      setState(() => _editing = null);
+      return;
+    }
+    setState(() => _saving = true);
+    try {
+      // 同じ日の使用済みスロットを避けて空きを採番（衝突防止）
+      final d = widget.defaultDate;
+      final dayStart = DateTime(d.year, d.month, d.day);
+      final dayEnd = dayStart.add(const Duration(days: 1));
+      final snap = await FirebaseFirestore.instance
+          .collection('plus_cell_memos')
+          .where('date',
+              isGreaterThanOrEqualTo: Timestamp.fromDate(dayStart))
+          .where('date', isLessThan: Timestamp.fromDate(dayEnd))
+          .get();
+      final used = snap.docs
+          .map((e) => (e.data()['slotIndex'] as int?) ?? 0)
+          .toSet();
+      int slot = 0;
+      while (used.contains(slot)) {
+        slot++;
+      }
+      final dateStr = DateFormat('yyyy-MM-dd').format(dayStart);
+      final docId = '${dateStr}_$slot';
+      await FirebaseFirestore.instance
+          .collection('plus_cell_memos')
+          .doc(docId)
+          .set({
+        'title': widget.categoryTitle,
+        'comment': text,
+        'date': Timestamp.fromDate(dayStart),
+        'slotIndex': slot,
+        'createdAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _editing = null;
+          _saving = false;
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hover = true),
+      onExit: (_) => setState(() => _hover = false),
       child: Padding(
         padding: const EdgeInsets.all(6),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            for (final doc in entries) _entryTile(doc, c),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: Padding(
-                padding: const EdgeInsets.only(top: 2),
-                child: Icon(Icons.add,
-                    size: 14, color: c.textTertiary.withValues(alpha: 0.6)),
-              ),
-            ),
-            if (entries.isEmpty) const SizedBox(height: 16),
+            for (final doc in widget.entries)
+              if (_editing == doc.id)
+                _editor(c, doc: doc)
+              else
+                _entryView(doc, c),
+            if (_editing == _newKey)
+              _editor(c, doc: null)
+            else
+              _addRow(c),
           ],
         ),
       ),
     );
   }
 
-  Widget _entryTile(
+  // 既存メモの表示（タップでインライン編集へ）
+  Widget _entryView(
       QueryDocumentSnapshot<Map<String, dynamic>> doc, AppColorScheme c) {
     final d = doc.data();
     final date = (d['date'] as Timestamp?)?.toDate();
@@ -3023,7 +2921,7 @@ class _CellMemoCurriculumView extends StatelessWidget {
     final dateLabel = date != null ? '${date.day}日' : '';
 
     return InkWell(
-      onTap: () => onCellTap(doc),
+      onTap: () => _startEditExisting(doc),
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 4),
         child: Column(
@@ -3038,26 +2936,125 @@ class _CellMemoCurriculumView extends StatelessWidget {
                   fontWeight: FontWeight.w600,
                 ),
               ),
-            if (comment.isNotEmpty)
-              Text(
-                comment,
-                style: TextStyle(
-                  fontSize: AppTextSize.small,
-                  color: c.textPrimary,
-                  height: 1.4,
-                ),
-              )
-            else
-              Text(
-                '(コメントなし)',
-                style: TextStyle(
-                  fontSize: AppTextSize.small,
-                  color: c.textTertiary,
-                  fontStyle: FontStyle.italic,
-                ),
+            Text(
+              comment.isNotEmpty ? comment : '(コメントなし)',
+              style: TextStyle(
+                fontSize: AppTextSize.small,
+                color: comment.isNotEmpty ? c.textPrimary : c.textTertiary,
+                fontStyle:
+                    comment.isNotEmpty ? FontStyle.normal : FontStyle.italic,
+                height: 1.4,
               ),
+            ),
           ],
         ),
+      ),
+    );
+  }
+
+  // 末尾の追加導線（ホバー時のみ薄く表示。空セルは広めのタップ領域）
+  Widget _addRow(AppColorScheme c) {
+    return InkWell(
+      onTap: _startAdd,
+      child: Container(
+        width: double.infinity,
+        alignment: Alignment.centerLeft,
+        padding: const EdgeInsets.symmetric(vertical: 3),
+        constraints: BoxConstraints(
+            minHeight: widget.entries.isEmpty ? 30 : 12),
+        child: _hover
+            ? Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.add, size: 13, color: c.textTertiary),
+                  const SizedBox(width: 2),
+                  Text(
+                    widget.entries.isEmpty ? '入力' : '追加',
+                    style: TextStyle(
+                        fontSize: AppTextSize.caption, color: c.textTertiary),
+                  ),
+                ],
+              )
+            : const SizedBox.shrink(),
+      ),
+    );
+  }
+
+  // インライン入力欄（新規 / 既存編集 共通）
+  Widget _editor(AppColorScheme c,
+      {QueryDocumentSnapshot<Map<String, dynamic>>? doc}) {
+    final isNew = doc == null;
+    final date = isNew
+        ? widget.defaultDate
+        : (doc.data()['date'] as Timestamp?)?.toDate();
+    final dateLabel = date != null ? '${date.day}日' : '';
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (dateLabel.isNotEmpty)
+            Text(
+              dateLabel,
+              style: TextStyle(
+                fontSize: AppTextSize.caption,
+                color: c.textTertiary,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          const SizedBox(height: 2),
+          TextField(
+            controller: _controller,
+            focusNode: _focusNode,
+            autofocus: true,
+            maxLines: null,
+            style: TextStyle(
+                fontSize: AppTextSize.small, color: c.textPrimary, height: 1.4),
+            decoration: InputDecoration(
+              isDense: true,
+              hintText: '内容を入力',
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+              border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(6)),
+            ),
+          ),
+          const SizedBox(height: 4),
+          Row(
+            children: [
+              InkWell(
+                onTap: _saving
+                    ? null
+                    : () => isNew ? _saveNew() : _saveExisting(doc.id),
+                child: Icon(Icons.check,
+                    size: 18, color: AppColors.primary),
+              ),
+              const SizedBox(width: 12),
+              InkWell(
+                onTap: _saving ? null : _cancel,
+                child:
+                    Icon(Icons.close, size: 18, color: c.textTertiary),
+              ),
+              if (!isNew) ...[
+                const Spacer(),
+                InkWell(
+                  onTap: _saving
+                      ? null
+                      : () async {
+                          await FirebaseFirestore.instance
+                              .collection('plus_cell_memos')
+                              .doc(doc.id)
+                              .delete();
+                          if (mounted) setState(() => _editing = null);
+                        },
+                  child: Icon(Icons.delete_outline,
+                      size: 16, color: AppColors.error),
+                ),
+              ],
+            ],
+          ),
+        ],
       ),
     );
   }
