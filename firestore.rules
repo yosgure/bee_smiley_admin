@@ -113,6 +113,9 @@ service cloud.firestore {
     match /plus_lessons/{docId} {
       allow read, write: if isStaff();
     }
+    match /plus_lesson_tombstones/{docId} {
+      allow read, write: if isStaff();
+    }
     match /plus_shifts/{docId} {
       allow read, write: if isStaff();
     }

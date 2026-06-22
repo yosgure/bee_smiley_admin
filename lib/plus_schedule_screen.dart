@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -104,7 +105,7 @@ class _PlusScheduleContentState extends State<PlusScheduleContent> with Automati
     '就学支援': AppColors.secondary,
     '放デイ': AppColors.primary,
     '契約': AppColors.accent,
-    '体験': AppColors.success,
+    '体験': AppColors.lavender,
     '欠席': AppColors.error, // 旧データ互換用
     '欠席（加算あり）': AppColors.error,
     '欠席（加算なし）': AppColors.error,
@@ -147,8 +148,10 @@ class _PlusScheduleContentState extends State<PlusScheduleContent> with Automati
   ];
   static const String _cellMemoTitleOther = 'その他';
 
-  // HUG欠席送信の失敗バナー（セッション内のみ）
+  // HUG送信失敗の一覧。saved_ai_contents の syncStatus=='failed' を購読して常時表示する
+  // （リロード・画面遷移しても残る。18時の自動同期 cron でも再試行される）。
   final List<Map<String, dynamic>> _failedAbsenceSends = [];
+  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _failedSyncSub;
 
   // 予定編集画面で「欠席」を選んだ後、予定保存時にHUGへ送るための保留データ
   // { category: '欠席連絡'|'欠席（加算なし）', content: String, studentName, absenceDate }
@@ -294,7 +297,30 @@ Future<void> _saveCourseColor(String course, Color color) async {
 Future<void> _initializeData() async {
   await _loadSavedState();  // まず保存された状態を読み込む
   await _loadCourseColors();
+  _listenFailedHugSyncs();  // HUG送信失敗の永続監視を開始
   await _loadInitialData(); // その後でデータを読み込む
+}
+
+// saved_ai_contents の syncStatus=='failed' を購読し、失敗バナーへ反映する。
+// 失敗ドキュメントは削除されず残るため、リロードしても一覧が消えない。
+void _listenFailedHugSyncs() {
+  _failedSyncSub?.cancel();
+  _failedSyncSub = FirebaseFirestore.instance
+      .collection('saved_ai_contents')
+      .where('syncStatus', isEqualTo: 'failed')
+      .snapshots()
+      .listen((snap) {
+    if (!mounted) return;
+    setState(() {
+      _failedAbsenceSends
+        ..clear()
+        ..addAll(snap.docs.map((d) {
+          final m = Map<String, dynamic>.from(d.data());
+          m['docId'] = d.id;
+          return m;
+        }));
+    });
+  }, onError: (e) => debugPrint('HUG失敗監視エラー: $e'));
 }
   
 Future<void> _loadSavedState() async {
@@ -353,6 +379,7 @@ Future<void> _saveMonthViewDate(DateTime date) async {
   @override
 void dispose() {
   _hideCurrentOverlay();
+  _failedSyncSub?.cancel();
 
   super.dispose();
 }
@@ -1586,6 +1613,54 @@ Map<String, dynamic>? _getCellMemo(DateTime date, int slotIndex) {
     }
   }
 
+  // ─── 削除済みコマの記録（tombstone）──────────────────────────────
+  // 一括展開は「テンプレートにあるのに該当レッスンが無いコマ」を作り直す。
+  // ユーザーが個別に削除/移動して空けたコマまで復活してしまうのを防ぐため、
+  // 削除・移動で空いたコマを plus_lesson_tombstones に記録し、
+  // 展開時に該当キーがあれば再作成をスキップする。
+  // 手動で同じコマにレッスンを追加/移動し直したら記録は解除する。
+  // docId / 照合キーともに「yyyy-MM-dd_slotIndex_生徒名」で揃える。
+  String _lessonTombstoneId(DateTime date, int slotIndex, String studentName) {
+    final dk =
+        DateFormat('yyyy-MM-dd').format(DateTime(date.year, date.month, date.day));
+    // docId に '/' は使えないため全角スラッシュに置換（照合は studentName フィールドで行う）
+    final name = studentName.trim().replaceAll('/', '／');
+    return '${dk}_${slotIndex}_$name';
+  }
+
+  Future<void> _addLessonTombstone(
+      DateTime date, int slotIndex, String studentName) async {
+    final name = studentName.trim();
+    if (name.isEmpty) return;
+    try {
+      await FirebaseFirestore.instance
+          .collection('plus_lesson_tombstones')
+          .doc(_lessonTombstoneId(date, slotIndex, name))
+          .set({
+        'date': Timestamp.fromDate(DateTime(date.year, date.month, date.day)),
+        'slotIndex': slotIndex,
+        'studentName': name,
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+    } catch (e) {
+      debugPrint('tombstone add error: $e');
+    }
+  }
+
+  Future<void> _clearLessonTombstone(
+      DateTime date, int slotIndex, String studentName) async {
+    final name = studentName.trim();
+    if (name.isEmpty) return;
+    try {
+      await FirebaseFirestore.instance
+          .collection('plus_lesson_tombstones')
+          .doc(_lessonTombstoneId(date, slotIndex, name))
+          .delete();
+    } catch (e) {
+      debugPrint('tombstone clear error: $e');
+    }
+  }
+
   // ダッシュボードの定期スケジュールを 指定した日 〜 2027-03-31 の plus_lessons に一括展開する。
   // 冪等。同じ (date, slotIndex, studentName) が既に存在する日はスキップして手動入力を保護する。
   Future<void> _deployRegularScheduleToLessons() async {
@@ -1620,6 +1695,7 @@ Map<String, dynamic>? _getCellMemo(DateTime date, int slotIndex) {
         content: Text(
           '$startLabel 〜 $endLabel の期間に、ダッシュボードの定期スケジュールを反映します。\n\n'
           '・既に同じ生徒・時間帯のレッスンがある日はスキップします（手動入力は保護）\n'
+          '・スケジュール画面で削除/移動して空けたコマは復活させません\n'
           '・ダッシュボードでセット化した生徒は、既存レッスンにも反映します\n'
           '・退会済み・在籍期間外の自動展開レッスンは削除します（手動編集は保護）\n'
           '・休業日設定がある日はスキップします（日曜は自動でスキップ）\n'
@@ -1729,11 +1805,32 @@ Map<String, dynamic>? _getCellMemo(DateTime date, int slotIndex) {
           .where('date', isLessThanOrEqualTo: Timestamp.fromDate(endInclusive))
           .get();
 
+      // 削除済みコマ（tombstone）を取得。該当キーは再作成しない。
+      final tombstoneKeys = <String>{};
+      {
+        final tsSnap = await FirebaseFirestore.instance
+            .collection('plus_lesson_tombstones')
+            .where('date', isGreaterThanOrEqualTo: Timestamp.fromDate(start))
+            .where('date', isLessThanOrEqualTo: Timestamp.fromDate(endInclusive))
+            .get();
+        for (final doc in tsSnap.docs) {
+          final data = doc.data();
+          final ts = data['date'];
+          if (ts is! Timestamp) continue;
+          final tdk = DateFormat('yyyy-MM-dd').format(ts.toDate());
+          final tslot = data['slotIndex'] ?? 0;
+          final tname = ((data['studentName'] as String?) ?? '').trim();
+          if (tname.isEmpty) continue;
+          tombstoneKeys.add('${tdk}_${tslot}_$tname');
+        }
+      }
+
       int created = 0;
       int deleted = 0;
       int skippedConflict = 0;
       int skippedHoliday = 0;
       int skippedSunday = 0;
+      int skippedTombstone = 0;
       int updatedGroup = 0;
       var batch = FirebaseFirestore.instance.batch();
       int batchOps = 0;
@@ -1816,24 +1913,60 @@ Map<String, dynamic>? _getCellMemo(DateTime date, int slotIndex) {
               // 既存レッスンに未反映なら同期する。
               // template が groupId を持たない場合は既存を変更しない
               // （予定画面側で個別に組んだセットを保護）。
-              final tplGid = m['groupId'];
-              if (tplGid is String && tplGid.isNotEmpty) {
-                final existingDoc = existingByKey[key];
-                if (existingDoc != null) {
-                  final existingGid = existingDoc.data()['groupId'];
-                  if (existingGid != tplGid) {
-                    batch.update(existingDoc.reference, {'groupId': tplGid});
-                    batchOps++;
-                    updatedGroup++;
-                    if (batchOps >= 450) {
-                      await batch.commit();
-                      batch = FirebaseFirestore.instance.batch();
-                      batchOps = 0;
-                    }
+              // course も同様に、ダッシュボードで明示設定（通常以外）が
+              // あれば既存レッスンへ同期する。
+              // course='通常' のテンプレートは各日で個別変更したコースを
+              // 上書きしないよう同期対象外とする。
+              final existingDoc = existingByKey[key];
+              if (existingDoc != null) {
+                final update = <String, dynamic>{};
+                final existingData = existingDoc.data();
+
+                final tplGid = m['groupId'];
+                if (tplGid is String && tplGid.isNotEmpty &&
+                    existingData['groupId'] != tplGid) {
+                  update['groupId'] = tplGid;
+                }
+
+                // テンプレート（ダッシュボード定期）のコースを既存レッスンへ同期する。
+                // 旧仕様は tplCourse='通常' を一律除外していたため、感覚統合→通常 のような
+                // 「通常へ戻す」変更が自動展開レッスンに反映されなかった。
+                // 対策: 自動展開レッスン（autoDeployed）には '通常' でも同期する。
+                // ただし次は保護して上書きしない:
+                //  - 欠席系コース（出席表記録を消さない）
+                //  - 週表示で個別にコース変更したもの（courseManual=true）
+                final tplCourse = (m['course'] as String?)?.trim() ?? '';
+                final existingCourse =
+                    (existingData['course'] as String?)?.trim() ?? '';
+                final isAbsenceCourse = existingCourse.startsWith('欠席');
+                final isManualCourse = existingData['courseManual'] == true;
+                final isAutoDeployed = existingData['autoDeployed'] == true;
+                if (tplCourse.isNotEmpty &&
+                    existingCourse != tplCourse &&
+                    !isAbsenceCourse &&
+                    !isManualCourse &&
+                    (tplCourse != '通常' || isAutoDeployed)) {
+                  update['course'] = tplCourse;
+                }
+
+                if (update.isNotEmpty) {
+                  batch.update(existingDoc.reference, update);
+                  batchOps++;
+                  updatedGroup++;
+                  if (batchOps >= 450) {
+                    await batch.commit();
+                    batch = FirebaseFirestore.instance.batch();
+                    batchOps = 0;
                   }
                 }
               }
               skippedConflict++;
+              continue;
+            }
+
+            // スケジュール画面で削除/移動して空けたコマは復活させない。
+            if (tombstoneKeys.contains(key)) {
+              skippedTombstone++;
               continue;
             }
 
@@ -1886,9 +2019,10 @@ Map<String, dynamic>? _getCellMemo(DateTime date, int slotIndex) {
             title: const Text('展開完了'),
             content: Text(
               '作成: $created件\n'
-              '更新(セット同期): $updatedGroup件\n'
+              '更新(セット/コース同期): $updatedGroup件\n'
               '削除(在籍期間外): $deleted件\n'
               'スキップ(衝突): $skippedConflict件\n'
+              'スキップ(削除済みコマ): $skippedTombstone件\n'
               'スキップ(休業日): $skippedHoliday件\n'
               'スキップ(日曜): $skippedSunday件',
             ),
@@ -2493,8 +2627,15 @@ void _goToPage(int page) {
             ),
             const Spacer(),
           ],
-          // 移動希望アラート（欠席で空いた枠に希望者）— 誕生日チップの左
-          ..._buildMoveAlertHeaderBadges(),
+          // 移動希望アラート: 1件は従来どおりインラインチップ、2件以上は「振替 N件 ▾」の
+          // まとめチップに集約（トップバーが崩れないように）。
+          if (_moveAlerts.isNotEmpty) ...[
+            if (_moveAlerts.length == 1)
+              _buildMoveAlertSingleChip(_sortedMoveAlerts().first)
+            else
+              _buildMoveAlertSummaryChip(),
+            const SizedBox(width: 8),
+          ],
           // 近日の誕生日バナー
           _buildBirthdayHeaderBadge(),
           // セット編集ボタン群
@@ -2907,10 +3048,8 @@ void _goToPage(int page) {
     );
   }
 
-  /// ヘッダー内の移動希望アラートチップ群（欠席で空いた枠に希望者がいる）。
-  /// 各チップはタップで詳細、✕で消去（対応済み）。
-  List<Widget> _buildMoveAlertHeaderBadges() {
-    if (_moveAlerts.isEmpty) return const [];
+  /// 移動希望アラートを日付・コマ順にソートして返す。
+  List<Map<String, dynamic>> _sortedMoveAlerts() {
     final alerts = _moveAlerts.values.toList();
     alerts.sort((a, b) {
       final da = (a['date'] as Timestamp?)?.toDate() ?? DateTime(2100);
@@ -2919,69 +3058,246 @@ void _goToPage(int page) {
       if (c != 0) return c;
       return (a['slotIndex'] as int? ?? 0).compareTo(b['slotIndex'] as int? ?? 0);
     });
+    return alerts;
+  }
+
+  /// 移動希望が1件のときの従来インラインチップ。タップで詳細、✕で消去。
+  Widget _buildMoveAlertSingleChip(Map<String, dynamic> alert) {
     final info = context.alerts.info;
-    return alerts.map((alert) {
-      final date = (alert['date'] as Timestamp?)?.toDate() ?? DateTime.now();
-      final slotIndex = alert['slotIndex'] as int? ?? 0;
-      final docId = alert['id'] as String;
-      final matches =
-          ((alert['matches'] as List?) ?? []).cast<Map<String, dynamic>>();
-      final wlabel = ['', '月', '火', '水', '木', '金', '土', '日'][date.weekday];
-      final slot = (slotIndex >= 0 && slotIndex < _timeSlots.length)
-          ? _timeSlots[slotIndex]
-          : '';
-      final firstName =
-          matches.isNotEmpty ? (matches.first['studentName'] ?? '') : '';
-      final extra = matches.length > 1 ? ' 他${matches.length - 1}' : '';
-      return Padding(
-        padding: const EdgeInsets.only(right: 8),
-        child: Tooltip(
-          message: matches
-              .map((m) => '${m['priority']}. ${m['studentName']}')
-              .join('\n'),
-          child: Material(
-            color: Colors.transparent,
-            child: InkWell(
-              onTap: () => _showMoveAlertDetail(date, slotIndex),
+    final date = (alert['date'] as Timestamp?)?.toDate() ?? DateTime.now();
+    final slotIndex = alert['slotIndex'] as int? ?? 0;
+    final docId = alert['id'] as String;
+    final matches =
+        ((alert['matches'] as List?) ?? []).cast<Map<String, dynamic>>();
+    final wlabel = ['', '月', '火', '水', '木', '金', '土', '日'][date.weekday];
+    final slot = (slotIndex >= 0 && slotIndex < _timeSlots.length)
+        ? _timeSlots[slotIndex]
+        : '';
+    final firstName =
+        matches.isNotEmpty ? (matches.first['studentName'] ?? '') : '';
+    final extra = matches.length > 1 ? ' 他${matches.length - 1}' : '';
+    return Tooltip(
+      message: matches
+          .map((m) => '${m['priority']}. ${m['studentName']}')
+          .join('\n'),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () => _showMoveAlertDetail(date, slotIndex),
+          borderRadius: BorderRadius.circular(14),
+          child: Container(
+            height: 28,
+            padding: const EdgeInsets.only(left: 10, right: 4),
+            decoration: BoxDecoration(
+              color: info.background,
               borderRadius: BorderRadius.circular(14),
-              child: Container(
-                height: 28,
-                padding: const EdgeInsets.only(left: 10, right: 4),
-                decoration: BoxDecoration(
-                  color: info.background,
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: info.border),
+              border: Border.all(color: info.border),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.swap_horiz, size: 14, color: info.icon),
+                const SizedBox(width: 4),
+                Text(
+                  '${date.month}/${date.day}($wlabel) $slot$firstName$extra',
+                  style: TextStyle(
+                    fontSize: AppTextSize.small,
+                    color: info.text,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.swap_horiz, size: 14, color: info.icon),
-                    const SizedBox(width: 4),
-                    Text(
-                      '${date.month}/${date.day}($wlabel) $slot$firstName$extra',
-                      style: TextStyle(
-                        fontSize: AppTextSize.small,
-                        color: info.text,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(width: 2),
-                    InkWell(
-                      onTap: () => _resolveMoveAlert(docId),
-                      borderRadius: BorderRadius.circular(10),
-                      child: Padding(
-                        padding: const EdgeInsets.all(3),
-                        child: Icon(Icons.close, size: 14, color: info.icon),
-                      ),
-                    ),
-                  ],
+                const SizedBox(width: 2),
+                InkWell(
+                  onTap: () => _resolveMoveAlert(docId),
+                  borderRadius: BorderRadius.circular(10),
+                  child: Padding(
+                    padding: const EdgeInsets.all(3),
+                    child: Icon(Icons.close, size: 14, color: info.icon),
+                  ),
                 ),
-              ),
+              ],
             ),
           ),
         ),
-      );
-    }).toList();
+      ),
+    );
+  }
+
+  /// ヘッダー内の移動希望まとめチップ（「振替 N件 ▾」）。
+  /// 件数が多くてもトップバーが崩れないよう1つに集約し、クリックで一覧を表示する。
+  Widget _buildMoveAlertSummaryChip() {
+    final info = context.alerts.info;
+    final count = _moveAlerts.length;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: _showMoveAlertListDialog,
+        borderRadius: BorderRadius.circular(14),
+        child: Container(
+          height: 28,
+          padding: const EdgeInsets.only(left: 10, right: 8),
+          decoration: BoxDecoration(
+            color: info.background,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: info.border),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.swap_horiz, size: 14, color: info.icon),
+              const SizedBox(width: 4),
+              Text(
+                '振替 $count件',
+                style: TextStyle(
+                  fontSize: AppTextSize.small,
+                  color: info.text,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(width: 2),
+              Icon(Icons.arrow_drop_down, size: 18, color: info.icon),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// 移動希望アラートの一覧ポップアップ。行タップで詳細、✕で消去（対応済み）。
+  void _showMoveAlertListDialog() {
+    if (_moveAlerts.isEmpty) return;
+    showDialog(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (dialogContext, setDialogState) {
+            final info = context.alerts.info;
+            final alerts = _sortedMoveAlerts();
+            return AlertDialog(
+              backgroundColor: context.colors.cardBg,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              titlePadding: const EdgeInsets.fromLTRB(20, 16, 12, 8),
+              contentPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+              title: Row(
+                children: [
+                  Icon(Icons.swap_horiz, size: 20, color: info.icon),
+                  const SizedBox(width: 8),
+                  Text('振替希望 (${alerts.length}件)',
+                      style: const TextStyle(fontSize: AppTextSize.titleSm)),
+                  const Spacer(),
+                  IconButton(
+                    icon: Icon(Icons.close, size: 20, color: context.colors.textTertiary),
+                    onPressed: () => Navigator.pop(dialogContext),
+                  ),
+                ],
+              ),
+              content: SizedBox(
+                width: 360,
+                child: alerts.isEmpty
+                    ? Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Text('振替希望はありません',
+                            style: TextStyle(color: context.colors.textSecondary)),
+                      )
+                    : ConstrainedBox(
+                        constraints: const BoxConstraints(maxHeight: 420),
+                        child: ListView.separated(
+                          shrinkWrap: true,
+                          itemCount: alerts.length,
+                          separatorBuilder: (_, __) => Divider(
+                              height: 1, color: context.colors.borderLight),
+                          itemBuilder: (_, i) => _buildMoveAlertListRow(
+                            alerts[i],
+                            onResolved: () {
+                              if (_moveAlerts.isEmpty) {
+                                Navigator.pop(dialogContext);
+                              } else {
+                                setDialogState(() {});
+                              }
+                            },
+                            onOpenedDetail: () => Navigator.pop(dialogContext),
+                          ),
+                        ),
+                      ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  /// 一覧ダイアログ内の1行。タップで詳細、✕で消去。
+  Widget _buildMoveAlertListRow(
+    Map<String, dynamic> alert, {
+    required VoidCallback onResolved,
+    required VoidCallback onOpenedDetail,
+  }) {
+    final info = context.alerts.info;
+    final date = (alert['date'] as Timestamp?)?.toDate() ?? DateTime.now();
+    final slotIndex = alert['slotIndex'] as int? ?? 0;
+    final docId = alert['id'] as String;
+    final matches =
+        ((alert['matches'] as List?) ?? []).cast<Map<String, dynamic>>();
+    final wlabel = ['', '月', '火', '水', '木', '金', '土', '日'][date.weekday];
+    final slot = (slotIndex >= 0 && slotIndex < _timeSlots.length)
+        ? _timeSlots[slotIndex]
+        : '';
+    final names = matches
+        .map((m) => (m['studentName'] ?? '').toString())
+        .where((s) => s.isNotEmpty)
+        .join('、');
+    return InkWell(
+      onTap: () {
+        onOpenedDetail();
+        _showMoveAlertDetail(date, slotIndex);
+      },
+      borderRadius: BorderRadius.circular(8),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+        child: Row(
+          children: [
+            Icon(Icons.swap_horiz, size: 16, color: info.icon),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    '${date.month}/${date.day}($wlabel) $slot',
+                    style: TextStyle(
+                      fontSize: AppTextSize.small,
+                      fontWeight: FontWeight.w600,
+                      color: context.colors.textPrimary,
+                    ),
+                  ),
+                  if (names.isNotEmpty)
+                    Text(
+                      names,
+                      style: TextStyle(
+                          fontSize: AppTextSize.caption,
+                          color: context.colors.textSecondary),
+                    ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            InkWell(
+              onTap: () async {
+                await _resolveMoveAlert(docId);
+                onResolved();
+              },
+              borderRadius: BorderRadius.circular(14),
+              child: Padding(
+                padding: const EdgeInsets.all(4),
+                child: Icon(Icons.close, size: 16, color: context.colors.textTertiary),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   /// ヘッダー内に表示するコンパクトな誕生日バッジ（1行表示）
@@ -4460,7 +4776,14 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
   Future<void> _moveLessonToCell(Map<String, dynamic> lesson, int newDayIndex, int newSlotIndex) async {
     final lessonId = lesson['id'] as String?;
     if (lessonId == null) return;
-    
+
+    // tombstone 用に移動元コマの情報を控える（setState で書き換わる前に取得）
+    final isEventLesson =
+        lesson['isCustomEvent'] == true || lesson['isEvent'] == true;
+    final oldDate = lesson['date'];
+    final oldSlot = lesson['slotIndex'];
+    final moveName = lesson['studentName'] as String? ?? '';
+
     try {
       final newDate = _weekStart.add(Duration(days: newDayIndex));
       final saveDate = DateTime(newDate.year, newDate.month, newDate.day, 12, 0, 0);
@@ -4503,6 +4826,16 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
         'order': newOrder,
         'updatedAt': FieldValue.serverTimestamp(),
       });
+
+      // 移動元コマを記録（一括展開で復活させない）、移動先コマの記録は解除
+      if (!isEventLesson && oldDate is DateTime && oldSlot is int) {
+        final oldKey = _lessonTombstoneId(oldDate, oldSlot, moveName);
+        final newKey = _lessonTombstoneId(saveDate, newSlotIndex, moveName);
+        if (oldKey != newKey) {
+          await _addLessonTombstone(oldDate, oldSlot, moveName);
+        }
+        await _clearLessonTombstone(saveDate, newSlotIndex, moveName);
+      }
     } catch (e) {
       debugPrint('Error moving lesson: $e');
       // エラー時はデータを再読み込み
@@ -4521,11 +4854,13 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
     final hasNote = note.isNotEmpty;
     final isCustomEvent = lesson['isCustomEvent'] == true;
 
-    // 文字色（通常の場合は黒、イベントはオレンジ）
-    final textColor = (course == '通常' || isCustomEvent) ? context.colors.textPrimary : color;
+    // 文字色（通常は既定色、イベントも既定色。ただし体験はカテゴリ色で色付け）
+    final textColor = (course == '通常' || (isCustomEvent && course != '体験'))
+        ? context.colors.textPrimary
+        : color;
 
     // 頭文字を取得（通常の場合は空文字、イベントも空文字）
-    final courseInitial = (!isCustomEvent && course != '通常' && course.isNotEmpty)
+    final courseInitial = ((!isCustomEvent || course == '体験') && course != '通常' && course.isNotEmpty)
         ? '(${course.substring(0, 1)})'
         : '';
 
@@ -4852,8 +5187,10 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
     final hasNote = note.isNotEmpty;
     final isCustomEvent = lesson['isCustomEvent'] == true;
 
-    final textColor = (course == '通常' || isCustomEvent) ? context.colors.textPrimary : color;
-    final courseInitial = (!isCustomEvent && course != '通常' && course.isNotEmpty)
+    final textColor = (course == '通常' || (isCustomEvent && course != '体験'))
+        ? context.colors.textPrimary
+        : color;
+    final courseInitial = ((!isCustomEvent || course == '体験') && course != '通常' && course.isNotEmpty)
         ? '(${course.substring(0, 1)})'
         : '';
 
@@ -5303,6 +5640,13 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
     final draggedId = draggedLesson['id'] as String?;
     if (draggedId == null) return;
 
+    // tombstone 用に移動元コマの情報を控える（setState で書き換わる前に取得）
+    final isEventLesson = draggedLesson['isCustomEvent'] == true ||
+        draggedLesson['isEvent'] == true;
+    final oldDate = draggedLesson['date'];
+    final oldSlot = draggedLesson['slotIndex'];
+    final moveName = draggedLesson['studentName'] as String? ?? '';
+
     // 新しいorder値を計算
     int newOrder;
     if (cellLessons.isEmpty) {
@@ -5353,6 +5697,16 @@ void _showEditCellMemoDialog(DateTime date, int slotIndex, Map<String, dynamic> 
         'order': newOrder,
         'updatedAt': FieldValue.serverTimestamp(),
       });
+
+      // 移動元コマを記録（一括展開で復活させない）、移動先コマの記録は解除
+      if (!isEventLesson && oldDate is DateTime && oldSlot is int) {
+        final oldKey = _lessonTombstoneId(oldDate, oldSlot, moveName);
+        final newKey = _lessonTombstoneId(saveDate, slotIndex, moveName);
+        if (oldKey != newKey) {
+          await _addLessonTombstone(oldDate, oldSlot, moveName);
+        }
+        await _clearLessonTombstone(saveDate, slotIndex, moveName);
+      }
     } catch (e) {
       debugPrint('Error reordering lesson: $e');
       await _loadLessonsForWeek();
@@ -6708,17 +7062,19 @@ final lessonData = {
                                   
                                   await FirebaseFirestore.instance.collection('plus_lessons').add(lessonData);
 
-                                  // HUG連携（欠席系の場合）
-                                  final pending = _pendingAbsenceData;
-                                  if (pending != null && pending['studentName'] == studentName) {
-                                    _sendAbsenceToHug(
-                                      studentName: studentName,
-                                      absenceDate: pending['absenceDate'] as DateTime,
-                                      category: pending['category'] as String,
-                                      content: pending['content'] as String,
-                                    );
-                                    _pendingAbsenceData = null;
+                                  // 手動で同じコマに生徒レッスンを追加し直したら、
+                                  // 削除済み記録（tombstone）を解除して展開対象に戻す
+                                  if (inputMode == 'student' && title.trim().isNotEmpty) {
+                                    await _clearLessonTombstone(date, slotIndex, title);
                                   }
+
+                                  // HUG連携（欠席系）。送信はダイアログを閉じた後に await する
+                                  // （HUG通信が遅いためダイアログを固めない。結果はトースト＋永続バナーで表示）。
+                                  final pendingAbsence = (_pendingAbsenceData != null &&
+                                          _pendingAbsenceData!['studentName'] == studentName)
+                                      ? _pendingAbsenceData
+                                      : null;
+                                  _pendingAbsenceData = null;
 
                                   // 生徒メモを保存（生徒モードの場合のみ）
                                   if (inputMode == 'student' && title.isNotEmpty) {
@@ -6735,6 +7091,16 @@ final lessonData = {
 await _loadLessonsForWeek(showLoading: false);
                                   if (mounted) {
                                     AppFeedback.success(context, '追加しました');
+                                  }
+
+                                  // ダイアログを閉じた後にHUG送信を await（成否はトースト＋永続バナーで表示）
+                                  if (pendingAbsence != null) {
+                                    await _sendAbsenceToHug(
+                                      studentName: studentName,
+                                      absenceDate: pendingAbsence['absenceDate'] as DateTime,
+                                      category: pendingAbsence['category'] as String,
+                                      content: pendingAbsence['content'] as String,
+                                    );
                                   }
 
                                   // 欠席で空いたコマに移動希望者がいないか突合
@@ -7774,6 +8140,13 @@ InkWell(
                                 'course': selectedCourse,
                                 'updatedAt': FieldValue.serverTimestamp(),
                               };
+                              // 週表示でコースを個別変更した場合は courseManual を立て、
+                              // 定期スケジュール展開でテンプレートのコースに上書きされないよう保護する。
+                              final originalCourse =
+                                  (lesson['course'] as String?)?.trim() ?? '通常';
+                              if (selectedCourse.trim() != originalCourse) {
+                                updateData['courseManual'] = true;
+                              }
                               // カスタムイベントの場合はタイトルも更新
                               if (isCustomEvent) {
                                 updateData['studentName'] = titleController.text.trim();
@@ -7783,17 +8156,13 @@ InkWell(
                                   .doc(lessonId)
                                   .update(updateData);
 
-                              // HUG連携（欠席系の場合）
-                              final pending = _pendingAbsenceData;
-                              if (pending != null && pending['studentName'] == studentName) {
-                                _sendAbsenceToHug(
-                                  studentName: studentName,
-                                  absenceDate: pending['absenceDate'] as DateTime,
-                                  category: pending['category'] as String,
-                                  content: pending['content'] as String,
-                                );
-                                _pendingAbsenceData = null;
-                              }
+                              // HUG連携（欠席系）。送信はダイアログを閉じた後に await する
+                              // （HUG通信が遅いためダイアログを固めない。結果はトースト＋永続バナーで表示）。
+                              final pendingAbsence = (_pendingAbsenceData != null &&
+                                      _pendingAbsenceData!['studentName'] == studentName)
+                                  ? _pendingAbsenceData
+                                  : null;
+                              _pendingAbsenceData = null;
 
                               // 生徒メモを保存（生徒モードの場合のみ）
                               if (!isCustomEvent && studentName.isNotEmpty) {
@@ -7822,6 +8191,16 @@ await _loadLessonsForWeek(showLoading: false);
 
                               if (mounted) {
                                 AppFeedback.success(context, '保存しました');
+                              }
+
+                              // ダイアログを閉じた後にHUG送信を await（成否はトースト＋永続バナーで表示）
+                              if (pendingAbsence != null) {
+                                await _sendAbsenceToHug(
+                                  studentName: studentName,
+                                  absenceDate: pendingAbsence['absenceDate'] as DateTime,
+                                  category: pendingAbsence['category'] as String,
+                                  content: pendingAbsence['content'] as String,
+                                );
                               }
 
                               // 欠席で空いたコマに移動希望者がいないか突合
@@ -8260,25 +8639,32 @@ await _loadLessonsForWeek(showLoading: false);
           AppFeedback.success(context, '$studentName さんの$categoryをHUGに送信しました');
         }
       } else {
+        // 失敗時はドキュメントを削除しない。Cloud Function 側で syncStatus='failed' が
+        // 付与され、リスナー経由で永続バナーに出る＋18時の自動同期で再試行される。
         final errs = (resultData['errors'] as List?)?.cast<Map<String, dynamic>>() ?? [];
         final errorMsg = errs.isNotEmpty ? (errs.first['error'] ?? '不明なエラー') : '不明なエラー';
-        await FirebaseFirestore.instance
-            .collection('saved_ai_contents')
-            .doc(tempDocId)
-            .delete()
-            .catchError((_) {});
-        _addFailedAbsenceBanner(payload, errorMsg.toString());
+        await _markHugSyncFailed(tempDocId, errorMsg.toString());
+        if (mounted) AppFeedback.error(context, 'HUG送信に失敗しました: $errorMsg');
       }
     } catch (e) {
+      // 関数呼び出し自体が失敗（通信/タイムアウト）。ドキュメントを残し failed マークを付ける。
       if (tempDocId != null) {
-        await FirebaseFirestore.instance
-            .collection('saved_ai_contents')
-            .doc(tempDocId)
-            .delete()
-            .catchError((_) {});
+        await _markHugSyncFailed(tempDocId, e.toString());
       }
-      _addFailedAbsenceBanner(payload, e.toString());
+      if (mounted) AppFeedback.error(context, 'HUG送信に失敗しました: $e');
     }
+  }
+
+  // 失敗ドキュメントを削除せず failed マークを付ける（永続バナー＋cron 再試行のため）。
+  Future<void> _markHugSyncFailed(String docId, String error) async {
+    await FirebaseFirestore.instance
+        .collection('saved_ai_contents')
+        .doc(docId)
+        .update({
+      'syncStatus': 'failed',
+      'lastError': error,
+      'lastTriedAt': FieldValue.serverTimestamp(),
+    }).catchError((_) {});
   }
 
   /// コマ開始時刻（'15:30'）に1時間足して退室時刻（'16:30'）を返す。
@@ -8384,63 +8770,47 @@ await _loadLessonsForWeek(showLoading: false);
       } else {
         final errs = (resultData['errors'] as List?)?.cast<Map<String, dynamic>>() ?? [];
         final errorMsg = errs.isNotEmpty ? (errs.first['error'] ?? '不明なエラー') : '不明なエラー';
-        await FirebaseFirestore.instance
-            .collection('saved_ai_contents')
-            .doc(tempDocId)
-            .delete()
-            .catchError((_) {});
-        _addFailedAbsenceBanner(payload, errorMsg.toString());
+        await _markHugSyncFailed(tempDocId, errorMsg.toString());
+        if (mounted) AppFeedback.error(context, 'HUG送信に失敗しました: $errorMsg');
       }
     } catch (e) {
       if (tempDocId != null) {
-        await FirebaseFirestore.instance
-            .collection('saved_ai_contents')
-            .doc(tempDocId)
-            .delete()
-            .catchError((_) {});
+        await _markHugSyncFailed(tempDocId, e.toString());
       }
-      _addFailedAbsenceBanner(payload, e.toString());
+      if (mounted) AppFeedback.error(context, 'HUG送信に失敗しました: $e');
     }
   }
 
-  void _addFailedAbsenceBanner(Map<String, dynamic> payload, String error) {
-    if (!mounted) return;
-    setState(() {
-      _failedAbsenceSends.add({
-        ...payload,
-        'error': error,
-      });
-    });
-    AppFeedback.error(context, 'HUG送信に失敗しました: $error');
-  }
-
-  Future<void> _retryFailedAbsence(int index) async {
-    if (index < 0 || index >= _failedAbsenceSends.length) return;
-    final item = Map<String, dynamic>.from(_failedAbsenceSends[index]);
-    item.remove('error');
-    setState(() => _failedAbsenceSends.removeAt(index));
-    final dateTs = item['date'] as Timestamp?;
-    final date = dateTs?.toDate() ?? DateTime.now();
-    if ((item['category'] as String?) == '出席') {
-      await _sendAttendanceToHug(
-        studentName: item['studentName'] as String? ?? '',
-        date: date,
-        startTime: item['startTime'] as String? ?? '',
-        endTime: item['endTime'] as String? ?? '',
-      );
-      return;
+  // 残っている失敗ドキュメント（syncStatus='failed'）を docId 指定で再送する。
+  // 成功すれば Cloud Function がドキュメントを削除 → リスナーがバナーから自動除去。
+  // 失敗すれば再度 failed マークが付き、バナーに残る。
+  Future<void> _retryFailedHugSync(String docId) async {
+    try {
+      final callable = FirebaseFunctions.instanceFor(region: 'asia-northeast1')
+          .httpsCallable('syncToHug');
+      final result = await callable.call({'contentIds': [docId]});
+      final resultData = result.data as Map<String, dynamic>;
+      final successCount = resultData['successCount'] ?? 0;
+      if (!mounted) return;
+      if (successCount > 0) {
+        AppFeedback.success(context, 'HUGに再送しました');
+      } else {
+        final errs = (resultData['errors'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+        final errorMsg = errs.isNotEmpty ? (errs.first['error'] ?? '不明なエラー') : '不明なエラー';
+        AppFeedback.error(context, '再送に失敗しました: $errorMsg');
+      }
+    } catch (e) {
+      if (mounted) AppFeedback.error(context, '再送エラー: $e');
     }
-    await _sendAbsenceToHug(
-      studentName: item['studentName'] as String? ?? '',
-      absenceDate: date,
-      category: item['category'] as String? ?? '欠席連絡',
-      content: item['content'] as String? ?? '',
-    );
   }
 
-  void _discardFailedAbsence(int index) {
-    if (index < 0 || index >= _failedAbsenceSends.length) return;
-    setState(() => _failedAbsenceSends.removeAt(index));
+  // バナーから破棄＝ドキュメントを削除（cron でも再試行されなくなる）。
+  Future<void> _discardFailedHugSync(String docId) async {
+    await FirebaseFirestore.instance
+        .collection('saved_ai_contents')
+        .doc(docId)
+        .delete()
+        .catchError((_) {});
   }
 
   Widget _buildAbsenceFailedBanner() {
@@ -8460,9 +8830,8 @@ await _loadLessonsForWeek(showLoading: false);
                   style: TextStyle(fontSize: AppTextSize.small, fontWeight: FontWeight.w600, color: AppColors.errorBorder)),
             ],
           ),
-          ..._failedAbsenceSends.asMap().entries.map((entry) {
-            final i = entry.key;
-            final item = entry.value;
+          ..._failedAbsenceSends.map((item) {
+            final docId = item['docId'] as String? ?? '';
             final category = item['category'] as String? ?? '';
             final student = item['studentName'] as String? ?? '';
             return Padding(
@@ -8477,7 +8846,7 @@ await _loadLessonsForWeek(showLoading: false);
                     ),
                   ),
                   TextButton(
-                    onPressed: () => _retryFailedAbsence(i),
+                    onPressed: docId.isEmpty ? null : () => _retryFailedHugSync(docId),
                     style: TextButton.styleFrom(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                       minimumSize: Size.zero,
@@ -8486,7 +8855,7 @@ await _loadLessonsForWeek(showLoading: false);
                     child: const Text('再送', style: TextStyle(fontSize: AppTextSize.caption)),
                   ),
                   TextButton(
-                    onPressed: () => _discardFailedAbsence(i),
+                    onPressed: docId.isEmpty ? null : () => _discardFailedHugSync(docId),
                     style: TextButton.styleFrom(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                       minimumSize: Size.zero,
@@ -8890,6 +9259,13 @@ void _showColorPickerDialog(String course, Color currentColor, Function(Color) o
               Navigator.pop(dialogContext);
               if (!mounted) return;
 
+              // tombstone 用に削除コマの情報を控える（生徒レッスンのみ）。
+              final isEventLesson =
+                  lesson['isCustomEvent'] == true || lesson['isEvent'] == true;
+              final delDate = lesson['date'];
+              final delSlot = lesson['slotIndex'];
+              final delName = lesson['studentName'] as String? ?? '';
+
               try {
                 await UndoService.deleteDoc(
                   context: context,
@@ -8899,11 +9275,19 @@ void _showColorPickerDialog(String course, Color currentColor, Function(Color) o
                       .collection('plus_lessons')
                       .doc(lessonId),
                   postDelete: () async {
+                    // 削除で空けたコマを記録 → 一括展開で復活させない
+                    if (!isEventLesson && delDate is DateTime && delSlot is int) {
+                      await _addLessonTombstone(delDate, delSlot, delName);
+                    }
                     if (!mounted) return;
                     await _loadLessonsForWeek(showLoading: false);
                     if (_viewMode == 2) await _loadLessonsForMonth();
                   },
                   postRestore: () async {
+                    // Undo で戻したら記録を解除
+                    if (!isEventLesson && delDate is DateTime && delSlot is int) {
+                      await _clearLessonTombstone(delDate, delSlot, delName);
+                    }
                     if (!mounted) return;
                     await _loadLessonsForWeek(showLoading: false);
                     if (_viewMode == 2) await _loadLessonsForMonth();
