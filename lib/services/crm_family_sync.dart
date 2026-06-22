@@ -74,6 +74,10 @@ class CrmFamilySync {
       'withdrawReason': lead['withdrawReason'],
       'withdrawDetail': lead['withdrawDetail'],
       'memo': lead['memo'],
+      'nextActionAt': lead['nextActionAt'],
+      'nextActionNote': lead['nextActionNote'],
+      'nextActionType': lead['nextActionType'],
+      'activities': lead['activities'],
       'sourceLeadId': leadId,
     };
     fields.removeWhere((k, v) => v == null);

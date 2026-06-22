@@ -37,7 +37,8 @@ class AbsenceRecordDialog extends StatefulWidget {
 
 class _AbsenceRecordDialogState extends State<AbsenceRecordDialog> {
   DateTime? _contactDate; // 欠席の連絡のあった日
-  final _callerController = TextEditingController(); // 誰が電話してきたか
+  final _contactMethodController = TextEditingController(); // 連絡手段
+  final _callerController = TextEditingController(); // 連絡者氏名
   String? _responder; // 連絡を受けた対応者（プラススタッフ）
   final _reasonController = TextEditingController(); // 欠席の理由
   final _conditionController = TextEditingController(); // 当日のご本人の様子
@@ -50,6 +51,7 @@ class _AbsenceRecordDialogState extends State<AbsenceRecordDialog> {
   static const String _defaultSupportText =
       '安静に過ごしていただくよう助言した。\n受診した際は結果報告いただけるよう依頼した。\n次回利用日を確認した。';
 
+  static const List<String> _contactMethodOptions = ['電話', 'メール', 'その他'];
   static const List<String> _callerOptions = ['母', '父'];
   static const List<String> _reasonOptions = ['発熱', '怪我', '家庭都合'];
 
@@ -63,6 +65,7 @@ class _AbsenceRecordDialogState extends State<AbsenceRecordDialog> {
 
   @override
   void dispose() {
+    _contactMethodController.dispose();
     _callerController.dispose();
     _reasonController.dispose();
     _conditionController.dispose();
@@ -120,8 +123,12 @@ class _AbsenceRecordDialogState extends State<AbsenceRecordDialog> {
     b.writeln('【欠席の連絡のあった日】');
     b.writeln(_contactDate != null ? df.format(_contactDate!) : '');
     b.writeln();
+    final method = _contactMethodController.text.trim();
+    b.writeln('【連絡手段】');
+    b.writeln(method);
+    b.writeln();
     final caller = _callerController.text.trim();
-    b.writeln('【誰が電話してきたか】');
+    b.writeln('【連絡者氏名】');
     b.writeln(caller.isNotEmpty ? '$callerより連絡あり。' : '');
     b.writeln();
     b.writeln('【連絡を受けた対応者】');
@@ -200,7 +207,15 @@ class _AbsenceRecordDialogState extends State<AbsenceRecordDialog> {
                     ),
                     const SizedBox(height: 12),
                     _chipsWithTextField(
-                      label: '誰が電話してきたか',
+                      label: '連絡手段',
+                      options: _contactMethodOptions,
+                      controller: _contactMethodController,
+                      hint: '',
+                      showTextField: false,
+                    ),
+                    const SizedBox(height: 12),
+                    _chipsWithTextField(
+                      label: '連絡者氏名',
                       options: _callerOptions,
                       controller: _callerController,
                       hint: '',

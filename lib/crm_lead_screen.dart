@@ -188,6 +188,24 @@ class _CrmLeadScreenState extends State<CrmLeadScreen> {
         foregroundColor: context.colors.textPrimary,
         automaticallyImplyLeading: false,
         actions: [
+          // 電話問い合わせの一次受け（intake 回収前のメモ置き場）。
+          // 電話番号/メールが後日 intake と自動マージされる前提の軽量フォーム。
+          if (_viewMode != 2)
+            Padding(
+              padding: const EdgeInsets.only(right: 8, top: 8, bottom: 8),
+              child: OutlinedButton.icon(
+                onPressed: _openQuickPhoneLead,
+                icon: const Icon(Icons.phone_in_talk, size: 16),
+                label: const Text('電話問い合わせ'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.primary,
+                  side: BorderSide(color: AppColors.primary),
+                  padding: const EdgeInsets.symmetric(horizontal: 14),
+                  textStyle: const TextStyle(
+                      fontSize: AppTextSize.small, fontWeight: FontWeight.bold),
+                ),
+              ),
+            ),
           // CSV インポート / 再読込はあまり使わないため、より頻度の高い「新規リード」を
           // 配置。CSV は管理タブのデータメンテナンスから。再読込はブラウザリロードで代替。
           if (_viewMode != 2)
@@ -262,6 +280,13 @@ class _CrmLeadScreenState extends State<CrmLeadScreen> {
     await Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => const CrmLeadEditScreen()),
+    );
+  }
+
+  Future<void> _openQuickPhoneLead() async {
+    await showDialog(
+      context: context,
+      builder: (_) => const _QuickPhoneLeadDialog(),
     );
   }
 
@@ -4181,6 +4206,279 @@ class _PhaseStepper extends StatelessWidget {
             ],
           );
         }),
+      ),
+    );
+  }
+}
+
+// ============================================================
+// 電話問い合わせ クイック登録
+// ------------------------------------------------------------
+// 電話で一次受けした時点の最小情報＋通話メモを記録する軽量フォーム。
+// 電話番号/メールは数字正規化して保存するため、後日 intake フォームが
+// 同じ番号で送信されると Cloud Function 側で自動マージされ、ここで書いた
+// 通話メモ・対応履歴はそのまま保持される。
+// ============================================================
+class _QuickPhoneLeadDialog extends StatefulWidget {
+  const _QuickPhoneLeadDialog();
+
+  @override
+  State<_QuickPhoneLeadDialog> createState() => _QuickPhoneLeadDialogState();
+}
+
+class _QuickPhoneLeadDialogState extends State<_QuickPhoneLeadDialog> {
+  final _parentLastNameCtrl = TextEditingController();
+  final _parentFirstNameCtrl = TextEditingController();
+  final _telCtrl = TextEditingController();
+  final _emailCtrl = TextEditingController();
+  final _childLastNameCtrl = TextEditingController();
+  final _childFirstNameCtrl = TextEditingController();
+  final _gradeCtrl = TextEditingController();
+  final _memoCtrl = TextEditingController();
+
+  // 児童の姓をユーザーが手入力したか（保護者の姓から自動反映するため）
+  bool _childLastNameTouched = false;
+  bool _saving = false;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _parentLastNameCtrl.addListener(_syncChildLastName);
+  }
+
+  void _syncChildLastName() {
+    if (_childLastNameTouched) return;
+    if (_childLastNameCtrl.text != _parentLastNameCtrl.text) {
+      _childLastNameCtrl.text = _parentLastNameCtrl.text;
+    }
+  }
+
+  @override
+  void dispose() {
+    for (final c in [
+      _parentLastNameCtrl,
+      _parentFirstNameCtrl,
+      _telCtrl,
+      _emailCtrl,
+      _childLastNameCtrl,
+      _childFirstNameCtrl,
+      _gradeCtrl,
+      _memoCtrl,
+    ]) {
+      c.dispose();
+    }
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    final tel = _telCtrl.text.replaceAll(RegExp(r'\D'), ''); // 数字のみ（intakeと突合可能に）
+    final email = _emailCtrl.text.trim().toLowerCase();
+    if (tel.isEmpty && email.isEmpty) {
+      setState(() => _error = '電話番号またはメールのどちらかを入力してください');
+      return;
+    }
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
+
+    final user = FirebaseAuth.instance.currentUser;
+    String authorName = '';
+    if (user != null) {
+      try {
+        final s = await FirebaseFirestore.instance
+            .collection('staffs')
+            .where('uid', isEqualTo: user.uid)
+            .limit(1)
+            .get();
+        if (s.docs.isNotEmpty) authorName = s.docs.first.data()['name'] ?? '';
+      } catch (_) {}
+    }
+
+    final now = Timestamp.now();
+    final memo = _memoCtrl.text.trim();
+    // 通話メモは対応履歴(activities)に残すことで intake マージ後も確実に保持される。
+    final activity = {
+      'id': DateTime.now().millisecondsSinceEpoch.toString(),
+      'type': 'tel',
+      'body': memo.isEmpty ? '電話問い合わせを受付' : memo,
+      'at': now,
+      'authorId': user?.uid ?? '',
+      'authorName': authorName,
+    };
+    // 回収待ちの期限（surveyDelayDays = 7日）。これを過ぎると督促タブに浮上。
+    final nextActionAt =
+        Timestamp.fromDate(DateTime.now().add(const Duration(days: 7)));
+
+    final data = <String, dynamic>{
+      'stage': 'considering',
+      'source': 'other',
+      'parentLastName': _parentLastNameCtrl.text.trim(),
+      'parentFirstName': _parentFirstNameCtrl.text.trim(),
+      'parentTel': tel,
+      'parentEmail': email,
+      'childLastName': _childLastNameCtrl.text.trim(),
+      'childFirstName': _childFirstNameCtrl.text.trim(),
+      'grade': _gradeCtrl.text.trim(),
+      'memo': memo,
+      'inquiredAt': now,
+      'firstContactedAt': now,
+      'nextActionAt': nextActionAt,
+      'nextActionNote': 'アンケート回収待ち',
+      'lastActivityAt': now,
+      'activities': [activity],
+      'createdAt': now,
+      'createdBy': user?.uid ?? '',
+    };
+
+    try {
+      final leadId = 'lead_${DateTime.now().millisecondsSinceEpoch}';
+      await CrmFamilySync.upsertLead(leadId: leadId, leadData: data);
+      if (mounted) {
+        AppFeedback.success(context, '電話問い合わせを登録しました');
+        Navigator.pop(context);
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = '保存失敗: $e';
+          _saving = false;
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return Dialog(
+      backgroundColor: c.cardBg,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 460),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.phone_in_talk, color: AppColors.primary, size: 20),
+                  const SizedBox(width: 8),
+                  Text('電話問い合わせ',
+                      style: TextStyle(
+                          fontSize: AppTextSize.bodyLarge,
+                          fontWeight: FontWeight.bold,
+                          color: c.textPrimary)),
+                  const Spacer(),
+                  IconButton(
+                    icon: Icon(Icons.close, size: 20, color: c.textTertiary),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 2),
+              Text(
+                  'わかる範囲でOK。電話番号かメールを入れておくと、後日アンケート（intake）が届いた時に自動でこのリードに合体します。',
+                  style: TextStyle(
+                      fontSize: AppTextSize.xs, color: c.textTertiary)),
+              const SizedBox(height: 16),
+              _qLabel('保護者名'),
+              Row(children: [
+                Expanded(child: _qField(_parentLastNameCtrl, hint: '姓')),
+                const SizedBox(width: 8),
+                Expanded(child: _qField(_parentFirstNameCtrl, hint: '名')),
+              ]),
+              const SizedBox(height: 12),
+              _qLabel('電話番号'),
+              _qField(_telCtrl,
+                  hint: '09000000000', keyboard: TextInputType.phone),
+              const SizedBox(height: 12),
+              _qLabel('メール（任意）'),
+              _qField(_emailCtrl,
+                  hint: 'example@example.com',
+                  keyboard: TextInputType.emailAddress),
+              const SizedBox(height: 12),
+              _qLabel('お子さま名（任意）'),
+              Row(children: [
+                Expanded(
+                    child: _qField(_childLastNameCtrl,
+                        hint: '姓',
+                        onChanged: (_) => _childLastNameTouched = true)),
+                const SizedBox(width: 8),
+                Expanded(child: _qField(_childFirstNameCtrl, hint: '名')),
+              ]),
+              const SizedBox(height: 12),
+              _qLabel('学年・年齢（任意）'),
+              _qField(_gradeCtrl, hint: '例: 年中、小1、4歳'),
+              const SizedBox(height: 12),
+              _qLabel('通話メモ'),
+              _qField(_memoCtrl,
+                  hint: '例: 育休明けで平日15:30希望。受給者証はまだ。', maxLines: 4),
+              if (_error != null) ...[
+                const SizedBox(height: 12),
+                Text(_error!,
+                    style: TextStyle(
+                        fontSize: AppTextSize.small,
+                        color: context.alerts.urgent.text)),
+              ],
+              const SizedBox(height: 20),
+              FilledButton(
+                style: FilledButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  padding: const EdgeInsets.symmetric(vertical: 13),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8)),
+                ),
+                onPressed: _saving ? null : _save,
+                child: _saving
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: Colors.white))
+                    : const Text('登録する',
+                        style: TextStyle(
+                            fontSize: AppTextSize.bodyMd,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white)),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _qLabel(String text) => Padding(
+        padding: const EdgeInsets.only(bottom: 5),
+        child: Text(text,
+            style: TextStyle(
+                fontSize: AppTextSize.small,
+                fontWeight: FontWeight.w600,
+                color: context.colors.textSecondary)),
+      );
+
+  Widget _qField(TextEditingController ctrl,
+      {String? hint,
+      int maxLines = 1,
+      TextInputType? keyboard,
+      void Function(String)? onChanged}) {
+    return TextField(
+      controller: ctrl,
+      keyboardType: keyboard,
+      maxLines: maxLines,
+      onChanged: onChanged,
+      style: TextStyle(
+          fontSize: AppTextSize.body, color: context.colors.textPrimary),
+      decoration: InputDecoration(
+        hintText: hint,
+        border: const OutlineInputBorder(),
+        isDense: true,
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       ),
     );
   }

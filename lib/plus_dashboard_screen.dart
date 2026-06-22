@@ -55,7 +55,7 @@ class _PlusDashboardContentState extends State<PlusDashboardContent> {
     '就学支援': AppColors.secondary,
     '放デイ': AppColors.primary,
     '契約': AppColors.accent,
-    '体験': AppColors.success,
+    '体験': AppColors.lavender,
     '欠席': AppColors.error, // 旧データ互換用
     '欠席（加算あり）': AppColors.error,
     '策定会議': AppColors.aiAccent,

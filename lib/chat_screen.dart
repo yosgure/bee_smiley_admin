@@ -23,6 +23,7 @@ import 'pdf_preview_stub.dart' if (dart.library.js_interop) 'pdf_preview_web.dar
 import 'package:video_player/video_player.dart';
 import 'app_theme.dart';
 import 'widgets/app_feedback.dart';
+import 'widgets/reply_quote.dart';
 import 'notification_service.dart';
 import 'classroom_utils.dart';
 import 'utils/recent_emojis.dart';
@@ -1201,6 +1202,9 @@ class _ChatDetailViewState extends State<ChatDetailView> {
   bool _isUploading = false;
   bool _isDraggingOver = false;
   bool _sendOnEnter = false; // false: Shift+Enter で送信、true: Enter で送信
+  // 入力中は + / 絵文字ボタンを畳む（Messenger 風）。テキストが空に戻ると自動で展開。
+  bool _hasText = false;
+  bool _actionsExpanded = false; // 入力中にユーザーが「>」で再展開した状態
   Timer? _draftSaveTimer;
   String get _draftKey => 'chat_draft_${widget.roomId}';
 
@@ -1277,7 +1281,16 @@ class _ChatDetailViewState extends State<ChatDetailView> {
       _scheduleDraftSave();
       // @メンション検知（グループチャットのみ）
       if (widget.isGroup) _checkMention();
+      // 入力有無で + / 絵文字ボタンの折りたたみを切り替え
+      final has = _textController.text.isNotEmpty;
+      if (has != _hasText) {
+        setState(() {
+          _hasText = has;
+          if (!has) _actionsExpanded = false; // 空に戻ったら自動で再折りたたみ
+        });
+      }
     });
+    _hasText = _textController.text.isNotEmpty;
   }
 
   Future<void> _loadSendOnEnter() async {
@@ -1673,20 +1686,8 @@ class _ChatDetailViewState extends State<ChatDetailView> {
             Row(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-            IconButton(
-              icon: Icon(Icons.add_circle_outline, color: _isUploading ? context.colors.borderMedium : context.colors.textSecondary, size: 24),
-              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-              padding: EdgeInsets.zero,
-              tooltip: '添付',
-              onPressed: _isUploading ? null : _showAttachmentMenu,
-            ),
-            IconButton(
-              icon: Icon(Icons.emoji_emotions_outlined, color: context.colors.textSecondary, size: 24),
-              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-              padding: EdgeInsets.zero,
-              tooltip: 'スタンプ',
-              onPressed: _showStampPickerForSend,
-            ),
+            // 入力中（テキストあり & 未展開）は + / 絵文字を畳み、「>」で再展開できる。
+            ..._buildInputActions(),
             const SizedBox(width: 4),
             Expanded(
               // 長文入力時に TextField が無限に伸びて送信ボタンをキーボード外に押し出すのを防ぐ。
@@ -1702,7 +1703,7 @@ class _ChatDetailViewState extends State<ChatDetailView> {
                   child: TextField(
                     controller: _textController, focusNode: _focusNode, maxLines: null, minLines: 1, keyboardType: TextInputType.multiline,
                     style: TextStyle(fontSize: AppTextSize.bodyLarge, height: 1.5, fontFamily: 'NotoSansJP', fontFamilyFallback: ['Hiragino Sans', 'Roboto', 'sans-serif']),
-                    decoration: InputDecoration(hintText: 'メッセージを入力', filled: true, fillColor: context.colors.chipBg, border: OutlineInputBorder(borderRadius: BorderRadius.circular(20), borderSide: BorderSide.none), contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6), isDense: true),
+                    decoration: InputDecoration(hintText: 'メッセージを入力', filled: true, fillColor: context.colors.chipBg, border: OutlineInputBorder(borderRadius: BorderRadius.circular(20), borderSide: BorderSide.none), contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10), isDense: true),
                     contextMenuBuilder: (ctx, editableTextState) => AdaptiveTextSelectionToolbar.editableText(
                       editableTextState: editableTextState,
                     ),
@@ -1711,16 +1712,51 @@ class _ChatDetailViewState extends State<ChatDetailView> {
               ),
             ),
             const SizedBox(width: 8),
-            Padding(
-              padding: const EdgeInsets.only(bottom: 2),
-              child: GestureDetector(onTap: _sendMessage, child: Container(width: 40, height: 40, decoration: const BoxDecoration(color: AppColors.primary, shape: BoxShape.circle), child: const Icon(Icons.send, color: Colors.white, size: 20))),
-            ),
+            GestureDetector(onTap: _sendMessage, child: Container(width: 40, height: 40, decoration: const BoxDecoration(color: AppColors.primary, shape: BoxShape.circle), child: const Icon(Icons.send, color: Colors.white, size: 20))),
           ],
         ),
           ],
         ),
       ),
     );
+  }
+
+  // 入力欄の先頭アクション（+ / 絵文字）。入力中は畳んで「>」だけ表示する。
+  List<Widget> _buildInputActions() {
+    final collapsed = _hasText && !_actionsExpanded;
+    if (collapsed) {
+      return [
+        IconButton(
+          icon: Icon(Icons.chevron_right,
+              color: context.colors.textSecondary, size: 26),
+          constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+          padding: EdgeInsets.zero,
+          tooltip: 'メニューを開く',
+          onPressed: () => setState(() => _actionsExpanded = true),
+        ),
+      ];
+    }
+    return [
+      IconButton(
+        icon: Icon(Icons.add_circle_outline,
+            color: _isUploading
+                ? context.colors.borderMedium
+                : context.colors.textSecondary,
+            size: 24),
+        constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+        padding: EdgeInsets.zero,
+        tooltip: '添付',
+        onPressed: _isUploading ? null : _showAttachmentMenu,
+      ),
+      IconButton(
+        icon: Icon(Icons.emoji_emotions_outlined,
+            color: context.colors.textSecondary, size: 24),
+        constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+        padding: EdgeInsets.zero,
+        tooltip: 'スタンプ',
+        onPressed: _showStampPickerForSend,
+      ),
+    ];
   }
 
   Widget _buildReplyPreviewBar() {
@@ -1856,39 +1892,12 @@ class _ChatDetailViewState extends State<ChatDetailView> {
     final bgColor =
         isMe ? context.colors.cardBg.withOpacity(0.5) : context.colors.cardBg.withOpacity(0.7);
     final accentColor = isMe ? AppColors.primary : context.colors.textSecondary;
-    return InkWell(
-      onTap: targetId.isEmpty ? null : () => _jumpToMessage(targetId),
-      borderRadius: BorderRadius.circular(6),
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 6),
-        padding: const EdgeInsets.fromLTRB(8, 4, 8, 5),
-        decoration: BoxDecoration(
-          color: bgColor,
-          borderRadius: BorderRadius.circular(6),
-          border: Border(left: BorderSide(color: accentColor, width: 3)),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              senderName,
-              style: TextStyle(
-                fontSize: AppTextSize.caption,
-                fontWeight: FontWeight.bold,
-                color: accentColor,
-              ),
-            ),
-            const SizedBox(height: 1),
-            Text(
-              preview,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(fontSize: AppTextSize.small, color: context.colors.textSecondary),
-            ),
-          ],
-        ),
-      ),
+    return ReplyQuote(
+      senderName: senderName,
+      preview: preview,
+      bgColor: bgColor,
+      accentColor: accentColor,
+      onJump: targetId.isEmpty ? null : () => _jumpToMessage(targetId),
     );
   }
 

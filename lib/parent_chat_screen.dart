@@ -19,6 +19,7 @@ import 'pdf_preview_stub.dart' if (dart.library.js_interop) 'pdf_preview_web.dar
 import 'package:flutter/cupertino.dart';
 import 'app_theme.dart';
 import 'widgets/app_feedback.dart';
+import 'widgets/reply_quote.dart';
 import 'chat_screen.dart' show VideoPlayerDialog;
 import 'utils/recent_emojis.dart';
 import 'widgets/emoji_stamp_picker.dart';
@@ -659,35 +660,11 @@ class _ChatMessageListState extends State<_ChatMessageList> {
     final bgColor =
         isMe ? context.colors.chatMyBubble.withOpacity(0.3) : context.colors.chipBg;
     final accentColor = isMe ? AppColors.primary : context.colors.textSecondary;
-    return Container(
-      margin: const EdgeInsets.only(bottom: 6),
-      padding: const EdgeInsets.fromLTRB(8, 4, 8, 5),
-      decoration: BoxDecoration(
-        color: bgColor,
-        borderRadius: BorderRadius.circular(6),
-        border: Border(left: BorderSide(color: accentColor, width: 3)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            senderName,
-            style: TextStyle(
-              fontSize: AppTextSize.caption,
-              fontWeight: FontWeight.bold,
-              color: accentColor,
-            ),
-          ),
-          SizedBox(height: 1),
-          Text(
-            preview,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(fontSize: AppTextSize.small, color: context.colors.textSecondary),
-          ),
-        ],
-      ),
+    return ReplyQuote(
+      senderName: senderName,
+      preview: preview,
+      bgColor: bgColor,
+      accentColor: accentColor,
     );
   }
 

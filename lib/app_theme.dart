@@ -23,6 +23,7 @@ class AppColors {
   static const Color error = Color(0xFFE53935);
   static const Color success = Color(0xFF43A047);
   static const Color info = Color(0xFF1E88E5);
+  static const Color lavender = Color(0xFFB39DDB); // 体験のアクセント（薄紫）
 
   // トーン違い（旧 Colors.red.shade100 / .shade800 等の置換先）
   // 100 系 = 淡い背景、400 系 = 罫線/アイコン、800 系 = 濃いテキスト/強調

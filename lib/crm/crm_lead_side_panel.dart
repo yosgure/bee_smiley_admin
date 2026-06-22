@@ -343,13 +343,13 @@ class _BasicInfoSectionState extends State<_BasicInfoSection> {
               context, '生年月日', lead.childBirthDate, leadRef),
           _editableGenderRow(context, '性別', lead.childGender ?? '', leadRef),
           _editableSinglelineRow(context, '園', lead.kindergarten,
-              'kindergarten', '◯◯幼稚園', leadRef),
+              'kindergarten', '例: ◯◯幼稚園', leadRef),
           _editableSinglelineRow(context, 'クラス', lead.className,
-              'className', 'ひまわり組', leadRef),
+              'className', '例: ひまわり組', leadRef),
           _editableSinglelineRow(context, '担任', lead.homeroomTeacher,
-              'homeroomTeacher', '山田先生', leadRef),
+              'homeroomTeacher', '例: 山田先生', leadRef),
           _editableSinglelineRow(context, '学年', lead.grade,
-              'grade', '年中', leadRef),
+              'grade', '例: 年中・小1', leadRef),
 
           const SizedBox(height: 8),
           Divider(height: 1, color: c.borderLight),
@@ -401,13 +401,13 @@ class _BasicInfoSectionState extends State<_BasicInfoSection> {
 
           // ── 健康・医療（アンケート由来、単層） ──
           _editableMultiline(context, 'アレルギー', lead.allergy,
-              'allergy', '食物・薬・その他', leadRef),
+              'allergy', '例: 卵・乳 / なし', leadRef),
           _editableMultiline(context, '発作', lead.severeSymptoms,
-              'severeSymptoms', 'てんかん・ひきつけ・喘息など', leadRef),
+              'severeSymptoms', '例: 熱性けいれん / なし', leadRef),
           _editableSinglelineRow(context, '病院', lead.hospitalName,
-              'hospitalName', 'かかりつけ病院名', leadRef),
+              'hospitalName', '例: ◯◯小児科', leadRef),
           _editableSinglelineRow(context, '医師名', lead.doctorName,
-              'doctorName', '担当医師名', leadRef),
+              'doctorName', '例: 山田医師', leadRef),
 
           const SizedBox(height: 8),
           Divider(height: 1, color: c.borderLight),
@@ -1251,7 +1251,8 @@ class _HistorySection extends StatelessWidget {
           : Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                for (final a in activities) _ActivityTile(activity: a),
+                for (final a in activities)
+                  _ActivityTile(activity: a, lead: lead, leadRef: leadRef),
               ],
             ),
     );
@@ -1260,7 +1261,10 @@ class _HistorySection extends StatelessWidget {
 
 class _ActivityTile extends StatelessWidget {
   final CrmActivity activity;
-  const _ActivityTile({required this.activity});
+  final CrmLead lead;
+  final LeadViewReference leadRef;
+  const _ActivityTile(
+      {required this.activity, required this.lead, required this.leadRef});
 
   @override
   Widget build(BuildContext context) {
@@ -1291,10 +1295,63 @@ class _ActivityTile extends StatelessWidget {
                       activity.body.isEmpty ? FontStyle.italic : null),
             ),
           ),
+          IconButton(
+            icon: const Icon(Icons.delete_outline, size: 16),
+            tooltip: '履歴を削除',
+            visualDensity: VisualDensity.compact,
+            constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+            padding: EdgeInsets.zero,
+            color: c.textTertiary,
+            onPressed: () => _deleteActivity(context, lead, leadRef, activity),
+          ),
         ],
       ),
     );
   }
+}
+
+/// 対応履歴の1件を削除（確認ダイアログ付き）。
+Future<void> _deleteActivity(BuildContext context, CrmLead lead,
+    LeadViewReference leadRef, CrmActivity activity) async {
+  final ok = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: const Text('履歴を削除'),
+      content: const Text('この対応履歴を削除しますか？この操作は取り消せません。'),
+      actions: [
+        TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('キャンセル')),
+        FilledButton(
+            style: FilledButton.styleFrom(
+                backgroundColor: context.alerts.urgent.text),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('削除')),
+      ],
+    ),
+  );
+  if (ok != true) return;
+  final existing = (lead.raw['activities'] as List?)?.cast<dynamic>() ?? [];
+  // id があれば id 一致で、無ければ at+body+type の一致で1件だけ除外。
+  bool removed = false;
+  final remaining = <dynamic>[];
+  for (final e in existing) {
+    if (!removed && e is Map) {
+      final m = Map<String, dynamic>.from(e);
+      final match = activity.id != null
+          ? m['id'] == activity.id
+          : (m['body'] ?? '') == activity.body &&
+              (m['type'] ?? '') == activity.type &&
+              (m['at'] as Timestamp?)?.toDate() == activity.at;
+      if (match) {
+        removed = true;
+        continue;
+      }
+    }
+    remaining.add(e);
+  }
+  await leadRef.update({'activities': remaining});
+  if (context.mounted) AppFeedback.success(context, '履歴を削除しました');
 }
 
 // ============================================================
@@ -1328,6 +1385,7 @@ class _StageAdvanceButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     final stage = lead.stage;
     String label;
     IconData icon;
@@ -1392,17 +1450,20 @@ class _StageAdvanceButton extends StatelessWidget {
             ),
           ),
         ),
-        if (hasLost)
-          PopupMenuButton<String>(
-            tooltip: 'その他',
-            icon: const Icon(Icons.more_vert, size: 18),
-            onSelected: (v) {
-              if (v == 'lost') _showLostDialog(context, lead, leadRef);
-            },
-            itemBuilder: (_) => const [
-              PopupMenuItem(value: 'lost', child: Text('失注として記録')),
-            ],
+        if (hasLost) ...[
+          const SizedBox(width: 8),
+          OutlinedButton.icon(
+            onPressed: () => _showLostDialog(context, lead, leadRef),
+            icon: const Icon(Icons.cancel_outlined, size: 16),
+            label: const Text('失注'),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: c.textSecondary,
+              side: BorderSide(color: c.borderLight),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              textStyle: const TextStyle(fontSize: AppTextSize.small),
+            ),
           ),
+        ],
       ],
     );
   }
@@ -1520,6 +1581,7 @@ Future<void> _showAddHistoryDialog(
   String type = 'tel';
   final body = TextEditingController();
   final user = FirebaseAuth.instance.currentUser;
+  DateTime at = DateTime.now();
   final ok = await showDialog<bool>(
     context: context,
     builder: (ctx) => StatefulBuilder(builder: (ctx, setS) {
@@ -1539,6 +1601,33 @@ Future<void> _showAddHistoryDialog(
                         DropdownMenuItem(value: t.id, child: Text(t.label)))
                     .toList(),
                 onChanged: (v) => setS(() => type = v ?? 'tel'),
+              ),
+              const SizedBox(height: 8),
+              // 対応日（デフォルト今日。過去日も選択可）
+              InkWell(
+                onTap: () async {
+                  final picked = await showDatePicker(
+                    context: ctx,
+                    initialDate: at,
+                    firstDate: DateTime(2020),
+                    lastDate: DateTime.now(),
+                    locale: const Locale('ja'),
+                  );
+                  if (picked != null) {
+                    setS(() => at = DateTime(
+                        picked.year, picked.month, picked.day,
+                        at.hour, at.minute));
+                  }
+                },
+                child: InputDecorator(
+                  decoration: const InputDecoration(
+                    labelText: '対応日',
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                    suffixIcon: Icon(Icons.calendar_today, size: 18),
+                  ),
+                  child: Text(DateFormat('yyyy/M/d', 'ja').format(at)),
+                ),
               ),
               const SizedBox(height: 8),
               TextField(
@@ -1568,7 +1657,7 @@ Future<void> _showAddHistoryDialog(
     'id': 'a_${DateTime.now().millisecondsSinceEpoch}',
     'type': type,
     'body': body.text.trim(),
-    'at': Timestamp.now(),
+    'at': Timestamp.fromDate(at),
     'authorId': user?.uid ?? '',
     'authorName': user?.displayName ?? '',
   };
@@ -3057,28 +3146,6 @@ class _HugInfoSectionState extends State<_HugInfoSection> {
 
           const SizedBox(height: 14),
 
-          // ─── 口座情報 ───
-          _subHeader(context, '口座情報', missing: _hasMissing(
-              ['金融機関名', '口座番号'], missing)),
-          _bankRow(context, '金融機関名', lead.bankName, 'bankName'),
-          _bankRow(context, '支店名', lead.branchName, 'branchName'),
-          _bankRow(context, '金融機関名カナ', lead.bankNameKana, 'bankNameKana',
-              hint: '例: ハグ'),
-          _bankRow(context, '支店名カナ', lead.branchNameKana, 'branchNameKana',
-              hint: '例: カナヤマシテン'),
-          _bankRow(context, '金融機関番号', lead.bankCode, 'bankCode',
-              hint: '例: 1234（半角4桁）',
-              keyboard: TextInputType.number),
-          _bankRow(context, '店舗番号', lead.branchCode, 'branchCode',
-              hint: '例: 567（半角3桁）',
-              keyboard: TextInputType.number),
-          _bankTypeRow(context),
-          _bankRow(context, '口座番号', lead.accountNumber, 'accountNumber',
-              hint: '例: 1234567（半角数字）',
-              keyboard: TextInputType.number),
-
-          const SizedBox(height: 14),
-
           // ─── 受給者証 ───
           _subHeader(context, '受給者証',
               missing: !certOk || _hasMissing(
@@ -3340,73 +3407,6 @@ class _HugInfoSectionState extends State<_HugInfoSection> {
                 await write(EmergencyContact(
                     name: ec.name, phone: ec.phone, relation: text));
               },
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// 口座情報の各フィールド（bankInfo オブジェクト下のキー）
-  Widget _bankRow(BuildContext context, String label, String value, String key,
-      {String hint = '未入力', TextInputType? keyboard}) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 3),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          _labelCol(context, label),
-          Expanded(
-            child: _InlineTextEditor(
-              key: ValueKey('hug_bank_$key'),
-              initialText: value,
-              hint: hint,
-              maxLines: 1,
-              keyboardType: keyboard,
-              onCommit: (text) async {
-                if (text == value) return;
-                await leadRef.update({'bankInfo.$key': text});
-                if (mounted) AppFeedback.success(context, '$label を保存しました');
-              },
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// 預金種目（普通 / 当座）
-  Widget _bankTypeRow(BuildContext context) {
-    const options = [('普通', '普通'), ('当座', '当座')];
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 3),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          _labelCol(context, '預金種目'),
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.only(left: 8),
-              child: Wrap(
-                spacing: 6,
-                children: [
-                  for (final o in options)
-                    ChoiceChip(
-                      label: Text(o.$2,
-                          style: const TextStyle(
-                              fontSize: AppTextSize.caption)),
-                      selected: lead.accountType == o.$1,
-                      onSelected: (s) async {
-                        if (!s) return;
-                        await leadRef
-                            .update({'bankInfo.accountType': o.$1});
-                        if (mounted) {
-                          AppFeedback.success(context, '預金種目 を保存しました');
-                        }
-                      },
-                    ),
-                ],
-              ),
             ),
           ),
         ],

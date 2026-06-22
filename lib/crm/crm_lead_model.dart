@@ -185,20 +185,6 @@ class CrmLead {
   }
   String get emergencyMemo => (raw['emergencyMemo'] as String?) ?? '';
 
-  // 口座情報
-  Map<String, dynamic> get bankInfo {
-    final m = raw['bankInfo'];
-    return (m is Map) ? Map<String, dynamic>.from(m) : const {};
-  }
-  String get bankName => (bankInfo['bankName'] as String?) ?? '';
-  String get branchName => (bankInfo['branchName'] as String?) ?? '';
-  String get bankNameKana => (bankInfo['bankNameKana'] as String?) ?? '';
-  String get branchNameKana => (bankInfo['branchNameKana'] as String?) ?? '';
-  String get bankCode => (bankInfo['bankCode'] as String?) ?? '';
-  String get branchCode => (bankInfo['branchCode'] as String?) ?? '';
-  String get accountType => (bankInfo['accountType'] as String?) ?? '';
-  String get accountNumber => (bankInfo['accountNumber'] as String?) ?? '';
-
   // 受給者証詳細
   Map<String, dynamic> get recipientCert {
     final m = raw['recipientCert'];
@@ -241,8 +227,6 @@ class CrmLead {
         emergencyContacts.first.phone.isEmpty) {
       missing.add('緊急連絡先1');
     }
-    if (bankName.isEmpty) missing.add('金融機関名');
-    if (accountNumber.isEmpty) missing.add('口座番号');
     if (certificateNumber.isEmpty) missing.add('受給者証番号');
     if (certificateStartDate == null) missing.add('受給者証利用開始日');
     if (certificateService.isEmpty) missing.add('利用サービス');

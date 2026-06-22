@@ -5,6 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'parent_chat_screen.dart';
 import 'parent_assessment_screen.dart';
+import 'parent_condition_screen.dart';
 import 'parent_notification_screen.dart';
 import 'parent_event_screen.dart';
 import 'parent_settings_screen.dart';
@@ -42,6 +43,9 @@ class _ParentMainScreenState extends State<ParentMainScreen> {
   List<Map<String, dynamic>> _children = [];
   int _selectedChildIndex = 0;
   bool _isLoading = true;
+  // ビースマイリープラス利用家庭か（plus_families に在籍）。
+  // プラス保護者にのみ「コンディション」タブを表示する。
+  bool _isPlus = false;
 
   // チャット未読監視用
   StreamSubscription<QuerySnapshot>? _chatRoomSubscription;
@@ -175,6 +179,7 @@ class _ParentMainScreenState extends State<ParentMainScreen> {
 
       // 保護者ドキュメントは families / plus_families のいずれかに存在
       QuerySnapshot? query;
+      bool isPlus = false;
       for (final coll in const ['families', 'plus_families']) {
         final q = await FirebaseFirestore.instance
             .collection(coll)
@@ -183,6 +188,7 @@ class _ParentMainScreenState extends State<ParentMainScreen> {
             .get();
         if (q.docs.isNotEmpty) {
           query = q;
+          isPlus = coll == 'plus_families';
           break;
         }
       }
@@ -194,6 +200,7 @@ class _ParentMainScreenState extends State<ParentMainScreen> {
         setState(() {
           _familyData = data;
           _children = children;
+          _isPlus = isPlus;
           _isLoading = false;
         });
       } else {
@@ -293,6 +300,55 @@ class _ParentMainScreenState extends State<ParentMainScreen> {
       ),
     ];
 
+    // プラス保護者のみ「コンディション」タブを設定の手前に挿入する。
+    // 既存タブ（0:記録 1:チャット 2:お知らせ 3:イベント）の index 依存ロジックを
+    // 壊さないよう、末尾（設定の直前）に追加する。
+    final List<BottomNavigationBarItem> navItems = [
+      BottomNavigationBarItem(
+        icon: _buildBadgedIcon(Icons.edit_note, _hasUnreadRecord),
+        label: '記録',
+      ),
+      BottomNavigationBarItem(
+        icon: _buildBadgedIcon(Icons.chat, _hasUnreadChat),
+        label: 'チャット',
+      ),
+      BottomNavigationBarItem(
+        icon: _buildBadgedIcon(Icons.notifications, _hasUnreadInfo),
+        label: 'お知らせ',
+      ),
+      BottomNavigationBarItem(
+        icon: _buildBadgedIcon(Icons.event, _hasUnreadEvent),
+        label: 'イベント',
+      ),
+      const BottomNavigationBarItem(
+        icon: Icon(Icons.settings),
+        label: '設定',
+      ),
+    ];
+
+    if (_isPlus) {
+      screens.insert(
+        4,
+        ParentConditionScreen(
+          childId: _currentChildId,
+          childName: _currentChildFirstName,
+          familyUid: _familyData?['uid'],
+          allChildren: _children,
+          selectedChildIndex: _selectedChildIndex,
+          onChildChanged: (index) {
+            setState(() => _selectedChildIndex = index);
+          },
+        ),
+      );
+      navItems.insert(
+        4,
+        const BottomNavigationBarItem(
+          icon: Icon(Icons.favorite),
+          label: 'コンディション',
+        ),
+      );
+    }
+
     return Scaffold(
       backgroundColor: context.colors.cardBg,
       body: SafeArea(
@@ -320,28 +376,7 @@ class _ParentMainScreenState extends State<ParentMainScreen> {
           unselectedItemColor: context.colors.textSecondary,
           selectedFontSize: 12,
           unselectedFontSize: 12,
-          items: [
-            BottomNavigationBarItem(
-              icon: _buildBadgedIcon(Icons.edit_note, _hasUnreadRecord),
-              label: '記録',
-            ),
-            BottomNavigationBarItem(
-              icon: _buildBadgedIcon(Icons.chat, _hasUnreadChat),
-              label: 'チャット',
-            ),
-            BottomNavigationBarItem(
-              icon: _buildBadgedIcon(Icons.notifications, _hasUnreadInfo),
-              label: 'お知らせ',
-            ),
-            BottomNavigationBarItem(
-              icon: _buildBadgedIcon(Icons.event, _hasUnreadEvent),
-              label: 'イベント',
-            ),
-            const BottomNavigationBarItem(
-              icon: Icon(Icons.settings),
-              label: '設定',
-            ),
-          ],
+          items: navItems,
         ),
       ),
     );

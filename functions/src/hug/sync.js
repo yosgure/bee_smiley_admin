@@ -7,7 +7,7 @@ const cheerio = require("cheerio");
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const { onSchedule } = require("firebase-functions/v2/scheduler");
 
-const { db, hugUsername, hugPassword } = require('../utils/setup');
+const { db, hugUsername, hugPassword, FieldValue } = require('../utils/setup');
 const {
   HUG_BASE_URL,
   hugFetch,
@@ -621,6 +621,52 @@ async function saveToAttendance(cookies, params) {
 }
 
 /**
+ * 出席表への保存。その日に児童の出席表行が無ければ「児童を追加」で行を作成してから再試行する。
+ * 出席(1)・欠席連絡(2)・加算なし(3) すべてで共通利用し、行が無いと失敗する不具合を防ぐ。
+ */
+async function saveAttendanceWithRowFallback(cookies, params, hugChildId, studentName, dateStr) {
+  try {
+    return await saveToAttendance(cookies, params);
+  } catch (e) {
+    if (!/出席レコードが|出席表が見つかりません/.test(e.message || '')) throw e;
+    // 行が無い（振替/スポット/未来日/未生成）→ HUGの「児童を追加」で行を作成してから再試行
+    console.log(`[attendance] row not found → adding child row: ${studentName} ${dateStr}`);
+    try {
+      await addAttendanceRow(cookies, { childId: hugChildId, dateStr });
+    } catch (addErr) {
+      if (/児童リストにありません/.test(addErr.message || '')) {
+        throw new Error(
+          `${studentName} さんがHUGの「児童を追加」の児童リストに見つかりません。HUG側の契約状況を確認してください。`
+        );
+      }
+      throw addErr;
+    }
+    return await saveToAttendance(cookies, params);
+  }
+}
+
+/**
+ * 同期失敗時にドキュメントへ failed マークを付ける（削除しない）。
+ * 18時の自動同期 cron による再試行と、画面の永続「未送信」一覧での表示に使う。
+ */
+async function markDocFailed(docRef, docId, message) {
+  const update = {
+    syncStatus: 'failed',
+    lastError: message,
+    lastTriedAt: FieldValue.serverTimestamp(),
+  };
+  try {
+    if (docRef && docRef.update) {
+      await docRef.update(update);
+    } else {
+      await db.collection('saved_ai_contents').doc(docId).update(update);
+    }
+  } catch (e) {
+    console.error(`[markDocFailed] ${docId} の更新に失敗:`, e.message);
+  }
+}
+
+/**
  * メイン同期処理（HTTPトリガーとスケジュールトリガーで共有）
  */
 async function syncToHugCore(contentIds = null) {
@@ -690,31 +736,14 @@ async function syncToHugCore(contentIds = null) {
           startTime: docData.startTime || '',
           endTime: docData.endTime || '',
         };
-        try {
-          let success = false;
-          try {
-            success = await saveToAttendance(cookies, attendanceParams);
-          } catch (e) {
-            if (!/出席レコードが|出席表が見つかりません/.test(e.message || '')) throw e;
-            // 行が無い → HUGの「児童を追加」で行を作成してから再試行
-            console.log(`[attendance:present] row not found → adding child row: ${studentName} ${dateStr}`);
-            await addAttendanceRow(cookies, { childId: hugChildId, dateStr });
-            success = await saveToAttendance(cookies, attendanceParams);
-          }
-          if (success) {
-            await (docRef.delete ? docRef.delete() : db.collection('saved_ai_contents').doc(docId).delete());
-            successCount++;
-            console.log(`[attendance:present] synced: ${studentName} ${dateStr}`);
-          } else {
-            failCount++;
-            errors.push({ docId, studentName, error: 'HUG（出席表）への保存に失敗しました' });
-          }
-        } catch (e) {
-          const raw = e.message || '';
-          const friendly = /児童リストにありません/.test(raw)
-            ? `${studentName} さんがHUGの「児童を追加」の児童リストに見つかりません。HUG側の契約状況を確認してください。`
-            : raw;
-          throw new Error(friendly);
+        const success = await saveAttendanceWithRowFallback(
+          cookies, attendanceParams, hugChildId, studentName, dateStr);
+        if (success) {
+          await (docRef.delete ? docRef.delete() : db.collection('saved_ai_contents').doc(docId).delete());
+          successCount++;
+          console.log(`[attendance:present] synced: ${studentName} ${dateStr}`);
+        } else {
+          throw new Error('HUG（出席表）への保存に失敗しました');
         }
         continue;
       }
@@ -729,39 +758,37 @@ async function syncToHugCore(contentIds = null) {
       }
 
       if (normalizeName(category).includes('欠席（加算なし）') || normalizeName(category).includes('欠席(加算なし)')) {
-        const success = await saveToAttendance(cookies, {
+        const success = await saveAttendanceWithRowFallback(cookies, {
           childId: hugChildId,
           dateStr,
           content: '',
           recorderStaffId: hugStaffId,
           attendValue: '3',
-        });
+        }, hugChildId, studentName, dateStr);
         if (success) {
           await (docRef.delete ? docRef.delete() : db.collection('saved_ai_contents').doc(docId).delete());
           successCount++;
           console.log(`[attendance:skip] synced: ${studentName} ${dateStr}`);
         } else {
-          failCount++;
-          errors.push({ docId, studentName, error: 'HUG（出席表・加算なし）への保存に失敗しました' });
+          throw new Error('HUG（出席表・加算なし）への保存に失敗しました');
         }
         continue;
       }
 
       if (normalizeName(category).includes('欠席連絡') || normalizeName(category).includes('欠席')) {
-        const success = await saveToAttendance(cookies, {
+        const success = await saveAttendanceWithRowFallback(cookies, {
           childId: hugChildId,
           dateStr,
           content,
           recorderStaffId: hugStaffId,
           attendValue: '2',
-        });
+        }, hugChildId, studentName, dateStr);
         if (success) {
           await (docRef.delete ? docRef.delete() : db.collection('saved_ai_contents').doc(docId).delete());
           successCount++;
           console.log(`[attendance] synced: ${studentName} ${dateStr} ${category}`);
         } else {
-          failCount++;
-          errors.push({ docId, studentName, error: 'HUG（出席表）への保存に失敗しました' });
+          throw new Error('HUG（出席表）への保存に失敗しました');
         }
         continue;
       }
@@ -879,13 +906,14 @@ async function syncToHugCore(contentIds = null) {
         successCount++;
         console.log(`Successfully synced: ${studentName} (${dateStr})`);
       } else {
-        failCount++;
-        errors.push({ docId, studentName, error: 'hugへの保存に失敗しました' });
+        throw new Error('hugへの保存に失敗しました');
       }
     } catch (error) {
       console.error(`Error processing ${docId}:`, error.message);
       failCount++;
       errors.push({ docId, studentName: docData.studentName || '', error: error.message });
+      // 失敗ドキュメントは削除せず failed マークを付け、18時の自動同期で再試行＋画面で可視化する
+      await markDocFailed(docRef, docId, error.message);
     }
   }
 

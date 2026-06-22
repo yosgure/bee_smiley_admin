@@ -70,6 +70,32 @@ class _IntakeFormScreenState extends State<IntakeFormScreen> {
   bool _submitted = false;
   String? _errorMessage;
 
+  // 児童の姓・姓ふりがなをユーザーが手入力したか（手入力後は保護者から自動反映しない）
+  bool _childLastNameTouched = false;
+  bool _childLastNameKanaTouched = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // 保護者の姓／姓ふりがな入力を児童側へ自動反映（児童側を手入力するまで）
+    _parentLastNameCtrl.addListener(_syncChildLastName);
+    _parentLastNameKanaCtrl.addListener(_syncChildLastNameKana);
+  }
+
+  void _syncChildLastName() {
+    if (_childLastNameTouched) return;
+    if (_childLastNameCtrl.text != _parentLastNameCtrl.text) {
+      _childLastNameCtrl.text = _parentLastNameCtrl.text;
+    }
+  }
+
+  void _syncChildLastNameKana() {
+    if (_childLastNameKanaTouched) return;
+    if (_childLastNameKanaCtrl.text != _parentLastNameKanaCtrl.text) {
+      _childLastNameKanaCtrl.text = _parentLastNameKanaCtrl.text;
+    }
+  }
+
   @override
   void dispose() {
     for (final c in [
@@ -262,11 +288,15 @@ class _IntakeFormScreenState extends State<IntakeFormScreen> {
                 ]),
                 _section('お子さまについて', [
                   _row2(
-                      _input('姓', _childLastNameCtrl, required: true),
+                      _input('姓', _childLastNameCtrl,
+                          required: true,
+                          onChanged: (_) => _childLastNameTouched = true),
                       _input('名', _childFirstNameCtrl, required: true)),
                   _row2(
                       _input('姓ふりがな', _childLastNameKanaCtrl,
-                          required: true),
+                          required: true,
+                          onChanged: (_) =>
+                              _childLastNameKanaTouched = true),
                       _input('名ふりがな', _childFirstNameKanaCtrl,
                           required: true)),
                   // 誕生日と性別はモバイル可読性のため縦並び
@@ -440,12 +470,14 @@ class _IntakeFormScreenState extends State<IntakeFormScreen> {
       String? hint,
       int maxLines = 1,
       TextInputType? keyboard,
-      String? Function(String?)? validator}) {
+      String? Function(String?)? validator,
+      void Function(String)? onChanged}) {
     final hasLabel = label.isNotEmpty;
     return TextFormField(
       controller: ctrl,
       keyboardType: keyboard,
       maxLines: maxLines,
+      onChanged: onChanged,
       decoration: InputDecoration(
         // ラベル空文字（_labelHint で外側に出している）の場合は labelText 自体を出さない
         labelText: hasLabel ? label + (required ? ' *' : '') : null,
@@ -633,26 +665,34 @@ class _IntakeFormScreenState extends State<IntakeFormScreen> {
       '市役所',
       'その他',
     ];
-    return InputDecorator(
-      decoration: const InputDecoration(
-        labelText: 'どちらでビースマイリーを知りましたか',
-        border: OutlineInputBorder(),
-        isDense: true,
-      ),
-      child: Wrap(
-        spacing: 6,
-        runSpacing: 6,
-        children: [
-          for (final s in sources)
-            ChoiceChip(
-              label: Text(s,
-                  style: const TextStyle(fontSize: AppTextSize.caption)),
-              selected: _source == s,
-              onSelected: (sel) {
-                if (sel) setState(() => _source = s);
-              },
-            ),
-        ],
+    return FormField<String>(
+      initialValue: _source,
+      validator: (_) => _source.isEmpty ? '選択してください' : null,
+      builder: (state) => InputDecorator(
+        decoration: InputDecoration(
+          labelText: 'どちらでビースマイリーを知りましたか *',
+          border: const OutlineInputBorder(),
+          isDense: true,
+          errorText: state.errorText,
+        ),
+        child: Wrap(
+          spacing: 6,
+          runSpacing: 6,
+          children: [
+            for (final s in sources)
+              ChoiceChip(
+                label: Text(s,
+                    style: const TextStyle(fontSize: AppTextSize.caption)),
+                selected: _source == s,
+                onSelected: (sel) {
+                  if (sel) {
+                    setState(() => _source = s);
+                    state.didChange(s);
+                  }
+                },
+              ),
+          ],
+        ),
       ),
     );
   }
