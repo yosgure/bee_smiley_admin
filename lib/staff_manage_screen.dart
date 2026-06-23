@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'app_theme.dart';
 import 'widgets/app_feedback.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:image_picker/image_picker.dart';
@@ -24,7 +25,10 @@ class _StaffManageScreenState extends State<StaffManageScreen> {
       FirebaseFirestore.instance.collection('classrooms');
 
   List<String> _classroomList = [];
-  
+
+  // ログイン中スタッフ自身がKPI権限を持つか（持つ人だけがKPIスイッチを操作可能）
+  bool _selfHasKpiAccess = false;
+
   // ExpansionTileControllerのマップ
   final Map<String, ExpansionTileController> _controllers = {};
   
@@ -37,6 +41,22 @@ class _StaffManageScreenState extends State<StaffManageScreen> {
   void initState() {
     super.initState();
     _fetchClassrooms();
+    _loadSelfKpiAccess();
+  }
+
+  Future<void> _loadSelfKpiAccess() async {
+    try {
+      final uid = FirebaseAuth.instance.currentUser?.uid;
+      if (uid == null) return;
+      final snap = await _staffsRef.where('uid', isEqualTo: uid).limit(1).get();
+      if (snap.docs.isEmpty) return;
+      final data = snap.docs.first.data() as Map<String, dynamic>;
+      if (mounted) {
+        setState(() => _selfHasKpiAccess = data['kpiAccess'] == true);
+      }
+    } catch (_) {
+      // 取得失敗時は権限なし扱い（スイッチ非表示）
+    }
   }
 
   Future<void> _fetchClassrooms() async {
@@ -464,6 +484,9 @@ appBar: AppBar(
     // スケジュール表示設定
     bool showInSchedule = data['showInSchedule'] ?? true;
 
+    // KPI画面の閲覧権限（上田洋介・上田藍のみON想定）
+    bool kpiAccess = data['kpiAccess'] == true;
+
     showDialog(
       context: context,
       barrierDismissible: false, 
@@ -559,7 +582,23 @@ appBar: AppBar(
                         _buildTextField(emailCtrl, 'メールアドレス', icon: Icons.email, type: TextInputType.emailAddress),
                         const SizedBox(height: 16),
                         _buildTextField(roleCtrl, '役職 (例: 園長, 保育士)', icon: Icons.work),
-                        
+
+                        // KPI閲覧権限の付与は、すでにKPI権限を持つ人（上田洋介・上田藍）のみ操作可能。
+                        // それ以外のスタッフにはスイッチ自体を表示しない（自己付与を防ぐ）。
+                        if (_selfHasKpiAccess) ...[
+                          const SizedBox(height: 12),
+                          SwitchListTile(
+                            contentPadding: EdgeInsets.zero,
+                            value: kpiAccess,
+                            onChanged: (v) =>
+                                setStateDialog(() => kpiAccess = v),
+                            secondary: const Icon(Icons.track_changes),
+                            title: const Text('KPI画面を表示'),
+                            subtitle: Text('OKR週次進捗（経営層向け）の閲覧を許可',
+                                style: TextStyle(fontSize: AppTextSize.small)),
+                          ),
+                        ],
+
                         const SizedBox(height: 24),
                         
                         // === 雇用形態セクション ===
@@ -944,6 +983,7 @@ appBar: AppBar(
                               'photoUrl': uploadedUrl,
                               'staffType': staffType,
                               'showInSchedule': showInSchedule,
+                              'kpiAccess': kpiAccess,
                             };
                             
                             // 社員の場合はデフォルト勤務時間を追加

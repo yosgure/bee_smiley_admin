@@ -20,9 +20,11 @@ import 'login_screen.dart';
 import 'force_change_password_screen.dart';
 import 'plus_schedule_screen.dart';
 import 'crm_lead_screen.dart';
+import 'kpi_screen.dart';
 import 'parent_main.dart';
 import 'ai_chat_main_screen.dart';
 import 'intake/intake_form_screen.dart';
+import 'intake/intake_final_screen.dart';
 
 // テーマモード管理（グローバル）
 final ValueNotifier<ThemeMode> themeNotifier = ValueNotifier(ThemeMode.system);
@@ -75,6 +77,32 @@ class BeeSmileyApp extends StatelessWidget {
         frag == 'intake';
   }
 
+  /// 入会前アンケート（個別トークンリンク）のルートか。
+  /// 例: bee-smiley-admin.web.app/#/intake-final?t=xxxx
+  static bool _isPublicFinalIntakeRoute() {
+    final base = Uri.base;
+    final path = base.path.toLowerCase();
+    var frag = base.fragment.toLowerCase();
+    final q = frag.indexOf('?');
+    if (q >= 0) frag = frag.substring(0, q);
+    return path.endsWith('/intake-final') ||
+        frag == '/intake-final' ||
+        frag == 'intake-final';
+  }
+
+  /// トークン（クエリ ?t=）をパス・フラグメントどちらからでも取得。
+  static String? _routeToken() {
+    final base = Uri.base;
+    final fromQuery = base.queryParameters['t'];
+    if (fromQuery != null && fromQuery.isNotEmpty) return fromQuery;
+    final frag = base.fragment;
+    final q = frag.indexOf('?');
+    if (q >= 0) {
+      return Uri.splitQueryString(frag.substring(q + 1))['t'];
+    }
+    return null;
+  }
+
   @override
   Widget build(BuildContext context) {
     return ValueListenableBuilder<ThemeMode>(
@@ -93,9 +121,11 @@ class BeeSmileyApp extends StatelessWidget {
           ],
           supportedLocales: const [Locale('ja', 'JP')],
           locale: const Locale('ja', 'JP'),
-          home: _isPublicIntakeRoute()
-              ? const IntakeFormScreen()
-              : const AuthCheckWrapper(),
+          home: _isPublicFinalIntakeRoute()
+              ? IntakeFinalScreen(token: _routeToken())
+              : _isPublicIntakeRoute()
+                  ? const IntakeFormScreen()
+                  : const AuthCheckWrapper(),
         );
       },
     );
@@ -319,6 +349,8 @@ class _AdminShellState extends State<AdminShell> {
   bool _hasUnreadRecord = false;
   bool _hasUnreadCrm = false;
   StaffType _staffType = StaffType.loading;
+  // KPIメニューの表示可否（staffs.kpiAccess == true の上田洋介・上田藍のみ）
+  bool _hasKpiAccess = false;
 
   // アプリアイコンバッジ：いずれかの種類で未読があれば 1、無ければ 0（運用案A）
   void _updateAppBadge() {
@@ -570,8 +602,10 @@ class _AdminShellState extends State<AdminShell> {
       final classrooms = List<String>.from(staffSnap.docs.first.data()['classrooms'] ?? []);
       final hasPlus = classrooms.any((c) => c.contains('プラス'));
       final hasBeesmiley = classrooms.any((c) => !c.contains('プラス') && c.contains('ビースマイリー'));
-      
+      final kpiAccess = staffSnap.docs.first.data()['kpiAccess'] == true;
+
       setState(() {
+        _hasKpiAccess = kpiAccess;
         if (hasPlus && hasBeesmiley) {
           _staffType = StaffType.both;
         } else if (hasPlus) {
@@ -606,6 +640,13 @@ class _AdminShellState extends State<AdminShell> {
           setState(() => _adminDetailScreen = null);
         },
       );
+    }
+
+    // KPIは「管理」の一つ手前に配置（kpiAccessを持つスタッフのみ）。
+    // KPIが管理の旧indexを取り、管理は一つ後ろ(_baseScreenCount)へずれる。
+    if (_hasKpiAccess) {
+      if (index == _baseScreenCount - 1) return const KpiScreen();
+      if (index == _baseScreenCount) return buildAdminScreen();
     }
 
     switch (_staffType) {
@@ -653,21 +694,25 @@ class _AdminShellState extends State<AdminShell> {
     }
   }
 
-  int get _screenCount {
+  /// KPIを除いた基本画面数（KPIのindexはこの値になる）
+  int get _baseScreenCount {
     switch (_staffType) {
       case StaffType.plusOnly: return 7;
       case StaffType.beesmiley: return 8;
       default: return 9;
     }
   }
+
+  int get _screenCount => _baseScreenCount + (_hasKpiAccess ? 1 : 0);
   
   List<NavigationRailDestination> get _railDestinations {
     final crmRail = NavigationRailDestination(
         icon: _buildBadgedIcon(Icons.people_alt_outlined, _hasUnreadCrm),
         label: const Text('CRM'));
+    final List<NavigationRailDestination> base;
     switch (_staffType) {
       case StaffType.plusOnly:
-        return [
+        base = [
           NavigationRailDestination(icon: _buildBadgedIcon(Icons.calendar_month, _hasUnreadSchedule), label: const Text('予定')),
           const NavigationRailDestination(icon: Icon(Icons.grid_view), label: Text('プラス')),
           const NavigationRailDestination(icon: Icon(Icons.psychology), label: Text('AI相談')),
@@ -677,7 +722,7 @@ class _AdminShellState extends State<AdminShell> {
           const NavigationRailDestination(icon: Icon(Icons.manage_accounts), label: Text('管理')),
         ];
       case StaffType.beesmiley:
-        return [
+        base = [
           NavigationRailDestination(icon: _buildBadgedIcon(Icons.calendar_month, _hasUnreadSchedule), label: const Text('予定')),
           NavigationRailDestination(icon: _buildBadgedIcon(Icons.edit_note, _hasUnreadRecord), label: const Text('記録')),
           const NavigationRailDestination(icon: Icon(Icons.psychology), label: Text('AI相談')),
@@ -690,7 +735,7 @@ class _AdminShellState extends State<AdminShell> {
       case StaffType.both:
       case StaffType.loading:
       default:
-        return [
+        base = [
           NavigationRailDestination(icon: _buildBadgedIcon(Icons.calendar_month, _hasUnreadSchedule), label: const Text('予定')),
           const NavigationRailDestination(icon: Icon(Icons.grid_view), label: Text('プラス')),
           NavigationRailDestination(icon: _buildBadgedIcon(Icons.edit_note, _hasUnreadRecord), label: const Text('記録')),
@@ -702,6 +747,14 @@ class _AdminShellState extends State<AdminShell> {
           const NavigationRailDestination(icon: Icon(Icons.manage_accounts), label: Text('管理')),
         ];
     }
+    if (_hasKpiAccess) {
+      // 「管理」（リスト末尾）の一つ手前にKPIを差し込む。
+      base.insert(
+          base.length - 1,
+          const NavigationRailDestination(
+              icon: Icon(Icons.track_changes), label: Text('KPI')));
+    }
+    return base;
   }
   
   /// モバイル: 直接表示する index 数（残りは「…」メニュー内）。
@@ -736,6 +789,12 @@ class _AdminShellState extends State<AdminShell> {
         items.add((index: 6, icon: Icons.notifications, label: 'お知らせ', hasUnread: _hasUnreadInfo));
         items.add((index: 7, icon: Icons.event, label: 'イベント', hasUnread: _hasUnreadEvent));
         items.add((index: 8, icon: Icons.manage_accounts, label: '管理', hasUnread: false));
+    }
+    if (_hasKpiAccess && items.isNotEmpty) {
+      // 末尾の「管理」を一つ後ろ(_baseScreenCount)へずらし、その手前にKPIを差し込む。
+      final admin = items.removeLast();
+      items.add((index: _baseScreenCount - 1, icon: Icons.track_changes, label: 'KPI', hasUnread: false));
+      items.add((index: _baseScreenCount, icon: admin.icon, label: admin.label, hasUnread: admin.hasUnread));
     }
     return items;
   }

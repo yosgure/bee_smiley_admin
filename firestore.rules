@@ -13,10 +13,33 @@ service cloud.firestore {
     function uid() {
       return request.auth.uid;
     }
+    // KPI権限を付与/変更できるのは上田洋介・上田藍のみ（uid固定）。
+    function canGrantKpi() {
+      return uid() in [
+        'QkWDUJgux7hGkgvZbfzeuJEO4TA2', // 上田 洋介
+        'tAo1QynUPgZevJ9iOCqgghHl4fy2'  // 上田 藍
+      ];
+    }
     match /staffs/{staffId} {
       allow read: if isAuthenticated();
-      allow update, delete: if isStaff();
+      // kpiAccess を変更する場合は上田2名のみ。それ以外のフィールド更新は従来通り全スタッフ可。
+      allow update: if isStaff()
+                    && (request.resource.data.get('kpiAccess', false)
+                          == resource.data.get('kpiAccess', false)
+                        || canGrantKpi());
+      allow delete: if isStaff();
       allow create: if false;
+    }
+    // KPI（OKR週次進捗）。閲覧可否はクライアント側で staffs.kpiAccess により制御。
+    // データ自体は機密PIIを含まないためスタッフ全体に read/write を許可。
+    match /kpi_categories/{docId} {
+      allow read, write: if isStaff();
+    }
+    match /kpi_weeks/{docId} {
+      allow read, write: if isStaff();
+    }
+    match /kpi_entries/{docId} {
+      allow read, write: if isStaff();
     }
     match /families/{familyId} {
       allow read: if isAuthenticated();
