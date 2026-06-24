@@ -2163,6 +2163,389 @@ Map<String, dynamic>? _getCellMemo(DateTime date, int slotIndex) {
     }
   }
 
+  // ─── 毎週1件 追加（ダッシュボード非依存・作成のみ）────────────────
+  // 1人の生徒を「指定曜日・時間帯」に毎週ぶん plus_lessons へ作成する。
+  // ・開始日 = 最初の実施日。その曜日に毎週、終了日まで繰り返す
+  // ・作成のみ。既存レッスン / 休業日 / 削除済みコマ(tombstone) はスキップ
+  // ・autoDeployed:false（手動扱い）→ 定期スケジュール一括展開で消されない
+  Future<void> _showAddWeeklyRecurringDialog() async {
+    const slotKeys = ['9:30〜', '11:00〜', '14:00〜', '15:30〜'];
+    const jpWeek = ['月', '火', '水', '木', '金', '土', '日'];
+    final courses =
+        _courseList.where((c) => !c.startsWith('欠席')).toList();
+
+    Map<String, dynamic>? student;
+    int slotIndex = 2; // 14:00〜
+    String course = '通常';
+    final today = DateTime.now();
+    DateTime startDate = DateTime(today.year, today.month, today.day);
+    DateTime endDate = DateTime(2027, 3, 31);
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) {
+          final c = context.colors;
+          final weekdayLabel = jpWeek[startDate.weekday - 1];
+          final isSunday = startDate.weekday == DateTime.sunday;
+          final canRun = student != null && !isSunday;
+
+          Widget box({required Widget child, VoidCallback? onTap}) => InkWell(
+                onTap: onTap,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: c.borderMedium),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: child,
+                ),
+              );
+
+          return AlertDialog(
+            backgroundColor: c.cardBg,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            title: Row(
+              children: [
+                Icon(Icons.repeat_one, color: AppColors.primary, size: 20),
+                const SizedBox(width: 8),
+                const Text('毎週1件 追加', style: TextStyle(fontSize: AppTextSize.titleLg)),
+              ],
+            ),
+            content: SizedBox(
+              width: 380,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // 生徒
+                    Text('生徒', style: TextStyle(fontSize: AppTextSize.small, fontWeight: FontWeight.w600, color: c.textSecondary)),
+                    const SizedBox(height: 6),
+                    box(
+                      onTap: () => _showStudentSelectionDialog(
+                        student,
+                        (s) => setDialogState(() => student = s),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.person, size: 20, color: c.textSecondary),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              student == null ? '生徒を選択' : student!['name'] as String,
+                              style: TextStyle(
+                                fontSize: AppTextSize.bodyLarge,
+                                color: student == null ? c.textSecondary : c.textPrimary,
+                              ),
+                            ),
+                          ),
+                          Icon(Icons.arrow_drop_down, color: c.textSecondary),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    // 時間帯
+                    Text('時間帯', style: TextStyle(fontSize: AppTextSize.small, fontWeight: FontWeight.w600, color: c.textSecondary)),
+                    const SizedBox(height: 6),
+                    Wrap(
+                      spacing: 8,
+                      children: List.generate(slotKeys.length, (i) {
+                        return ChoiceChip(
+                          label: Text(slotKeys[i]),
+                          selected: slotIndex == i,
+                          onSelected: (_) => setDialogState(() => slotIndex = i),
+                        );
+                      }),
+                    ),
+                    const SizedBox(height: 16),
+                    // コース
+                    Text('コース', style: TextStyle(fontSize: AppTextSize.small, fontWeight: FontWeight.w600, color: c.textSecondary)),
+                    const SizedBox(height: 6),
+                    box(
+                      child: DropdownButtonHideUnderline(
+                        child: DropdownButton<String>(
+                          value: course,
+                          isExpanded: true,
+                          isDense: true,
+                          items: courses
+                              .map((co) => DropdownMenuItem(value: co, child: Text(co)))
+                              .toList(),
+                          onChanged: (v) => setDialogState(() => course = v ?? '通常'),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    // 開始日
+                    Text('開始日（最初の実施日）', style: TextStyle(fontSize: AppTextSize.small, fontWeight: FontWeight.w600, color: c.textSecondary)),
+                    const SizedBox(height: 6),
+                    box(
+                      onTap: () async {
+                        final picked = await showDatePicker(
+                          context: dialogContext,
+                          helpText: '最初の実施日を選択',
+                          initialDate: startDate,
+                          firstDate: DateTime(2026, 1, 1),
+                          lastDate: DateTime(2027, 3, 31),
+                          locale: const Locale('ja'),
+                        );
+                        if (picked != null) {
+                          setDialogState(() => startDate = DateTime(picked.year, picked.month, picked.day));
+                        }
+                      },
+                      child: Row(
+                        children: [
+                          Icon(Icons.calendar_today, size: 18, color: AppColors.accent.shade700),
+                          const SizedBox(width: 12),
+                          Text(
+                            DateFormat('yyyy年M月d日').format(startDate),
+                            style: TextStyle(fontSize: AppTextSize.bodyLarge, color: c.textPrimary),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    // 終了日
+                    Text('終了日', style: TextStyle(fontSize: AppTextSize.small, fontWeight: FontWeight.w600, color: c.textSecondary)),
+                    const SizedBox(height: 6),
+                    box(
+                      onTap: () async {
+                        final picked = await showDatePicker(
+                          context: dialogContext,
+                          helpText: '最後の実施日（目安）を選択',
+                          initialDate: endDate,
+                          firstDate: startDate,
+                          lastDate: DateTime(2027, 3, 31),
+                          locale: const Locale('ja'),
+                        );
+                        if (picked != null) {
+                          setDialogState(() => endDate = DateTime(picked.year, picked.month, picked.day));
+                        }
+                      },
+                      child: Row(
+                        children: [
+                          Icon(Icons.event_available, size: 18, color: AppColors.accent.shade700),
+                          const SizedBox(width: 12),
+                          Text(
+                            DateFormat('yyyy年M月d日').format(endDate),
+                            style: TextStyle(fontSize: AppTextSize.bodyLarge, color: c.textPrimary),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: AppColors.primary.withValues(alpha: 0.06),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        isSunday
+                            ? '⚠ 日曜は対象外です。別の曜日の開始日を選んでください。'
+                            : '毎週$weekdayLabel曜日に「${student?['name'] ?? '（生徒未選択）'}」を $course / ${slotKeys[slotIndex]} で追加します。\n既存予定・休業日・削除済みコマは自動でスキップ。既存の予定は変更しません。',
+                        style: TextStyle(fontSize: AppTextSize.small, color: c.textSecondary, height: 1.4),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('キャンセル'),
+              ),
+              ElevatedButton(
+                onPressed: canRun
+                    ? () {
+                        Navigator.pop(dialogContext);
+                        _executeAddWeekly(
+                          studentName: student!['name'] as String,
+                          slotIndex: slotIndex,
+                          course: course,
+                          start: startDate,
+                          end: endDate,
+                        );
+                      }
+                    : null,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  foregroundColor: context.colors.textOnPrimary,
+                ),
+                child: const Text('追加する'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  // 毎週追加の実処理（作成のみ・削除しない）
+  Future<void> _executeAddWeekly({
+    required String studentName,
+    required int slotIndex,
+    required String course,
+    required DateTime start,
+    required DateTime end,
+  }) async {
+    final s = DateTime(start.year, start.month, start.day);
+    final e = DateTime(end.year, end.month, end.day);
+    final endInclusive = DateTime(e.year, e.month, e.day, 23, 59, 59);
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const AlertDialog(
+        content: Row(
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(width: 16),
+            Text('追加中...'),
+          ],
+        ),
+      ),
+    );
+
+    try {
+      // 休業日（plus_shifts.holidays）を月別に取得
+      final holidayDates = <String>{};
+      var monthCursor = DateTime(s.year, s.month, 1);
+      while (!monthCursor.isAfter(e)) {
+        final monthKey = DateFormat('yyyy-MM').format(monthCursor);
+        final shiftDoc = await FirebaseFirestore.instance
+            .collection('plus_shifts')
+            .doc(monthKey)
+            .get();
+        if (shiftDoc.exists) {
+          final hList = (shiftDoc.data()?['holidays'] as List<dynamic>?) ?? [];
+          for (final raw in hList) {
+            final day = int.tryParse(raw.toString()) ?? 0;
+            if (day > 0) {
+              holidayDates.add(DateFormat('yyyy-MM-dd')
+                  .format(DateTime(monthCursor.year, monthCursor.month, day)));
+            }
+          }
+        }
+        monthCursor = DateTime(monthCursor.year, monthCursor.month + 1, 1);
+      }
+
+      // 既存レッスン（期間）と tombstone を取得してスキップ判定。
+      // studentName 等値 + date 範囲は複合インデックスが必要になるため、
+      // date 範囲のみでクエリし生徒名はコード側で判定する（一括展開と同方式）。
+      final existingKeys = <String>{};
+      final existingSnap = await FirebaseFirestore.instance
+          .collection('plus_lessons')
+          .where('date', isGreaterThanOrEqualTo: Timestamp.fromDate(s))
+          .where('date', isLessThanOrEqualTo: Timestamp.fromDate(endInclusive))
+          .get();
+      for (final doc in existingSnap.docs) {
+        final data = doc.data();
+        final ts = data['date'];
+        if (ts is! Timestamp) continue;
+        if (((data['studentName'] as String?) ?? '').trim() != studentName) continue;
+        final dk = DateFormat('yyyy-MM-dd').format(ts.toDate());
+        existingKeys.add('${dk}_${data['slotIndex'] ?? 0}');
+      }
+
+      final tombstoneKeys = <String>{};
+      final tsSnap = await FirebaseFirestore.instance
+          .collection('plus_lesson_tombstones')
+          .where('date', isGreaterThanOrEqualTo: Timestamp.fromDate(s))
+          .where('date', isLessThanOrEqualTo: Timestamp.fromDate(endInclusive))
+          .get();
+      for (final doc in tsSnap.docs) {
+        final data = doc.data();
+        final ts = data['date'];
+        if (ts is! Timestamp) continue;
+        final tname = ((data['studentName'] as String?) ?? '').trim();
+        if (tname != studentName) continue;
+        final tdk = DateFormat('yyyy-MM-dd').format(ts.toDate());
+        tombstoneKeys.add('${tdk}_${data['slotIndex'] ?? 0}');
+      }
+
+      int created = 0, skipExisting = 0, skipHoliday = 0, skipTombstone = 0;
+      var batch = FirebaseFirestore.instance.batch();
+      int batchOps = 0;
+
+      // 開始日から毎週同じ曜日（+7日）で end まで
+      var d = s;
+      while (!d.isAfter(e)) {
+        if (d.weekday == DateTime.sunday) {
+          d = d.add(const Duration(days: 7));
+          continue;
+        }
+        final dateKey = DateFormat('yyyy-MM-dd').format(d);
+        final key = '${dateKey}_$slotIndex';
+        if (holidayDates.contains(dateKey)) {
+          skipHoliday++;
+        } else if (existingKeys.contains(key)) {
+          skipExisting++;
+        } else if (tombstoneKeys.contains(key)) {
+          skipTombstone++;
+        } else {
+          final ref = FirebaseFirestore.instance.collection('plus_lessons').doc();
+          batch.set(ref, <String, dynamic>{
+            'date': Timestamp.fromDate(DateTime(d.year, d.month, d.day)),
+            'slotIndex': slotIndex,
+            'studentName': studentName,
+            'teachers': <String>[],
+            'room': '',
+            'course': course,
+            'note': '',
+            'link': '',
+            'isCustomEvent': false,
+            'isEvent': false,
+            'title': '',
+            'order': 0,
+            'createdAt': FieldValue.serverTimestamp(),
+            'autoDeployed': false, // 手動扱い → 一括展開で削除されない
+          });
+          existingKeys.add(key);
+          created++;
+          batchOps++;
+          if (batchOps >= 450) {
+            await batch.commit();
+            batch = FirebaseFirestore.instance.batch();
+            batchOps = 0;
+          }
+        }
+        d = d.add(const Duration(days: 7));
+      }
+
+      if (batchOps > 0) await batch.commit();
+
+      if (mounted) Navigator.pop(context); // 進捗
+
+      if (mounted) {
+        await showDialog(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('追加完了'),
+            content: Text(
+              '作成: $created件\n'
+              'スキップ(既存): $skipExisting件\n'
+              'スキップ(休業日): $skipHoliday件\n'
+              'スキップ(削除済みコマ): $skipTombstone件',
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('OK')),
+            ],
+          ),
+        );
+      }
+
+      await _loadLessonsForWeek(showLoading: false);
+      if (_viewMode == 2) await _loadLessonsForMonth();
+    } catch (err) {
+      debugPrint('AddWeekly error: $err');
+      if (mounted) Navigator.pop(context);
+      if (mounted) AppFeedback.info(context, '追加失敗: $err');
+    }
+  }
+
   // 特定の日付のレッスンを取得
   List<Map<String, dynamic>> _getLessonsForDate(DateTime date) {
     final dateOnly = DateTime(date.year, date.month, date.day);
@@ -3056,6 +3439,11 @@ void _goToPage(int page) {
           await _deployRegularScheduleToLessons();
         }
         break;
+      case 'add_weekly':
+        if (mounted) {
+          await _showAddWeeklyRecurringDialog();
+        }
+        break;
     }
   }
 
@@ -3145,6 +3533,7 @@ void _goToPage(int page) {
             menuItem('shift_decision', Icons.event_available_outlined, 'シフト決定'),
             menuItem('set_edit', Icons.link, 'セット編集'),
             menuItem('deploy_schedule', Icons.event_repeat, '定期スケジュール展開'),
+            menuItem('add_weekly', Icons.repeat_one, '毎週1件 追加'),
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 6),
               child: Divider(height: 1, color: border),
