@@ -17,5 +17,6 @@ module.exports = {
   ...require('./src/hug/family_register'),
   ...require('./src/monitoring'),
   ...require('./src/intake/form_intake'),
+  ...require('./src/intake/intake_final'),
   ...require('./src/morning_meeting'),
 };

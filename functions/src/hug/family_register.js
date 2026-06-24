@@ -126,7 +126,7 @@ function extractAllDefaults($, formSelector = 'form') {
 
 // ──────────────── 保護者登録 ────────────────
 
-async function registerParent(cookies, family) {
+async function registerParent(cookies, family, nameOverride) {
   const getUrl = `${HUG_BASE_URL}/profile_parent.php?mode=edit`;
   const getRes = await hugFetch(getUrl, {}, cookies);
   const getHtml = await getRes.text();
@@ -135,8 +135,13 @@ async function registerParent(cookies, family) {
 
   const parentLastName = family.lastName || '';
   const parentFirstName = family.firstName || '';
-  const realname = `${parentLastName} ${parentFirstName}`.trim() || parentLastName || parentFirstName;
-  const furigana = `${family.lastNameKana || ''} ${family.firstNameKana || ''}`.trim();
+  // nameOverride（通所給付決定保護者名）があれば実績記録票の表記に合わせて優先。
+  const realname = (nameOverride && nameOverride.realname)
+    ? nameOverride.realname
+    : (`${parentLastName} ${parentFirstName}`.trim() || parentLastName || parentFirstName);
+  const furigana = (nameOverride && nameOverride.furigana)
+    ? nameOverride.furigana
+    : `${family.lastNameKana || ''} ${family.firstNameKana || ''}`.trim();
 
   const formData = {
     ...hidden,
@@ -364,13 +369,43 @@ exports.hugRegisterFamily = onCall(
       );
     }
 
-    console.log(`[hugRegisterFamily] start uid=${request.auth.uid} family=${familyId} child=${ci}`);
+    // 受給者証なし児童の「仮登録」: 架空の受給者証番号で fault_flg=1 のまま登録する。
+    // 実績記録票を出すための運用。保護者名は実績の表記に合わせ payerName を優先。
+    const provisional = (request.data && request.data.provisional) || null;
+    const cert0 = child.recipientCert || {};
+    let childForReg = child;
+    let nameOverride = null;
+    if (provisional) {
+      if (!/^\d{10}$/.test(String(provisional.certNumber || ''))) {
+        throw new HttpsError('invalid-argument', '架空の受給者証番号は半角数字10桁で指定してください');
+      }
+      if (!provisional.acceptanceDate) {
+        throw new HttpsError('invalid-argument', '利用開始日が必要です');
+      }
+      if (cert0.payerName) {
+        nameOverride = { realname: cert0.payerName, furigana: cert0.payerNameKana || '' };
+      }
+      childForReg = {
+        ...child,
+        recipientCert: {
+          ...cert0,
+          certificateNumber: String(provisional.certNumber),
+          startDate: provisional.acceptanceDate, // 'YYYY/MM/DD' 文字列（formatDate が処理）
+          service: provisional.service || cert0.service || '',
+          monthlyDays: provisional.monthlyDays != null
+            ? provisional.monthlyDays
+            : cert0.monthlyDays,
+        },
+      };
+    }
+
+    console.log(`[hugRegisterFamily] start uid=${request.auth.uid} family=${familyId} child=${ci} provisional=${!!provisional}`);
     const cookies = await loginToHug();
 
     // 既存 hugParentId があれば保護者登録をスキップ（リトライ時の重複防止）
     let hugParentId = family.hugParentId || null;
     if (!hugParentId) {
-      hugParentId = await registerParent(cookies, family);
+      hugParentId = await registerParent(cookies, family, nameOverride);
       console.log(`[hugRegisterFamily] parent registered: p_id=${hugParentId}`);
       await famRef.update({
         hugParentId,
@@ -382,7 +417,7 @@ exports.hugRegisterFamily = onCall(
 
     let hugChildId;
     try {
-      hugChildId = await registerChild(cookies, hugParentId, child, family);
+      hugChildId = await registerChild(cookies, hugParentId, childForReg, family);
     } catch (err) {
       console.error('[hugRegisterFamily] child register failed:', err);
       throw new HttpsError('internal', err.message);
@@ -395,6 +430,8 @@ exports.hugRegisterFamily = onCall(
       ...child,
       hugChildId: hugChildId || '',
       hugRegisteredAt: Timestamp.now(),
+      // 仮登録（架空番号）の場合はフラグを立て、受給者証到着後の正式更新を促す。
+      hugProvisional: provisional ? true : (child.hugProvisional || false),
     };
     await famRef.update({ children: newChildren });
 

@@ -151,6 +151,12 @@ class CrmLead {
   String get severeSymptoms => (raw['severeSymptoms'] as String?) ?? '';
   String get hospitalName => (raw['hospitalName'] as String?) ?? '';
   String get doctorName => (raw['doctorName'] as String?) ?? '';
+
+  // ヒアリング深掘り項目（入会前アンケートで任意取得 → 来所ヒアリングの事前共有）
+  String get sensitivities => (raw['sensitivities'] as String?) ?? '';
+  String get precautions => (raw['precautions'] as String?) ?? '';
+  String get childWishes => (raw['childWishes'] as String?) ?? '';
+  String get familyWishes => (raw['familyWishes'] as String?) ?? '';
   String get trialNotes => (raw['trialNotes'] as String?) ?? '';
   String get kindergarten => (raw['kindergarten'] as String?) ?? '';
   String get className => (raw['className'] as String?) ?? '';
@@ -213,6 +219,22 @@ class CrmLead {
       (recipientCert['periodStart'] as Timestamp?)?.toDate();
   DateTime? get certPeriodEnd =>
       (recipientCert['periodEnd'] as Timestamp?)?.toDate();
+  // 通所給付決定保護者名（受給者証・実績記録票に記載される保護者氏名）。
+  // 受給者証の有無に関わらず全員必須（実績記録票の表記一致のため）。
+  String get payerName =>
+      (recipientCert['payerName'] as String?) ?? '';
+  String get payerNameKana =>
+      (recipientCert['payerNameKana'] as String?) ?? '';
+  // 受給者証の写真（表・裏）。Storage パス/URL を保持（「有」の人のみ）。
+  List<String> get certImageUrls {
+    final v = recipientCert['images'];
+    return (v is List) ? v.whereType<String>().toList() : const [];
+  }
+
+  // HUG連携状態
+  String get hugChildId => (raw['hugChildId'] as String?) ?? '';
+  // 架空番号での仮登録か（受給者証到着後に正式更新が必要）
+  bool get hugProvisional => raw['hugProvisional'] == true;
 
   /// HUG連携に必要な項目で未入力のリストを返す（ロック判定・進捗表示用）。
   /// 受給者証「無」「申請中」は別ロック（permitStatus != 'have'）。

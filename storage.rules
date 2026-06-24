@@ -83,5 +83,12 @@ service firebase.storage {
                    && request.auth.token.role == 'staff'
                    && request.resource.size < 50 * 1024 * 1024;
     }
+
+    // intake_uploads: 入会前アンケートの受給者証写真。
+    // 書き込みは Cloud Functions（Admin SDK）経由のみ。閲覧は認証スタッフのみ。
+    match /intake_uploads/{allPaths=**} {
+      allow read: if request.auth != null;
+      allow write: if false;
+    }
   }
 }

@@ -16,6 +16,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
@@ -2708,6 +2709,296 @@ DateTime? _dateFor(_ChecklistItem item, CrmLead lead) {
   return lead.checklistDates[item.id];
 }
 
+/// 入会前アンケートの個別トークンリンクを発行し、クリップボードへコピー。
+/// スタッフはコピーしたURLをSMSに貼り付けて保護者へ送付する（SMS自動送付は別フェーズ）。
+Future<void> _issueIntakeLink(
+    BuildContext context, LeadViewReference leadRef) async {
+  final messenger = ScaffoldMessenger.of(context);
+  try {
+    final callable = FirebaseFunctions.instanceFor(region: 'asia-northeast1')
+        .httpsCallable('createIntakeToken');
+    final res = await callable.call<Map<String, dynamic>>({
+      'familyId': leadRef.familyDocId,
+      'childIndex': leadRef.childIndex,
+      'type': 'final',
+    });
+    final url = (res.data['url'] as String?) ?? '';
+    if (url.isEmpty) throw Exception('リンクの取得に失敗しました');
+    await Clipboard.setData(ClipboardData(text: url));
+    if (!context.mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('入会前アンケートのリンク'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('リンクをコピーしました。SMSに貼り付けて保護者へ送ってください。'),
+            const SizedBox(height: 10),
+            SelectableText(url,
+                style: const TextStyle(fontSize: AppTextSize.caption)),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () =>
+                Clipboard.setData(ClipboardData(text: url)),
+            child: const Text('再コピー'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('閉じる'),
+          ),
+        ],
+      ),
+    );
+  } on FirebaseFunctionsException catch (e) {
+    messenger.showSnackBar(
+        SnackBar(content: Text('発行に失敗しました: ${e.message ?? e.code}')));
+  } catch (e) {
+    messenger.showSnackBar(SnackBar(content: Text('発行に失敗しました: $e')));
+  }
+}
+
+/// 受給者証なし児童を、架空の受給者証番号で HUG に「仮登録」する。
+/// 受給者証が届いたら正式情報に更新する運用（実績記録票を先に出すため）。
+/// 保護者名は実績記録票と一致させるため payerName を優先する（バックエンド側で適用）。
+Future<void> _showProvisionalHugDialog(
+    BuildContext context, CrmLead lead, LeadViewReference leadRef) async {
+  final certCtrl = TextEditingController(text: '0000000000');
+  DateTime startDate = DateTime.now();
+  String service = '児童発達支援';
+  bool busy = false;
+  String? err;
+  final payer = lead.payerName;
+
+  await showDialog<void>(
+    context: context,
+    barrierDismissible: false,
+    builder: (ctx) => StatefulBuilder(builder: (ctx, setS) {
+      Future<void> run() async {
+        if (!RegExp(r'^\d{10}$').hasMatch(certCtrl.text.trim())) {
+          setS(() => err = '受給者証番号は半角数字10桁で入力してください');
+          return;
+        }
+        setS(() {
+          busy = true;
+          err = null;
+        });
+        try {
+          final callable =
+              FirebaseFunctions.instanceFor(region: 'asia-northeast1')
+                  .httpsCallable('hugRegisterFamily');
+          await callable.call<Map<String, dynamic>>({
+            'familyId': leadRef.familyDocId,
+            'childIndex': leadRef.childIndex,
+            'provisional': {
+              'certNumber': certCtrl.text.trim(),
+              'acceptanceDate': DateFormat('yyyy/MM/dd').format(startDate),
+              'service': service,
+            },
+          });
+          if (ctx.mounted) Navigator.pop(ctx);
+        } on FirebaseFunctionsException catch (e) {
+          setS(() {
+            busy = false;
+            err = e.message ?? e.code;
+          });
+        } catch (e) {
+          setS(() {
+            busy = false;
+            err = '$e';
+          });
+        }
+      }
+
+      final c = ctx.colors;
+      return AlertDialog(
+        title: const Text('HUGに仮登録（受給者証なし）'),
+        content: SizedBox(
+          width: 420,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                  '架空の受給者証番号でHUGに仮登録します。受給者証が届いたら、HUG側で正式情報に更新してください。',
+                  style: TextStyle(
+                      fontSize: AppTextSize.caption, color: c.textSecondary)),
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: payer.isEmpty
+                      ? ctx.alerts.warning.background
+                      : ctx.colors.cardBg,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: ctx.colors.borderLight),
+                ),
+                child: Text(
+                  payer.isEmpty
+                      ? '⚠ 保護者名（受給者証・実績記録票に載る名前）が未取得です。先に入会前アンケートで取得すると、実績の名前ズレを防げます。'
+                      : 'HUGに登録する保護者名: $payer',
+                  style: TextStyle(
+                      fontSize: AppTextSize.caption,
+                      color: payer.isEmpty
+                          ? ctx.alerts.warning.text
+                          : c.textPrimary),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: certCtrl,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: '架空の受給者証番号（10桁）',
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                ),
+              ),
+              const SizedBox(height: 12),
+              InkWell(
+                onTap: () async {
+                  final d = await showDatePicker(
+                    context: ctx,
+                    initialDate: startDate,
+                    firstDate: DateTime(2020),
+                    lastDate: DateTime(2035),
+                  );
+                  if (d != null) setS(() => startDate = d);
+                },
+                child: InputDecorator(
+                  decoration: const InputDecoration(
+                    labelText: '利用開始日',
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                  child: Text(DateFormat('yyyy/M/d', 'ja').format(startDate)),
+                ),
+              ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                initialValue: service,
+                decoration: const InputDecoration(
+                  labelText: '利用サービス',
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                ),
+                items: const [
+                  DropdownMenuItem(
+                      value: '児童発達支援', child: Text('児童発達支援')),
+                  DropdownMenuItem(
+                      value: '放課後等デイサービス',
+                      child: Text('放課後等デイサービス')),
+                ],
+                onChanged: (v) => setS(() => service = v ?? service),
+              ),
+              if (err != null) ...[
+                const SizedBox(height: 10),
+                Text(err!,
+                    style: TextStyle(
+                        fontSize: AppTextSize.caption,
+                        color: ctx.alerts.urgent.text)),
+              ],
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: busy ? null : () => Navigator.pop(ctx),
+            child: const Text('キャンセル'),
+          ),
+          FilledButton(
+            onPressed: busy ? null : run,
+            child: busy
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2))
+                : const Text('仮登録する'),
+          ),
+        ],
+      );
+    }),
+  );
+}
+
+/// 受給者証写真のサムネイル。Storage パスを download URL に解決して表示し、
+/// タップで全画面プレビュー。
+class _CertThumb extends StatelessWidget {
+  final String path;
+  const _CertThumb({required this.path});
+
+  Future<String> _url() async {
+    // 既に http(s) URL ならそのまま、Storage パスなら download URL を取得。
+    if (path.startsWith('http')) return path;
+    return FirebaseStorage.instance.ref(path).getDownloadURL();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return FutureBuilder<String>(
+      future: _url(),
+      builder: (ctx, snap) {
+        if (snap.connectionState != ConnectionState.done) {
+          return Container(
+            width: 72,
+            height: 72,
+            decoration: BoxDecoration(
+              color: c.borderLight,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: const Center(
+                child: SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2))),
+          );
+        }
+        if (!snap.hasData) {
+          return Container(
+            width: 72,
+            height: 72,
+            decoration: BoxDecoration(
+              color: c.borderLight,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(Icons.broken_image_outlined, color: c.textTertiary),
+          );
+        }
+        final url = snap.data!;
+        return InkWell(
+          onTap: () => showDialog<void>(
+            context: context,
+            builder: (d) => Dialog(
+              child: Stack(
+                children: [
+                  InteractiveViewer(child: Image.network(url)),
+                  Positioned(
+                    top: 4,
+                    right: 4,
+                    child: IconButton(
+                      icon: const Icon(Icons.close),
+                      onPressed: () => Navigator.pop(d),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: Image.network(url,
+                width: 72, height: 72, fit: BoxFit.cover),
+          ),
+        );
+      },
+    );
+  }
+}
+
 class _ProgressSection extends StatelessWidget {
   final CrmLead lead;
   final LeadViewReference leadRef;
@@ -2761,8 +3052,67 @@ class _ProgressSection extends StatelessWidget {
               ],
             ),
           ),
+          _certPhotos(context),
           const SizedBox(height: 4),
           for (final item in items) _itemRow(context, item),
+          if (stage == 'onboarding') ...[
+            const SizedBox(height: 10),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: OutlinedButton.icon(
+                onPressed: () => _issueIntakeLink(context, leadRef),
+                icon: const Icon(Icons.link, size: 18),
+                label: const Text('入会前アンケートのリンクを発行'),
+              ),
+            ),
+            if (lead.permitStatus != 'have' && lead.hugChildId.isEmpty) ...[
+              const SizedBox(height: 8),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: OutlinedButton.icon(
+                  onPressed: () =>
+                      _showProvisionalHugDialog(context, lead, leadRef),
+                  icon: const Icon(Icons.cloud_upload_outlined, size: 18),
+                  label: const Text('HUGに仮登録（受給者証なし）'),
+                ),
+              ),
+            ],
+            if (lead.hugProvisional) ...[
+              const SizedBox(height: 6),
+              Text('※ 架空番号で仮登録済み。受給者証到着後にHUGで正式更新してください。',
+                  style: TextStyle(
+                      fontSize: AppTextSize.xs,
+                      color: context.alerts.warning.text)),
+            ],
+          ],
+        ],
+      ),
+    );
+  }
+
+  /// 受給者証写真のサムネイル（保護者が入会前アンケートで添付したもの）。
+  Widget _certPhotos(BuildContext context) {
+    final paths = lead.certImageUrls;
+    if (paths.isEmpty) return const SizedBox.shrink();
+    final c = context.colors;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+              width: 80,
+              child: Text('受給者証写真',
+                  style: TextStyle(
+                      fontSize: AppTextSize.caption,
+                      color: c.textSecondary))),
+          Expanded(
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [for (final p in paths) _CertThumb(path: p)],
+            ),
+          ),
         ],
       ),
     );
