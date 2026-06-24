@@ -857,6 +857,8 @@ Map<String, dynamic>? _getCellMemo(DateTime date, int slotIndex) {
           'title': data['title'] ?? '',
           'comment': data['comment'] ?? '', // dashboardと同期
           'studentName': data['studentName'],
+          'assigneeId': data['assigneeId'],
+          'assigneeName': data['assigneeName'],
           'dueDate': data['dueDate'],
           'isCustom': data['isCustom'] ?? (data['studentName'] == null), // dashboardと同期
           'completed': data['completed'] ?? false,
@@ -956,30 +958,35 @@ Map<String, dynamic>? _getCellMemo(DateTime date, int slotIndex) {
   }
   
   // タスクを追加
-  Future<Map<String, dynamic>?> _addTaskForStudent(String? studentName, String title, DateTime? dueDate) async {
+  Future<Map<String, dynamic>?> _addTaskForStudent(String? studentName, String title, DateTime? dueDate,
+      {String? assigneeId, String? assigneeName}) async {
     try {
-      debugPrint('Adding task: studentName=$studentName, title=$title, dueDate=$dueDate');
-      
+      debugPrint('Adding task: studentName=$studentName, title=$title, dueDate=$dueDate, assignee=$assigneeName');
+
       // dashboardと同じ構造で保存
       final taskData = {
         'title': title,
         'comment': '', // dashboardと同期
         'studentName': studentName,
+        'assigneeId': assigneeId, // 担当者（任意）プラスのスタッフID
+        'assigneeName': assigneeName, // 担当者表示名（任意）
         'dueDate': dueDate != null ? Timestamp.fromDate(dueDate) : null,
         'isCustom': studentName == null, // dashboardと同期
         'completed': false,
         'createdAt': FieldValue.serverTimestamp(),
       };
-      
+
       final docRef = await FirebaseFirestore.instance.collection('plus_tasks').add(taskData);
       debugPrint('Task added with id: ${docRef.id}');
-      
+
       // 新しいタスクを返す
       final newTask = {
         'id': docRef.id,
         'title': title,
         'comment': '',
         'studentName': studentName,
+        'assigneeId': assigneeId,
+        'assigneeName': assigneeName,
         'dueDate': dueDate != null ? Timestamp.fromDate(dueDate) : null,
         'isCustom': studentName == null,
         'completed': false,
@@ -1011,6 +1018,106 @@ Map<String, dynamic>? _getCellMemo(DateTime date, int slotIndex) {
     }
   }
   
+  // assigneeId からプラススタッフの表示名を引く（見つからなければ null）
+  String? _assigneeNameForId(String? assigneeId) {
+    if (assigneeId == null || assigneeId.isEmpty) return null;
+    for (final s in _staffList) {
+      if (s['id'] == assigneeId) return s['name'] as String?;
+    }
+    return null;
+  }
+
+  // タスク担当者セレクタ（任意 / プラスのスタッフから選択）
+  // 「生徒を選択」と同じ枠付きボックスの見た目に揃える。
+  Widget _buildAssigneeSelector(String? selectedId, ValueChanged<String?> onChanged) {
+    final selectedName = _assigneeNameForId(selectedId);
+    return InkWell(
+      onTap: () => _showAssigneeSelectionDialog(selectedId, onChanged),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        decoration: BoxDecoration(
+          border: Border.all(color: context.colors.borderMedium),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.assignment_ind_outlined, size: 20, color: context.colors.textSecondary),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                selectedName ?? '担当者を選択（任意）',
+                style: TextStyle(
+                  fontSize: AppTextSize.bodyLarge,
+                  color: selectedName == null
+                      ? context.colors.textSecondary
+                      : context.colors.textPrimary,
+                ),
+              ),
+            ),
+            Icon(Icons.arrow_drop_down, color: context.colors.textSecondary),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // 担当者選択ダイアログ（単一選択 / 担当者なし + プラスのスタッフ）
+  void _showAssigneeSelectionDialog(String? currentId, ValueChanged<String?> onConfirm) {
+    final staff = [..._staffList]
+      ..sort((a, b) => (a['furigana'] as String? ?? a['name'] as String? ?? '')
+          .compareTo(b['furigana'] as String? ?? b['name'] as String? ?? ''));
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: context.colors.cardBg,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        title: const Text('担当者を選択', style: TextStyle(fontSize: AppTextSize.titleLg)),
+        content: SizedBox(
+          width: 350,
+          height: 400,
+          child: ListView(
+            children: [
+              ListTile(
+                dense: true,
+                title: Text('担当者なし',
+                    style: TextStyle(
+                      fontWeight: currentId == null ? FontWeight.bold : FontWeight.normal,
+                      color: currentId == null ? AppColors.primary : context.colors.textSecondary,
+                    )),
+                onTap: () {
+                  Navigator.pop(dialogContext);
+                  onConfirm(null);
+                },
+              ),
+              ...staff.map((s) {
+                final id = s['id'] as String;
+                final isSelected = id == currentId;
+                return ListTile(
+                  dense: true,
+                  title: Text(s['name'] as String? ?? '',
+                      style: TextStyle(
+                        fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                        color: isSelected ? AppColors.primary : null,
+                      )),
+                  onTap: () {
+                    Navigator.pop(dialogContext);
+                    onConfirm(id);
+                  },
+                );
+              }),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('キャンセル'),
+          ),
+        ],
+      ),
+    );
+  }
+
   // タスクを完了（削除）。Undo で復活可能。
   Future<void> _completeTask(String taskId) async {
     if (!mounted) return;
@@ -1038,10 +1145,11 @@ Map<String, dynamic>? _getCellMemo(DateTime date, int slotIndex) {
   // タスク編集ダイアログ
   void _showEditTaskDialog(BuildContext parentContext, Map<String, dynamic> task, VoidCallback onUpdate) {
     final titleController = TextEditingController(text: task['title'] ?? '');
-    DateTime? dueDate = task['dueDate'] != null 
-        ? (task['dueDate'] as Timestamp).toDate() 
+    DateTime? dueDate = task['dueDate'] != null
+        ? (task['dueDate'] as Timestamp).toDate()
         : null;
-    
+    String? assigneeId = task['assigneeId'] as String?;
+
     showDialog(
       context: parentContext,
       builder: (dialogContext) => StatefulBuilder(
@@ -1172,6 +1280,14 @@ Map<String, dynamic>? _getCellMemo(DateTime date, int slotIndex) {
                             ),
                           ),
                         ),
+                        const SizedBox(height: 20),
+                        // 担当者（任意）
+                        Text('担当者', style: TextStyle(fontSize: AppTextSize.small, fontWeight: FontWeight.w600, color: context.colors.textSecondary)),
+                        const SizedBox(height: 6),
+                        _buildAssigneeSelector(
+                          assigneeId,
+                          (v) => setDialogState(() => assigneeId = v),
+                        ),
                       ],
                     ),
                   ),
@@ -1228,6 +1344,8 @@ Map<String, dynamic>? _getCellMemo(DateTime date, int slotIndex) {
                                   .update({
                                 'title': newTitle,
                                 'dueDate': dueDate != null ? Timestamp.fromDate(dueDate!) : null,
+                                'assigneeId': assigneeId,
+                                'assigneeName': _assigneeNameForId(assigneeId),
                               });
                               await _loadAllTasks();
                               onUpdate();

@@ -42,6 +42,8 @@ extension PlusScheduleTaskDialog on _PlusScheduleContentState {
                   else
                     ...currentTasks.map((task) {
                       final studentName = task['studentName'] as String?;
+                      final assigneeName = (task['assigneeName'] as String?) ??
+                          _assigneeNameForId(task['assigneeId'] as String?);
                       return GestureDetector(
                         onTap: () {
                           Navigator.pop(dialogContext);
@@ -77,6 +79,26 @@ extension PlusScheduleTaskDialog on _PlusScheduleContentState {
                                         color: studentName != null ? context.colors.textSecondary : context.colors.textPrimary,
                                       ),
                                     ),
+                                    if (assigneeName != null && assigneeName.isNotEmpty)
+                                      Padding(
+                                        padding: const EdgeInsets.only(top: 4),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(Icons.assignment_ind_outlined,
+                                                size: 14, color: AppColors.primary),
+                                            const SizedBox(width: 4),
+                                            Text(
+                                              assigneeName,
+                                              style: TextStyle(
+                                                fontSize: AppTextSize.small,
+                                                color: AppColors.primary,
+                                                fontWeight: FontWeight.w500,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
                                   ],
                                 ),
                               ),
@@ -145,6 +167,7 @@ extension PlusScheduleTaskDialog on _PlusScheduleContentState {
   void _showAddTaskDialogForDate(DateTime date) {
     String inputMode = 'student'; // 'student' or 'custom'
     Map<String, dynamic>? selectedStudent;
+    String? selectedAssigneeId; // 担当者（任意）
     final titleController = TextEditingController();
     final commentController = TextEditingController();
     DateTime selectedDueDate = date;
@@ -335,6 +358,12 @@ extension PlusScheduleTaskDialog on _PlusScheduleContentState {
                       ),
                     ),
                   ),
+                  const SizedBox(height: 16),
+                  // 担当者（任意 / プラスのスタッフから選択）
+                  _buildAssigneeSelector(
+                    selectedAssigneeId,
+                    (v) => setDialogState(() => selectedAssigneeId = v),
+                  ),
                   // コメント（生徒モードのみ）
                   if (inputMode == 'student') ...[
                     const SizedBox(height: 16),
@@ -371,6 +400,8 @@ extension PlusScheduleTaskDialog on _PlusScheduleContentState {
                           studentNameValue,
                           titleController.text,
                           selectedDueDate,
+                          assigneeId: selectedAssigneeId,
+                          assigneeName: _assigneeNameForId(selectedAssigneeId),
                         );
                         if (dialogContext.mounted) {
                           Navigator.pop(dialogContext);
