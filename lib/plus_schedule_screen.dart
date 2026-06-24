@@ -2435,7 +2435,10 @@ Map<String, dynamic>? _getCellMemo(DateTime date, int slotIndex) {
       // 既存レッスン（期間）と tombstone を取得してスキップ判定。
       // studentName 等値 + date 範囲は複合インデックスが必要になるため、
       // date 範囲のみでクエリし生徒名はコード側で判定する（一括展開と同方式）。
+      // あわせて、同じ日付・同じ時間帯にある既存セット(groupId)を集計し、
+      // セットが1つだけなら新規レッスンを自動でそのセットに参加させる。
       final existingKeys = <String>{};
+      final setIdsByDate = <String, Set<String>>{};
       final existingSnap = await FirebaseFirestore.instance
           .collection('plus_lessons')
           .where('date', isGreaterThanOrEqualTo: Timestamp.fromDate(s))
@@ -2445,9 +2448,17 @@ Map<String, dynamic>? _getCellMemo(DateTime date, int slotIndex) {
         final data = doc.data();
         final ts = data['date'];
         if (ts is! Timestamp) continue;
-        if (((data['studentName'] as String?) ?? '').trim() != studentName) continue;
         final dk = DateFormat('yyyy-MM-dd').format(ts.toDate());
-        existingKeys.add('${dk}_${data['slotIndex'] ?? 0}');
+        final sIdx = data['slotIndex'] ?? 0;
+        if (sIdx == slotIndex) {
+          final gid = data['groupId'] as String?;
+          if (gid != null && gid.isNotEmpty) {
+            (setIdsByDate[dk] ??= <String>{}).add(gid);
+          }
+        }
+        if (((data['studentName'] as String?) ?? '').trim() == studentName) {
+          existingKeys.add('${dk}_$sIdx');
+        }
       }
 
       final tombstoneKeys = <String>{};
@@ -2466,7 +2477,7 @@ Map<String, dynamic>? _getCellMemo(DateTime date, int slotIndex) {
         tombstoneKeys.add('${tdk}_${data['slotIndex'] ?? 0}');
       }
 
-      int created = 0, skipExisting = 0, skipHoliday = 0, skipTombstone = 0;
+      int created = 0, skipExisting = 0, skipHoliday = 0, skipTombstone = 0, joinedSet = 0;
       var batch = FirebaseFirestore.instance.batch();
       int batchOps = 0;
 
@@ -2487,7 +2498,7 @@ Map<String, dynamic>? _getCellMemo(DateTime date, int slotIndex) {
           skipTombstone++;
         } else {
           final ref = FirebaseFirestore.instance.collection('plus_lessons').doc();
-          batch.set(ref, <String, dynamic>{
+          final lessonData = <String, dynamic>{
             'date': Timestamp.fromDate(DateTime(d.year, d.month, d.day)),
             'slotIndex': slotIndex,
             'studentName': studentName,
@@ -2502,7 +2513,14 @@ Map<String, dynamic>? _getCellMemo(DateTime date, int slotIndex) {
             'order': 0,
             'createdAt': FieldValue.serverTimestamp(),
             'autoDeployed': false, // 手動扱い → 一括展開で削除されない
-          });
+          };
+          // 同じ枠に既存セットが1つだけなら自動参加（セットの線を引き継ぐ）
+          final gids = setIdsByDate[dateKey];
+          if (gids != null && gids.length == 1) {
+            lessonData['groupId'] = gids.first;
+            joinedSet++;
+          }
+          batch.set(ref, lessonData);
           existingKeys.add(key);
           created++;
           batchOps++;
@@ -2526,6 +2544,7 @@ Map<String, dynamic>? _getCellMemo(DateTime date, int slotIndex) {
             title: const Text('追加完了'),
             content: Text(
               '作成: $created件\n'
+              'うちセット参加: $joinedSet件\n'
               'スキップ(既存): $skipExisting件\n'
               'スキップ(休業日): $skipHoliday件\n'
               'スキップ(削除済みコマ): $skipTombstone件',
