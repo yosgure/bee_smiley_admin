@@ -38,12 +38,38 @@ class _TrialSlotAdminScreenState extends State<TrialSlotAdminScreen> {
 
   final _db = FirebaseFirestore.instance;
   late DateTime _month; // 表示中の月（1日）
+  // プラスのスケジュール休業日（表示中の月の日番号）。plus_shifts/{yyyy-MM}.holidays と連動。
+  Set<int> _holidayDays = {};
 
   @override
   void initState() {
     super.initState();
     final now = DateTime.now();
     _month = DateTime(now.year, now.month, 1);
+    _loadHolidays();
+  }
+
+  Future<void> _loadHolidays() async {
+    final monthKey = DateFormat('yyyy-MM').format(_month);
+    final days = <int>{};
+    try {
+      final doc = await _db.collection('plus_shifts').doc(monthKey).get();
+      if (doc.exists) {
+        final list = (doc.data()?['holidays'] as List<dynamic>?) ?? [];
+        for (final raw in list) {
+          final d = int.tryParse(raw.toString()) ?? 0;
+          if (d > 0) days.add(d);
+        }
+      }
+    } catch (_) {
+      // 読み取り失敗時は休業日なし扱い（日曜のみ休み）
+    }
+    if (mounted) setState(() => _holidayDays = days);
+  }
+
+  void _goMonth(int delta) {
+    setState(() => _month = DateTime(_month.year, _month.month + delta, 1));
+    _loadHolidays();
   }
 
   String _slotId(String date, String start) =>
@@ -122,8 +148,7 @@ class _TrialSlotAdminScreenState extends State<TrialSlotAdminScreen> {
         children: [
           IconButton(
             icon: const Icon(Icons.chevron_left),
-            onPressed: () => setState(
-                () => _month = DateTime(_month.year, _month.month - 1, 1)),
+            onPressed: () => _goMonth(-1),
           ),
           SizedBox(
             width: 140,
@@ -136,8 +161,7 @@ class _TrialSlotAdminScreenState extends State<TrialSlotAdminScreen> {
           ),
           IconButton(
             icon: const Icon(Icons.chevron_right),
-            onPressed: () => setState(
-                () => _month = DateTime(_month.year, _month.month + 1, 1)),
+            onPressed: () => _goMonth(1),
           ),
         ],
       ),
@@ -228,8 +252,10 @@ class _TrialSlotAdminScreenState extends State<TrialSlotAdminScreen> {
     if (date == null) return const SizedBox.shrink();
 
     final isSunday = date.weekday == DateTime.sunday;
+    // プラスのスケジュールで休業設定された日も休み扱い
+    final isHoliday = isSunday || _holidayDays.contains(date.day);
     final isPast = date.isBefore(today0);
-    final disabled = isSunday || isPast;
+    final disabled = isHoliday || isPast;
     final dayBySlot = byDate[_ymd(date)] ?? const {};
 
     final numColor = disabled
@@ -259,7 +285,7 @@ class _TrialSlotAdminScreenState extends State<TrialSlotAdminScreen> {
                         fontSize: AppTextSize.caption,
                         fontWeight: FontWeight.bold,
                         color: numColor)),
-                if (isSunday) ...[
+                if (isHoliday) ...[
                   const SizedBox(width: 4),
                   Text('休',
                       style: TextStyle(
