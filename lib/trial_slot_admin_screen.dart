@@ -10,10 +10,10 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import 'app_theme.dart';
+import 'main.dart' show AdminShell;
 
 class TrialSlotAdminScreen extends StatefulWidget {
-  final VoidCallback? onBack;
-  const TrialSlotAdminScreen({super.key, this.onBack});
+  const TrialSlotAdminScreen({super.key});
 
   @override
   State<TrialSlotAdminScreen> createState() => _TrialSlotAdminScreenState();
@@ -72,6 +72,15 @@ class _TrialSlotAdminScreenState extends State<TrialSlotAdminScreen> {
     _loadHolidays();
   }
 
+  // 戻る：オーバーレイ表示なら hideOverlay、push されていれば pop。
+  void _close() {
+    if (Navigator.canPop(context)) {
+      Navigator.pop(context);
+    } else {
+      AdminShell.hideOverlay(context);
+    }
+  }
+
   String _slotId(String date, String start) =>
       '${date}_${start.replaceAll(':', '')}';
   String _ymd(DateTime d) => DateFormat('yyyy-MM-dd').format(d);
@@ -124,16 +133,38 @@ class _TrialSlotAdminScreenState extends State<TrialSlotAdminScreen> {
         title: const Text('体験予約枠'),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
-          onPressed: () => widget.onBack != null
-              ? widget.onBack!()
-              : Navigator.maybePop(context),
+          onPressed: _close,
         ),
       ),
       body: Column(
         children: [
+          _hintBar(),
           _monthNav(),
           _weekdayHeader(),
           Expanded(child: _calendar()),
+        ],
+      ),
+    );
+  }
+
+  Widget _hintBar() {
+    final c = context.colors;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      color: c.cardBg,
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.touch_app_outlined, size: 14, color: c.textTertiary),
+          const SizedBox(width: 6),
+          Flexible(
+            child: Text(
+              '時間枠をタップで公開（緑）／非公開を切り替え。変更は自動で保存されます。',
+              style:
+                  TextStyle(fontSize: AppTextSize.caption, color: c.textSecondary),
+            ),
+          ),
         ],
       ),
     );

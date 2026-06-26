@@ -3466,10 +3466,17 @@ void _goToPage(int page) {
         break;
       case 'trial_slots':
         if (mounted) {
-          await Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => const TrialSlotAdminScreen()),
-          );
+          final isWide = MediaQuery.of(context).size.width >= 600;
+          if (isWide) {
+            // サイドバーを残したままコンテンツ内にオーバーレイ表示
+            // （閉じる処理は画面側が自身の context で hideOverlay する）
+            AdminShell.showOverlay(context, const TrialSlotAdminScreen());
+          } else {
+            await Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const TrialSlotAdminScreen()),
+            );
+          }
         }
         break;
     }
