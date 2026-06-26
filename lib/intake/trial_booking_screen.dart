@@ -114,6 +114,15 @@ class _TrialBookingScreenState extends State<TrialBookingScreen> {
     return DateTime(int.parse(p[0]), int.parse(p[1]), int.parse(p[2]));
   }
 
+  // 月を移動したら選択中の日付・時間をクリア（別月の選択が残って紛らわしいのを防ぐ）
+  void _changeCalMonth(int delta) {
+    setState(() {
+      _calMonth = DateTime(_calMonth.year, _calMonth.month + delta, 1);
+      _selectedDate = null;
+      _selectedSlotId = null;
+    });
+  }
+
   String _dateLabel(String date) {
     final p = date.split('-');
     if (p.length != 3) return date;
@@ -405,8 +414,7 @@ class _TrialBookingScreenState extends State<TrialBookingScreen> {
           children: [
             IconButton(
               icon: const Icon(Icons.chevron_left),
-              onPressed: () => setState(() =>
-                  _calMonth = DateTime(_calMonth.year, _calMonth.month - 1, 1)),
+              onPressed: () => _changeCalMonth(-1),
             ),
             SizedBox(
               width: 120,
@@ -419,8 +427,7 @@ class _TrialBookingScreenState extends State<TrialBookingScreen> {
             ),
             IconButton(
               icon: const Icon(Icons.chevron_right),
-              onPressed: () => setState(() =>
-                  _calMonth = DateTime(_calMonth.year, _calMonth.month + 1, 1)),
+              onPressed: () => _changeCalMonth(1),
             ),
           ],
         ),
