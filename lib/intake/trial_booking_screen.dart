@@ -1,9 +1,8 @@
 // 体験予約 公開フォーム（HP問い合わせ用）。STORES予約の自前置き換え。
 //
 // アクセス: https://bee-smiley-admin.web.app/#/book
-// STEP1 日時選択（空き枠から選ぶ）/ STEP2 お客様情報（最小限の6項目）。
+// STEP1 カレンダーで日付選択 → 時間枠選択 / STEP2 お客様情報（最小限の6項目）。
 // 送信で submitTrialBooking → plus_families にリード作成＋枠を確保。
-// 詳細な体験前アンケートは後追いでSMS/メール送付（2段アンケート構想）。
 
 import 'dart:convert';
 
@@ -17,18 +16,18 @@ import '../widgets/brand_header.dart';
 const String _base =
     'https://asia-northeast1-bee-smiley-admin.cloudfunctions.net';
 
-class _SlotDate {
-  final String date; // YYYY-MM-DD
-  final String weekday;
-  final List<_Slot> slots;
-  const _SlotDate(this.date, this.weekday, this.slots);
-}
-
 class _Slot {
   final String id;
   final String start;
   final String end;
   const _Slot(this.id, this.start, this.end);
+}
+
+class _SlotDate {
+  final String date; // YYYY-MM-DD
+  final String weekday;
+  final List<_Slot> slots;
+  const _SlotDate(this.date, this.weekday, this.slots);
 }
 
 class TrialBookingScreen extends StatefulWidget {
@@ -40,6 +39,7 @@ class TrialBookingScreen extends StatefulWidget {
 
 class _TrialBookingScreenState extends State<TrialBookingScreen> {
   final _formKey = GlobalKey<FormState>();
+  static const _weekHeaders = ['日', '月', '火', '水', '木', '金', '土'];
 
   final _parentLastCtrl = TextEditingController();
   final _parentFirstCtrl = TextEditingController();
@@ -51,9 +51,10 @@ class _TrialBookingScreenState extends State<TrialBookingScreen> {
   final _phoneCtrl = TextEditingController();
   final _honeypotCtrl = TextEditingController();
 
-  List<_SlotDate> _dates = [];
+  final Map<String, _SlotDate> _byDate = {};
+  late DateTime _calMonth;
+  String? _selectedDate;
   String? _selectedSlotId;
-  _SlotDate? _selectedDate;
 
   bool _loading = true;
   bool _submitting = false;
@@ -64,6 +65,8 @@ class _TrialBookingScreenState extends State<TrialBookingScreen> {
   @override
   void initState() {
     super.initState();
+    final now = DateTime.now();
+    _calMonth = DateTime(now.year, now.month, 1);
     _loadSlots();
   }
 
@@ -73,23 +76,26 @@ class _TrialBookingScreenState extends State<TrialBookingScreen> {
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body) as Map<String, dynamic>;
         final list = (data['dates'] as List?) ?? [];
-        setState(() {
-          _dates = list.map((d) {
-            final m = d as Map<String, dynamic>;
-            final slots = ((m['slots'] as List?) ?? []).map((sl) {
-              final s = sl as Map<String, dynamic>;
-              return _Slot(s['id'] as String, s['start'] as String, s['end'] as String);
-            }).toList();
-            return _SlotDate(m['date'] as String, (m['weekday'] as String?) ?? '', slots);
+        _byDate.clear();
+        for (final d in list) {
+          final m = d as Map<String, dynamic>;
+          final slots = ((m['slots'] as List?) ?? []).map((sl) {
+            final s = sl as Map<String, dynamic>;
+            return _Slot(s['id'] as String, s['start'] as String, s['end'] as String);
           }).toList();
-          _loading = false;
-        });
-      } else {
-        setState(() => _loading = false);
+          final sd = _SlotDate(
+              m['date'] as String, (m['weekday'] as String?) ?? '', slots);
+          _byDate[sd.date] = sd;
+        }
+        // 最初の空き日の月を初期表示
+        if (_byDate.isNotEmpty) {
+          final first = (_byDate.keys.toList()..sort()).first;
+          final fd = _parseDate(first);
+          _calMonth = DateTime(fd.year, fd.month, 1);
+        }
       }
-    } catch (_) {
-      setState(() => _loading = false);
-    }
+    } catch (_) {}
+    if (mounted) setState(() => _loading = false);
   }
 
   @override
@@ -101,6 +107,11 @@ class _TrialBookingScreenState extends State<TrialBookingScreen> {
       c.dispose();
     }
     super.dispose();
+  }
+
+  DateTime _parseDate(String s) {
+    final p = s.split('-');
+    return DateTime(int.parse(p[0]), int.parse(p[1]), int.parse(p[2]));
   }
 
   String _dateLabel(String date) {
@@ -163,9 +174,9 @@ class _TrialBookingScreenState extends State<TrialBookingScreen> {
         setState(() {
           _errorMessage = msg;
           _submitting = false;
-          // 枠が埋まった場合は再読込
           if (res.statusCode == 409) {
             _selectedSlotId = null;
+            _selectedDate = null;
             _loadSlots();
           }
         });
@@ -181,11 +192,7 @@ class _TrialBookingScreenState extends State<TrialBookingScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: context.colors.scaffoldBg,
-      appBar: AppBar(
-        title: const Text('ビースマイリープラス 体験予約'),
-        elevation: 0,
-      ),
+      backgroundColor: context.colors.scaffoldBgAlt,
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _submitted
@@ -197,107 +204,141 @@ class _TrialBookingScreenState extends State<TrialBookingScreen> {
   Widget _buildThanks() {
     final c = context.colors;
     return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.check_circle, size: 64, color: AppColors.success),
-            const SizedBox(height: 16),
-            Text('体験のご予約ありがとうございました',
-                style: TextStyle(
-                    fontSize: AppTextSize.title,
-                    fontWeight: FontWeight.bold,
-                    color: c.textPrimary)),
-            const SizedBox(height: 8),
-            Text('ご予約日時：$_bookedLabel',
-                style: TextStyle(
-                    fontSize: AppTextSize.bodyLarge,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.primary)),
-            const SizedBox(height: 12),
-            Text('当日に向けて、担当者から詳しいご案内（事前アンケート等）をお送りします。',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                    fontSize: AppTextSize.body, color: c.textSecondary)),
-          ],
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 480),
+        child: Container(
+          margin: const EdgeInsets.all(24),
+          padding: const EdgeInsets.all(36),
+          decoration: _cardDecoration(),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.check_circle, size: 64, color: AppColors.success),
+              const SizedBox(height: 16),
+              Text('体験のご予約ありがとうございました',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                      fontSize: AppTextSize.title,
+                      fontWeight: FontWeight.bold,
+                      color: c.textPrimary)),
+              const SizedBox(height: 12),
+              Text('ご予約日時：$_bookedLabel',
+                  style: TextStyle(
+                      fontSize: AppTextSize.bodyLarge,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.primary)),
+              const SizedBox(height: 12),
+              Text('当日に向けて、担当者から詳しいご案内をお送りします。',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                      fontSize: AppTextSize.body, color: c.textSecondary)),
+            ],
+          ),
         ),
       ),
+    );
+  }
+
+  BoxDecoration _cardDecoration() {
+    return BoxDecoration(
+      color: context.colors.cardBg,
+      borderRadius: BorderRadius.circular(16),
+      border: Border.all(color: context.colors.borderLight),
+      boxShadow: [
+        BoxShadow(
+          color: Colors.black.withValues(alpha: 0.06),
+          blurRadius: 24,
+          offset: const Offset(0, 8),
+        ),
+      ],
     );
   }
 
   Widget _buildForm() {
     return Center(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 640),
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(20),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const BrandHeader(),
-                _stepHeader('STEP 1', '日時を選択'),
-                _slotSelector(),
-                const SizedBox(height: 8),
-                _stepHeader('STEP 2', 'お客様情報'),
-                _section([
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.symmetric(vertical: 32, horizontal: 16),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 560),
+          child: Container(
+            padding: const EdgeInsets.all(28),
+            decoration: _cardDecoration(),
+            child: Form(
+              key: _formKey,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const BrandHeader(height: 48),
+                  const SizedBox(height: 8),
+                  _stepHeader('STEP 1', '日時を選択'),
+                  const SizedBox(height: 12),
+                  _calendar(),
+                  if (_selectedDate != null) ...[
+                    const SizedBox(height: 16),
+                    _timeList(),
+                  ],
+                  const SizedBox(height: 28),
+                  _stepHeader('STEP 2', 'お客様情報'),
+                  const SizedBox(height: 12),
                   _row2(_input('保護者 姓', _parentLastCtrl, required: true),
                       _input('保護者 名', _parentFirstCtrl, required: true)),
+                  const SizedBox(height: 12),
                   _row2(_input('お子さま 姓', _childLastCtrl, required: true),
                       _input('お子さま 名', _childFirstCtrl, required: true)),
+                  const SizedBox(height: 12),
                   _genderSelector(),
+                  const SizedBox(height: 12),
                   _birthPicker(),
+                  const SizedBox(height: 12),
                   _input('メールアドレス', _emailCtrl,
                       required: true,
                       keyboard: TextInputType.emailAddress,
                       validator: _emailValidator),
+                  const SizedBox(height: 12),
                   _input('電話番号', _phoneCtrl,
                       required: true,
                       keyboard: TextInputType.phone,
                       hint: '09000000000'),
-                ]),
-                Offstage(
-                  child: TextField(controller: _honeypotCtrl,
-                      decoration: const InputDecoration(labelText: 'website')),
-                ),
-                if (_errorMessage != null) ...[
-                  const SizedBox(height: 12),
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: context.alerts.urgent.background,
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: context.alerts.urgent.border),
+                  Offstage(
+                    child: TextField(controller: _honeypotCtrl),
+                  ),
+                  if (_errorMessage != null) ...[
+                    const SizedBox(height: 16),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: context.alerts.urgent.background,
+                        borderRadius: BorderRadius.circular(8),
+                        border:
+                            Border.all(color: context.alerts.urgent.border),
+                      ),
+                      child: Text(_errorMessage!,
+                          style: TextStyle(
+                              fontSize: AppTextSize.body,
+                              color: context.alerts.urgent.text)),
                     ),
-                    child: Text(_errorMessage!,
-                        style: TextStyle(
-                            fontSize: AppTextSize.body,
-                            color: context.alerts.urgent.text)),
+                  ],
+                  const SizedBox(height: 24),
+                  FilledButton(
+                    style: FilledButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10)),
+                    ),
+                    onPressed: _submitting ? null : _submit,
+                    child: _submitting
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(
+                                strokeWidth: 2, color: Colors.white))
+                        : const Text('予約を確定する',
+                            style: TextStyle(
+                                fontSize: AppTextSize.bodyLarge,
+                                fontWeight: FontWeight.bold)),
                   ),
                 ],
-                const SizedBox(height: 20),
-                FilledButton(
-                  style: FilledButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8)),
-                  ),
-                  onPressed: _submitting ? null : _submit,
-                  child: _submitting
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(
-                              strokeWidth: 2, color: Colors.white))
-                      : const Text('予約を確定する',
-                          style: TextStyle(
-                              fontSize: AppTextSize.bodyLarge,
-                              fontWeight: FontWeight.bold)),
-                ),
-                const SizedBox(height: 32),
-              ],
+              ),
             ),
           ),
         ),
@@ -305,116 +346,230 @@ class _TrialBookingScreenState extends State<TrialBookingScreen> {
     );
   }
 
-  // ─── パーツ ───
+  // ─── STEP1: カレンダー ───
 
   Widget _stepHeader(String step, String title) {
     final c = context.colors;
-    return Padding(
-      padding: const EdgeInsets.only(top: 8, bottom: 8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(step,
-              style: TextStyle(
-                  fontSize: AppTextSize.caption,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.primary)),
-          Text(title,
-              style: TextStyle(
-                  fontSize: AppTextSize.title,
-                  fontWeight: FontWeight.bold,
-                  color: c.textPrimary)),
-        ],
-      ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(step,
+            style: TextStyle(
+                fontSize: AppTextSize.caption,
+                fontWeight: FontWeight.bold,
+                color: AppColors.primary,
+                letterSpacing: 1)),
+        const SizedBox(height: 2),
+        Text(title,
+            style: TextStyle(
+                fontSize: AppTextSize.titleSm,
+                fontWeight: FontWeight.bold,
+                color: c.textPrimary)),
+      ],
     );
   }
 
-  Widget _slotSelector() {
+  Widget _calendar() {
     final c = context.colors;
-    if (_dates.isEmpty) {
+    if (_byDate.isEmpty) {
       return Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: c.cardBg,
+          color: c.scaffoldBgAlt,
           borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: c.borderLight),
         ),
         child: Text('現在ご予約いただける空き枠がありません。お手数ですがお電話でお問い合わせください。',
             style: TextStyle(fontSize: AppTextSize.body, color: c.textSecondary)),
       );
     }
+
+    final year = _calMonth.year, month = _calMonth.month;
+    final daysInMonth = DateTime(year, month + 1, 0).day;
+    final leading = DateTime(year, month, 1).weekday % 7; // 日始まり
+    final cells = <int?>[];
+    for (int i = 0; i < leading; i++) {
+      cells.add(null);
+    }
+    for (int d = 1; d <= daysInMonth; d++) {
+      cells.add(d);
+    }
+    while (cells.length % 7 != 0) {
+      cells.add(null);
+    }
+
+    return Column(
+      children: [
+        // 月ナビ
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            IconButton(
+              icon: const Icon(Icons.chevron_left),
+              onPressed: () => setState(() =>
+                  _calMonth = DateTime(_calMonth.year, _calMonth.month - 1, 1)),
+            ),
+            SizedBox(
+              width: 120,
+              child: Text('$year年$month月',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                      fontSize: AppTextSize.bodyLarge,
+                      fontWeight: FontWeight.bold,
+                      color: c.textPrimary)),
+            ),
+            IconButton(
+              icon: const Icon(Icons.chevron_right),
+              onPressed: () => setState(() =>
+                  _calMonth = DateTime(_calMonth.year, _calMonth.month + 1, 1)),
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Row(
+          children: [
+            for (int i = 0; i < 7; i++)
+              Expanded(
+                child: Center(
+                  child: Text(_weekHeaders[i],
+                      style: TextStyle(
+                          fontSize: AppTextSize.caption,
+                          fontWeight: FontWeight.bold,
+                          color: i == 0
+                              ? AppColors.error
+                              : i == 6
+                                  ? AppColors.secondary
+                                  : c.textSecondary)),
+                ),
+              ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        GridView.count(
+          crossAxisCount: 7,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          childAspectRatio: 1.0,
+          children: [
+            for (final d in cells) _dayCell(d, year, month),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _dayCell(int? day, int year, int month) {
+    final c = context.colors;
+    if (day == null) return const SizedBox.shrink();
+    final dateStr =
+        '${year.toString().padLeft(4, '0')}-${month.toString().padLeft(2, '0')}-${day.toString().padLeft(2, '0')}';
+    final available = _byDate.containsKey(dateStr);
+    final selected = _selectedDate == dateStr;
+    final weekday = DateTime(year, month, day).weekday; // Mon=1..Sun=7
+
+    Color textColor;
+    if (selected) {
+      textColor = Colors.white;
+    } else if (available) {
+      textColor = AppColors.primary;
+    } else {
+      textColor = weekday == DateTime.sunday
+          ? AppColors.error.withValues(alpha: 0.4)
+          : c.textTertiary;
+    }
+
+    return Center(
+      child: InkWell(
+        borderRadius: BorderRadius.circular(20),
+        onTap: available
+            ? () => setState(() {
+                  _selectedDate = dateStr;
+                  _selectedSlotId = null;
+                })
+            : null,
+        child: Container(
+          width: 38,
+          height: 38,
+          decoration: available
+              ? BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: selected ? AppColors.primary : Colors.transparent,
+                  border: Border.all(
+                      color: selected
+                          ? AppColors.primary
+                          : AppColors.primary.withValues(alpha: 0.5),
+                      width: 1.5),
+                )
+              : null,
+          alignment: Alignment.center,
+          child: Text('$day',
+              style: TextStyle(
+                  fontSize: AppTextSize.body,
+                  fontWeight: available ? FontWeight.bold : FontWeight.normal,
+                  color: textColor)),
+        ),
+      ),
+    );
+  }
+
+  Widget _timeList() {
+    final c = context.colors;
+    final sd = _byDate[_selectedDate];
+    if (sd == null) return const SizedBox.shrink();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        for (final d in _dates)
-          Container(
-            margin: const EdgeInsets.only(bottom: 10),
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: c.cardBg,
+        Text('${_dateLabel(sd.date)}（${sd.weekday}）の時間を選択',
+            style: TextStyle(
+                fontSize: AppTextSize.body,
+                fontWeight: FontWeight.w600,
+                color: c.textPrimary)),
+        const SizedBox(height: 8),
+        for (final s in sd.slots)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: InkWell(
               borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: c.borderLight),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('${_dateLabel(d.date)}（${d.weekday}）',
-                    style: TextStyle(
-                        fontSize: AppTextSize.bodyLarge,
-                        fontWeight: FontWeight.bold,
-                        color: c.textPrimary)),
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
+              onTap: () => setState(() => _selectedSlotId = s.id),
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                decoration: BoxDecoration(
+                  color: _selectedSlotId == s.id
+                      ? AppColors.primary.withValues(alpha: 0.06)
+                      : c.cardBg,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                      color: _selectedSlotId == s.id
+                          ? AppColors.primary
+                          : c.borderLight,
+                      width: _selectedSlotId == s.id ? 1.5 : 1),
+                ),
+                child: Row(
                   children: [
-                    for (final s in d.slots)
-                      ChoiceChip(
-                        label: Text('${s.start}〜${s.end}',
-                            style: const TextStyle(fontSize: AppTextSize.body)),
-                        selected: _selectedSlotId == s.id,
-                        onSelected: (sel) {
-                          setState(() {
-                            _selectedSlotId = sel ? s.id : null;
-                            _selectedDate = sel ? d : null;
-                          });
-                        },
-                      ),
+                    Text('${s.start} 〜 ${s.end}',
+                        style: TextStyle(
+                            fontSize: AppTextSize.bodyLarge,
+                            color: c.textPrimary)),
+                    const Spacer(),
+                    Icon(
+                      _selectedSlotId == s.id
+                          ? Icons.radio_button_checked
+                          : Icons.radio_button_unchecked,
+                      color: _selectedSlotId == s.id
+                          ? AppColors.primary
+                          : c.iconMuted,
+                      size: 22,
+                    ),
                   ],
                 ),
-              ],
+              ),
             ),
-          ),
-        if (_selectedDate != null && _selectedSlotId != null)
-          Padding(
-            padding: const EdgeInsets.only(top: 2, bottom: 6),
-            child: Text(
-                '選択中: ${_dateLabel(_selectedDate!.date)}（${_selectedDate!.weekday}） '
-                '${_selectedDate!.slots.firstWhere((s) => s.id == _selectedSlotId, orElse: () => _selectedDate!.slots.first).start}〜',
-                style: TextStyle(
-                    fontSize: AppTextSize.caption, color: AppColors.primary)),
           ),
       ],
     );
   }
 
-  Widget _section(List<Widget> children) {
-    final c = context.colors;
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: c.cardBg,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: c.borderLight),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          for (final w in children) ...[w, const SizedBox(height: 12)],
-        ],
-      ),
-    );
-  }
+  // ─── STEP2: フォーム部品 ───
 
   Widget _row2(Widget left, Widget right) {
     return Row(
