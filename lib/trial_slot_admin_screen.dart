@@ -267,9 +267,8 @@ class _TrialSlotAdminScreenState extends State<TrialSlotAdminScreen> {
     return Container(
       margin: const EdgeInsets.all(2),
       decoration: BoxDecoration(
-        color: disabled
-            ? c.scaffoldBg.withValues(alpha: 0.4)
-            : c.cardBg,
+        // 休み/無効日は中身も薄いグレーでグレーアウト
+        color: disabled ? c.borderLight : c.cardBg,
         borderRadius: BorderRadius.circular(8),
         border: Border.all(color: c.borderLight),
       ),
