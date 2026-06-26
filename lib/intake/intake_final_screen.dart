@@ -15,6 +15,7 @@ import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 
 import '../app_theme.dart';
+import '../widgets/brand_header.dart';
 
 const String _base =
     'https://asia-northeast1-bee-smiley-admin.cloudfunctions.net';
@@ -302,6 +303,7 @@ class _IntakeFinalScreenState extends State<IntakeFinalScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                const BrandHeader(),
                 _intro(),
                 if (_banner != null) ...[
                   const SizedBox(height: 12),

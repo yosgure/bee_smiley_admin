@@ -11,6 +11,7 @@ import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 
 import '../app_theme.dart';
+import '../widgets/brand_header.dart';
 
 /// Cloud Function 公開エンドポイント URL。
 const String _intakeUrl =
@@ -258,6 +259,7 @@ class _IntakeFormScreenState extends State<IntakeFormScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                const BrandHeader(),
                 _intro(),
                 const SizedBox(height: 16),
                 _section('保護者さまについて', [

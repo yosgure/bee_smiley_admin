@@ -25,6 +25,7 @@ import 'parent_main.dart';
 import 'ai_chat_main_screen.dart';
 import 'intake/intake_form_screen.dart';
 import 'intake/intake_final_screen.dart';
+import 'intake/trial_booking_screen.dart';
 
 // テーマモード管理（グローバル）
 final ValueNotifier<ThemeMode> themeNotifier = ValueNotifier(ThemeMode.system);
@@ -77,6 +78,17 @@ class BeeSmileyApp extends StatelessWidget {
         frag == 'intake';
   }
 
+  /// 体験予約フォーム（HP問い合わせ用）のルートか。
+  /// 例: bee-smiley-admin.web.app/#/book
+  static bool _isPublicBookingRoute() {
+    final base = Uri.base;
+    final path = base.path.toLowerCase();
+    var frag = base.fragment.toLowerCase();
+    final q = frag.indexOf('?');
+    if (q >= 0) frag = frag.substring(0, q);
+    return path.endsWith('/book') || frag == '/book' || frag == 'book';
+  }
+
   /// 入会前アンケート（個別トークンリンク）のルートか。
   /// 例: bee-smiley-admin.web.app/#/intake-final?t=xxxx
   static bool _isPublicFinalIntakeRoute() {
@@ -121,11 +133,13 @@ class BeeSmileyApp extends StatelessWidget {
           ],
           supportedLocales: const [Locale('ja', 'JP')],
           locale: const Locale('ja', 'JP'),
-          home: _isPublicFinalIntakeRoute()
-              ? IntakeFinalScreen(token: _routeToken())
-              : _isPublicIntakeRoute()
-                  ? const IntakeFormScreen()
-                  : const AuthCheckWrapper(),
+          home: _isPublicBookingRoute()
+              ? const TrialBookingScreen()
+              : _isPublicFinalIntakeRoute()
+                  ? IntakeFinalScreen(token: _routeToken())
+                  : _isPublicIntakeRoute()
+                      ? const IntakeFormScreen()
+                      : const AuthCheckWrapper(),
         );
       },
     );

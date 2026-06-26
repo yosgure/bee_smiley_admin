@@ -18,5 +18,6 @@ module.exports = {
   ...require('./src/monitoring'),
   ...require('./src/intake/form_intake'),
   ...require('./src/intake/intake_final'),
+  ...require('./src/intake/trial_booking'),
   ...require('./src/morning_meeting'),
 };

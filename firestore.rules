@@ -41,6 +41,14 @@ service cloud.firestore {
     match /kpi_entries/{docId} {
       allow read, write: if isStaff();
     }
+    // 体験予約: 枠管理はスタッフのみ。公開フォームの空き枠取得・予約は
+    // Cloud Functions（Admin SDK）経由なので公開readは不要。
+    match /trial_config/{docId} {
+      allow read, write: if isStaff();
+    }
+    match /trial_slots/{docId} {
+      allow read, write: if isStaff();
+    }
     match /families/{familyId} {
       allow read: if isAuthenticated();
       allow update: if isStaff()
