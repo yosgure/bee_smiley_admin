@@ -54,7 +54,8 @@ exports.getTrialSlots = onRequest(
       const rows = [];
       snap.forEach((doc) => {
         const d = doc.data();
-        if (s(d.date) >= today) {
+        // 当日・過去は予約不可（翌日以降のみ表示）
+        if (s(d.date) > today) {
           rows.push({ id: doc.id, date: s(d.date), start: s(d.start), end: s(d.end) });
         }
       });
@@ -194,13 +195,20 @@ exports.submitTrialBooking = onRequest(
         if (!snap.exists) throw new Error('NOT_FOUND');
         const d = snap.data();
         if (d.status !== 'open') throw new Error('TAKEN');
+        // 当日・過去は予約不可（翌日以降のみ）
+        if (s(d.date) <= jstToday()) throw new Error('PAST');
         tx.update(slotRef, { status: 'booked', bookedAt: submittedAt });
         return d;
       }).catch((e) => {
         if (e.message === 'NOT_FOUND' || e.message === 'TAKEN') return null;
+        if (e.message === 'PAST') return 'PAST';
         throw e;
       });
 
+      if (slot === 'PAST') {
+        res.status(409).json({ error: '当日のご予約はできません。翌日以降の枠をお選びください。' });
+        return;
+      }
       if (!slot) {
         res.status(409).json({ error: 'この日時は埋まってしまいました。別の枠をお選びください。' });
         return;

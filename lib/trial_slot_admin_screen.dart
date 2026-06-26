@@ -138,33 +138,9 @@ class _TrialSlotAdminScreenState extends State<TrialSlotAdminScreen> {
       ),
       body: Column(
         children: [
-          _hintBar(),
           _monthNav(),
           _weekdayHeader(),
           Expanded(child: _calendar()),
-        ],
-      ),
-    );
-  }
-
-  Widget _hintBar() {
-    final c = context.colors;
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-      color: c.cardBg,
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.touch_app_outlined, size: 14, color: c.textTertiary),
-          const SizedBox(width: 6),
-          Flexible(
-            child: Text(
-              '時間枠をタップで公開（緑）／非公開を切り替え。変更は自動で保存されます。',
-              style:
-                  TextStyle(fontSize: AppTextSize.caption, color: c.textSecondary),
-            ),
-          ),
         ],
       ),
     );
