@@ -15,7 +15,6 @@ import 'generic_master_screen.dart';
 import 'staff_manage_screen.dart';
 import 'non_cognitive_skill_master_screen.dart';
 import 'classroom_master_screen.dart';
-import 'trial_slot_admin_screen.dart';
 import 'staff_csv_import_screen.dart';
 import 'family_csv_import_screen.dart';
 import 'tool_csv_import_screen.dart';
@@ -94,8 +93,6 @@ void _navigateTo(BuildContext context, Widget screen) {
       screenWithBack = NonCognitiveSkillMasterScreen(onBack: widget.onCloseWebScreen);
     } else if (screen is ClassroomMasterScreen) {
       screenWithBack = ClassroomMasterScreen(onBack: widget.onCloseWebScreen);
-    } else if (screen is TrialSlotAdminScreen) {
-      screenWithBack = TrialSlotAdminScreen(onBack: widget.onCloseWebScreen);
     } else if (screen is NotificationSettingsScreen) {
       screenWithBack = NotificationSettingsScreen(onBack: widget.onCloseWebScreen);
     } else if (screen is ChatSettingsScreen) {
@@ -230,13 +227,6 @@ void _navigateTo(BuildContext context, Widget screen) {
       color: AppColors.secondary,
       description: '予定で使う部屋・場所',
       destination: const ClassroomMasterScreen(),
-    ),
-    _MenuData(
-      title: '体験予約枠',
-      icon: Icons.event_available,
-      color: AppColors.primary,
-      description: 'HP体験予約の空き日時を公開',
-      destination: const TrialSlotAdminScreen(),
     ),
   ],
 ),

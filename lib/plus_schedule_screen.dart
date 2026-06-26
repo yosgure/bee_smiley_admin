@@ -19,6 +19,7 @@ import 'student_profile_dialog.dart';
 import 'hiyari_screen.dart';
 import 'complaint_screen.dart';
 import 'meeting_minutes_screen.dart';
+import 'trial_slot_admin_screen.dart';
 import 'crm_lead_screen.dart';
 import 'absence_record_dialog.dart';
 import 'services/undo_service.dart';
@@ -3463,6 +3464,14 @@ void _goToPage(int page) {
           await _showAddWeeklyRecurringDialog();
         }
         break;
+      case 'trial_slots':
+        if (mounted) {
+          await Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const TrialSlotAdminScreen()),
+          );
+        }
+        break;
     }
   }
 
@@ -3553,6 +3562,21 @@ void _goToPage(int page) {
             menuItem('set_edit', Icons.link, 'セット編集'),
             menuItem('deploy_schedule', Icons.event_repeat, '定期スケジュール展開'),
             menuItem('add_weekly', Icons.repeat_one, '毎週1件 追加'),
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 6),
+              child: Divider(height: 1, color: border),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 4, 12, 4),
+              child: Text('体験予約',
+                  style: TextStyle(
+                    fontSize: AppTextSize.caption,
+                    fontWeight: FontWeight.w700,
+                    color: c.textTertiary,
+                    letterSpacing: 0.5,
+                  )),
+            ),
+            menuItem('trial_slots', Icons.calendar_month, '体験予約枠'),
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 6),
               child: Divider(height: 1, color: border),
