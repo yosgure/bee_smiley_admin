@@ -1192,7 +1192,7 @@ class _NextActionSection extends StatelessWidget {
                 onPressed: () =>
                     _showCompleteNextActionDialog(context, lead, leadRef),
                 icon: const Icon(Icons.check_circle_outline, size: 16),
-                label: const Text('完了して次を入力'),
+                label: const Text('完了'),
                 style: FilledButton.styleFrom(
                   padding:
                       const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -1224,38 +1224,40 @@ class _HistorySection extends StatelessWidget {
       frameless: true,
       icon: Icons.history,
       title: '対応履歴',
-      trailing: Row(
-        mainAxisSize: MainAxisSize.min,
+      trailing: Text('${lead.activities.length}件',
+          style: TextStyle(
+              fontSize: AppTextSize.caption, color: c.textTertiary)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text('${lead.activities.length}件',
-              style: TextStyle(
-                  fontSize: AppTextSize.caption, color: c.textTertiary)),
-          const SizedBox(width: 4),
-          IconButton(
-            icon: const Icon(Icons.add, size: 16),
-            tooltip: '履歴を追加',
-            visualDensity: VisualDensity.compact,
-            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-            onPressed: () => _showAddHistoryDialog(context, lead, leadRef),
+          // 入力欄のように見える「記録する」行（計画外の電話・来所もここから）
+          InkWell(
+            borderRadius: BorderRadius.circular(8),
+            onTap: () => _showAddHistoryDialog(context, lead, leadRef),
+            child: Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              decoration: BoxDecoration(
+                color: c.scaffoldBg,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: c.borderLight),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.add, size: 18, color: AppColors.primary),
+                  const SizedBox(width: 10),
+                  Text('電話・来所・メールを記録',
+                      style: TextStyle(
+                          fontSize: AppTextSize.body, color: c.textTertiary)),
+                ],
+              ),
+            ),
           ),
+          if (activities.isNotEmpty) const SizedBox(height: 6),
+          for (final a in activities)
+            _ActivityTile(activity: a, lead: lead, leadRef: leadRef),
         ],
       ),
-      child: activities.isEmpty
-          ? Padding(
-              padding: const EdgeInsets.symmetric(vertical: 4),
-              child: Text('履歴はまだありません',
-                  style: TextStyle(
-                      fontSize: AppTextSize.body,
-                      color: c.textTertiary,
-                      fontStyle: FontStyle.italic)),
-            )
-          : Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                for (final a in activities)
-                  _ActivityTile(activity: a, lead: lead, leadRef: leadRef),
-              ],
-            ),
     );
   }
 }
@@ -1285,15 +1287,38 @@ class _ActivityTile extends StatelessWidget {
                     color: c.textTertiary)),
           ),
           Expanded(
-            child: Text(
-              activity.body.isEmpty ? '（内容なし）' : activity.body,
-              style: TextStyle(
-                  fontSize: AppTextSize.body,
-                  color: activity.body.isEmpty
-                      ? c.textTertiary
-                      : c.textPrimary,
-                  fontStyle:
-                      activity.body.isEmpty ? FontStyle.italic : null),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  margin: const EdgeInsets.only(top: 1, right: 8),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 7, vertical: 1),
+                  decoration: BoxDecoration(
+                    color: c.borderLight,
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                      CrmOptions.labelOf(
+                          CrmOptions.activityTypes, activity.type),
+                      style: TextStyle(
+                          fontSize: AppTextSize.xs,
+                          color: c.textSecondary,
+                          fontWeight: FontWeight.w600)),
+                ),
+                Expanded(
+                  child: Text(
+                    activity.body.isEmpty ? '（内容なし）' : activity.body,
+                    style: TextStyle(
+                        fontSize: AppTextSize.body,
+                        color: activity.body.isEmpty
+                            ? c.textTertiary
+                            : c.textPrimary,
+                        fontStyle:
+                            activity.body.isEmpty ? FontStyle.italic : null),
+                  ),
+                ),
+              ],
             ),
           ),
           IconButton(
@@ -2681,7 +2706,6 @@ const _checklistConsidering = <_ChecklistItem>[
   (id: 'trial_scheduled', label: '体験日決定', dateField: 'trialAt', hasNote: false),
   (id: 'survey_received', label: 'アンケート回収', dateField: 'surveyReceivedAt', hasNote: false),
   (id: 'trial_completed', label: '体験実施', dateField: 'trialActualDate', hasNote: false),
-  (id: 'intent_confirmed', label: '入会意向の確認', dateField: null, hasNote: false),
 ];
 
 /// 入会手続中フェーズ（v3: 5 項目固定、業務フロー反映）。
