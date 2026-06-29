@@ -200,78 +200,51 @@ class _TrialBookingScreenState extends State<TrialBookingScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final isWide = MediaQuery.of(context).size.width >= 600;
     return Scaffold(
-      // スマホは枠なしで全幅（背景=カード色）、PCは薄灰背景にカードを浮かせる
-      backgroundColor:
-          isWide ? context.colors.scaffoldBgAlt : context.colors.cardBg,
+      // STORES風にフラット（カード枠なし・単色背景）
+      backgroundColor: context.colors.cardBg,
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _submitted
-              ? _buildThanks(isWide)
-              : _buildForm(isWide),
+              ? _buildThanks()
+              : _buildForm(),
     );
   }
 
-  Widget _buildThanks(bool isWide) {
+  Widget _buildThanks() {
     final c = context.colors;
-    final inner = Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(Icons.check_circle, size: 64, color: AppColors.success),
-        const SizedBox(height: 16),
-        Text('体験のご予約ありがとうございました',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-                fontSize: AppTextSize.title,
-                fontWeight: FontWeight.bold,
-                color: c.textPrimary)),
-        const SizedBox(height: 12),
-        Text('ご予約日時：$_bookedLabel',
-            style: TextStyle(
-                fontSize: AppTextSize.bodyLarge,
-                fontWeight: FontWeight.bold,
-                color: AppColors.primary)),
-        const SizedBox(height: 12),
-        Text('当日に向けて、担当者から詳しいご案内をお送りします。',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-                fontSize: AppTextSize.body, color: c.textSecondary)),
-      ],
-    );
-    if (!isWide) {
-      return Center(
-          child: Padding(padding: const EdgeInsets.all(24), child: inner));
-    }
     return Center(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 480),
-        child: Container(
-          margin: const EdgeInsets.all(24),
-          padding: const EdgeInsets.all(36),
-          decoration: _cardDecoration(),
-          child: inner,
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.check_circle, size: 64, color: AppColors.success),
+            const SizedBox(height: 16),
+            Text('体験のご予約ありがとうございました',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                    fontSize: AppTextSize.title,
+                    fontWeight: FontWeight.bold,
+                    color: c.textPrimary)),
+            const SizedBox(height: 12),
+            Text('ご予約日時：$_bookedLabel',
+                style: TextStyle(
+                    fontSize: AppTextSize.bodyLarge,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.primary)),
+            const SizedBox(height: 12),
+            Text('当日に向けて、担当者から詳しいご案内をお送りします。',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                    fontSize: AppTextSize.body, color: c.textSecondary)),
+          ],
         ),
       ),
     );
   }
 
-  BoxDecoration _cardDecoration() {
-    return BoxDecoration(
-      color: context.colors.cardBg,
-      borderRadius: BorderRadius.circular(16),
-      border: Border.all(color: context.colors.borderLight),
-      boxShadow: [
-        BoxShadow(
-          color: Colors.black.withValues(alpha: 0.06),
-          blurRadius: 24,
-          offset: const Offset(0, 8),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildForm(bool isWide) {
+  Widget _buildForm() {
     final content = Form(
       key: _formKey,
       child: Column(
@@ -350,26 +323,15 @@ class _TrialBookingScreenState extends State<TrialBookingScreen> {
               ),
             );
 
-    if (!isWide) {
-      // スマホ: 枠なしで全幅・上揃え
-      return SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
-        child: content,
-      );
-    }
-    // PC: 薄灰背景に上揃えカード（中央寄せ・高さは内容に応じて下に伸びる）
+    // 枠なし・フラット。中央寄せ＆上揃えで、内容に応じて下に伸びる。
     return SingleChildScrollView(
-      padding: const EdgeInsets.symmetric(vertical: 32, horizontal: 16),
+      padding: const EdgeInsets.fromLTRB(16, 24, 16, 40),
       child: Container(
         width: double.infinity,
         alignment: Alignment.topCenter,
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 560),
-          child: Container(
-            padding: const EdgeInsets.all(28),
-            decoration: _cardDecoration(),
-            child: content,
-          ),
+          constraints: const BoxConstraints(maxWidth: 600),
+          child: content,
         ),
       ),
     );
@@ -394,6 +356,8 @@ class _TrialBookingScreenState extends State<TrialBookingScreen> {
                 fontSize: AppTextSize.titleSm,
                 fontWeight: FontWeight.bold,
                 color: c.textPrimary)),
+        const SizedBox(height: 10),
+        Divider(height: 1, color: c.borderLight),
       ],
     );
   }
