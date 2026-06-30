@@ -39,6 +39,24 @@ import 'services/custom_stamps.dart';
 String _sanitizeFileName(String s) =>
     s.replaceAll(RegExp('[\u0000-\u001F\u007F-\u009F]'), '');
 
+// ベルのメンション一覧（Slack風の履歴）1件分。
+class _MentionItem {
+  final String roomId;
+  final String roomName;
+  final String senderName;
+  final String text;
+  final DateTime? time;
+  final bool unread;
+  const _MentionItem({
+    required this.roomId,
+    required this.roomName,
+    required this.senderName,
+    required this.text,
+    required this.time,
+    required this.unread,
+  });
+}
+
 class ChatListScreen extends StatefulWidget {
   const ChatListScreen({super.key});
 
@@ -63,6 +81,8 @@ class _ChatListScreenState extends State<ChatListScreen> {
   final Map<String, int> _unreadByRoom = {};
   // ルームごとの「自分宛メンション（@all含む）かつ未読」の件数。ベルの赤ドット用。
   final Map<String, int> _mentionByRoom = {};
+  // ルームごとの自分宛メンション履歴（既読含む）。ベル押下時の一覧表示用。
+  final Map<String, List<_MentionItem>> _mentionItemsByRoom = {};
   final Map<String, DocumentSnapshot> _roomDocsCache = {};
   final Map<String, StreamSubscription<QuerySnapshot>> _unreadSubs = {};
 
@@ -137,15 +157,27 @@ class _ChatListScreenState extends State<ChatListScreen> {
         _unreadSubs.remove(id);
         _unreadByRoom.remove(id);
         _mentionByRoom.remove(id);
+        _mentionItemsByRoom.remove(id);
       }
     }
 
     for (final doc in docs) {
       if (_unreadSubs.containsKey(doc.id)) continue;
-      // このルームでの自分の表示名（手打ち @名前 の検知用）
+      // このルームの表示名・メンバー名（手打ち @名前 の検知 / 一覧表示用）
       final roomData = doc.data() as Map<String, dynamic>?;
-      final myName =
-          ((roomData?['names'] as Map?)?[myUid] ?? '').toString().trim();
+      final namesMap = Map<String, dynamic>.from(roomData?['names'] ?? {});
+      final myName = (namesMap[myUid] ?? '').toString().trim();
+      final groupName = (roomData?['groupName'] ?? '').toString().trim();
+      final members = List<String>.from(roomData?['members'] ?? []);
+      String roomName = groupName;
+      if (roomName.isEmpty) {
+        final others = members
+            .where((id) => id != myUid)
+            .map((id) => (namesMap[id] ?? '').toString().trim())
+            .where((s) => s.isNotEmpty)
+            .toList();
+        roomName = others.isEmpty ? '名称未設定' : others.join(', ');
+      }
       _unreadSubs[doc.id] = FirebaseFirestore.instance
           .collection('chat_rooms')
           .doc(doc.id)
@@ -155,23 +187,39 @@ class _ChatListScreenState extends State<ChatListScreen> {
           .listen((snap) {
         int count = 0;
         int mentionCount = 0;
+        final items = <_MentionItem>[];
         for (final m in snap.docs) {
           final data = m.data();
           final readBy = List<String>.from(data['readBy'] ?? []);
-          if (!readBy.contains(myUid)) {
-            count++;
-            // 自分宛メンション判定:
-            //  (a) mentions に自分のuid（候補リスト選択 / @all / タスクDM）
-            //  (b) 本文に @全員 / @all、または @自分の名前（手打ち対応）
-            final mentions = List<String>.from(data['mentions'] ?? []);
-            final text = (data['text'] ?? '').toString();
-            final mentioned = mentions.contains(myUid) ||
-                text.contains('@all') ||
-                text.contains('@全員') ||
-                (myName.isNotEmpty && text.contains('@$myName'));
-            if (mentioned) mentionCount++;
+          final unread = !readBy.contains(myUid);
+          // 自分宛メンション判定:
+          //  (a) mentions に自分のuid（候補リスト選択 / @all / タスクDM）
+          //  (b) 本文に @全員 / @all、または @自分の名前（手打ち対応）
+          final mentions = List<String>.from(data['mentions'] ?? []);
+          final text = (data['text'] ?? '').toString();
+          final mentioned = mentions.contains(myUid) ||
+              text.contains('@all') ||
+              text.contains('@全員') ||
+              (myName.isNotEmpty && text.contains('@$myName'));
+          if (unread) count++;
+          if (mentioned) {
+            if (unread) mentionCount++;
+            final ts = data['createdAt'];
+            items.add(_MentionItem(
+              roomId: doc.id,
+              roomName: roomName,
+              senderName: (namesMap[data['senderId']] ?? '').toString().trim(),
+              text: text,
+              time: ts is Timestamp ? ts.toDate() : null,
+              unread: unread,
+            ));
           }
         }
+        // 新しい順・各ルーム最大30件まで保持（一覧表示用、再描画は不要）
+        items.sort((a, b) =>
+            (b.time ?? DateTime(0)).compareTo(a.time ?? DateTime(0)));
+        _mentionItemsByRoom[doc.id] =
+            items.length > 30 ? items.sublist(0, 30) : items;
         if (mounted &&
             (_unreadByRoom[doc.id] != count ||
                 _mentionByRoom[doc.id] != mentionCount)) {
@@ -188,12 +236,15 @@ class _ChatListScreenState extends State<ChatListScreen> {
   bool get _hasUnreadMention =>
       _mentionByRoom.values.any((v) => v > 0);
 
-  // 未読メンションがある最初のルームID（ベルのタップ先）
-  String? _firstMentionRoomId() {
-    for (final e in _mentionByRoom.entries) {
-      if (e.value > 0) return e.key;
+  // 全ルームのメンション履歴を新しい順にまとめる（一覧表示用）
+  List<_MentionItem> _allMentionItems() {
+    final all = <_MentionItem>[];
+    for (final list in _mentionItemsByRoom.values) {
+      all.addAll(list);
     }
-    return null;
+    all.sort(
+        (a, b) => (b.time ?? DateTime(0)).compareTo(a.time ?? DateTime(0)));
+    return all;
   }
 
   // タブのフィルタ条件に合うルームの未読合計を返す
@@ -401,18 +452,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
                   : context.colors.iconMuted,
               size: 20),
           tooltip: hasMention ? 'メンションあり' : 'メンション',
-          onPressed: () {
-            final roomId = _firstMentionRoomId();
-            if (roomId == null) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                    content: Text('新しいメンションはありません'),
-                    duration: Duration(milliseconds: 1200)),
-              );
-              return;
-            }
-            _openRoomFromNotification(roomId);
-          },
+          onPressed: _showMentionList,
         ),
         if (hasMention)
           Positioned(
@@ -430,6 +470,171 @@ class _ChatListScreenState extends State<ChatListScreen> {
             ),
           ),
       ],
+    );
+  }
+
+  // ベル押下: 自分宛メンションの一覧（既読含む）を右上にドロップダウン表示。
+  void _showMentionList() {
+    final items = _allMentionItems();
+    showDialog(
+      context: context,
+      barrierColor: Colors.black.withValues(alpha: 0.12),
+      builder: (ctx) {
+        return Stack(
+          children: [
+            Positioned(
+              top: 60,
+              right: 12,
+              child: Material(
+                color: Colors.transparent,
+                child: Container(
+                  width: 360,
+                  constraints: const BoxConstraints(maxHeight: 460),
+                  decoration: BoxDecoration(
+                    color: context.colors.cardBg,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: context.colors.borderMedium),
+                    boxShadow: [
+                      BoxShadow(
+                          color: context.colors.shadow,
+                          blurRadius: 16,
+                          offset: const Offset(0, 4)),
+                    ],
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 14, 12, 10),
+                        child: Row(
+                          children: [
+                            Icon(Icons.notifications_none,
+                                size: 18, color: context.colors.textSecondary),
+                            const SizedBox(width: 8),
+                            Text('メンション',
+                                style: TextStyle(
+                                    fontSize: AppTextSize.body,
+                                    fontWeight: FontWeight.w700,
+                                    color: context.colors.textPrimary)),
+                          ],
+                        ),
+                      ),
+                      Divider(
+                          height: 1, color: context.colors.borderLight),
+                      Flexible(
+                        child: items.isEmpty
+                            ? Padding(
+                                padding: const EdgeInsets.symmetric(
+                                    vertical: 36, horizontal: 16),
+                                child: Center(
+                                  child: Text('メンションはまだありません',
+                                      style: TextStyle(
+                                          fontSize: AppTextSize.caption,
+                                          color: context.colors.textTertiary)),
+                                ),
+                              )
+                            : ListView.separated(
+                                padding: EdgeInsets.zero,
+                                shrinkWrap: true,
+                                itemCount: items.length,
+                                separatorBuilder: (_, __) => Divider(
+                                    height: 1,
+                                    color: context.colors.borderLight),
+                                itemBuilder: (_, i) =>
+                                    _buildMentionListTile(ctx, items[i]),
+                              ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildMentionListTile(BuildContext dialogCtx, _MentionItem item) {
+    String timeStr = '';
+    if (item.time != null) {
+      final now = DateTime.now();
+      final isToday = item.time!.year == now.year &&
+          item.time!.month == now.month &&
+          item.time!.day == now.day;
+      timeStr = isToday
+          ? DateFormat('HH:mm').format(item.time!)
+          : DateFormat('M/d').format(item.time!);
+    }
+    return InkWell(
+      onTap: () {
+        Navigator.of(dialogCtx).pop();
+        _openRoomFromNotification(item.roomId);
+      },
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // 未読は青ドット、既読は無印
+            Padding(
+              padding: const EdgeInsets.only(top: 5, right: 8),
+              child: Container(
+                width: 8,
+                height: 8,
+                decoration: BoxDecoration(
+                  color: item.unread
+                      ? AppColors.primary
+                      : Colors.transparent,
+                  shape: BoxShape.circle,
+                ),
+              ),
+            ),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          item.senderName.isEmpty
+                              ? item.roomName
+                              : '${item.senderName}・${item.roomName}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                              fontSize: AppTextSize.caption,
+                              fontWeight: item.unread
+                                  ? FontWeight.w700
+                                  : FontWeight.w600,
+                              color: context.colors.textSecondary),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Text(timeStr,
+                          style: TextStyle(
+                              fontSize: AppTextSize.caption,
+                              color: context.colors.textTertiary)),
+                    ],
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    item.text.replaceAll('\n', ' '),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                        fontSize: AppTextSize.body,
+                        height: 1.35,
+                        color: context.colors.textPrimary),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
