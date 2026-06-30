@@ -384,11 +384,11 @@ class _ChatListScreenState extends State<ChatListScreen> {
       clipBehavior: Clip.none,
       children: [
         IconButton(
-          icon: Icon(Icons.notifications_outlined,
+          icon: Icon(Icons.notifications_none,
               color: hasMention
-                  ? context.colors.textPrimary
-                  : context.colors.textSecondary,
-              size: 24),
+                  ? context.colors.textSecondary
+                  : context.colors.iconMuted,
+              size: 20),
           tooltip: hasMention ? 'メンションあり' : 'メンション',
           onPressed: () {
             final roomId = _firstMentionRoomId();
