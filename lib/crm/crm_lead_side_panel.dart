@@ -2736,7 +2736,8 @@ DateTime? _dateFor(_ChecklistItem item, CrmLead lead) {
 /// 入会前アンケートの個別トークンリンクを発行し、クリップボードへコピー。
 /// スタッフはコピーしたURLをSMSに貼り付けて保護者へ送付する（SMS自動送付は別フェーズ）。
 Future<void> _issueIntakeLink(
-    BuildContext context, LeadViewReference leadRef) async {
+    BuildContext context, LeadViewReference leadRef,
+    {VoidCallback? onResolved}) async {
   final messenger = ScaffoldMessenger.of(context);
   try {
     final callable = FirebaseFunctions.instanceFor(region: 'asia-northeast1')
@@ -2750,6 +2751,7 @@ Future<void> _issueIntakeLink(
     if (url.isEmpty) throw Exception('リンクの取得に失敗しました');
     await Clipboard.setData(ClipboardData(text: url));
     if (!context.mounted) return;
+    onResolved?.call(); // URL取得完了 → ボタンのローディング解除
     await showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -2782,6 +2784,51 @@ Future<void> _issueIntakeLink(
         SnackBar(content: Text('発行に失敗しました: ${e.message ?? e.code}')));
   } catch (e) {
     messenger.showSnackBar(SnackBar(content: Text('発行に失敗しました: $e')));
+  }
+}
+
+/// 入会前アンケートのリンク発行ボタン。発行処理中はスピナー＋無効化で反応を明示。
+class _IssueLinkButton extends StatefulWidget {
+  final LeadViewReference leadRef;
+  const _IssueLinkButton({required this.leadRef});
+
+  @override
+  State<_IssueLinkButton> createState() => _IssueLinkButtonState();
+}
+
+class _IssueLinkButtonState extends State<_IssueLinkButton> {
+  bool _loading = false;
+
+  Future<void> _run() async {
+    if (_loading) return;
+    setState(() => _loading = true);
+    try {
+      await _issueIntakeLink(
+        context,
+        widget.leadRef,
+        onResolved: () {
+          if (mounted) setState(() => _loading = false);
+        },
+      );
+    } finally {
+      if (mounted && _loading) setState(() => _loading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return OutlinedButton.icon(
+      onPressed: _loading ? null : _run,
+      icon: _loading
+          ? SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(
+                  strokeWidth: 2, color: AppColors.primary),
+            )
+          : const Icon(Icons.link, size: 18),
+      label: Text(_loading ? 'リンクを準備中…' : '入会前アンケートのリンクを発行'),
+    );
   }
 }
 
@@ -3083,11 +3130,7 @@ class _ProgressSection extends StatelessWidget {
             const SizedBox(height: 10),
             Align(
               alignment: Alignment.centerLeft,
-              child: OutlinedButton.icon(
-                onPressed: () => _issueIntakeLink(context, leadRef),
-                icon: const Icon(Icons.link, size: 18),
-                label: const Text('入会前アンケートのリンクを発行'),
-              ),
+              child: _IssueLinkButton(leadRef: leadRef),
             ),
             if (lead.permitStatus != 'have' && lead.hugChildId.isEmpty) ...[
               const SizedBox(height: 8),
