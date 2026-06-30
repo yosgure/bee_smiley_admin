@@ -142,6 +142,10 @@ class _ChatListScreenState extends State<ChatListScreen> {
 
     for (final doc in docs) {
       if (_unreadSubs.containsKey(doc.id)) continue;
+      // このルームでの自分の表示名（手打ち @名前 の検知用）
+      final roomData = doc.data() as Map<String, dynamic>?;
+      final myName =
+          ((roomData?['names'] as Map?)?[myUid] ?? '').toString().trim();
       _unreadSubs[doc.id] = FirebaseFirestore.instance
           .collection('chat_rooms')
           .doc(doc.id)
@@ -156,9 +160,16 @@ class _ChatListScreenState extends State<ChatListScreen> {
           final readBy = List<String>.from(data['readBy'] ?? []);
           if (!readBy.contains(myUid)) {
             count++;
-            // 未読 かつ 自分が @メンション（@all は全員uidに展開済み）されている
+            // 自分宛メンション判定:
+            //  (a) mentions に自分のuid（候補リスト選択 / @all / タスクDM）
+            //  (b) 本文に @全員 / @all、または @自分の名前（手打ち対応）
             final mentions = List<String>.from(data['mentions'] ?? []);
-            if (mentions.contains(myUid)) mentionCount++;
+            final text = (data['text'] ?? '').toString();
+            final mentioned = mentions.contains(myUid) ||
+                text.contains('@all') ||
+                text.contains('@全員') ||
+                (myName.isNotEmpty && text.contains('@$myName'));
+            if (mentioned) mentionCount++;
           }
         }
         if (mounted &&
