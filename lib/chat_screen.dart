@@ -61,6 +61,8 @@ class _ChatListScreenState extends State<ChatListScreen> {
 
   // タブの未読件数表示用: ルームごとの未読件数と現在のルームドキュメントキャッシュ
   final Map<String, int> _unreadByRoom = {};
+  // ルームごとの「自分宛メンション（@all含む）かつ未読」の件数。ベルの赤ドット用。
+  final Map<String, int> _mentionByRoom = {};
   final Map<String, DocumentSnapshot> _roomDocsCache = {};
   final Map<String, StreamSubscription<QuerySnapshot>> _unreadSubs = {};
 
@@ -134,6 +136,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
         _unreadSubs[id]?.cancel();
         _unreadSubs.remove(id);
         _unreadByRoom.remove(id);
+        _mentionByRoom.remove(id);
       }
     }
 
@@ -147,16 +150,39 @@ class _ChatListScreenState extends State<ChatListScreen> {
           .snapshots()
           .listen((snap) {
         int count = 0;
+        int mentionCount = 0;
         for (final m in snap.docs) {
           final data = m.data();
           final readBy = List<String>.from(data['readBy'] ?? []);
-          if (!readBy.contains(myUid)) count++;
+          if (!readBy.contains(myUid)) {
+            count++;
+            // 未読 かつ 自分が @メンション（@all は全員uidに展開済み）されている
+            final mentions = List<String>.from(data['mentions'] ?? []);
+            if (mentions.contains(myUid)) mentionCount++;
+          }
         }
-        if (mounted && _unreadByRoom[doc.id] != count) {
-          setState(() => _unreadByRoom[doc.id] = count);
+        if (mounted &&
+            (_unreadByRoom[doc.id] != count ||
+                _mentionByRoom[doc.id] != mentionCount)) {
+          setState(() {
+            _unreadByRoom[doc.id] = count;
+            _mentionByRoom[doc.id] = mentionCount;
+          });
         }
       });
     }
+  }
+
+  // 自分宛の未読メンションがどこかのルームにあるか（ベルの赤ドット用）
+  bool get _hasUnreadMention =>
+      _mentionByRoom.values.any((v) => v > 0);
+
+  // 未読メンションがある最初のルームID（ベルのタップ先）
+  String? _firstMentionRoomId() {
+    for (final e in _mentionByRoom.entries) {
+      if (e.value > 0) return e.key;
+    }
+    return null;
   }
 
   // タブのフィルタ条件に合うルームの未読合計を返す
@@ -351,6 +377,51 @@ class _ChatListScreenState extends State<ChatListScreen> {
     );
   }
 
+  // メンション通知ベル。自分宛の未読メンションがあれば赤ドット。タップで該当ルームへ。
+  Widget _buildMentionBell() {
+    final hasMention = _hasUnreadMention;
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        IconButton(
+          icon: Icon(Icons.notifications_outlined,
+              color: hasMention
+                  ? context.colors.textPrimary
+                  : context.colors.textSecondary,
+              size: 24),
+          tooltip: hasMention ? 'メンションあり' : 'メンション',
+          onPressed: () {
+            final roomId = _firstMentionRoomId();
+            if (roomId == null) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                    content: Text('新しいメンションはありません'),
+                    duration: Duration(milliseconds: 1200)),
+              );
+              return;
+            }
+            _openRoomFromNotification(roomId);
+          },
+        ),
+        if (hasMention)
+          Positioned(
+            right: 8,
+            top: 8,
+            child: Container(
+              width: 10,
+              height: 10,
+              decoration: BoxDecoration(
+                color: AppColors.error,
+                shape: BoxShape.circle,
+                border:
+                    Border.all(color: context.colors.cardBg, width: 1.5),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
   Widget _buildCommonHeader(String title, {bool isLeftPane = false, List<Widget>? actions, bool showBackButton = false}) {
     return Container(
       height: 56,
@@ -377,6 +448,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
                 right: 0,
                 child: Row(mainAxisSize: MainAxisSize.min, children: [
                 if (actions != null) ...actions,
+                if (isLeftPane) _buildMentionBell(),
                 if (isLeftPane)
                   IconButton(
                     icon: const Icon(Icons.add, color: AppColors.primary, size: 24),
