@@ -333,12 +333,19 @@ class _IntakeFinalScreenState extends State<IntakeFinalScreen> {
                 _section('受給者証について', [
                   _permitSelector(),
                   if (_permitStatus == '有') ...[
-                    const SizedBox(height: 4),
+                    const SizedBox(height: 10),
+                    _certHint(
+                        '受給者証の表・裏を撮影して、写真を添付してください。受給者証番号を書き写していただく必要はありません（写真から確認します）。'),
+                    const SizedBox(height: 10),
                     _certUploader(),
-                    const SizedBox(height: 4),
+                    const SizedBox(height: 8),
                     _input('受給者証番号（任意）', _certNumberCtrl,
                         keyboard: TextInputType.number,
-                        hint: '写真が不鮮明な場合のみ。10桁の番号'),
+                        hint: '写真がぼやけてしまった場合のみ、10桁の番号をご記入ください'),
+                  ],
+                  if (_permitStatus == '申請中') ...[
+                    const SizedBox(height: 10),
+                    _certHint('受給者証が届きましたら、表・裏のお写真をお送りください。'),
                   ],
                 ]),
                 _section('園・医療について', [
@@ -406,9 +413,8 @@ class _IntakeFinalScreenState extends State<IntakeFinalScreen> {
 
   Widget _intro() {
     final c = context.colors;
-    final who = _childName.isNotEmpty
-        ? '$_parentName 様（お子さま：$_childName さん）'
-        : 'ご入会手続きにあたって';
+    final greeting =
+        _parentName.trim().isNotEmpty ? '$_parentName 様' : '保護者さまへ';
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -418,16 +424,24 @@ class _IntakeFinalScreenState extends State<IntakeFinalScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(who,
+          Text(greeting,
               style: TextStyle(
                   fontSize: AppTextSize.bodyLarge,
                   fontWeight: FontWeight.bold,
                   color: c.textPrimary)),
-          const SizedBox(height: 6),
+          if (_childName.isNotEmpty) ...[
+            const SizedBox(height: 2),
+            Text('お子さま：$_childName さん',
+                style: TextStyle(
+                    fontSize: AppTextSize.caption, color: c.textSecondary)),
+          ],
+          const SizedBox(height: 10),
           Text(
-              '書類作成（HUG登録）にあたり、下記のご入力をお願いいたします。受給者証をお持ちの方は、写真を添付いただくだけで結構です。',
+              'このたびはご入会いただきありがとうございます。通いはじめのお手続きのため、下記のご入力をお願いいたします。',
               style: TextStyle(
-                  fontSize: AppTextSize.body, color: c.textSecondary)),
+                  fontSize: AppTextSize.body,
+                  color: c.textSecondary,
+                  height: 1.5)),
         ],
       ),
     );
@@ -564,13 +578,28 @@ class _IntakeFinalScreenState extends State<IntakeFinalScreen> {
     );
   }
 
+  // 受給者証の有無に応じた、保護者向けの案内文（淡い色のミニカード）。
+  Widget _certHint(String text) {
+    final c = context.colors;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: AppColors.primary.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Text(text,
+          style: TextStyle(
+              fontSize: AppTextSize.body, color: c.textSecondary, height: 1.5)),
+    );
+  }
+
   Widget _certUploader() {
     final c = context.colors;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _labelHint('受給者証の写真（表・裏）',
-            '受給者証に記載の情報をそのまま登録に使います。表と裏の2枚をご添付ください', required: true),
+        _labelHint('受給者証の写真（表・裏）', '表と裏の2枚をご添付ください', required: true),
         if (_certImages.isNotEmpty)
           Wrap(
             spacing: 8,
