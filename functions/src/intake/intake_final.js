@@ -55,6 +55,36 @@ exports.createIntakeToken = onCall(
       throw new HttpsError('not-found', `家族が見つかりません: ${familyId}`);
     }
 
+    // 同じリード（家族・児童・種別）に未使用かつ未期限のリンクが既にあれば使い回す。
+    // → 押すたびにURLが変わる／未使用リンクが量産されるのを防ぎ、安全側に倒す。
+    // 等価フィルタのみなので複合インデックス不要（単一フィールドインデックスで処理される）。
+    const existing = await db.collection('intake_tokens')
+      .where('familyId', '==', familyId)
+      .where('childIndex', '==', ci)
+      .where('type', '==', kind)
+      .where('usedAt', '==', null)
+      .get();
+    const nowMs = Date.now();
+    let reusable = null;
+    for (const d of existing.docs) {
+      const dd = d.data() || {};
+      if (dd.expiresAt && dd.expiresAt.toMillis() > nowMs) {
+        // 期限が最も先のものを選ぶ（より長く使えるリンクを返す）
+        if (!reusable || dd.expiresAt.toMillis() > reusable.expiresAt.toMillis()) {
+          reusable = { token: d.id, expiresAt: dd.expiresAt };
+        }
+      }
+    }
+    if (reusable) {
+      const url = `https://bee-smiley-admin.web.app/#/intake-final?t=${reusable.token}`;
+      return {
+        token: reusable.token,
+        url,
+        expiresAt: reusable.expiresAt.toMillis(),
+        reused: true,
+      };
+    }
+
     const token = newToken();
     const now = Timestamp.now();
     const expiresAt = Timestamp.fromMillis(
