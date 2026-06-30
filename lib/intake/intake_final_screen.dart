@@ -105,7 +105,7 @@ class _IntakeFinalScreenState extends State<IntakeFinalScreen> {
           _payerNameKanaCtrl.text = (prefill['payerNameKana'] as String?) ?? '';
           _postalCodeCtrl.text = (prefill['postalCode'] as String?) ?? '';
           _addressCtrl.text = (prefill['addressDetail'] as String?) ?? '';
-          _schoolCtrl.text = (prefill['school'] as String?) ?? '';
+          _schoolCtrl.text = (prefill['kindergarten'] as String?) ?? '';
           _hospitalCtrl.text = (prefill['hospitalName'] as String?) ?? '';
           _doctorCtrl.text = (prefill['doctorName'] as String?) ?? '';
           _certNumberCtrl.text = (prefill['certificateNumber'] as String?) ?? '';
@@ -201,7 +201,7 @@ class _IntakeFinalScreenState extends State<IntakeFinalScreen> {
       'emergencyRelation': _emergencyRelationCtrl.text.trim(),
       'permitStatus': _permitToCode(_permitStatus),
       'certificateNumber': _certNumberCtrl.text.trim(),
-      'school': _schoolCtrl.text.trim(),
+      'kindergarten': _schoolCtrl.text.trim(),
       'hospitalName': _hospitalCtrl.text.trim(),
       'doctorName': _doctorCtrl.text.trim(),
       'allergy': _allergyCtrl.text.trim(),

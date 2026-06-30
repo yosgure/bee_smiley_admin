@@ -154,7 +154,7 @@ exports.getIntakeContext = onRequest(
           payerNameKana: s(cert.payerNameKana),
           postalCode: s(fam.postalCode),
           addressDetail: s(fam.addressDetail),
-          school: s(child.school),
+          kindergarten: s(child.kindergarten),
           hospitalName: s(child.hospitalName),
           doctorName: s(child.doctorName),
           permitStatus: s(child.permitStatus),
@@ -245,7 +245,7 @@ exports.submitFinalIntake = onRequest(
 
         // 児童・保護者の各項目
         if (p.permitStatus !== undefined && s(p.permitStatus)) child.permitStatus = s(p.permitStatus);
-        if (p.school !== undefined) child.school = s(p.school);
+        if (p.kindergarten !== undefined) child.kindergarten = s(p.kindergarten);
         if (p.hospitalName !== undefined) child.hospitalName = s(p.hospitalName);
         if (p.doctorName !== undefined) child.doctorName = s(p.doctorName);
         if (p.allergy !== undefined && s(p.allergy)) child.allergy = s(p.allergy);
@@ -254,6 +254,8 @@ exports.submitFinalIntake = onRequest(
         if (p.precautions !== undefined) child.precautions = s(p.precautions);
         if (p.childWishes !== undefined) child.childWishes = s(p.childWishes);
         if (p.familyWishes !== undefined) child.familyWishes = s(p.familyWishes);
+        // その他お伝えしたいこと → 備考（CRMは child.memo を読む）。空は上書きしない。
+        if (p.memo !== undefined && s(p.memo)) child.memo = s(p.memo);
         child.finalIntakeReceivedAt = now;
         child.updatedAt = now;
         children[childIndex] = child;
