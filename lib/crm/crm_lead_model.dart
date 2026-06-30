@@ -150,6 +150,7 @@ class CrmLead {
   /// てんかん・ひきつけ・喘息など、急に重症化しうる発作・症状
   String get severeSymptoms => (raw['severeSymptoms'] as String?) ?? '';
   String get hospitalName => (raw['hospitalName'] as String?) ?? '';
+  String get hospitalPhone => (raw['hospitalPhone'] as String?) ?? '';
   String get doctorName => (raw['doctorName'] as String?) ?? '';
 
   // ヒアリング深掘り項目（入会前アンケートで任意取得 → 来所ヒアリングの事前共有）
@@ -159,9 +160,13 @@ class CrmLead {
   String get familyWishes => (raw['familyWishes'] as String?) ?? '';
   String get trialNotes => (raw['trialNotes'] as String?) ?? '';
   String get kindergarten => (raw['kindergarten'] as String?) ?? '';
+  String get kindergartenPhone => (raw['kindergartenPhone'] as String?) ?? '';
   String get className => (raw['className'] as String?) ?? '';
   String get homeroomTeacher => (raw['homeroomTeacher'] as String?) ?? '';
   String get grade => (raw['grade'] as String?) ?? '';
+  // HUGプロフィール（お弁当の種類・家族構成）
+  String get lunchType => (raw['lunchType'] as String?) ?? '';
+  String get familyComposition => (raw['familyComposition'] as String?) ?? '';
   String get trialAttendee => (raw['trialAttendee'] as String?) ?? '';
   String? get childGender => raw['childGender'] as String?;
   String get permitStatus =>

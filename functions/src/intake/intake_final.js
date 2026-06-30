@@ -144,6 +144,7 @@ exports.getIntakeContext = onRequest(
       const fam = famSnap.data();
       const child = (fam.children || [])[t.childIndex] || {};
       const cert = child.recipientCert || {};
+      const ec0 = (Array.isArray(fam.emergencyContacts) ? fam.emergencyContacts[0] : null) || {};
       // 本人確認＋事前入力用に最小限だけ返す
       res.status(200).json({
         ok: true,
@@ -154,9 +155,19 @@ exports.getIntakeContext = onRequest(
           payerNameKana: s(cert.payerNameKana),
           postalCode: s(fam.postalCode),
           addressDetail: s(fam.addressDetail),
+          parentRelation: s(fam.parentRelation),
+          emergencyName: s(ec0.name),
+          emergencyPhone: s(ec0.phone),
+          emergencyRelation: s(ec0.relation),
           kindergarten: s(child.kindergarten),
+          kindergartenPhone: s(child.kindergartenPhone),
+          homeroomTeacher: s(child.homeroomTeacher),
+          grade: s(child.grade),
           hospitalName: s(child.hospitalName),
+          hospitalPhone: s(child.hospitalPhone),
           doctorName: s(child.doctorName),
+          lunchType: s(child.lunchType),
+          familyComposition: s(child.familyComposition),
           permitStatus: s(child.permitStatus),
           certificateNumber: s(cert.certificateNumber),
         },
@@ -246,8 +257,14 @@ exports.submitFinalIntake = onRequest(
         // 児童・保護者の各項目
         if (p.permitStatus !== undefined && s(p.permitStatus)) child.permitStatus = s(p.permitStatus);
         if (p.kindergarten !== undefined) child.kindergarten = s(p.kindergarten);
+        if (p.kindergartenPhone !== undefined) child.kindergartenPhone = s(p.kindergartenPhone);
+        if (p.homeroomTeacher !== undefined) child.homeroomTeacher = s(p.homeroomTeacher);
+        if (p.grade !== undefined) child.grade = s(p.grade);
         if (p.hospitalName !== undefined) child.hospitalName = s(p.hospitalName);
+        if (p.hospitalPhone !== undefined) child.hospitalPhone = s(p.hospitalPhone);
         if (p.doctorName !== undefined) child.doctorName = s(p.doctorName);
+        if (p.lunchType !== undefined) child.lunchType = s(p.lunchType);
+        if (p.familyComposition !== undefined) child.familyComposition = s(p.familyComposition);
         if (p.allergy !== undefined && s(p.allergy)) child.allergy = s(p.allergy);
         if (p.severeSymptoms !== undefined && s(p.severeSymptoms)) child.severeSymptoms = s(p.severeSymptoms);
         if (p.sensitivities !== undefined) child.sensitivities = s(p.sensitivities);
@@ -265,14 +282,17 @@ exports.submitFinalIntake = onRequest(
           notifyUnread: true,
           notifyUnreadAt: now,
         };
-        // 住所・郵便番号は family レベル
+        // 住所・郵便番号・続柄は family レベル
         if (p.postalCode !== undefined && s(p.postalCode)) famUpdate.postalCode = s(p.postalCode);
         if (p.addressDetail !== undefined && s(p.addressDetail)) famUpdate.addressDetail = s(p.addressDetail);
-        // 緊急連絡先（任意・1件）
-        if (p.emergencyPhone !== undefined && s(p.emergencyPhone)) {
+        if (p.parentRelation !== undefined && s(p.parentRelation)) famUpdate.parentRelation = s(p.parentRelation);
+        // 緊急連絡先（任意・1件：名前＋電話＋続柄）
+        if ((p.emergencyName !== undefined && s(p.emergencyName)) ||
+            (p.emergencyPhone !== undefined && s(p.emergencyPhone))) {
           const list = Array.isArray(data.emergencyContacts) ? [...data.emergencyContacts] : [];
           list[0] = {
             ...(list[0] || {}),
+            name: s(p.emergencyName),
             phone: s(p.emergencyPhone),
             relation: s(p.emergencyRelation),
           };

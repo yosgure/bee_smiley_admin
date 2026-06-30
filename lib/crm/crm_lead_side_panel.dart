@@ -351,6 +351,8 @@ class _BasicInfoSectionState extends State<_BasicInfoSection> {
               'homeroomTeacher', '例: 山田先生', leadRef),
           _editableSinglelineRow(context, '学年', lead.grade,
               'grade', '例: 年中・小1', leadRef),
+          _editableSinglelineRow(context, '園の連絡先', lead.kindergartenPhone,
+              'kindergartenPhone', '例: 0466-00-0000', leadRef),
 
           const SizedBox(height: 8),
           Divider(height: 1, color: c.borderLight),
@@ -407,8 +409,20 @@ class _BasicInfoSectionState extends State<_BasicInfoSection> {
               'severeSymptoms', '例: 熱性けいれん / なし', leadRef),
           _editableSinglelineRow(context, '病院', lead.hospitalName,
               'hospitalName', '例: ◯◯小児科', leadRef),
+          _editableSinglelineRow(context, '病院の連絡先', lead.hospitalPhone,
+              'hospitalPhone', '例: 0466-00-0000', leadRef),
           _editableSinglelineRow(context, '医師名', lead.doctorName,
               'doctorName', '例: 山田医師', leadRef),
+
+          const SizedBox(height: 8),
+          Divider(height: 1, color: c.borderLight),
+          const SizedBox(height: 8),
+
+          // ── HUGプロフィール（家族構成・お弁当） ──
+          _editableMultiline(context, '家族構成', lead.familyComposition,
+              'familyComposition', '例: 父・母・本人・弟', leadRef),
+          _editableSinglelineRow(context, 'お弁当', lead.lunchType,
+              'lunchType', '例: 標準', leadRef),
 
           const SizedBox(height: 8),
           Divider(height: 1, color: c.borderLight),

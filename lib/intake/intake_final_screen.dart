@@ -44,6 +44,9 @@ class _IntakeFinalScreenState extends State<IntakeFinalScreen> {
   final _payerNameKanaCtrl = TextEditingController();
   final _postalCodeCtrl = TextEditingController();
   final _addressCtrl = TextEditingController();
+  final _parentRelationCtrl = TextEditingController(); // 保護者の児童との続柄(父/母等)
+  // 緊急連絡先（名前・電話・続柄）
+  final _emergencyNameCtrl = TextEditingController();
   final _emergencyPhoneCtrl = TextEditingController();
   final _emergencyRelationCtrl = TextEditingController();
 
@@ -52,12 +55,20 @@ class _IntakeFinalScreenState extends State<IntakeFinalScreen> {
   final _certNumberCtrl = TextEditingController();
   final List<_PickedImage> _certImages = [];
 
-  // 園・医療
-  final _schoolCtrl = TextEditingController();
+  // 園・学校
+  final _schoolCtrl = TextEditingController(); // 園/保育所名 → kindergarten
+  final _kindergartenPhoneCtrl = TextEditingController(); // 園の連絡先
+  final _homeroomTeacherCtrl = TextEditingController(); // 担任
+  final _gradeCtrl = TextEditingController(); // 学年
+  // 医療
   final _hospitalCtrl = TextEditingController();
+  final _hospitalPhoneCtrl = TextEditingController(); // 病院連絡先
   final _doctorCtrl = TextEditingController();
   final _allergyCtrl = TextEditingController();
   final _severeSymptomsCtrl = TextEditingController();
+  // その他（HUGプロフィール）
+  final _lunchTypeCtrl = TextEditingController(); // お弁当の種類
+  final _familyCompositionCtrl = TextEditingController(); // 家族構成
 
   // ヒアリング
   final _sensitivitiesCtrl = TextEditingController();
@@ -105,9 +116,23 @@ class _IntakeFinalScreenState extends State<IntakeFinalScreen> {
           _payerNameKanaCtrl.text = (prefill['payerNameKana'] as String?) ?? '';
           _postalCodeCtrl.text = (prefill['postalCode'] as String?) ?? '';
           _addressCtrl.text = (prefill['addressDetail'] as String?) ?? '';
+          _parentRelationCtrl.text = (prefill['parentRelation'] as String?) ?? '';
+          _emergencyNameCtrl.text = (prefill['emergencyName'] as String?) ?? '';
+          _emergencyPhoneCtrl.text = (prefill['emergencyPhone'] as String?) ?? '';
+          _emergencyRelationCtrl.text =
+              (prefill['emergencyRelation'] as String?) ?? '';
           _schoolCtrl.text = (prefill['kindergarten'] as String?) ?? '';
+          _kindergartenPhoneCtrl.text =
+              (prefill['kindergartenPhone'] as String?) ?? '';
+          _homeroomTeacherCtrl.text =
+              (prefill['homeroomTeacher'] as String?) ?? '';
+          _gradeCtrl.text = (prefill['grade'] as String?) ?? '';
           _hospitalCtrl.text = (prefill['hospitalName'] as String?) ?? '';
+          _hospitalPhoneCtrl.text = (prefill['hospitalPhone'] as String?) ?? '';
           _doctorCtrl.text = (prefill['doctorName'] as String?) ?? '';
+          _lunchTypeCtrl.text = (prefill['lunchType'] as String?) ?? '';
+          _familyCompositionCtrl.text =
+              (prefill['familyComposition'] as String?) ?? '';
           _certNumberCtrl.text = (prefill['certificateNumber'] as String?) ?? '';
           _permitStatus = _normPermit((prefill['permitStatus'] as String?) ?? '');
           _loading = false;
@@ -149,8 +174,11 @@ class _IntakeFinalScreenState extends State<IntakeFinalScreen> {
   void dispose() {
     for (final c in [
       _payerNameCtrl, _payerNameKanaCtrl, _postalCodeCtrl, _addressCtrl,
+      _parentRelationCtrl, _emergencyNameCtrl,
       _emergencyPhoneCtrl, _emergencyRelationCtrl, _certNumberCtrl,
-      _schoolCtrl, _hospitalCtrl, _doctorCtrl, _allergyCtrl, _severeSymptomsCtrl,
+      _schoolCtrl, _kindergartenPhoneCtrl, _homeroomTeacherCtrl, _gradeCtrl,
+      _hospitalCtrl, _hospitalPhoneCtrl, _doctorCtrl, _allergyCtrl,
+      _severeSymptomsCtrl, _lunchTypeCtrl, _familyCompositionCtrl,
       _sensitivitiesCtrl, _precautionsCtrl, _childWishesCtrl, _familyWishesCtrl,
       _memoCtrl, _honeypotCtrl,
     ]) {
@@ -197,13 +225,21 @@ class _IntakeFinalScreenState extends State<IntakeFinalScreen> {
       'payerNameKana': _payerNameKanaCtrl.text.trim(),
       'postalCode': _postalCodeCtrl.text.trim(),
       'addressDetail': _addressCtrl.text.trim(),
+      'parentRelation': _parentRelationCtrl.text.trim(),
+      'emergencyName': _emergencyNameCtrl.text.trim(),
       'emergencyPhone': _emergencyPhoneCtrl.text.trim(),
       'emergencyRelation': _emergencyRelationCtrl.text.trim(),
       'permitStatus': _permitToCode(_permitStatus),
       'certificateNumber': _certNumberCtrl.text.trim(),
       'kindergarten': _schoolCtrl.text.trim(),
+      'kindergartenPhone': _kindergartenPhoneCtrl.text.trim(),
+      'homeroomTeacher': _homeroomTeacherCtrl.text.trim(),
+      'grade': _gradeCtrl.text.trim(),
       'hospitalName': _hospitalCtrl.text.trim(),
+      'hospitalPhone': _hospitalPhoneCtrl.text.trim(),
       'doctorName': _doctorCtrl.text.trim(),
+      'lunchType': _lunchTypeCtrl.text.trim(),
+      'familyComposition': _familyCompositionCtrl.text.trim(),
       'allergy': _allergyCtrl.text.trim(),
       'severeSymptoms': _severeSymptomsCtrl.text.trim(),
       'sensitivities': _sensitivitiesCtrl.text.trim(),
@@ -324,10 +360,14 @@ class _IntakeFinalScreenState extends State<IntakeFinalScreen> {
                       hint: '例: 251-0042'),
                   _input('ご住所（番地まで）', _addressCtrl,
                       required: true, maxLines: 2),
+                  _input('保護者さまの続柄（お子さまから見て）', _parentRelationCtrl,
+                      hint: '例: 父 / 母'),
+                  _labelHint('緊急連絡先', '保護者さま以外で連絡がつく方（任意）'),
+                  _input('お名前', _emergencyNameCtrl, hint: '例: 山田 花子'),
                   _row2(
-                    _input('緊急連絡先（電話）', _emergencyPhoneCtrl,
+                    _input('電話', _emergencyPhoneCtrl,
                         keyboard: TextInputType.phone, hint: '任意'),
-                    _input('続柄', _emergencyRelationCtrl, hint: '例: 父'),
+                    _input('続柄', _emergencyRelationCtrl, hint: '例: 祖母'),
                   ),
                 ]),
                 _section('受給者証について', [
@@ -348,10 +388,22 @@ class _IntakeFinalScreenState extends State<IntakeFinalScreen> {
                     _certHint('受給者証が届きましたら、表・裏のお写真をお送りください。'),
                   ],
                 ]),
-                _section('園・医療について', [
+                _section('園・学校について', [
                   _input('幼稚園・保育園・学校名', _schoolCtrl, required: true),
+                  _row2(
+                    _input('学年', _gradeCtrl, hint: '例: 年長 / 小1'),
+                    _input('担任の先生', _homeroomTeacherCtrl, hint: '任意'),
+                  ),
+                  _input('園・学校の連絡先', _kindergartenPhoneCtrl,
+                      keyboard: TextInputType.phone, hint: '任意'),
+                ]),
+                _section('医療について', [
                   _input('かかりつけ病院名', _hospitalCtrl, required: true),
-                  _input('医師名', _doctorCtrl, hint: 'お分かりになれば'),
+                  _row2(
+                    _input('医師名', _doctorCtrl, hint: 'お分かりになれば'),
+                    _input('病院の連絡先', _hospitalPhoneCtrl,
+                        keyboard: TextInputType.phone, hint: '任意'),
+                  ),
                   _labelHint('アレルギー', '食物・薬・その他。なければ空欄'),
                   _input('', _allergyCtrl, maxLines: 2),
                   _labelHint('てんかん・ひきつけ・喘息などの発作',
@@ -368,7 +420,11 @@ class _IntakeFinalScreenState extends State<IntakeFinalScreen> {
                   _labelHint('ご家族の希望', '例：ビースマイリーでの保護者さまの意向'),
                   _input('', _familyWishesCtrl, maxLines: 3),
                 ]),
-                _section('その他', [
+                _section('ご家族・その他', [
+                  _input('家族構成', _familyCompositionCtrl,
+                      hint: '例: 父・母・本人・弟', maxLines: 2),
+                  _input('お弁当の種類', _lunchTypeCtrl,
+                      hint: '例: 標準 / 手作り弁当 / アレルギー対応'),
                   _input('その他お伝えしたいこと', _memoCtrl, maxLines: 3),
                 ]),
                 Offstage(
