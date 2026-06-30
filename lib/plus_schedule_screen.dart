@@ -971,6 +971,7 @@ Map<String, dynamic>? _getCellMemo(DateTime date, int slotIndex) {
         'studentName': studentName,
         'assigneeId': assigneeId, // 担当者（任意）プラスのスタッフID
         'assigneeName': assigneeName, // 担当者表示名（任意）
+        'createdBy': FirebaseAuth.instance.currentUser?.uid, // 作成者uid（担当者へのDM通知用）
         'dueDate': dueDate != null ? Timestamp.fromDate(dueDate) : null,
         'isCustom': studentName == null, // dashboardと同期
         'completed': false,

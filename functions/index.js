@@ -7,6 +7,7 @@ require('./src/utils/setup');
 
 module.exports = {
   ...require('./src/notifications'),
+  ...require('./src/notifications/task_assignment'),
   ...require('./src/calendar'),
   ...require('./src/accounts'),
   ...require('./src/ai'),
