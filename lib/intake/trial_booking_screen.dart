@@ -245,13 +245,23 @@ class _TrialBookingScreenState extends State<TrialBookingScreen> {
   }
 
   Widget _buildForm() {
+    final c = context.colors;
     final content = Form(
       key: _formKey,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
                   const BrandHeader(height: 48),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 10),
+                  Text(
+                    'このたびはビースマイリープラスにご興味をお持ちいただき、ありがとうございます。\n無料体験のご予約ページです。ご希望の日時とお客さま情報をご入力ください。ご予約後、担当者より当日のご案内をお送りします。',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                        fontSize: AppTextSize.caption,
+                        height: 1.7,
+                        color: c.textSecondary),
+                  ),
+                  const SizedBox(height: 18),
                   _stepHeader('STEP 1', '日時を選択'),
                   const SizedBox(height: 12),
                   _calendar(),
