@@ -47,10 +47,13 @@ class _IntakeFinalScreenState extends State<IntakeFinalScreen> {
   final _cityCtrl = TextEditingController(); // 市町村
   final _addressCtrl = TextEditingController(); // 番地・建物
   final _parentRelationCtrl = TextEditingController(); // 保護者の児童との続柄(父/母等)
-  // 緊急連絡先（名前・電話・続柄）
+  // 緊急連絡先（2件・必須。名前・電話・続柄）
   final _emergencyNameCtrl = TextEditingController();
   final _emergencyPhoneCtrl = TextEditingController();
   final _emergencyRelationCtrl = TextEditingController();
+  final _emergency2NameCtrl = TextEditingController();
+  final _emergency2PhoneCtrl = TextEditingController();
+  final _emergency2RelationCtrl = TextEditingController();
 
   // 受給者証
   String _permitStatus = '';
@@ -125,6 +128,11 @@ class _IntakeFinalScreenState extends State<IntakeFinalScreen> {
           _emergencyPhoneCtrl.text = (prefill['emergencyPhone'] as String?) ?? '';
           _emergencyRelationCtrl.text =
               (prefill['emergencyRelation'] as String?) ?? '';
+          _emergency2NameCtrl.text = (prefill['emergency2Name'] as String?) ?? '';
+          _emergency2PhoneCtrl.text =
+              (prefill['emergency2Phone'] as String?) ?? '';
+          _emergency2RelationCtrl.text =
+              (prefill['emergency2Relation'] as String?) ?? '';
           _schoolCtrl.text = (prefill['kindergarten'] as String?) ?? '';
           _kindergartenPhoneCtrl.text =
               (prefill['kindergartenPhone'] as String?) ?? '';
@@ -180,7 +188,9 @@ class _IntakeFinalScreenState extends State<IntakeFinalScreen> {
       _payerNameCtrl, _payerNameKanaCtrl, _postalCodeCtrl, _prefectureCtrl,
       _cityCtrl, _addressCtrl,
       _parentRelationCtrl, _emergencyNameCtrl,
-      _emergencyPhoneCtrl, _emergencyRelationCtrl, _certNumberCtrl,
+      _emergencyPhoneCtrl, _emergencyRelationCtrl,
+      _emergency2NameCtrl, _emergency2PhoneCtrl, _emergency2RelationCtrl,
+      _certNumberCtrl,
       _schoolCtrl, _kindergartenPhoneCtrl, _homeroomTeacherCtrl, _gradeCtrl,
       _hospitalCtrl, _hospitalPhoneCtrl, _doctorCtrl, _allergyCtrl,
       _severeSymptomsCtrl, _familyCompositionCtrl,
@@ -236,6 +246,9 @@ class _IntakeFinalScreenState extends State<IntakeFinalScreen> {
       'emergencyName': _emergencyNameCtrl.text.trim(),
       'emergencyPhone': _emergencyPhoneCtrl.text.trim(),
       'emergencyRelation': _emergencyRelationCtrl.text.trim(),
+      'emergency2Name': _emergency2NameCtrl.text.trim(),
+      'emergency2Phone': _emergency2PhoneCtrl.text.trim(),
+      'emergency2Relation': _emergency2RelationCtrl.text.trim(),
       'permitStatus': _permitToCode(_permitStatus),
       'certificateNumber': _certNumberCtrl.text.trim(),
       'kindergarten': _schoolCtrl.text.trim(),
@@ -375,12 +388,27 @@ class _IntakeFinalScreenState extends State<IntakeFinalScreen> {
                       required: true, maxLines: 2, hint: '例: 辻堂東海岸1-2-3 ◯◯マンション101'),
                   _input('保護者さまの続柄（お子さまから見て）', _parentRelationCtrl,
                       hint: '例: 父 / 母'),
-                  _labelHint('緊急連絡先', '保護者さま以外で連絡がつく方（任意）'),
-                  _input('お名前', _emergencyNameCtrl, hint: '例: 山田 花子'),
+                  _labelHint('緊急連絡先①', '保護者さま以外で連絡がつく方', required: true),
+                  _input('お名前', _emergencyNameCtrl,
+                      required: true, hint: '例: 山田 花子'),
                   _row2(
                     _input('電話', _emergencyPhoneCtrl,
-                        keyboard: TextInputType.phone, hint: '任意'),
-                    _input('続柄', _emergencyRelationCtrl, hint: '例: 祖母'),
+                        required: true,
+                        keyboard: TextInputType.phone,
+                        hint: '例: 090-1234-5678'),
+                    _input('続柄', _emergencyRelationCtrl,
+                        required: true, hint: '例: 祖母'),
+                  ),
+                  _labelHint('緊急連絡先②', '', required: true),
+                  _input('お名前', _emergency2NameCtrl,
+                      required: true, hint: '例: 山田 太郎'),
+                  _row2(
+                    _input('電話', _emergency2PhoneCtrl,
+                        required: true,
+                        keyboard: TextInputType.phone,
+                        hint: '例: 090-8765-4321'),
+                    _input('続柄', _emergency2RelationCtrl,
+                        required: true, hint: '例: 祖父'),
                   ),
                   _input('家族構成', _familyCompositionCtrl,
                       hint: '例: 父・母・本人・弟', maxLines: 2),

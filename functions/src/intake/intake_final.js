@@ -144,7 +144,9 @@ exports.getIntakeContext = onRequest(
       const fam = famSnap.data();
       const child = (fam.children || [])[t.childIndex] || {};
       const cert = child.recipientCert || {};
-      const ec0 = (Array.isArray(fam.emergencyContacts) ? fam.emergencyContacts[0] : null) || {};
+      const ecList = Array.isArray(fam.emergencyContacts) ? fam.emergencyContacts : [];
+      const ec0 = ecList[0] || {};
+      const ec1 = ecList[1] || {};
       // 本人確認＋事前入力用に最小限だけ返す
       res.status(200).json({
         ok: true,
@@ -161,6 +163,9 @@ exports.getIntakeContext = onRequest(
           emergencyName: s(ec0.name),
           emergencyPhone: s(ec0.phone),
           emergencyRelation: s(ec0.relation),
+          emergency2Name: s(ec1.name),
+          emergency2Phone: s(ec1.phone),
+          emergency2Relation: s(ec1.relation),
           kindergarten: s(child.kindergarten),
           kindergartenPhone: s(child.kindergartenPhone),
           homeroomTeacher: s(child.homeroomTeacher),
@@ -290,16 +295,26 @@ exports.submitFinalIntake = onRequest(
         if (p.city !== undefined && s(p.city)) famUpdate.city = s(p.city);
         if (p.addressDetail !== undefined && s(p.addressDetail)) famUpdate.addressDetail = s(p.addressDetail);
         if (p.parentRelation !== undefined && s(p.parentRelation)) famUpdate.parentRelation = s(p.parentRelation);
-        // 緊急連絡先（任意・1件：名前＋電話＋続柄）
-        if ((p.emergencyName !== undefined && s(p.emergencyName)) ||
-            (p.emergencyPhone !== undefined && s(p.emergencyPhone))) {
+        // 緊急連絡先（2件・必須：名前＋電話＋続柄）
+        if (p.emergencyName !== undefined || p.emergencyPhone !== undefined ||
+            p.emergency2Name !== undefined || p.emergency2Phone !== undefined) {
           const list = Array.isArray(data.emergencyContacts) ? [...data.emergencyContacts] : [];
-          list[0] = {
-            ...(list[0] || {}),
-            name: s(p.emergencyName),
-            phone: s(p.emergencyPhone),
-            relation: s(p.emergencyRelation),
-          };
+          if (p.emergencyName !== undefined || p.emergencyPhone !== undefined) {
+            list[0] = {
+              ...(list[0] || {}),
+              name: s(p.emergencyName),
+              phone: s(p.emergencyPhone),
+              relation: s(p.emergencyRelation),
+            };
+          }
+          if (p.emergency2Name !== undefined || p.emergency2Phone !== undefined) {
+            list[1] = {
+              ...(list[1] || {}),
+              name: s(p.emergency2Name),
+              phone: s(p.emergency2Phone),
+              relation: s(p.emergency2Relation),
+            };
+          }
           famUpdate.emergencyContacts = list;
         }
         tx.update(famRef, famUpdate);
