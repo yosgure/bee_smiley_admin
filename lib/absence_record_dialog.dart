@@ -51,7 +51,7 @@ class _AbsenceRecordDialogState extends State<AbsenceRecordDialog> {
   static const String _defaultSupportText =
       '安静に過ごしていただくよう助言した。\n受診した際は結果報告いただけるよう依頼した。\n次回利用日を確認した。';
 
-  static const List<String> _contactMethodOptions = ['電話', 'メール', 'その他'];
+  static const List<String> _contactMethodOptions = ['電話', 'HUG'];
   static const List<String> _callerOptions = ['母', '父'];
   static const List<String> _reasonOptions = ['発熱', '怪我', '家庭都合'];
 
@@ -214,7 +214,8 @@ class _AbsenceRecordDialogState extends State<AbsenceRecordDialog> {
                       label: '連絡手段',
                       options: _contactMethodOptions,
                       controller: _contactMethodController,
-                      hint: 'その他（自由入力）',
+                      hint: '',
+                      showTextField: false,
                     ),
                     const SizedBox(height: 12),
                     _chipsWithTextField(
