@@ -2,7 +2,33 @@
 // 全 callable で「呼び出し元が staffs に存在するか」をチェックして管理者権限を担保している。
 
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
+const { onDocumentDeleted } = require("firebase-functions/v2/firestore");
 const { db, auth, FieldValue, FIXED_DOMAIN, initialPassword } = require('../utils/setup');
+
+// スタッフが削除されたら、そのuidを全チャットルームの members から自動で外す。
+// （names は残す＝過去メッセージの表示名を保持。振り分け判定を触らずに、
+//  削除済みスタッフが残るグループが「保護者」側へ落ちる問題を根本解消する）
+exports.onStaffDeleted = onDocumentDeleted(
+  { region: 'asia-northeast1', document: 'staffs/{staffId}' },
+  async (event) => {
+    const data = (event.data && event.data.data()) || {};
+    const uid = data.uid;
+    if (!uid) return;
+    try {
+      const rooms = await db.collection('chat_rooms')
+        .where('members', 'array-contains', uid).get();
+      if (rooms.empty) return;
+      const batch = db.batch();
+      rooms.forEach((r) => {
+        batch.update(r.ref, { members: FieldValue.arrayRemove(uid) });
+      });
+      await batch.commit();
+      console.log(`[onStaffDeleted] removed uid=${uid} from ${rooms.size} chat rooms`);
+    } catch (e) {
+      console.error('[onStaffDeleted] failed:', e.message);
+    }
+  }
+);
 
 async function assertStaffCaller(request) {
   if (!request.auth) {
