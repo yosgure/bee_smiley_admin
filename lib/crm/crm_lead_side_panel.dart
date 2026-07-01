@@ -345,8 +345,6 @@ class _BasicInfoSectionState extends State<_BasicInfoSection> {
           _editableGenderRow(context, '性別', lead.childGender ?? '', leadRef),
           _editableSinglelineRow(context, '園', lead.kindergarten,
               'kindergarten', '例: ◯◯幼稚園', leadRef),
-          _editableSinglelineRow(context, 'クラス', lead.className,
-              'className', '例: ひまわり組', leadRef),
           _editableSinglelineRow(context, '担任', lead.homeroomTeacher,
               'homeroomTeacher', '例: 山田先生', leadRef),
           _editableSinglelineRow(context, '学年', lead.grade,
@@ -421,6 +419,22 @@ class _BasicInfoSectionState extends State<_BasicInfoSection> {
           // ── HUGプロフィール（家族構成） ──
           _editableMultiline(context, '家族構成', lead.familyComposition,
               'familyComposition', '例: 父・母・本人・弟', leadRef),
+
+          const SizedBox(height: 8),
+          Divider(height: 1, color: c.borderLight),
+          const SizedBox(height: 8),
+
+          // ── ヒアリング（入会前アンケートで保護者が事前共有 / 来所で深掘り） ──
+          _editableMultiline(context, '困っていること', lead.troubles,
+              'troubles', '', leadRef),
+          _editableMultiline(context, '敏感なもの・こと', lead.sensitivities,
+              'sensitivities', '例: 音・光・匂い・触覚', leadRef),
+          _editableMultiline(context, '気をつけてほしいこと', lead.precautions,
+              'precautions', '', leadRef),
+          _editableMultiline(context, '本人の希望', lead.childWishes,
+              'childWishes', '', leadRef),
+          _editableMultiline(context, '家族の希望', lead.familyWishes,
+              'familyWishes', '', leadRef),
 
           const SizedBox(height: 8),
           Divider(height: 1, color: c.borderLight),
@@ -3595,6 +3609,11 @@ class _HugInfoSectionState extends State<_HugInfoSection> {
                     color: context.alerts.urgent.text),
               ),
             ),
+          _certRow(context, '通所給付決定保護者名（漢字）', lead.payerName,
+              'payerName',
+              hint: '実績記録票に記載される保護者名'),
+          _certRow(context, '通所給付決定保護者名（カナ）', lead.payerNameKana,
+              'payerNameKana'),
           _certRow(context, '受給者証番号', lead.certificateNumber,
               'certificateNumber',
               hint: '半角数字10桁',

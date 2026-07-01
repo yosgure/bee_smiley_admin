@@ -154,6 +154,8 @@ exports.getIntakeContext = onRequest(
           payerName: s(cert.payerName),
           payerNameKana: s(cert.payerNameKana),
           postalCode: s(fam.postalCode),
+          prefecture: s(fam.prefecture),
+          city: s(fam.city),
           addressDetail: s(fam.addressDetail),
           parentRelation: s(fam.parentRelation),
           emergencyName: s(ec0.name),
@@ -167,6 +169,7 @@ exports.getIntakeContext = onRequest(
           hospitalPhone: s(child.hospitalPhone),
           doctorName: s(child.doctorName),
           familyComposition: s(child.familyComposition),
+          troubles: s(child.troubles),
           permitStatus: s(child.permitStatus),
           certificateNumber: s(cert.certificateNumber),
         },
@@ -269,6 +272,7 @@ exports.submitFinalIntake = onRequest(
         if (p.precautions !== undefined) child.precautions = s(p.precautions);
         if (p.childWishes !== undefined) child.childWishes = s(p.childWishes);
         if (p.familyWishes !== undefined) child.familyWishes = s(p.familyWishes);
+        if (p.troubles !== undefined) child.troubles = s(p.troubles);
         // その他お伝えしたいこと → 備考（CRMは child.memo を読む）。空は上書きしない。
         if (p.memo !== undefined && s(p.memo)) child.memo = s(p.memo);
         child.finalIntakeReceivedAt = now;
@@ -282,6 +286,8 @@ exports.submitFinalIntake = onRequest(
         };
         // 住所・郵便番号・続柄は family レベル
         if (p.postalCode !== undefined && s(p.postalCode)) famUpdate.postalCode = s(p.postalCode);
+        if (p.prefecture !== undefined && s(p.prefecture)) famUpdate.prefecture = s(p.prefecture);
+        if (p.city !== undefined && s(p.city)) famUpdate.city = s(p.city);
         if (p.addressDetail !== undefined && s(p.addressDetail)) famUpdate.addressDetail = s(p.addressDetail);
         if (p.parentRelation !== undefined && s(p.parentRelation)) famUpdate.parentRelation = s(p.parentRelation);
         // 緊急連絡先（任意・1件：名前＋電話＋続柄）

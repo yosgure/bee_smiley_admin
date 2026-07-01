@@ -43,7 +43,9 @@ class _IntakeFinalScreenState extends State<IntakeFinalScreen> {
   final _payerNameCtrl = TextEditingController();
   final _payerNameKanaCtrl = TextEditingController();
   final _postalCodeCtrl = TextEditingController();
-  final _addressCtrl = TextEditingController();
+  final _prefectureCtrl = TextEditingController(); // 都道府県
+  final _cityCtrl = TextEditingController(); // 市町村
+  final _addressCtrl = TextEditingController(); // 番地・建物
   final _parentRelationCtrl = TextEditingController(); // 保護者の児童との続柄(父/母等)
   // 緊急連絡先（名前・電話・続柄）
   final _emergencyNameCtrl = TextEditingController();
@@ -74,6 +76,7 @@ class _IntakeFinalScreenState extends State<IntakeFinalScreen> {
   final _precautionsCtrl = TextEditingController();
   final _childWishesCtrl = TextEditingController();
   final _familyWishesCtrl = TextEditingController();
+  final _troublesCtrl = TextEditingController(); // 困っていること
   final _memoCtrl = TextEditingController();
 
   final _honeypotCtrl = TextEditingController();
@@ -114,6 +117,8 @@ class _IntakeFinalScreenState extends State<IntakeFinalScreen> {
           _payerNameCtrl.text = (prefill['payerName'] as String?) ?? '';
           _payerNameKanaCtrl.text = (prefill['payerNameKana'] as String?) ?? '';
           _postalCodeCtrl.text = (prefill['postalCode'] as String?) ?? '';
+          _prefectureCtrl.text = (prefill['prefecture'] as String?) ?? '';
+          _cityCtrl.text = (prefill['city'] as String?) ?? '';
           _addressCtrl.text = (prefill['addressDetail'] as String?) ?? '';
           _parentRelationCtrl.text = (prefill['parentRelation'] as String?) ?? '';
           _emergencyNameCtrl.text = (prefill['emergencyName'] as String?) ?? '';
@@ -131,6 +136,7 @@ class _IntakeFinalScreenState extends State<IntakeFinalScreen> {
           _doctorCtrl.text = (prefill['doctorName'] as String?) ?? '';
           _familyCompositionCtrl.text =
               (prefill['familyComposition'] as String?) ?? '';
+          _troublesCtrl.text = (prefill['troubles'] as String?) ?? '';
           _certNumberCtrl.text = (prefill['certificateNumber'] as String?) ?? '';
           _permitStatus = _normPermit((prefill['permitStatus'] as String?) ?? '');
           _loading = false;
@@ -171,14 +177,15 @@ class _IntakeFinalScreenState extends State<IntakeFinalScreen> {
   @override
   void dispose() {
     for (final c in [
-      _payerNameCtrl, _payerNameKanaCtrl, _postalCodeCtrl, _addressCtrl,
+      _payerNameCtrl, _payerNameKanaCtrl, _postalCodeCtrl, _prefectureCtrl,
+      _cityCtrl, _addressCtrl,
       _parentRelationCtrl, _emergencyNameCtrl,
       _emergencyPhoneCtrl, _emergencyRelationCtrl, _certNumberCtrl,
       _schoolCtrl, _kindergartenPhoneCtrl, _homeroomTeacherCtrl, _gradeCtrl,
       _hospitalCtrl, _hospitalPhoneCtrl, _doctorCtrl, _allergyCtrl,
       _severeSymptomsCtrl, _familyCompositionCtrl,
       _sensitivitiesCtrl, _precautionsCtrl, _childWishesCtrl, _familyWishesCtrl,
-      _memoCtrl, _honeypotCtrl,
+      _troublesCtrl, _memoCtrl, _honeypotCtrl,
     ]) {
       c.dispose();
     }
@@ -222,6 +229,8 @@ class _IntakeFinalScreenState extends State<IntakeFinalScreen> {
       'payerName': _payerNameCtrl.text.trim(),
       'payerNameKana': _payerNameKanaCtrl.text.trim(),
       'postalCode': _postalCodeCtrl.text.trim(),
+      'prefecture': _prefectureCtrl.text.trim(),
+      'city': _cityCtrl.text.trim(),
       'addressDetail': _addressCtrl.text.trim(),
       'parentRelation': _parentRelationCtrl.text.trim(),
       'emergencyName': _emergencyNameCtrl.text.trim(),
@@ -243,6 +252,7 @@ class _IntakeFinalScreenState extends State<IntakeFinalScreen> {
       'precautions': _precautionsCtrl.text.trim(),
       'childWishes': _childWishesCtrl.text.trim(),
       'familyWishes': _familyWishesCtrl.text.trim(),
+      'troubles': _troublesCtrl.text.trim(),
       'memo': _memoCtrl.text.trim(),
       'certImages': _certImages
           .map((i) => {
@@ -355,8 +365,14 @@ class _IntakeFinalScreenState extends State<IntakeFinalScreen> {
                       required: true,
                       keyboard: TextInputType.number,
                       hint: '例: 251-0042'),
-                  _input('ご住所（番地まで）', _addressCtrl,
-                      required: true, maxLines: 2),
+                  _row2(
+                    _input('都道府県', _prefectureCtrl,
+                        required: true, hint: '例: 神奈川県'),
+                    _input('市区町村', _cityCtrl,
+                        required: true, hint: '例: 藤沢市'),
+                  ),
+                  _input('番地・建物名', _addressCtrl,
+                      required: true, maxLines: 2, hint: '例: 辻堂東海岸1-2-3 ◯◯マンション101'),
                   _input('保護者さまの続柄（お子さまから見て）', _parentRelationCtrl,
                       hint: '例: 父 / 母'),
                   _labelHint('緊急連絡先', '保護者さま以外で連絡がつく方（任意）'),
@@ -410,6 +426,8 @@ class _IntakeFinalScreenState extends State<IntakeFinalScreen> {
                   _input('', _severeSymptomsCtrl, maxLines: 3),
                 ]),
                 _section('ヒアリング（分かる範囲で・任意）', [
+                  _labelHint('困っていること', ''),
+                  _input('', _troublesCtrl, maxLines: 3),
                   _labelHint('敏感なもの・こと', '例：音、光、匂い、触覚など'),
                   _input('', _sensitivitiesCtrl, maxLines: 3),
                   _labelHint('気をつけてほしいこと', ''),

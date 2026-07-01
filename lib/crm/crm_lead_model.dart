@@ -158,10 +158,10 @@ class CrmLead {
   String get precautions => (raw['precautions'] as String?) ?? '';
   String get childWishes => (raw['childWishes'] as String?) ?? '';
   String get familyWishes => (raw['familyWishes'] as String?) ?? '';
+  String get troubles => (raw['troubles'] as String?) ?? '';
   String get trialNotes => (raw['trialNotes'] as String?) ?? '';
   String get kindergarten => (raw['kindergarten'] as String?) ?? '';
   String get kindergartenPhone => (raw['kindergartenPhone'] as String?) ?? '';
-  String get className => (raw['className'] as String?) ?? '';
   String get homeroomTeacher => (raw['homeroomTeacher'] as String?) ?? '';
   String get grade => (raw['grade'] as String?) ?? '';
   // HUGプロフィール（家族構成）
