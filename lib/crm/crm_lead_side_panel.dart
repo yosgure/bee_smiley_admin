@@ -2843,17 +2843,46 @@ class _IssueLinkButtonState extends State<_IssueLinkButton> {
 
   @override
   Widget build(BuildContext context) {
-    return OutlinedButton.icon(
-      onPressed: _loading ? null : _run,
-      icon: _loading
-          ? SizedBox(
-              width: 16,
-              height: 16,
-              child: CircularProgressIndicator(
-                  strokeWidth: 2, color: AppColors.primary),
-            )
-          : const Icon(Icons.link, size: 18),
-      label: Text(_loading ? 'リンクを準備中…' : '入会前アンケートのリンクを発行'),
+    final c = context.colors;
+    return InkWell(
+      onTap: _loading ? null : _run,
+      borderRadius: BorderRadius.circular(10),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: AppColors.primary.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: AppColors.primary.withValues(alpha: 0.30)),
+        ),
+        child: Row(
+          children: [
+            _loading
+                ? SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                        strokeWidth: 2, color: AppColors.primary))
+                : Icon(Icons.send_outlined, size: 20, color: AppColors.primary),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(_loading ? 'リンクを準備中…' : '入会前アンケートを送る',
+                      style: TextStyle(
+                          fontSize: AppTextSize.body,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.primary)),
+                  Text('記入用リンクをSMSで送付',
+                      style: TextStyle(
+                          fontSize: AppTextSize.xs, color: c.textSecondary)),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -3153,20 +3182,53 @@ class _ProgressSection extends StatelessWidget {
           const SizedBox(height: 4),
           for (final item in items) _itemRow(context, item),
           if (stage == 'onboarding') ...[
-            const SizedBox(height: 10),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: _IssueLinkButton(leadRef: leadRef),
-            ),
+            const SizedBox(height: 12),
+            Divider(height: 1, color: c.borderLight),
+            const SizedBox(height: 12),
+            Text('手続き',
+                style: TextStyle(
+                    fontSize: AppTextSize.caption,
+                    fontWeight: FontWeight.w600,
+                    color: c.textTertiary)),
+            const SizedBox(height: 8),
+            _IssueLinkButton(leadRef: leadRef),
             if (lead.permitStatus != 'have' && lead.hugChildId.isEmpty) ...[
               const SizedBox(height: 8),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: OutlinedButton.icon(
-                  onPressed: () =>
-                      _showProvisionalHugDialog(context, lead, leadRef),
-                  icon: const Icon(Icons.cloud_upload_outlined, size: 18),
-                  label: const Text('HUGに仮登録（受給者証なし）'),
+              InkWell(
+                onTap: () =>
+                    _showProvisionalHugDialog(context, lead, leadRef),
+                borderRadius: BorderRadius.circular(10),
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 12, vertical: 10),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: c.borderMedium),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.cloud_upload_outlined,
+                          size: 20, color: c.textSecondary),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('HUGに仮登録',
+                                style: TextStyle(
+                                    fontSize: AppTextSize.body,
+                                    fontWeight: FontWeight.w600,
+                                    color: c.textPrimary)),
+                            Text('受給者証なしで先行登録',
+                                style: TextStyle(
+                                    fontSize: AppTextSize.xs,
+                                    color: c.textTertiary)),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ],
