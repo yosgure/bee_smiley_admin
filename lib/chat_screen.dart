@@ -267,9 +267,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
     final members = List<String>.from(data['members'] ?? []);
     final others = members.where((id) => id != currentUser?.uid).toList();
     if (others.isEmpty) return true;
-    // 保護者チャットは「1対1 かつ 相手がスタッフでない」場合だけ。グループは常にスタッフ扱い。
-    final hasParent =
-        others.length == 1 && !_staffUids.contains(others.first);
+    final hasParent = others.any((id) => !_staffUids.contains(id));
     return filter == 'staff' ? !hasParent : hasParent;
   }
 
@@ -792,11 +790,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
     final members = List<String>.from(data['members'] ?? []);
     final others = members.where((id) => id != currentUser?.uid).toList();
     if (others.isEmpty) return true;
-    // 保護者チャットは「1対1 かつ 相手がスタッフでない」場合だけ。
-    // 3人以上のグループ（アプリ修正ch等）は常にスタッフ扱い。
-    // （保護者との1対1ルームにも相手名が groupName に入るため、groupName では判定しない）
-    final hasParent =
-        others.length == 1 && !_staffUids.contains(others.first);
+    final hasParent = others.any((id) => !_staffUids.contains(id));
     return _filter == 'staff' ? !hasParent : hasParent;
   }
 
