@@ -35,6 +35,9 @@ class _StaffManageScreenState extends State<StaffManageScreen> {
   // 現在展開中のドキュメントID
   String? _currentExpandedId;
 
+  // 退職者も一覧に表示するか（既定は非表示）
+  bool _showRetired = false;
+
   final _functions = FirebaseFunctions.instanceFor(region: 'asia-northeast1');
 
   @override
@@ -163,6 +166,22 @@ appBar: AppBar(
       }
     },
   ),
+  actions: [
+    TextButton.icon(
+      icon: Icon(
+        _showRetired ? Icons.visibility : Icons.visibility_off,
+        size: 18,
+        color: context.colors.textSecondary,
+      ),
+      label: Text(
+        _showRetired ? '退職者を隠す' : '退職者を表示',
+        style: TextStyle(
+            fontSize: AppTextSize.caption,
+            color: context.colors.textSecondary),
+      ),
+      onPressed: () => setState(() => _showRetired = !_showRetired),
+    ),
+  ],
 ),
       backgroundColor: context.colors.scaffoldBgAlt,
       body: StreamBuilder<QuerySnapshot>(
@@ -198,6 +217,9 @@ appBar: AppBar(
 
           for (var doc in docs) {
             final data = doc.data() as Map<String, dynamic>;
+            final bool retired = data['retired'] == true;
+            // 退職者は既定で非表示（トグルで表示可）
+            if (retired && !_showRetired) continue;
             final furigana = data['furigana'] ?? '';
             final header = _getKanaRow(furigana);
 
@@ -285,8 +307,27 @@ appBar: AppBar(
                             ),
                           ),
                         ),
-                      // スケジュール非表示バッジ
-                      if (!showInSchedule) ...[
+                      // 退職バッジ（非表示より優先して分かるように）
+                      if (retired) ...[
+                        SizedBox(width: 4),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: AppColors.error.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            '退職',
+                            style: TextStyle(
+                              fontSize: AppTextSize.xs,
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.error,
+                            ),
+                          ),
+                        ),
+                      ],
+                      // スケジュール非表示バッジ（退職でない時のみ。退職は自明）
+                      if (!showInSchedule && !retired) ...[
                         SizedBox(width: 4),
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -348,20 +389,48 @@ appBar: AppBar(
                               }).toList(),
                             ),
                           const SizedBox(height: 16),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.end,
+                          Wrap(
+                            alignment: WrapAlignment.end,
+                            spacing: 8,
+                            runSpacing: 8,
+                            crossAxisAlignment: WrapCrossAlignment.center,
                             children: [
+                              // 完全削除（誤登録の消去用。通常は退職を使う）
                               TextButton.icon(
-                                icon: const Icon(Icons.delete, color: AppColors.error),
-                                label: const Text('削除', style: TextStyle(color: AppColors.error)),
+                                icon: const Icon(Icons.delete_outline,
+                                    color: AppColors.error, size: 18),
+                                label: const Text('削除',
+                                    style: TextStyle(color: AppColors.error)),
                                 onPressed: () => _deleteStaff(doc.id, data['name']),
                               ),
-                              const SizedBox(width: 8),
+                              // 退職 / 復職
+                              if (!retired)
+                                TextButton.icon(
+                                  icon: Icon(Icons.logout,
+                                      color: context.colors.textSecondary,
+                                      size: 18),
+                                  label: Text('退職',
+                                      style: TextStyle(
+                                          color: context.colors.textSecondary)),
+                                  onPressed: () =>
+                                      _retireStaff(doc.id, data['name']),
+                                )
+                              else
+                                TextButton.icon(
+                                  icon: const Icon(Icons.login,
+                                      color: AppColors.success, size: 18),
+                                  label: const Text('復職',
+                                      style:
+                                          TextStyle(color: AppColors.success)),
+                                  onPressed: () =>
+                                      _reinstateStaff(doc.id, data['name']),
+                                ),
                               ElevatedButton.icon(
                                 icon: const Icon(Icons.edit),
                                 label: const Text('編集'),
                                 style: ElevatedButton.styleFrom(
-                                    backgroundColor: AppColors.info, foregroundColor: Colors.white),
+                                    backgroundColor: AppColors.info,
+                                    foregroundColor: Colors.white),
                                 onPressed: () => _showEditDialog(doc: doc),
                               ),
                             ],
@@ -407,6 +476,107 @@ appBar: AppBar(
           Expanded(child: Text(value, style: TextStyle(fontSize: AppTextSize.bodyMd))),
         ],
       ),
+    );
+  }
+
+  // 退職処理: ログイン無効化＋退職フラグ＋シフト非表示（履歴・チャット名は残す）
+  void _retireStaff(String docId, String? name) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (dctx) {
+        bool busy = false;
+        return StatefulBuilder(
+          builder: (dctx, setD) => AlertDialog(
+            title: const Text('退職処理'),
+            content: Text(
+                '$name さんを退職にしますか？\n\n・ログインできなくなります\n・シフト表／講師選択から外れます\n・チャットや過去の記録の名前はそのまま残ります\n\n（あとで「復職」で戻せます）'),
+            actions: [
+              TextButton(
+                onPressed: busy ? null : () => Navigator.pop(dctx),
+                child: const Text('キャンセル'),
+              ),
+              TextButton(
+                onPressed: busy
+                    ? null
+                    : () async {
+                        setD(() => busy = true);
+                        try {
+                          await _functions
+                              .httpsCallable('retireStaff')
+                              .call({'staffDocId': docId});
+                          if (dctx.mounted) Navigator.pop(dctx);
+                          if (mounted) {
+                            AppFeedback.info(context, '$name さんを退職にしました');
+                          }
+                        } catch (e) {
+                          setD(() => busy = false);
+                          if (mounted) {
+                            AppFeedback.info(context, '退職処理に失敗: $e');
+                          }
+                        }
+                      },
+                child: busy
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2))
+                    : const Text('退職にする'),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  // 復職処理: ログイン再有効化＋退職フラグ解除。
+  void _reinstateStaff(String docId, String? name) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (dctx) {
+        bool busy = false;
+        return StatefulBuilder(
+          builder: (dctx, setD) => AlertDialog(
+            title: const Text('復職処理'),
+            content: Text('$name さんを復職させますか？\n\n・再びログインできるようになります\n・シフト表／講師選択に戻ります'),
+            actions: [
+              TextButton(
+                onPressed: busy ? null : () => Navigator.pop(dctx),
+                child: const Text('キャンセル'),
+              ),
+              TextButton(
+                onPressed: busy
+                    ? null
+                    : () async {
+                        setD(() => busy = true);
+                        try {
+                          await _functions
+                              .httpsCallable('reinstateStaff')
+                              .call({'staffDocId': docId});
+                          if (dctx.mounted) Navigator.pop(dctx);
+                          if (mounted) {
+                            AppFeedback.info(context, '$name さんを復職させました');
+                          }
+                        } catch (e) {
+                          setD(() => busy = false);
+                          if (mounted) {
+                            AppFeedback.info(context, '復職処理に失敗: $e');
+                          }
+                        }
+                      },
+                child: busy
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2))
+                    : const Text('復職させる'),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 

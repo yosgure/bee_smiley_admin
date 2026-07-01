@@ -329,6 +329,81 @@ exports.deleteStaffAccount = onCall({ region: 'asia-northeast1' }, async (reques
 });
 
 // ==========================================
+// 退職 / 復職（ハードデリートせず、ログイン無効化＋アーカイブ）
+// ==========================================
+
+// スタッフの退職処理:
+//  - Authアカウントは削除せず disabled=true（ログイン不可・復職時に戻せる）
+//  - staffs ドキュメントは残す（チャット履歴・過去記録の名前解決を守る）
+//  - retired フラグ＋退職日を記録し、シフト表/講師選択から外す
+exports.retireStaff = onCall({ region: 'asia-northeast1' }, async (request) => {
+  await assertStaffCaller(request);
+  const { staffDocId } = request.data || {};
+  if (!staffDocId) {
+    throw new HttpsError('invalid-argument', 'staffDocId が必要です');
+  }
+  try {
+    const ref = db.collection('staffs').doc(staffDocId);
+    const snap = await ref.get();
+    if (!snap.exists) {
+      throw new HttpsError('not-found', 'スタッフが見つかりません');
+    }
+    const uid = (snap.data() || {}).uid;
+    if (uid) {
+      try {
+        await auth.updateUser(uid, { disabled: true });
+      } catch (authError) {
+        if (authError.code !== 'auth/user-not-found') throw authError;
+      }
+    }
+    await ref.update({
+      retired: true,
+      retiredAt: FieldValue.serverTimestamp(),
+      showInSchedule: false,
+    });
+    return { success: true, message: '退職処理が完了しました' };
+  } catch (error) {
+    if (error instanceof HttpsError) throw error;
+    console.error(JSON.stringify({ function: 'retireStaff', staffDocId, error: error.message }));
+    throw new HttpsError('internal', error.message);
+  }
+});
+
+// 復職処理: ログイン再有効化＋退職フラグ解除。
+exports.reinstateStaff = onCall({ region: 'asia-northeast1' }, async (request) => {
+  await assertStaffCaller(request);
+  const { staffDocId } = request.data || {};
+  if (!staffDocId) {
+    throw new HttpsError('invalid-argument', 'staffDocId が必要です');
+  }
+  try {
+    const ref = db.collection('staffs').doc(staffDocId);
+    const snap = await ref.get();
+    if (!snap.exists) {
+      throw new HttpsError('not-found', 'スタッフが見つかりません');
+    }
+    const uid = (snap.data() || {}).uid;
+    if (uid) {
+      try {
+        await auth.updateUser(uid, { disabled: false });
+      } catch (authError) {
+        if (authError.code !== 'auth/user-not-found') throw authError;
+      }
+    }
+    await ref.update({
+      retired: false,
+      retiredAt: FieldValue.delete(),
+      showInSchedule: true,
+    });
+    return { success: true, message: '復職処理が完了しました' };
+  } catch (error) {
+    if (error instanceof HttpsError) throw error;
+    console.error(JSON.stringify({ function: 'reinstateStaff', staffDocId, error: error.message }));
+    throw new HttpsError('internal', error.message);
+  }
+});
+
+// ==========================================
 // 既存ユーザーへの Custom Claims マイグレーション
 // ==========================================
 exports.migrateCustomClaims = onCall({ region: 'asia-northeast1' }, async (request) => {
