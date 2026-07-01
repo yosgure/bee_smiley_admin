@@ -3031,6 +3031,7 @@ class _ChatDetailViewState extends State<ChatDetailView> {
     final msgText = text ?? _textController.text;
     if (msgText.trim().isEmpty && type == 'text') return;
     _dismissKeyboard();
+    final restoreText = _textController.text; // 送信失敗時に入力を戻す用
     if (type == 'text') { _textController.clear(); _clearPersistedDraft(); }
     final roomRef = FirebaseFirestore.instance.collection('chat_rooms').doc(widget.roomId);
     final data = <String, dynamic>{
@@ -3048,20 +3049,34 @@ class _ChatDetailViewState extends State<ChatDetailView> {
     if (durationMs != null) data['durationMs'] = durationMs;
     if (_replyTo != null) data['replyTo'] = _replyTo;
     if (_mentionedUids.isNotEmpty) data['mentions'] = _mentionedUids.toList();
-    await roomRef.collection('messages').add(data);
-    String lastMsg = msgText;
-    if (type == 'image') lastMsg = '画像を送信しました';
-    if (type == 'file') lastMsg = 'ファイルを送信しました';
-    if (type == 'video') lastMsg = '動画を送信しました';
-    if (type == 'stamp') lastMsg = 'スタンプを送信しました';
-    await roomRef.update({'lastMessage': lastMsg, 'lastMessageTime': FieldValue.serverTimestamp()});
-    // 返信・メンション状態をクリア
-    if (_replyTo != null || _mentionedUids.isNotEmpty) {
-      setState(() {
-        _replyTo = null;
-        _mentionedUids = [];
-        _showAllOption = false;
-      });
+    try {
+      await roomRef.collection('messages').add(data);
+      String lastMsg = msgText;
+      if (type == 'image') lastMsg = '画像を送信しました';
+      if (type == 'file') lastMsg = 'ファイルを送信しました';
+      if (type == 'video') lastMsg = '動画を送信しました';
+      if (type == 'stamp') lastMsg = 'スタンプを送信しました';
+      await roomRef.update({'lastMessage': lastMsg, 'lastMessageTime': FieldValue.serverTimestamp()});
+      // 返信・メンション状態をクリア
+      if (_replyTo != null || _mentionedUids.isNotEmpty) {
+        setState(() {
+          _replyTo = null;
+          _mentionedUids = [];
+          _showAllOption = false;
+        });
+      }
+    } catch (e) {
+      // 送信失敗: 無言で消えないよう、入力を復元してエラーを表示。
+      if (type == 'text' && mounted) {
+        _textController.text = restoreText;
+        _textController.selection =
+            TextSelection.collapsed(offset: restoreText.length);
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('送信に失敗しました: $e')),
+        );
+      }
     }
   }
 
