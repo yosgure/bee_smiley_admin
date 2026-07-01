@@ -194,7 +194,21 @@ async function registerParent(cookies, family, nameOverride) {
       const t = $p(el).text().trim().replace(/\s+/g, ' ');
       if (t && t.length < 300) errors.push(t);
     });
-    throw new Error(`保護者登録失敗: ${errors.join(' / ') || '不明なエラー'}`);
+    // HUGは項目名を返さないため、必須と思われる欄の未入力を検出して名指しする。
+    const missing = [];
+    if (!formData.realname) missing.push('保護者名（漢字）');
+    if (!formData.furigana) missing.push('保護者名（フリガナ）');
+    if (!formData.postal) missing.push('郵便番号');
+    if (!formData.pref) missing.push('都道府県');
+    if (!formData.address1) missing.push('市区町村・番地');
+    if (!formData.tel) missing.push('電話番号');
+    console.error('[registerParent] failed. missing=' + JSON.stringify(missing) +
+      ' hugErrors=' + JSON.stringify(errors));
+    const hint = missing.length
+      ? `（CRMで未入力の項目: ${missing.join('・')}）`
+      : '';
+    throw new Error(
+      `保護者登録失敗: ${errors.join(' / ') || 'HUGが入力エラーを返しました'}${hint}`);
   }
 
   // 「続けて児童登録を行う」リンクから新規 p_id を抽出

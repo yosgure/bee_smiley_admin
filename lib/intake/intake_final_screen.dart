@@ -410,7 +410,8 @@ class _IntakeFinalScreenState extends State<IntakeFinalScreen> {
                     _input('続柄', _emergency2RelationCtrl,
                         required: true, hint: '例: 祖父'),
                   ),
-                  _input('家族構成', _familyCompositionCtrl,
+                  _labelHint('家族構成', ''),
+                  _input('', _familyCompositionCtrl,
                       hint: '例: 父・母・本人・弟', maxLines: 2),
                 ]),
                 _section('受給者証について', [
