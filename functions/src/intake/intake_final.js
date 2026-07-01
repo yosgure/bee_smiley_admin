@@ -166,7 +166,6 @@ exports.getIntakeContext = onRequest(
           hospitalName: s(child.hospitalName),
           hospitalPhone: s(child.hospitalPhone),
           doctorName: s(child.doctorName),
-          lunchType: s(child.lunchType),
           familyComposition: s(child.familyComposition),
           permitStatus: s(child.permitStatus),
           certificateNumber: s(cert.certificateNumber),
@@ -263,7 +262,6 @@ exports.submitFinalIntake = onRequest(
         if (p.hospitalName !== undefined) child.hospitalName = s(p.hospitalName);
         if (p.hospitalPhone !== undefined) child.hospitalPhone = s(p.hospitalPhone);
         if (p.doctorName !== undefined) child.doctorName = s(p.doctorName);
-        if (p.lunchType !== undefined) child.lunchType = s(p.lunchType);
         if (p.familyComposition !== undefined) child.familyComposition = s(p.familyComposition);
         if (p.allergy !== undefined && s(p.allergy)) child.allergy = s(p.allergy);
         if (p.severeSymptoms !== undefined && s(p.severeSymptoms)) child.severeSymptoms = s(p.severeSymptoms);

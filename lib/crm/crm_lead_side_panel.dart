@@ -418,11 +418,9 @@ class _BasicInfoSectionState extends State<_BasicInfoSection> {
           Divider(height: 1, color: c.borderLight),
           const SizedBox(height: 8),
 
-          // ── HUGプロフィール（家族構成・お弁当） ──
+          // ── HUGプロフィール（家族構成） ──
           _editableMultiline(context, '家族構成', lead.familyComposition,
               'familyComposition', '例: 父・母・本人・弟', leadRef),
-          _editableSinglelineRow(context, 'お弁当', lead.lunchType,
-              'lunchType', '例: 標準', leadRef),
 
           const SizedBox(height: 8),
           Divider(height: 1, color: c.borderLight),

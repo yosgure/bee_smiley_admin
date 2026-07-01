@@ -67,7 +67,6 @@ class _IntakeFinalScreenState extends State<IntakeFinalScreen> {
   final _allergyCtrl = TextEditingController();
   final _severeSymptomsCtrl = TextEditingController();
   // その他（HUGプロフィール）
-  final _lunchTypeCtrl = TextEditingController(); // お弁当の種類
   final _familyCompositionCtrl = TextEditingController(); // 家族構成
 
   // ヒアリング
@@ -130,7 +129,6 @@ class _IntakeFinalScreenState extends State<IntakeFinalScreen> {
           _hospitalCtrl.text = (prefill['hospitalName'] as String?) ?? '';
           _hospitalPhoneCtrl.text = (prefill['hospitalPhone'] as String?) ?? '';
           _doctorCtrl.text = (prefill['doctorName'] as String?) ?? '';
-          _lunchTypeCtrl.text = (prefill['lunchType'] as String?) ?? '';
           _familyCompositionCtrl.text =
               (prefill['familyComposition'] as String?) ?? '';
           _certNumberCtrl.text = (prefill['certificateNumber'] as String?) ?? '';
@@ -178,7 +176,7 @@ class _IntakeFinalScreenState extends State<IntakeFinalScreen> {
       _emergencyPhoneCtrl, _emergencyRelationCtrl, _certNumberCtrl,
       _schoolCtrl, _kindergartenPhoneCtrl, _homeroomTeacherCtrl, _gradeCtrl,
       _hospitalCtrl, _hospitalPhoneCtrl, _doctorCtrl, _allergyCtrl,
-      _severeSymptomsCtrl, _lunchTypeCtrl, _familyCompositionCtrl,
+      _severeSymptomsCtrl, _familyCompositionCtrl,
       _sensitivitiesCtrl, _precautionsCtrl, _childWishesCtrl, _familyWishesCtrl,
       _memoCtrl, _honeypotCtrl,
     ]) {
@@ -238,7 +236,6 @@ class _IntakeFinalScreenState extends State<IntakeFinalScreen> {
       'hospitalName': _hospitalCtrl.text.trim(),
       'hospitalPhone': _hospitalPhoneCtrl.text.trim(),
       'doctorName': _doctorCtrl.text.trim(),
-      'lunchType': _lunchTypeCtrl.text.trim(),
       'familyComposition': _familyCompositionCtrl.text.trim(),
       'allergy': _allergyCtrl.text.trim(),
       'severeSymptoms': _severeSymptomsCtrl.text.trim(),
@@ -369,6 +366,8 @@ class _IntakeFinalScreenState extends State<IntakeFinalScreen> {
                         keyboard: TextInputType.phone, hint: '任意'),
                     _input('続柄', _emergencyRelationCtrl, hint: '例: 祖母'),
                   ),
+                  _input('家族構成', _familyCompositionCtrl,
+                      hint: '例: 父・母・本人・弟', maxLines: 2),
                 ]),
                 _section('受給者証について', [
                   _permitSelector(),
@@ -420,11 +419,7 @@ class _IntakeFinalScreenState extends State<IntakeFinalScreen> {
                   _labelHint('ご家族の希望', '例：ビースマイリーでの保護者さまの意向'),
                   _input('', _familyWishesCtrl, maxLines: 3),
                 ]),
-                _section('ご家族・その他', [
-                  _input('家族構成', _familyCompositionCtrl,
-                      hint: '例: 父・母・本人・弟', maxLines: 2),
-                  _input('お弁当の種類', _lunchTypeCtrl,
-                      hint: '例: 標準 / 手作り弁当 / アレルギー対応'),
+                _section('その他', [
                   _input('その他お伝えしたいこと', _memoCtrl, maxLines: 3),
                 ]),
                 Offstage(

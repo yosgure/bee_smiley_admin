@@ -164,8 +164,7 @@ class CrmLead {
   String get className => (raw['className'] as String?) ?? '';
   String get homeroomTeacher => (raw['homeroomTeacher'] as String?) ?? '';
   String get grade => (raw['grade'] as String?) ?? '';
-  // HUGプロフィール（お弁当の種類・家族構成）
-  String get lunchType => (raw['lunchType'] as String?) ?? '';
+  // HUGプロフィール（家族構成）
   String get familyComposition => (raw['familyComposition'] as String?) ?? '';
   String get trialAttendee => (raw['trialAttendee'] as String?) ?? '';
   String? get childGender => raw['childGender'] as String?;
