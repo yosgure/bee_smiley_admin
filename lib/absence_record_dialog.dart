@@ -36,14 +36,14 @@ class AbsenceRecordDialog extends StatefulWidget {
 }
 
 class _AbsenceRecordDialogState extends State<AbsenceRecordDialog> {
-  DateTime? _contactDate; // 欠席の連絡のあった日
+  DateTime? _contactDate; // 欠席連絡受付日時
   final _contactMethodController = TextEditingController(); // 連絡手段
   final _callerController = TextEditingController(); // 連絡者氏名
-  String? _responder; // 連絡を受けた対応者（プラススタッフ）
-  final _reasonController = TextEditingController(); // 欠席の理由
-  final _conditionController = TextEditingController(); // 当日のご本人の様子
-  final _supportController = TextEditingController(); // 相談援助内容
-  DateTime? _nextVisitDate; // 次回通所予定日
+  String? _responder; // 対応した職員名（プラススタッフ）
+  final _reasonController = TextEditingController(); // 欠席理由
+  final _conditionController = TextEditingController(); // 利用者（児童）の当日の状況
+  final _supportController = TextEditingController(); // 実施した相談援助の内容
+  DateTime? _nextVisitDate; // 次回利用予定日
 
   List<String>? _plusStaffOptions;
   bool _loadingStaff = true;
@@ -120,7 +120,7 @@ class _AbsenceRecordDialogState extends State<AbsenceRecordDialog> {
   void _submit() {
     final df = DateFormat('yyyy/MM/dd');
     final b = StringBuffer();
-    b.writeln('【欠席の連絡のあった日】');
+    b.writeln('【欠席連絡受付日時】');
     b.writeln(_contactDate != null ? df.format(_contactDate!) : '');
     b.writeln();
     final method = _contactMethodController.text.trim();
@@ -131,20 +131,24 @@ class _AbsenceRecordDialogState extends State<AbsenceRecordDialog> {
     b.writeln('【連絡者氏名】');
     b.writeln(caller.isNotEmpty ? '$callerより連絡あり。' : '');
     b.writeln();
-    b.writeln('【連絡を受けた対応者】');
+    b.writeln('【対応した職員名】');
     b.writeln(_responder ?? '');
     b.writeln();
     final reason = _reasonController.text.trim();
-    b.writeln('【欠席の理由】');
-    b.writeln(reason.isNotEmpty ? '$reasonのため欠席。' : '');
+    // 「〇〇のため」形式で出力（既に「ため」で終わっていれば二重付与しない）
+    final reasonText = reason.isEmpty
+        ? ''
+        : (reason.endsWith('ため') ? reason : '$reasonのため');
+    b.writeln('【欠席理由】');
+    b.writeln(reasonText);
     b.writeln();
-    b.writeln('【当日のご本人の様子】');
+    b.writeln('【利用者（児童）の当日の状況】');
     b.writeln(_conditionController.text.trim());
     b.writeln();
-    b.writeln('【相談援助内容】');
+    b.writeln('【実施した相談援助の内容】');
     b.writeln(_supportController.text.trim());
     b.writeln();
-    b.writeln('【次回通所予定日】');
+    b.writeln('【次回利用予定日】');
     b.writeln(_nextVisitDate != null ? df.format(_nextVisitDate!) : '');
     Navigator.pop(context, b.toString().trim());
   }
@@ -201,7 +205,7 @@ class _AbsenceRecordDialogState extends State<AbsenceRecordDialog> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     _dateField(
-                      label: '欠席の連絡のあった日',
+                      label: '欠席連絡受付日時',
                       value: _contactDate,
                       onTap: () => _pickDate(_contactDate, (d) => setState(() => _contactDate = d)),
                     ),
@@ -210,8 +214,7 @@ class _AbsenceRecordDialogState extends State<AbsenceRecordDialog> {
                       label: '連絡手段',
                       options: _contactMethodOptions,
                       controller: _contactMethodController,
-                      hint: '',
-                      showTextField: false,
+                      hint: 'その他（自由入力）',
                     ),
                     const SizedBox(height: 12),
                     _chipsWithTextField(
@@ -225,28 +228,28 @@ class _AbsenceRecordDialogState extends State<AbsenceRecordDialog> {
                     _responderField(),
                     const SizedBox(height: 12),
                     _chipsWithTextField(
-                      label: '欠席の理由',
+                      label: '欠席理由',
                       options: _reasonOptions,
                       controller: _reasonController,
-                      hint: 'その他（自由入力）',
+                      hint: 'その他（自由入力）　※「〇〇のため」の〇〇を入力',
                     ),
                     const SizedBox(height: 12),
                     _textField(
-                      label: '当日のご本人の様子',
+                      label: '利用者（児童）の当日の状況',
                       controller: _conditionController,
                       hint: '',
                       maxLines: 2,
                     ),
                     const SizedBox(height: 12),
                     _textField(
-                      label: '相談援助内容',
+                      label: '実施した相談援助の内容',
                       controller: _supportController,
                       hint: '',
                       maxLines: 4,
                     ),
                     const SizedBox(height: 12),
                     _dateField(
-                      label: '次回通所予定日',
+                      label: '次回利用予定日',
                       value: _nextVisitDate,
                       onTap: () => _pickDate(_nextVisitDate, (d) => setState(() => _nextVisitDate = d)),
                     ),
@@ -461,7 +464,7 @@ class _AbsenceRecordDialogState extends State<AbsenceRecordDialog> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _sectionLabel('連絡を受けた対応者'),
+        _sectionLabel('対応した職員名'),
         if (_loadingStaff)
           const Padding(
             padding: EdgeInsets.symmetric(vertical: 12),
