@@ -264,10 +264,14 @@ class _ChatListScreenState extends State<ChatListScreen> {
   bool _matchesFilterFor(DocumentSnapshot roomDoc, String filter) {
     if (filter == 'all') return true;
     final data = roomDoc.data() as Map<String, dynamic>;
+    final groupName = (data['groupName'] ?? '').toString().trim();
     final members = List<String>.from(data['members'] ?? []);
     final others = members.where((id) => id != currentUser?.uid).toList();
     if (others.isEmpty) return true;
-    final hasParent = others.any((id) => !_staffUids.contains(id));
+    // 名前付きグループ（例: アプリ修正ch）はスタッフ内部チャンネル。保護者は入らないため常にスタッフ扱い。
+    // これにより退職/削除で staffs から消えたメンバーが混じっても保護者側に落ちない。
+    final hasParent =
+        groupName.isEmpty && others.any((id) => !_staffUids.contains(id));
     return filter == 'staff' ? !hasParent : hasParent;
   }
 
@@ -3093,6 +3097,20 @@ class _ChatDetailViewState extends State<ChatDetailView> {
   }
 
   // 入力欄のスタンプボタン: 選んだスタンプ/絵文字をメッセージとして送信する。
+  // 絵文字を本文のカーソル位置（選択範囲があれば置換）に挿入し、入力へフォーカスを戻す。
+  void _insertEmojiAtCursor(String emoji) {
+    final text = _textController.text;
+    final sel = _textController.selection;
+    final start = sel.isValid ? sel.start : text.length;
+    final end = sel.isValid ? sel.end : text.length;
+    final newText = text.replaceRange(start, end, emoji);
+    _textController.value = TextEditingValue(
+      text: newText,
+      selection: TextSelection.collapsed(offset: start + emoji.length),
+    );
+    if (mounted) FocusScope.of(context).requestFocus(_focusNode);
+  }
+
   void _showStampPickerForSend() {
     showEmojiStampPicker(
       context: context,
@@ -3103,8 +3121,9 @@ class _ChatDetailViewState extends State<ChatDetailView> {
             _sendMessage(type: 'stamp', url: url, text: '');
           }
         } else {
-          // 絵文字は単独メッセージとして送信（絵文字のみは大きく表示される）
-          _sendMessage(type: 'text', text: value);
+          // 絵文字は本文のカーソル位置に挿入（文中でも使える）。
+          // 単独で送りたい時は、挿入後にそのまま送信すれば絵文字のみ＝大きく表示される。
+          _insertEmojiAtCursor(value);
         }
       },
     );

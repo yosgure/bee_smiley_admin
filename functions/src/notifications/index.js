@@ -122,7 +122,9 @@ exports.onChatMessageCreated = onDocumentCreated(
             ? "動画を送信しました"
             : message.type === "file"
             ? "ファイルを送信しました"
-            : message.text,
+            : message.type === "stamp"
+            ? "スタンプを送信しました"
+            : (message.text || "メッセージを送信しました"),
         },
         data: {
           type: "chat",
@@ -250,12 +252,16 @@ exports.onChatStampAdded = onDocumentUpdated(
 
       for (const [reacterUid, emojis] of byUid.entries()) {
         const reacterName = names[reacterUid] || "誰か";
-        const emojiStr = emojis.join("");
+        // オリジナルスタンプ（stamp:{docId}）は生キーを表示しない。絵文字のみ連結。
+        const emojiStr = emojis.filter((e) => !e.startsWith("stamp:")).join("");
+        const body = emojiStr
+          ? `あなたのメッセージにスタンプを付けました ${emojiStr}`
+          : "あなたのメッセージにスタンプを付けました";
         const response = await messaging.sendEachForMulticast({
           tokens: senderTokens,
           notification: {
             title: `${reacterName}さん`,
-            body: `あなたのメッセージにスタンプを付けました ${emojiStr}`,
+            body: body,
           },
           data: {
             type: "chat",
