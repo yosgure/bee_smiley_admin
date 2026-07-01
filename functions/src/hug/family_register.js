@@ -126,6 +126,12 @@ function extractAllDefaults($, formSelector = 'form') {
 
 // ──────────────── 保護者登録 ────────────────
 
+// HUGのふりがな欄はひらがな必須。カタカナ（全角）が含まれる場合はひらがなへ変換する。
+function toHiragana(str) {
+  return String(str || '').replace(/[ァ-ヶ]/g, (ch) =>
+    String.fromCharCode(ch.charCodeAt(0) - 0x60));
+}
+
 async function registerParent(cookies, family, nameOverride) {
   const getUrl = `${HUG_BASE_URL}/profile_parent.php?mode=edit`;
   const getRes = await hugFetch(getUrl, {}, cookies);
@@ -139,9 +145,9 @@ async function registerParent(cookies, family, nameOverride) {
   const realname = (nameOverride && nameOverride.realname)
     ? nameOverride.realname
     : (`${parentLastName} ${parentFirstName}`.trim() || parentLastName || parentFirstName);
-  const furigana = (nameOverride && nameOverride.furigana)
+  const furigana = toHiragana((nameOverride && nameOverride.furigana)
     ? nameOverride.furigana
-    : `${family.lastNameKana || ''} ${family.firstNameKana || ''}`.trim();
+    : `${family.lastNameKana || ''} ${family.firstNameKana || ''}`.trim());
 
   const formData = {
     ...hidden,
@@ -159,8 +165,8 @@ async function registerParent(cookies, family, nameOverride) {
     help_note: family.emergencyMemo || '',
     bank_name: [family.bankInfo?.bankName, family.bankInfo?.branchName]
       .filter(Boolean).join(' '),
-    bank_name_kana: family.bankInfo?.bankNameKana || '',
-    bank_branch_name_kana: family.bankInfo?.branchNameKana || '',
+    bank_name_kana: toHiragana(family.bankInfo?.bankNameKana || ''),
+    bank_branch_name_kana: toHiragana(family.bankInfo?.branchNameKana || ''),
     bank_num: family.bankInfo?.bankCode || '',
     bank_branch_num: family.bankInfo?.branchCode || '',
     deposit_type: DEPOSIT_TYPE_TO_ID[family.bankInfo?.accountType] || '0',
@@ -249,7 +255,7 @@ async function registerChild(cookies, hugParentId, child, family) {
   const childLastName = child.lastName || '';
   const childFirstName = child.firstName || '';
   const realname = `${childLastName} ${childFirstName}`.trim() || childLastName || childFirstName;
-  const furigana = `${child.lastNameKana || ''} ${child.firstNameKana || ''}`.trim();
+  const furigana = toHiragana(`${child.lastNameKana || ''} ${child.firstNameKana || ''}`.trim());
 
   // 生年月日
   const birthDate = child.birthDate?.toDate
