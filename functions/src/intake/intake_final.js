@@ -344,6 +344,10 @@ exports.submitFinalIntake = onRequest(
         if (p.memo !== undefined && s(p.memo)) child.memo = s(p.memo);
         child.finalIntakeReceivedAt = now;
         child.updatedAt = now;
+        // 既読化(markRead)は児童の notifyUnread を見るため、児童側にも必ず立てる。
+        // （家族レベルだけだと開いても赤ポチが消えない）
+        child.notifyUnread = true;
+        child.notifyUnreadAt = now;
         children[childIndex] = child;
 
         const famUpdate = {
