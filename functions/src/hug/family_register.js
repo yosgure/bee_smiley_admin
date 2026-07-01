@@ -339,6 +339,7 @@ exports.hugRegisterFamily = onCall(
     memory: '512MiB',
   },
   async (request) => {
+   try {
     if (!request.auth) {
       throw new HttpsError('unauthenticated', '認証が必要です');
     }
@@ -448,5 +449,12 @@ exports.hugRegisterFamily = onCall(
       hugParentId,
       hugChildId: hugChildId || null,
     };
+   } catch (err) {
+    if (err instanceof HttpsError) throw err;
+    console.error('[hugRegisterFamily] fatal:',
+      err && err.stack ? err.stack : err);
+    throw new HttpsError('internal',
+      `HUG登録に失敗しました: ${err && err.message ? err.message : String(err)}`);
+   }
   }
 );
