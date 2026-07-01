@@ -189,7 +189,7 @@ async function registerParent(cookies, family, nameOverride) {
   const bodyText = $p('body').text();
   const success = bodyText.includes('登録が完了しました');
   if (!success) {
-    // HUGは項目名を返さないため、必須と思われる欄の未入力を検出して名指しする。
+    // 未入力の必須候補
     const missing = [];
     if (!formData.realname) missing.push('保護者名（漢字）');
     if (!formData.furigana) missing.push('保護者名（フリガナ）');
@@ -197,17 +197,30 @@ async function registerParent(cookies, family, nameOverride) {
     if (!formData.pref) missing.push('都道府県');
     if (!formData.address1) missing.push('市区町村・番地');
     if (!formData.tel) missing.push('電話番号');
-    // HUGの汎用エラー文（重複除去。ログ用）
-    const hugErrSet = new Set();
-    $p('[class*="error"]').each((_, el) => {
-      const t = $p(el).text().trim().replace(/\s+/g, ' ');
-      if (t && t.length < 300) hugErrSet.add(t);
-    });
-    console.error('[registerParent] failed. missing=' + JSON.stringify(missing) +
-      ' hugErrors=' + JSON.stringify([...hugErrSet]));
-    const msg = missing.length
-      ? `CRMの詳細情報に未入力があります：${missing.join('・')}。入力してから再度お試しください。`
-      : 'HUGが入力エラーを返しました。CRMの詳細情報（住所・保護者名・電話など）をご確認ください。';
+    // HUG応答から具体的エラーを広く収集（重複除去）
+    const clueSet = new Set();
+    $p('.error, .err, .alert, [class*="error"], [class*="invalid"], [class*="alert"], .form_error, .errmsg, .text-danger')
+      .each((_, el) => {
+        const t = $p(el).text().trim().replace(/\s+/g, ' ');
+        if (t && t.length < 200) clueSet.add(t);
+      });
+    const clues = [...clueSet];
+    // 原因特定のための詳細ログ（テスト用。落ち着いたら削除）
+    console.error('[registerParent] HUG rejected. missing=' + JSON.stringify(missing));
+    console.error('[registerParent] sent=' + JSON.stringify(formData));
+    console.error('[registerParent] clues=' + JSON.stringify(clues));
+    console.error('[registerParent] body3000=' +
+      bodyText.substring(0, 3000).replace(/\s+/g, ' '));
+    // 汎用文（お手数ですが〜）以外の具体的メッセージを優先して全部出す
+    const specifics = clues.filter((c) => !c.includes('お手数ですが'));
+    let msg;
+    if (specifics.length) {
+      msg = 'HUGでエラー：' + specifics.join(' / ');
+    } else if (missing.length) {
+      msg = `CRMの詳細情報に未入力があります：${missing.join('・')}。入力してから再度お試しください。`;
+    } else {
+      msg = 'HUGが入力エラーを返しました（項目名は返されず）。原因調査のためログを確認します。';
+    }
     throw new HttpsError('failed-precondition', msg);
   }
 
