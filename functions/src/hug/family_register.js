@@ -150,7 +150,7 @@ async function registerParent(cookies, family, nameOverride) {
     postal: family.postalCode || '',
     pref: PREF_TO_ID[family.prefecture] || '',
     address1: `${family.city || ''}${family.addressDetail || ''}`,
-    tel: family.phone || '',
+    tel: family.phone || family.tel || '',
     relationship: family.parentRelation || '',
     help_tel1: family.emergencyContacts?.[0]?.phone || '',
     help_contact1: family.emergencyContacts?.[0]?.name || '',
@@ -189,11 +189,6 @@ async function registerParent(cookies, family, nameOverride) {
   const bodyText = $p('body').text();
   const success = bodyText.includes('登録が完了しました');
   if (!success) {
-    const errors = [];
-    $p('[class*="error"]').each((_, el) => {
-      const t = $p(el).text().trim().replace(/\s+/g, ' ');
-      if (t && t.length < 300) errors.push(t);
-    });
     // HUGは項目名を返さないため、必須と思われる欄の未入力を検出して名指しする。
     const missing = [];
     if (!formData.realname) missing.push('保護者名（漢字）');
@@ -202,13 +197,18 @@ async function registerParent(cookies, family, nameOverride) {
     if (!formData.pref) missing.push('都道府県');
     if (!formData.address1) missing.push('市区町村・番地');
     if (!formData.tel) missing.push('電話番号');
+    // HUGの汎用エラー文（重複除去。ログ用）
+    const hugErrSet = new Set();
+    $p('[class*="error"]').each((_, el) => {
+      const t = $p(el).text().trim().replace(/\s+/g, ' ');
+      if (t && t.length < 300) hugErrSet.add(t);
+    });
     console.error('[registerParent] failed. missing=' + JSON.stringify(missing) +
-      ' hugErrors=' + JSON.stringify(errors));
-    const hint = missing.length
-      ? `（CRMで未入力の項目: ${missing.join('・')}）`
-      : '';
-    throw new Error(
-      `保護者登録失敗: ${errors.join(' / ') || 'HUGが入力エラーを返しました'}${hint}`);
+      ' hugErrors=' + JSON.stringify([...hugErrSet]));
+    const msg = missing.length
+      ? `CRMの詳細情報に未入力があります：${missing.join('・')}。入力してから再度お試しください。`
+      : 'HUGが入力エラーを返しました。CRMの詳細情報（住所・保護者名・電話など）をご確認ください。';
+    throw new HttpsError('failed-precondition', msg);
   }
 
   // 「続けて児童登録を行う」リンクから新規 p_id を抽出
