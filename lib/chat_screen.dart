@@ -791,10 +791,14 @@ class _ChatListScreenState extends State<ChatListScreen> {
   bool _matchesFilter(DocumentSnapshot roomDoc) {
     if (_filter == 'all') return true;
     final data = roomDoc.data() as Map<String, dynamic>;
+    final groupName = (data['groupName'] ?? '').toString().trim();
     final members = List<String>.from(data['members'] ?? []);
     final others = members.where((id) => id != currentUser?.uid).toList();
     if (others.isEmpty) return true;
-    final hasParent = others.any((id) => !_staffUids.contains(id));
+    // 名前付きグループ（例: アプリ修正ch）はスタッフ内部チャンネル。保護者は入らないため常にスタッフ扱い。
+    // 退職/削除で staffs から消えたメンバーが混じっても保護者側に落ちない。
+    final hasParent =
+        groupName.isEmpty && others.any((id) => !_staffUids.contains(id));
     return _filter == 'staff' ? !hasParent : hasParent;
   }
 
