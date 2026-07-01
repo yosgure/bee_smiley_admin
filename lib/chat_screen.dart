@@ -1785,10 +1785,21 @@ class _ChatDetailViewState extends State<ChatDetailView> {
             child: Container(
               color: context.colors.cardBg,
               child: StreamBuilder<QuerySnapshot>(
-                stream: FirebaseFirestore.instance.collection('chat_rooms').doc(widget.roomId).collection('messages').orderBy('createdAt', descending: false).snapshots(),
+                // orderBy('createdAt') はサーバー確定前(null)のメッセージを除外してしまい、
+                // 送信直後に自分のメッセージが出ない原因になる。並び替えはクライアント側で行い、
+                // 未確定（送信中）のメッセージは最新扱いで即表示する。
+                stream: FirebaseFirestore.instance.collection('chat_rooms').doc(widget.roomId).collection('messages').snapshots(),
                 builder: (context, snapshot) {
                   if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
-                  final docs = snapshot.data!.docs;
+                  final docs = [...snapshot.data!.docs];
+                  docs.sort((a, b) {
+                    final ta = (a.data() as Map<String, dynamic>)['createdAt'] as Timestamp?;
+                    final tb = (b.data() as Map<String, dynamic>)['createdAt'] as Timestamp?;
+                    if (ta == null && tb == null) return 0;
+                    if (ta == null) return 1; // 送信中(null)は最新＝末尾へ
+                    if (tb == null) return -1;
+                    return ta.compareTo(tb);
+                  });
                   for (var doc in docs) {
                     final data = doc.data() as Map<String, dynamic>;
                     final senderId = data['senderId'];
