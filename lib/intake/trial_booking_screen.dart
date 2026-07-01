@@ -255,7 +255,7 @@ class _TrialBookingScreenState extends State<TrialBookingScreen> {
                   const SizedBox(height: 10),
                   Text(
                     'このたびはビースマイリープラスにご興味をお持ちいただき、ありがとうございます。\n無料体験のご予約ページです。ご希望の日時とお客さま情報をご入力ください。ご予約後、担当者より当日のご案内をお送りします。',
-                    textAlign: TextAlign.center,
+                    textAlign: TextAlign.start,
                     style: TextStyle(
                         fontSize: AppTextSize.caption,
                         height: 1.7,
