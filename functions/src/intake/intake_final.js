@@ -213,6 +213,68 @@ async function uploadCertImages(familyId, childIndex, images) {
   return paths;
 }
 
+// ─────────────── プラス従業員全員へチャット通知 ───────────────
+
+// 入会前アンケート受領を、ビースマイリープラスの従業員全員へチャットで通知する。
+// プラス従業員 = staffs の classrooms に「プラス」を含む人（退職除外・uidあり）。
+// 専用ルーム(plus_intake_notify)を最新メンバーで upsert し、全員を @mention した
+// メッセージを投稿 → 各自のベル点灯＋未読＋FCM（onChatMessageCreated 経由）。
+async function notifyPlusStaffIntakeReceived(familyId, childIndex) {
+  const staffSnap = await db.collection('staffs').get();
+  const members = [];
+  const names = {};
+  staffSnap.forEach((d) => {
+    const st = d.data() || {};
+    if (st.retired === true) return;
+    const uid = st.uid;
+    if (!uid) return;
+    const classrooms = Array.isArray(st.classrooms) ? st.classrooms : [];
+    if (!classrooms.some((c) => String(c).includes('プラス'))) return;
+    members.push(uid);
+    names[uid] = st.name || '';
+  });
+  if (members.length === 0) return;
+  names['system'] = 'ビースマイリー';
+
+  const famSnap = await db.collection('plus_families').doc(familyId).get();
+  const fam = famSnap.exists ? (famSnap.data() || {}) : {};
+  const child =
+    (Array.isArray(fam.children) ? fam.children[childIndex] : null) || {};
+  const childName =
+    `${s(child.lastName)}${s(child.firstName)}`.trim() || 'お子さま';
+  const parentName = `${s(fam.lastName)}${s(fam.firstName)}`.trim();
+
+  const roomRef = db.collection('chat_rooms').doc('plus_intake_notify');
+  const existing = await roomRef.get();
+  const roomData = {
+    roomId: 'plus_intake_notify',
+    members,
+    names,
+    groupName: '入会前アンケート通知',
+    photoUrl: null,
+    lastMessage: '入会前アンケートが届きました',
+    lastMessageTime: FieldValue.serverTimestamp(),
+  };
+  if (!existing.exists) roomData.createdAt = FieldValue.serverTimestamp();
+  await roomRef.set(roomData, { merge: true });
+
+  const lines = ['📩 入会前アンケートが届きました'];
+  lines.push(parentName ? `${childName}（${parentName}）` : childName);
+  lines.push('CRMで内容をご確認ください。');
+  await roomRef.collection('messages').add({
+    senderId: 'system',
+    text: lines.join('\n'),
+    type: 'text',
+    url: '',
+    fileName: '',
+    fileSize: 0,
+    stamps: {},
+    mentions: members, // 全員のベルを点ける
+    createdAt: FieldValue.serverTimestamp(),
+    readBy: [],
+  });
+}
+
 // ─────────────── 回答の書き戻し ───────────────
 
 exports.submitFinalIntake = onRequest(
@@ -321,6 +383,14 @@ exports.submitFinalIntake = onRequest(
       });
 
       await t.ref.update({ usedAt: now });
+
+      // プラス従業員全員へチャット通知（失敗しても回答受領は成功扱い）
+      try {
+        await notifyPlusStaffIntakeReceived(familyId, childIndex);
+      } catch (e) {
+        console.warn('[submitFinalIntake] プラス通知に失敗:', e.message);
+      }
+
       res.status(200).json({ ok: true });
     } catch (err) {
       console.error('[submitFinalIntake] error:', err);
