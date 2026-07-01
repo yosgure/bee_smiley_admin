@@ -264,14 +264,12 @@ class _ChatListScreenState extends State<ChatListScreen> {
   bool _matchesFilterFor(DocumentSnapshot roomDoc, String filter) {
     if (filter == 'all') return true;
     final data = roomDoc.data() as Map<String, dynamic>;
-    final groupName = (data['groupName'] ?? '').toString().trim();
     final members = List<String>.from(data['members'] ?? []);
     final others = members.where((id) => id != currentUser?.uid).toList();
     if (others.isEmpty) return true;
-    // 名前付きグループ（例: アプリ修正ch）はスタッフ内部チャンネル。保護者は入らないため常にスタッフ扱い。
-    // これにより退職/削除で staffs から消えたメンバーが混じっても保護者側に落ちない。
+    // 保護者チャットは「1対1 かつ 相手がスタッフでない」場合だけ。グループは常にスタッフ扱い。
     final hasParent =
-        groupName.isEmpty && others.any((id) => !_staffUids.contains(id));
+        others.length == 1 && !_staffUids.contains(others.first);
     return filter == 'staff' ? !hasParent : hasParent;
   }
 
@@ -791,14 +789,14 @@ class _ChatListScreenState extends State<ChatListScreen> {
   bool _matchesFilter(DocumentSnapshot roomDoc) {
     if (_filter == 'all') return true;
     final data = roomDoc.data() as Map<String, dynamic>;
-    final groupName = (data['groupName'] ?? '').toString().trim();
     final members = List<String>.from(data['members'] ?? []);
     final others = members.where((id) => id != currentUser?.uid).toList();
     if (others.isEmpty) return true;
-    // 名前付きグループ（例: アプリ修正ch）はスタッフ内部チャンネル。保護者は入らないため常にスタッフ扱い。
-    // 退職/削除で staffs から消えたメンバーが混じっても保護者側に落ちない。
+    // 保護者チャットは「1対1 かつ 相手がスタッフでない」場合だけ。
+    // 3人以上のグループ（アプリ修正ch等）は常にスタッフ扱い。
+    // （保護者との1対1ルームにも相手名が groupName に入るため、groupName では判定しない）
     final hasParent =
-        groupName.isEmpty && others.any((id) => !_staffUids.contains(id));
+        others.length == 1 && !_staffUids.contains(others.first);
     return _filter == 'staff' ? !hasParent : hasParent;
   }
 
