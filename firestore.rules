@@ -126,6 +126,32 @@ service cloud.firestore {
       allow read: if isAuthenticated();
       allow write: if isStaff();
     }
+    // 保護者コンディション記録（プラス保護者向け）。
+    // condition_daily: 毎日のキャラ選択・疲れ度（doc id = studentId_YYYY-MM-DD）
+    // condition_sheets: 月次かんたんシート（doc id = studentId_YYYY-MM）
+    // 保護者は自分の家族（familyUid == uid）の記録のみ読み書き可。
+    // doc 未作成時の read は resource == null を許可して not-found を返す
+    // （chat_rooms と同じデッドロック回避パターン）。
+    match /condition_daily/{docId} {
+      allow read: if isStaff()
+                  || (isParent() && (resource == null || resource.data.familyUid == uid()));
+      allow create: if isStaff()
+                  || (isParent() && request.resource.data.familyUid == uid());
+      allow update: if isStaff()
+                  || (isParent() && resource.data.familyUid == uid()
+                      && request.resource.data.familyUid == uid());
+      allow delete: if isStaff();
+    }
+    match /condition_sheets/{docId} {
+      allow read: if isStaff()
+                  || (isParent() && (resource == null || resource.data.familyUid == uid()));
+      allow create: if isStaff()
+                  || (isParent() && request.resource.data.familyUid == uid());
+      allow update: if isStaff()
+                  || (isParent() && resource.data.familyUid == uid()
+                      && request.resource.data.familyUid == uid());
+      allow delete: if isStaff();
+    }
     match /support_plans/{planId} {
       allow read, write: if isStaff();
     }
