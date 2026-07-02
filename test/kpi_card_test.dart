@@ -88,7 +88,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('振り返りメモ導線: メモ空＋前週側で出て、タップで編集が開く',
+  testWidgets('メモ導線: 前週側は「振り返りメモ」・今週側は「メモ」、タップで編集が開く',
       (tester) async {
     var opened = false;
     await tester.pumpWidget(wrap(pane(
@@ -100,10 +100,11 @@ void main() {
     await tester.tap(find.text('振り返りメモ'));
     expect(opened, isTrue);
 
-    // 今週側（ghost無し）では出ない
+    // 今週側は「メモ」表記（行のリズムを左右で揃えるため両側に出す）
     await tester.pumpWidget(wrap(pane(note: '', showRetroGhost: false)));
     await tester.pumpAndSettle();
     expect(find.text('振り返りメモ'), findsNothing);
+    expect(find.text('メモ'), findsOneWidget);
   });
 
   testWidgets('インライン追加: 入力してEnterで追加され、続けて入力できる',

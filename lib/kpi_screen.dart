@@ -153,33 +153,11 @@ class _KpiScreenState extends State<KpiScreen> {
                     fontSize: AppTextSize.title,
                     fontWeight: FontWeight.w600)),
             const SizedBox(width: 12),
-            Flexible(
-              child: Text('週次進捗（前週の振り返り × 今週の計画）',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                      fontSize: AppTextSize.small, color: c.textSecondary)),
-            ),
+            Text('週次進捗',
+                style: TextStyle(
+                    fontSize: AppTextSize.small, color: c.textSecondary)),
           ],
         ),
-        actions: [
-          if (_weekShift != 0)
-            TextButton(
-              onPressed: () => setState(() => _weekShift = 0),
-              child: const Text('今週へ'),
-            ),
-          IconButton(
-            tooltip: '1週すすらす（過去へ）',
-            icon: const Icon(Icons.chevron_left),
-            onPressed: () => setState(() => _weekShift -= 1),
-          ),
-          IconButton(
-            tooltip: '1週ずらす（未来へ）',
-            icon: const Icon(Icons.chevron_right),
-            onPressed: () => setState(() => _weekShift += 1),
-          ),
-          const SizedBox(width: 8),
-        ],
       ),
       body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
         stream: _categoriesRef.orderBy('order').snapshots(),
@@ -266,7 +244,7 @@ class _KpiScreenState extends State<KpiScreen> {
     return '${DateFormat('M/d').format(monday)}〜${DateFormat('M/d').format(end)}';
   }
 
-  /// リスト先頭の列ヘッダー（週ラベルはここに1回だけ。カード毎に繰り返さない）
+  /// リスト先頭の列ヘッダー（週ラベルはここに1回だけ。週送り◀▶もここに置く）
   Widget _headerStrip(DateTime left, DateTime right) {
     final c = context.colors;
     final isDefaultPair = _weekShift == 0;
@@ -275,6 +253,7 @@ class _KpiScreenState extends State<KpiScreen> {
       final rel = _relName(m);
       final isCur = m == _currentMonday;
       return Row(
+        mainAxisSize: MainAxisSize.min,
         children: [
           if (isCur)
             Container(
@@ -296,16 +275,30 @@ class _KpiScreenState extends State<KpiScreen> {
                     fontWeight: FontWeight.w600,
                     color: c.textPrimary)),
           const SizedBox(width: 6),
-          Text(_rangeLabel(m),
+          Flexible(
+            child: Text(
+              hint == null ? _rangeLabel(m) : '${_rangeLabel(m)} ・$hint',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
               style: TextStyle(
-                  fontSize: AppTextSize.small, color: c.textSecondary)),
-          if (hint != null) ...[
-            const Spacer(),
-            Text(hint,
-                style: TextStyle(
-                    fontSize: AppTextSize.xs, color: c.textTertiary)),
-          ],
+                  fontSize: AppTextSize.small, color: c.textSecondary),
+            ),
+          ),
         ],
+      );
+    }
+
+    Widget navBtn(IconData icon, String tip, VoidCallback onTap) {
+      return Tooltip(
+        message: tip,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(6),
+          child: Padding(
+            padding: const EdgeInsets.all(4),
+            child: Icon(icon, size: 18, color: c.iconDefault),
+          ),
+        ),
       );
     }
 
@@ -325,13 +318,40 @@ class _KpiScreenState extends State<KpiScreen> {
           Expanded(
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 14),
-              child: weekLabel(left, isDefaultPair ? '振り返り' : null),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: weekLabel(left, isDefaultPair ? '振り返り' : null),
+              ),
             ),
           ),
           Expanded(
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 14),
-              child: weekLabel(right, isDefaultPair ? '計画' : null),
+              padding: const EdgeInsets.only(left: 14, right: 6),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: weekLabel(right, isDefaultPair ? '計画' : null),
+                  ),
+                  // 週送りは週ラベルの隣に（ペアごと1週ずつ動く）
+                  if (!isDefaultPair)
+                    TextButton(
+                      onPressed: () => setState(() => _weekShift = 0),
+                      style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        minimumSize: const Size(0, 28),
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        textStyle:
+                            const TextStyle(fontSize: AppTextSize.small),
+                      ),
+                      child: const Text('今週へ'),
+                    ),
+                  navBtn(Icons.chevron_left, '1週前へ',
+                      () => setState(() => _weekShift -= 1)),
+                  const SizedBox(width: 2),
+                  navBtn(Icons.chevron_right, '1週先へ',
+                      () => setState(() => _weekShift += 1)),
+                ],
+              ),
             ),
           ),
         ],
@@ -864,10 +884,10 @@ class KpiCategoryCard extends StatelessWidget {
     return InkWell(
       onTap: onEditCategory,
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
         child: Column(
+          // 上揃え: カテゴリ名とペインの実績行が同じ高さから始まる
           crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Tooltip(
               message: objective.isEmpty ? name : objective,
@@ -953,7 +973,7 @@ class KpiWeekPane extends StatefulWidget {
   final num? target;
   final String note;
   final List<Map<String, dynamic>> tasks;
-  final bool showRetroGhost; // メモ空のとき「＋振り返りメモ」導線
+  final bool showRetroGhost; // メモ空時のゴースト文言（true=振り返りメモ / false=メモ）
   final String carryOverLabel; // 空なら引き継ぎボタン非表示
   final String Function(dynamic) numLabel;
   final VoidCallback onEditResult;
@@ -1013,10 +1033,10 @@ class _KpiWeekPaneState extends State<KpiWeekPane> {
 
     return Container(
       color: bg,
-      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+      padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
       child: Column(
+        // 上揃え: 実績→メモ→やること の行が左右ペインで横に揃う
         crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.center,
         children: [
           // 実績（タップで編集。桁あふれは縮小フィット）
           InkWell(
@@ -1081,7 +1101,8 @@ class _KpiWeekPaneState extends State<KpiWeekPane> {
                 ),
               ),
             )
-          else if (widget.showRetroGhost)
+          else
+            // メモ空でも行を出して左右ペインの高さリズムを揃える
             Padding(
               padding: const EdgeInsets.only(top: 6),
               child: InkWell(
@@ -1095,7 +1116,7 @@ class _KpiWeekPaneState extends State<KpiWeekPane> {
                     children: [
                       Icon(Icons.add, size: 14, color: c.textTertiary),
                       const SizedBox(width: 3),
-                      Text('振り返りメモ',
+                      Text(widget.showRetroGhost ? '振り返りメモ' : 'メモ',
                           style: TextStyle(
                               fontSize: AppTextSize.small,
                               color: c.textTertiary)),
