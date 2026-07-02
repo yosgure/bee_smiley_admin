@@ -7,14 +7,17 @@ import 'app_theme.dart';
 
 /// KPI（OKR週次進捗）画面。上田洋介・上田藍のみ（staffs.kpiAccess == true）。
 ///
-/// 週次の「作業ドキュメント」。カテゴリ1件 = 1カード:
-///   [識別: 名前 / KR / 目標バー] | [実績: その週の数字＋メモ] | [やること: タスク（縦に増やせる）]
-/// 上部ヘッダーの ◀▶ / 今週へ で対象の週を切り替える。
+/// 週次の「作業ドキュメント」。前週と今週を横に並べて固定表示し、
+/// 週初めの儀式（前週の振り返り → 今週の計画）を画面移動なしで行う。
+///
+/// カード構成: [識別: 名前/KR/目標バー] | [前週ペイン(振り返り)] | [今週ペイン(計画)]
+/// ◀▶ はペアごと移動（▶1回で[今週|翌週]）。「今週へ」で既定に戻る。
 ///
 /// データ:
 ///  - kpi_categories/{id}: { name, objective, krContent, krTarget(num?), order(int) }
 ///  - kpi_entries/{id} (id="{categoryId}_{yyyyMMdd(月曜)}"):
 ///      { categoryId, weekStart(Timestamp), resultValue(num?), note(String), tasks:[{title,done}] }
+///  - note は各週の「振り返りメモ」を兼ねる。
 class KpiScreen extends StatefulWidget {
   const KpiScreen({super.key});
 
@@ -30,7 +33,8 @@ class _KpiScreenState extends State<KpiScreen> {
   CollectionReference<Map<String, dynamic>> get _entriesRef =>
       _db.collection('kpi_entries');
 
-  int _weekShift = 0; // 今週からのずらし幅（週単位、0=今週）
+  /// ペアのずらし幅（週単位）。0 = [前週|今週]、+1 = [今週|翌週]、-1 = [先々週|前週]
+  int _weekShift = 0;
 
   /// 最新スナップショットの entries。コールバック実行時に常に最新を参照する
   /// （build時のクロージャ捕捉だと連続追加でタスクが消える競合が起きるため）。
@@ -63,9 +67,12 @@ class _KpiScreenState extends State<KpiScreen> {
   }
 
   DateTime get _currentMonday => _mondayOf(DateTime.now());
-  DateTime get _focusMonday =>
+
+  /// 右ペインの週（既定 = 今週）。左ペインはその1週前。
+  DateTime get _rightMonday =>
       _currentMonday.add(Duration(days: 7 * _weekShift));
-  bool get _focusIsCurrent => _weekShift == 0;
+  DateTime get _leftMonday =>
+      _rightMonday.subtract(const Duration(days: 7));
 
   String _weekKey(DateTime monday) => DateFormat('yyyyMMdd').format(monday);
   String _entryId(String categoryId, DateTime monday) =>
@@ -80,10 +87,10 @@ class _KpiScreenState extends State<KpiScreen> {
     return (v is num && v.isFinite) ? v : null;
   }
 
-  // 直近の非null実績（focus週から過去へ遡る）。目標バー用。
-  num? _latestResult(String catId, DateTime focus) {
+  // 直近の非null実績（基準週から過去へ遡る）。目標バー用。
+  num? _latestResult(String catId, DateTime from) {
     for (var i = 0; i < 80; i++) {
-      final r = _resultAt(catId, focus.subtract(Duration(days: 7 * i)));
+      final r = _resultAt(catId, from.subtract(Duration(days: 7 * i)));
       if (r != null) return r;
     }
     return null;
@@ -131,8 +138,6 @@ class _KpiScreenState extends State<KpiScreen> {
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
-    final focus = _focusMonday;
-    final end = focus.add(const Duration(days: 6));
     return Scaffold(
       backgroundColor: c.scaffoldBg,
       appBar: AppBar(
@@ -147,46 +152,29 @@ class _KpiScreenState extends State<KpiScreen> {
                 style: TextStyle(
                     fontSize: AppTextSize.title,
                     fontWeight: FontWeight.w600)),
-            const SizedBox(width: 14),
+            const SizedBox(width: 12),
             Flexible(
-              child: Text(
-                '${DateFormat('M/d').format(focus)}〜${DateFormat('M/d').format(end)} の週',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                    fontSize: AppTextSize.small, color: c.textSecondary),
-              ),
+              child: Text('週次進捗（前週の振り返り × 今週の計画）',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                      fontSize: AppTextSize.small, color: c.textSecondary)),
             ),
-            const SizedBox(width: 8),
-            if (_focusIsCurrent)
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                decoration: BoxDecoration(
-                  color: AppColors.primary,
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: const Text('今週',
-                    style: TextStyle(
-                        fontSize: AppTextSize.xs,
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold)),
-              ),
           ],
         ),
         actions: [
-          if (!_focusIsCurrent)
+          if (_weekShift != 0)
             TextButton(
               onPressed: () => setState(() => _weekShift = 0),
               child: const Text('今週へ'),
             ),
           IconButton(
-            tooltip: '前の週へ',
+            tooltip: '1週すすらす（過去へ）',
             icon: const Icon(Icons.chevron_left),
             onPressed: () => setState(() => _weekShift -= 1),
           ),
           IconButton(
-            tooltip: '次の週へ',
+            tooltip: '1週ずらす（未来へ）',
             icon: const Icon(Icons.chevron_right),
             onPressed: () => setState(() => _weekShift += 1),
           ),
@@ -230,15 +218,18 @@ class _KpiScreenState extends State<KpiScreen> {
 
   Widget _buildList(
       List<QueryDocumentSnapshot<Map<String, dynamic>>> categories) {
-    final focus = _focusMonday;
+    final left = _leftMonday;
+    final right = _rightMonday;
     return Center(
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 1180),
+        constraints: const BoxConstraints(maxWidth: 1280),
         child: ListView(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
           children: [
+            _headerStrip(left, right),
+            const SizedBox(height: 8),
             for (final cat in categories) ...[
-              _cardFor(cat, focus),
+              _cardFor(cat, left, right),
               const SizedBox(height: 10),
             ],
             const SizedBox(height: 4),
@@ -261,44 +252,149 @@ class _KpiScreenState extends State<KpiScreen> {
     );
   }
 
-  Widget _cardFor(
-      QueryDocumentSnapshot<Map<String, dynamic>> cat, DateTime focus) {
-    final data = cat.data();
-    final entry = _entryOf(cat.id, focus);
-    final tasks = _tasksOf(entry);
-    final rv = entry?['resultValue'];
-    final carrySource = _carrySource(cat.id, focus, tasks);
-    final String carryLabel;
-    if (carrySource == null) {
-      carryLabel = '';
-    } else if (focus.difference(carrySource.monday).inDays == 7) {
-      carryLabel = '前週の未完了を引き継ぐ（${carrySource.unfinished.length}件）';
-    } else {
-      carryLabel =
-          '${DateFormat('M/d').format(carrySource.monday)}週の未完了を引き継ぐ（${carrySource.unfinished.length}件）';
+  /// 週の相対名（実日付と照合。「今週」は本当に今週の時だけ）
+  String _relName(DateTime monday) {
+    final cur = _currentMonday;
+    if (monday == cur) return '今週';
+    if (monday == cur.subtract(const Duration(days: 7))) return '前週';
+    if (monday == cur.add(const Duration(days: 7))) return '翌週';
+    return '';
+  }
+
+  String _rangeLabel(DateTime monday) {
+    final end = monday.add(const Duration(days: 6));
+    return '${DateFormat('M/d').format(monday)}〜${DateFormat('M/d').format(end)}';
+  }
+
+  /// リスト先頭の列ヘッダー（週ラベルはここに1回だけ。カード毎に繰り返さない）
+  Widget _headerStrip(DateTime left, DateTime right) {
+    final c = context.colors;
+    final isDefaultPair = _weekShift == 0;
+
+    Widget weekLabel(DateTime m, String? hint) {
+      final rel = _relName(m);
+      final isCur = m == _currentMonday;
+      return Row(
+        children: [
+          if (isCur)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              decoration: BoxDecoration(
+                color: AppColors.primary,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Text('今週',
+                  style: TextStyle(
+                      fontSize: AppTextSize.xs,
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold)),
+            )
+          else if (rel.isNotEmpty)
+            Text(rel,
+                style: TextStyle(
+                    fontSize: AppTextSize.small,
+                    fontWeight: FontWeight.w600,
+                    color: c.textPrimary)),
+          const SizedBox(width: 6),
+          Text(_rangeLabel(m),
+              style: TextStyle(
+                  fontSize: AppTextSize.small, color: c.textSecondary)),
+          if (hint != null) ...[
+            const Spacer(),
+            Text(hint,
+                style: TextStyle(
+                    fontSize: AppTextSize.xs, color: c.textTertiary)),
+          ],
+        ],
+      );
     }
 
+    return Padding(
+      padding: const EdgeInsets.only(left: 1, right: 1),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 230,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Text('カテゴリ / KR',
+                  style: TextStyle(
+                      fontSize: AppTextSize.small, color: c.textTertiary)),
+            ),
+          ),
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 14),
+              child: weekLabel(left, isDefaultPair ? '振り返り' : null),
+            ),
+          ),
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 14),
+              child: weekLabel(right, isDefaultPair ? '計画' : null),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _cardFor(QueryDocumentSnapshot<Map<String, dynamic>> cat,
+      DateTime left, DateTime right) {
+    final data = cat.data();
+    final target =
+        (data['krTarget'] is num && (data['krTarget'] as num).isFinite)
+            ? data['krTarget'] as num
+            : null;
     return KpiCategoryCard(
-      key: ValueKey('${cat.id}_${_weekKey(focus)}'),
+      key: ValueKey('${cat.id}_${_weekKey(right)}'),
       name: (data['name'] ?? '') as String,
       krContent: (data['krContent'] ?? '') as String,
       objective: (data['objective'] ?? '') as String,
-      target: (data['krTarget'] is num && (data['krTarget'] as num).isFinite)
-          ? data['krTarget'] as num
-          : null,
-      result: (rv is num && rv.isFinite) ? rv : null,
-      note: (entry?['note'] ?? '').toString(),
-      tasks: tasks,
-      latest: _latestResult(cat.id, focus),
-      isCurrentWeek: _focusIsCurrent,
-      carryOverLabel: carryLabel,
+      target: target,
+      latest: _latestResult(cat.id, right),
       numLabel: _numLabel,
       onEditCategory: () => _categoryDialog(doc: cat),
-      onEditResult: () => _resultDialog(cat, focus),
-      onAddTaskText: (text) => _addTask(cat.id, focus, text),
-      onToggleTask: (i) => _toggleTask(cat.id, focus, i),
-      onEditTask: (i) => _editTaskDialog(cat.id, focus, i),
-      onCarryOver: () => _carryOverTasks(cat.id, focus),
+      leftPane: _paneFor(cat, target, left, isRight: false),
+      rightPane: _paneFor(cat, target, right, isRight: true),
+    );
+  }
+
+  Widget _paneFor(QueryDocumentSnapshot<Map<String, dynamic>> cat,
+      num? target, DateTime monday,
+      {required bool isRight}) {
+    final entry = _entryOf(cat.id, monday);
+    final tasks = _tasksOf(entry);
+    final rv = entry?['resultValue'];
+
+    // 引き継ぎは右ペイン（計画側）のみ
+    String carryLabel = '';
+    if (isRight) {
+      final source = _carrySource(cat.id, monday, tasks);
+      if (source != null) {
+        carryLabel = monday.difference(source.monday).inDays == 7
+            ? '前週の未完了を引き継ぐ（${source.unfinished.length}件）'
+            : '${DateFormat('M/d').format(source.monday)}週の未完了を引き継ぐ（${source.unfinished.length}件）';
+      }
+    }
+
+    return KpiWeekPane(
+      key: ValueKey('${cat.id}_${_weekKey(monday)}_pane'),
+      highlight: monday == _currentMonday,
+      muted: !isRight,
+      result: (rv is num && rv.isFinite) ? rv : null,
+      target: target,
+      note: (entry?['note'] ?? '').toString(),
+      tasks: tasks,
+      // 前週側はメモが空なら「＋振り返りメモ」導線を出す
+      showRetroGhost: !isRight,
+      carryOverLabel: carryLabel,
+      numLabel: _numLabel,
+      onEditResult: () => _resultDialog(cat, monday),
+      onAddTaskText: (t) => _addTask(cat.id, monday, t),
+      onToggleTask: (i) => _toggleTask(cat.id, monday, i),
+      onEditTask: (i) => _editTaskDialog(cat.id, monday, i),
+      onCarryOver: () => _carryOverTasks(cat.id, monday),
     );
   }
 
@@ -361,63 +457,64 @@ class _KpiScreenState extends State<KpiScreen> {
       context: context,
       builder: (_) => StatefulBuilder(
         builder: (context, setDialog) => AlertDialog(
-        title: Text(doc == null ? 'カテゴリ／KRを追加' : 'カテゴリ／KRを編集'),
-        content: SizedBox(
-          width: 380,
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: nameCtrl,
-                  decoration: InputDecoration(
-                      labelText: 'カテゴリ名（例: BS湘南藤沢）',
-                      errorText: nameError),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: objCtrl,
-                  decoration: const InputDecoration(
-                      labelText: 'Objective（例: 生徒数の増加と継続）'),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: krCtrl,
-                  decoration: const InputDecoration(
-                      labelText: 'KR内容（例: 生徒数を60人達成）'),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: targetCtrl,
-                  keyboardType:
-                      const TextInputType.numberWithOptions(decimal: true),
-                  decoration: const InputDecoration(labelText: '目標値（数字）'),
-                ),
-              ],
+          title: Text(doc == null ? 'カテゴリ／KRを追加' : 'カテゴリ／KRを編集'),
+          content: SizedBox(
+            width: 380,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: nameCtrl,
+                    decoration: InputDecoration(
+                        labelText: 'カテゴリ名（例: BS湘南藤沢）',
+                        errorText: nameError),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: objCtrl,
+                    decoration: const InputDecoration(
+                        labelText: 'Objective（例: 生徒数の増加と継続）'),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: krCtrl,
+                    decoration: const InputDecoration(
+                        labelText: 'KR内容（例: 生徒数を60人達成）'),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: targetCtrl,
+                    keyboardType:
+                        const TextInputType.numberWithOptions(decimal: true),
+                    decoration:
+                        const InputDecoration(labelText: '目標値（数字）'),
+                  ),
+                ],
+              ),
             ),
           ),
-        ),
-        actions: [
-          if (doc != null)
+          actions: [
+            if (doc != null)
+              TextButton(
+                onPressed: () => Navigator.pop(context, 'delete'),
+                style: TextButton.styleFrom(foregroundColor: urgentColor),
+                child: const Text('削除'),
+              ),
             TextButton(
-              onPressed: () => Navigator.pop(context, 'delete'),
-              style: TextButton.styleFrom(foregroundColor: urgentColor),
-              child: const Text('削除'),
-            ),
-          TextButton(
-              onPressed: () => Navigator.pop(context, null),
-              child: const Text('キャンセル')),
-          FilledButton(
-              onPressed: () {
-                // 名前が空のまま閉じると他の入力ごと消えるため、閉じずにエラー表示
-                if (nameCtrl.text.trim().isEmpty) {
-                  setDialog(() => nameError = 'カテゴリ名は必須です');
-                  return;
-                }
-                Navigator.pop(context, 'save');
-              },
-              child: const Text('保存')),
-        ],
+                onPressed: () => Navigator.pop(context, null),
+                child: const Text('キャンセル')),
+            FilledButton(
+                onPressed: () {
+                  // 名前が空のまま閉じると他の入力ごと消えるため、閉じずにエラー表示
+                  if (nameCtrl.text.trim().isEmpty) {
+                    setDialog(() => nameError = 'カテゴリ名は必須です');
+                    return;
+                  }
+                  Navigator.pop(context, 'save');
+                },
+                child: const Text('保存')),
+          ],
         ),
       ),
     );
@@ -430,7 +527,8 @@ class _KpiScreenState extends State<KpiScreen> {
         'objective': objCtrl.text.trim(),
         'krContent': krCtrl.text.trim(),
         // NaN/Infinity は保存しない（描画時クラッシュの元）
-        'krTarget': (targetVal != null && targetVal.isFinite) ? targetVal : null,
+        'krTarget':
+            (targetVal != null && targetVal.isFinite) ? targetVal : null,
       };
       if (doc == null) {
         // order は最大値+1（件数だと削除後に重複しうる）
@@ -481,21 +579,21 @@ class _KpiScreenState extends State<KpiScreen> {
     await batch.commit();
   }
 
-  // ===== 実績数字 / メモ =====
+  // ===== 実績数字 / 振り返りメモ =====
 
   Future<void> _resultDialog(
       QueryDocumentSnapshot<Map<String, dynamic>> cat, DateTime monday) async {
     final entry = _entryOf(cat.id, monday);
     final existing = _resultAt(cat.id, monday);
-    final valueCtrl =
-        TextEditingController(text: existing != null ? _numLabel(existing) : '');
+    final valueCtrl = TextEditingController(
+        text: existing != null ? _numLabel(existing) : '');
     final noteCtrl =
         TextEditingController(text: (entry?['note'] ?? '').toString());
 
     final save = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
-        title: Text('${DateFormat('M/d').format(monday)}週の実績'),
+        title: Text('${DateFormat('M/d').format(monday)}週の実績・メモ'),
         content: SizedBox(
           width: 360,
           child: Column(
@@ -513,9 +611,9 @@ class _KpiScreenState extends State<KpiScreen> {
               const SizedBox(height: 12),
               TextField(
                 controller: noteCtrl,
-                maxLines: 3,
+                maxLines: 4,
                 decoration: const InputDecoration(
-                  labelText: 'メモ（自由記入）',
+                  labelText: '振り返りメモ（自由記入）',
                   alignLabelWithHint: true,
                 ),
               ),
@@ -668,26 +766,18 @@ class _KpiScreenState extends State<KpiScreen> {
   }
 }
 
-/// KPIカテゴリ1件のカード（週次作業ドキュメント）。
+/// KPIカテゴリ1件のカード（識別ゾーン + 前週/今週ペイン）。
 /// ウィジェットテストから直接検証できるよう公開クラスにしている。
-class KpiCategoryCard extends StatefulWidget {
+class KpiCategoryCard extends StatelessWidget {
   final String name;
   final String krContent;
   final String objective;
   final num? target;
-  final num? result;
-  final String note;
-  final List<Map<String, dynamic>> tasks;
   final num? latest;
-  final bool isCurrentWeek;
-  final String carryOverLabel; // 空なら引き継ぎボタン非表示
   final String Function(dynamic) numLabel;
   final VoidCallback onEditCategory;
-  final VoidCallback onEditResult;
-  final ValueChanged<String> onAddTaskText;
-  final ValueChanged<int> onToggleTask;
-  final ValueChanged<int> onEditTask;
-  final VoidCallback onCarryOver;
+  final Widget leftPane;
+  final Widget rightPane;
 
   const KpiCategoryCard({
     super.key,
@@ -695,36 +785,12 @@ class KpiCategoryCard extends StatefulWidget {
     required this.krContent,
     required this.objective,
     required this.target,
-    required this.result,
-    required this.note,
-    required this.tasks,
     required this.latest,
-    required this.isCurrentWeek,
-    required this.carryOverLabel,
     required this.numLabel,
     required this.onEditCategory,
-    required this.onEditResult,
-    required this.onAddTaskText,
-    required this.onToggleTask,
-    required this.onEditTask,
-    required this.onCarryOver,
+    required this.leftPane,
+    required this.rightPane,
   });
-
-  @override
-  State<KpiCategoryCard> createState() => _KpiCategoryCardState();
-}
-
-class _KpiCategoryCardState extends State<KpiCategoryCard> {
-  bool _addingTask = false;
-  final _taskCtrl = TextEditingController();
-  final _taskFocus = FocusNode();
-
-  @override
-  void dispose() {
-    _taskCtrl.dispose();
-    _taskFocus.dispose();
-    super.dispose();
-  }
 
   Color _ramp(double ratio, AlertPalette a) {
     if (ratio >= 1.0) return a.success.icon;
@@ -750,30 +816,43 @@ class _KpiCategoryCardState extends State<KpiCategoryCard> {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  SizedBox(width: 300, child: _zoneIdentity(c)),
+                  SizedBox(width: 230, child: _zoneIdentity(context, c)),
                   VerticalDivider(width: 1, color: c.borderLight),
-                  SizedBox(width: 170, child: _zoneResult(c)),
+                  Expanded(child: leftPane),
                   VerticalDivider(width: 1, color: c.borderLight),
-                  Expanded(child: _zoneTasks(c)),
+                  Expanded(child: rightPane),
                 ],
               ),
             );
           }
+          if (cons.maxWidth >= 560) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _zoneIdentity(context, c),
+                Divider(height: 1, color: c.borderLight),
+                IntrinsicHeight(
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Expanded(child: leftPane),
+                      VerticalDivider(width: 1, color: c.borderLight),
+                      Expanded(child: rightPane),
+                    ],
+                  ),
+                ),
+              ],
+            );
+          }
+          // ごく狭い幅では縦積み
           return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              _zoneIdentity(c),
+              _zoneIdentity(context, c),
               Divider(height: 1, color: c.borderLight),
-              IntrinsicHeight(
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    SizedBox(width: 140, child: _zoneResult(c)),
-                    VerticalDivider(width: 1, color: c.borderLight),
-                    Expanded(child: _zoneTasks(c)),
-                  ],
-                ),
-              ),
+              leftPane,
+              Divider(height: 1, color: c.borderLight),
+              rightPane,
             ],
           );
         },
@@ -781,10 +860,9 @@ class _KpiCategoryCardState extends State<KpiCategoryCard> {
     );
   }
 
-  // ===== 識別 + 目標バー =====
-  Widget _zoneIdentity(AppColorScheme c) {
+  Widget _zoneIdentity(BuildContext context, AppColorScheme c) {
     return InkWell(
-      onTap: widget.onEditCategory,
+      onTap: onEditCategory,
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -792,10 +870,8 @@ class _KpiCategoryCardState extends State<KpiCategoryCard> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Tooltip(
-              message: widget.objective.isEmpty
-                  ? widget.name
-                  : widget.objective,
-              child: Text(widget.name,
+              message: objective.isEmpty ? name : objective,
+              child: Text(name,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
@@ -804,7 +880,7 @@ class _KpiCategoryCardState extends State<KpiCategoryCard> {
                       color: AppColors.primary)),
             ),
             const SizedBox(height: 4),
-            Text(widget.krContent,
+            Text(krContent,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
@@ -812,35 +888,30 @@ class _KpiCategoryCardState extends State<KpiCategoryCard> {
                     color: c.textPrimary,
                     height: 1.35)),
             const SizedBox(height: 12),
-            _progress(c),
+            _progress(context, c),
           ],
         ),
       ),
     );
   }
 
-  Widget _progress(AppColorScheme c) {
+  Widget _progress(BuildContext context, AppColorScheme c) {
     final a = context.alerts;
-    final target = widget.target;
     if (target == null || target == 0) {
       return Text('目標 未設定',
           style:
               TextStyle(fontSize: AppTextSize.small, color: c.textTertiary));
     }
-    final latest = (widget.latest != null && widget.latest!.isFinite)
-        ? widget.latest
-        : null;
-    final ratio = latest == null ? 0.0 : (latest / target).toDouble();
-    final pctLabel = (latest == null || !ratio.isFinite)
-        ? '—'
-        : '${(ratio * 100).round()}%';
+    final lv = (latest != null && latest!.isFinite) ? latest : null;
+    final ratio = lv == null ? 0.0 : (lv / target!).toDouble();
+    final pctLabel =
+        (lv == null || !ratio.isFinite) ? '—' : '${(ratio * 100).round()}%';
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
           children: [
-            Text(
-                '${latest == null ? '—' : widget.numLabel(latest)} / ${widget.numLabel(target)}',
+            Text('${lv == null ? '—' : numLabel(lv)} / ${numLabel(target)}',
                 style: TextStyle(
                     fontSize: AppTextSize.small, color: c.textSecondary)),
             const Spacer(),
@@ -871,81 +942,174 @@ class _KpiCategoryCardState extends State<KpiCategoryCard> {
       ],
     );
   }
+}
 
-  // ===== 実績（その週の数字 + メモ）=====
-  Widget _zoneResult(AppColorScheme c) {
+/// 1週ぶんのペイン（実績・振り返りメモ・タスク）。前週=振り返り / 今週=計画 の両方で使う。
+/// ウィジェットテストから直接検証できるよう公開クラスにしている。
+class KpiWeekPane extends StatefulWidget {
+  final bool highlight; // 実カレンダー上の今週（薄いブランド色）
+  final bool muted; // 前週側（落ち着いた背景）
+  final num? result;
+  final num? target;
+  final String note;
+  final List<Map<String, dynamic>> tasks;
+  final bool showRetroGhost; // メモ空のとき「＋振り返りメモ」導線
+  final String carryOverLabel; // 空なら引き継ぎボタン非表示
+  final String Function(dynamic) numLabel;
+  final VoidCallback onEditResult;
+  final ValueChanged<String> onAddTaskText;
+  final ValueChanged<int> onToggleTask;
+  final ValueChanged<int> onEditTask;
+  final VoidCallback onCarryOver;
+
+  const KpiWeekPane({
+    super.key,
+    required this.highlight,
+    required this.muted,
+    required this.result,
+    required this.target,
+    required this.note,
+    required this.tasks,
+    required this.showRetroGhost,
+    required this.carryOverLabel,
+    required this.numLabel,
+    required this.onEditResult,
+    required this.onAddTaskText,
+    required this.onToggleTask,
+    required this.onEditTask,
+    required this.onCarryOver,
+  });
+
+  @override
+  State<KpiWeekPane> createState() => _KpiWeekPaneState();
+}
+
+class _KpiWeekPaneState extends State<KpiWeekPane> {
+  bool _addingTask = false;
+  final _taskCtrl = TextEditingController();
+  final _taskFocus = FocusNode();
+
+  @override
+  void dispose() {
+    _taskCtrl.dispose();
+    _taskFocus.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
     final a = context.alerts;
     final result = widget.result;
     final target = widget.target;
     final reached = result != null && target != null && result >= target;
-    return InkWell(
-      onTap: widget.onEditResult,
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text('実績',
-                style: TextStyle(
-                    fontSize: AppTextSize.small, color: c.textSecondary)),
-            const SizedBox(height: 4),
-            // 桁が多い数字でもゾーン幅を超えないよう縮小フィット
-            FittedBox(
-              fit: BoxFit.scaleDown,
-              alignment: Alignment.centerLeft,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.baseline,
-                textBaseline: TextBaseline.alphabetic,
-                children: [
-                  Text(result == null ? '—' : widget.numLabel(result),
-                      style: TextStyle(
-                          fontSize: AppTextSize.headline,
-                          fontWeight: FontWeight.w700,
-                          height: 1.0,
-                          color: result == null
-                              ? c.textTertiary
-                              : (reached ? a.success.icon : c.textPrimary))),
-                  if (target != null) ...[
-                    const SizedBox(width: 4),
-                    Text('/ ${widget.numLabel(target)}',
-                        style: TextStyle(
-                            fontSize: AppTextSize.small,
-                            color: c.textSecondary)),
-                  ],
-                ],
-              ),
-            ),
-            if (widget.note.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              Text(widget.note,
-                  maxLines: 4,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                      fontSize: AppTextSize.small,
-                      color: c.textSecondary,
-                      height: 1.4)),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
 
-  // ===== やること（タスク：縦に増やせる）=====
-  Widget _zoneTasks(AppColorScheme c) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 12, 14, 12),
+    Color? bg;
+    if (widget.highlight) {
+      bg = AppColors.primary.withValues(alpha: 0.05);
+    } else if (widget.muted) {
+      bg = c.scaffoldBgAlt.withValues(alpha: 0.55);
+    }
+
+    return Container(
+      color: bg,
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          // 「今週」と書けるのは実際に今週を表示している時だけ
-          Text(widget.isCurrentWeek ? '今週やること' : 'やること',
+          // 実績（タップで編集。桁あふれは縮小フィット）
+          InkWell(
+            onTap: widget.onEditResult,
+            borderRadius: BorderRadius.circular(6),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 2),
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.baseline,
+                  textBaseline: TextBaseline.alphabetic,
+                  children: [
+                    Text('実績 ',
+                        style: TextStyle(
+                            fontSize: AppTextSize.small,
+                            color: c.textSecondary)),
+                    Text(result == null ? '—' : widget.numLabel(result),
+                        style: TextStyle(
+                            fontSize: AppTextSize.xl,
+                            fontWeight: FontWeight.w700,
+                            height: 1.0,
+                            color: result == null
+                                ? c.textTertiary
+                                : (reached
+                                    ? a.success.icon
+                                    : c.textPrimary))),
+                    if (target != null)
+                      Text(' / ${widget.numLabel(target)}',
+                          style: TextStyle(
+                              fontSize: AppTextSize.small,
+                              color: c.textSecondary)),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          // 振り返りメモ
+          if (widget.note.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: InkWell(
+                onTap: widget.onEditResult,
+                borderRadius: BorderRadius.circular(8),
+                child: Container(
+                  width: double.infinity,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                  decoration: BoxDecoration(
+                    color: c.scaffoldBgAlt,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(widget.note,
+                      maxLines: 4,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                          fontSize: AppTextSize.small,
+                          color: c.textSecondary,
+                          height: 1.45)),
+                ),
+              ),
+            )
+          else if (widget.showRetroGhost)
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: InkWell(
+                onTap: widget.onEditResult,
+                borderRadius: BorderRadius.circular(6),
+                child: Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.add, size: 14, color: c.textTertiary),
+                      const SizedBox(width: 3),
+                      Text('振り返りメモ',
+                          style: TextStyle(
+                              fontSize: AppTextSize.small,
+                              color: c.textTertiary)),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          const SizedBox(height: 8),
+          // やること
+          Text('やること',
               style: TextStyle(
-                  fontSize: AppTextSize.small, color: c.textSecondary)),
-          const SizedBox(height: 6),
+                  fontSize: AppTextSize.xs, color: c.textTertiary)),
+          const SizedBox(height: 3),
           for (var i = 0; i < widget.tasks.length; i++)
             _TaskRow(
               key: ValueKey('task_$i'),
@@ -1028,13 +1192,12 @@ class _KpiCategoryCardState extends State<KpiCategoryCard> {
           controller: _taskCtrl,
           focusNode: _taskFocus,
           textInputAction: TextInputAction.done,
-          style: TextStyle(
-              fontSize: AppTextSize.body, color: c.textPrimary),
+          style: TextStyle(fontSize: AppTextSize.body, color: c.textPrimary),
           decoration: InputDecoration(
             isDense: true,
-            hintText: 'タスクを入力して Enter（連続追加できます）',
-            hintStyle: TextStyle(
-                fontSize: AppTextSize.small, color: c.textHint),
+            hintText: 'タスクを入力して Enter',
+            hintStyle:
+                TextStyle(fontSize: AppTextSize.small, color: c.textHint),
             contentPadding:
                 const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
             enabledBorder: OutlineInputBorder(
