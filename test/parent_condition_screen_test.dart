@@ -125,6 +125,9 @@ void main() {
     await tester.pumpWidget(wrap(fs));
     await tester.pumpAndSettle();
 
+    // メモ欄は日次カード下部（画面外の可能性あり）なのでスクロールして表示
+    await tester.scrollUntilVisible(find.byTooltip('メモを保存'), 200,
+        scrollable: find.byType(Scrollable).first);
     await tester.enterText(
         find.byType(TextField).first, '夕方に眠そうだった');
     await tester.tap(find.byTooltip('メモを保存'));
@@ -203,6 +206,8 @@ void main() {
     await tester.scrollUntilVisible(
         find.text('$monthLabelのシートを記入'), 200,
         scrollable: find.byType(Scrollable).first);
+    await tester.ensureVisible(find.text('$monthLabelのシートを記入'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('$monthLabelのシートを記入'));
     await tester.pumpAndSettle();
 
@@ -257,6 +262,8 @@ void main() {
     await tester.scrollUntilVisible(
         find.text('$monthLabelのシートを編集'), 200,
         scrollable: find.byType(Scrollable).first);
+    await tester.ensureVisible(find.text('$monthLabelのシートを編集'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('$monthLabelのシートを編集'));
     await tester.pumpAndSettle();
 
@@ -264,5 +271,69 @@ void main() {
     await tester.scrollUntilVisible(find.text('帰宅後に泣きやすい'), 200,
         scrollable: find.byType(Scrollable).first);
     expect(find.text('帰宅後に泣きやすい'), findsOneWidget);
+  });
+
+  testWidgets('ふりかえり: キャラ分布・つかれ度平均・メモが表示される', (tester) async {
+    final fs = FakeFirebaseFirestore();
+    final now = DateTime.now();
+    String dk(int day) =>
+        DateFormat('yyyy-MM-dd').format(DateTime(now.year, now.month, day));
+
+    await fs.collection('condition_daily').doc('${childId}_${dk(1)}').set({
+      'studentId': childId,
+      'familyUid': familyUid,
+      'dateKey': dk(1),
+      'character': 'lion',
+      'fatigue': 2,
+      'note': '公園で元気に遊んだ',
+    });
+    await fs.collection('condition_daily').doc('${childId}_${dk(2)}').set({
+      'studentId': childId,
+      'familyUid': familyUid,
+      'dateKey': dk(2),
+      'character': 'panda',
+      'fatigue': 4,
+    });
+
+    await tester.pumpWidget(wrap(fs));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('ふりかえり'));
+    await tester.pumpAndSettle();
+
+    // キャラ分布カード
+    expect(find.text('キャラクターのぶんぷ'), findsOneWidget);
+    expect(find.text('記録 2日'), findsOneWidget);
+
+    // つかれ度チャート（平均 (2+4)/2 = 3.0）
+    await tester.scrollUntilVisible(find.text('つかれ度のすいい'), 200,
+        scrollable: find.byType(Scrollable).first);
+    expect(find.text('平均 3.0'), findsOneWidget);
+
+    // メモ一覧
+    await tester.scrollUntilVisible(find.text('公園で元気に遊んだ'), 200,
+        scrollable: find.byType(Scrollable).first);
+    expect(find.text('公園で元気に遊んだ'), findsOneWidget);
+  });
+
+  testWidgets('ふりかえり: 記録のない月は空状態、前月ナビが機能する', (tester) async {
+    final fs = FakeFirebaseFirestore();
+    await tester.pumpWidget(wrap(fs));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('ふりかえり'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('この月の記録はまだありません'), findsOneWidget);
+
+    // 前月へ
+    await tester.tap(find.byIcon(Icons.chevron_left));
+    await tester.pumpAndSettle();
+
+    final now = DateTime.now();
+    final prev = DateTime(now.year, now.month - 1);
+    expect(find.text(DateFormat('yyyy年 M月', 'ja').format(prev)),
+        findsOneWidget);
+    expect(find.text('この月の記録はまだありません'), findsOneWidget);
   });
 }
