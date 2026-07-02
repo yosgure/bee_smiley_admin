@@ -24,7 +24,9 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../app_theme.dart';
 import '../crm_lead_screen.dart' show CrmOptions, CrmLeadEditScreen;
+import '../main.dart' show AdminShell;
 import '../services/crm_lead_adapter.dart';
+import '../staff_condition_screen.dart';
 import '../widgets/app_feedback.dart';
 import 'crm_home_utils.dart';
 import 'crm_lead_model.dart';
@@ -248,6 +250,30 @@ class _Header extends StatelessWidget {
                 ],
               ],
             ),
+          ),
+          // Phase 3: コンディション面談ビュー（保護者の日次きろく＋月1シート＋職員コメント）。
+          // 保護者アカウント未発行（parentUid 空）だと記録が存在し得ないため無効化。
+          IconButton(
+            icon: const Icon(Icons.favorite_outline, size: 20),
+            color: AppColors.primary,
+            tooltip: 'コンディション（面談用）',
+            visualDensity: VisualDensity.compact,
+            onPressed: lead.parentUid.isEmpty || lead.childFirstName.isEmpty
+                ? null
+                : () {
+                    AdminShell.showOverlay(
+                      context,
+                      StaffConditionScreen(
+                        studentId:
+                            '${lead.parentUid}_${lead.childFirstName}',
+                        familyUid: lead.parentUid,
+                        childName: fullName,
+                        staffUid:
+                            FirebaseAuth.instance.currentUser?.uid,
+                        onClose: () => AdminShell.hideOverlay(context),
+                      ),
+                    );
+                  },
           ),
           // v2 Step 3c: 編集ボタンを Header 右側に常時表示。
           FilledButton.tonalIcon(

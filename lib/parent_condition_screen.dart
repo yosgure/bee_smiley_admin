@@ -1,10 +1,9 @@
-import 'dart:ui' as ui;
-
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import 'app_theme.dart';
 import 'widgets/app_feedback.dart';
+import 'widgets/condition_review.dart';
 
 /// 保護者用「コンディション」タブ（ビースマイリープラス保護者限定）
 ///
@@ -21,62 +20,6 @@ import 'widgets/app_feedback.dart';
 ///
 /// 「できている／できていない」を評価するものではなく、どんな時に安定し、
 /// どんな時に疲れやすいかを親子と支援者で見つけるための記録。
-class ConditionCharacter {
-  final String id;
-  final String name;
-  final String phrase; // 子ども向けの言葉
-  final String emoji; // イラスト素材ができるまでの代用（将来 assetPath に差し替え）
-  final Color color;
-
-  const ConditionCharacter({
-    required this.id,
-    required this.name,
-    required this.phrase,
-    required this.emoji,
-    required this.color,
-  });
-}
-
-/// コンディションキャラクター（構想の基本5キャラ）。
-/// 状態の意味が重ならないように選定されている。
-const List<ConditionCharacter> kConditionCharacters = [
-  ConditionCharacter(
-    id: 'lion',
-    name: 'げんきライオン',
-    phrase: 'げんきいっぱい！やってみたい',
-    emoji: '🦁',
-    color: Color(0xFFF59E0B),
-  ),
-  ConditionCharacter(
-    id: 'koala',
-    name: 'のんびりコアラ',
-    phrase: 'ゆっくりならできそう',
-    emoji: '🐨',
-    color: Color(0xFF66BB6A),
-  ),
-  ConditionCharacter(
-    id: 'penguin',
-    name: 'ねむねむペンギン',
-    phrase: 'ねむいよ、ちょっとやすみたい',
-    emoji: '🐧',
-    color: Color(0xFF42A5F5),
-  ),
-  ConditionCharacter(
-    id: 'squirrel',
-    name: 'そわそわリス',
-    phrase: 'まわりがきになっておちつかない',
-    emoji: '🐿️',
-    color: Color(0xFF9575CD),
-  ),
-  ConditionCharacter(
-    id: 'panda',
-    name: 'おやすみパンダ',
-    phrase: 'つかれたよ、しっかりやすみたい',
-    emoji: '🐼',
-    color: Color(0xFF78909C),
-  ),
-];
-
 class ParentConditionScreen extends StatefulWidget {
   final String? childId; // `${familyUid}_${firstName}`
   final String childName;
@@ -467,11 +410,7 @@ class _ParentConditionScreenState extends State<ParentConditionScreen> {
           final key = _dateKey(d);
           final data = _daily[key];
           final charId = data?['character'] as String?;
-          final char = charId == null
-              ? null
-              : kConditionCharacters
-                  .where((c) => c.id == charId)
-                  .firstOrNull;
+          final char = conditionCharacterById(charId);
           final fatigue = data?['fatigue'] as int?;
           final isSelected = key == _selectedDateKey;
           final isToday = key == _todayKey;
@@ -524,7 +463,7 @@ class _ParentConditionScreenState extends State<ParentConditionScreen> {
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
                         color: fatigue != null && fatigue > 0
-                            ? _fatigueColor(fatigue)
+                            ? conditionFatigueColor(fatigue)
                             : context.colors.borderLight,
                       ),
                     ),
@@ -646,9 +585,7 @@ class _ParentConditionScreenState extends State<ParentConditionScreen> {
           if (selectedChar != null) ...[
             const SizedBox(height: 10),
             Builder(builder: (context) {
-              final c = kConditionCharacters
-                  .where((c) => c.id == selectedChar)
-                  .firstOrNull;
+              final c = conditionCharacterById(selectedChar);
               if (c == null) return const SizedBox.shrink();
               return Container(
                 width: double.infinity,
@@ -689,10 +626,10 @@ class _ParentConditionScreenState extends State<ParentConditionScreen> {
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     color:
-                        isSel ? _fatigueColor(level) : context.colors.chipBg,
+                        isSel ? conditionFatigueColor(level) : context.colors.chipBg,
                     border: Border.all(
                         color: isSel
-                            ? _fatigueColor(level)
+                            ? conditionFatigueColor(level)
                             : context.colors.borderLight),
                   ),
                   alignment: Alignment.center,
@@ -739,23 +676,6 @@ class _ParentConditionScreenState extends State<ParentConditionScreen> {
         ],
       ),
     );
-  }
-
-  Color _fatigueColor(int level) {
-    switch (level) {
-      case 1:
-        return AppColors.success;
-      case 2:
-        return const Color(0xFF9CCC65);
-      case 3:
-        return AppColors.warning;
-      case 4:
-        return const Color(0xFFFB8C00);
-      case 5:
-        return AppColors.error;
-      default:
-        return context.colors.borderLight;
-    }
   }
 
   // ---------------- 月1かんたんシートセクション ----------------
@@ -883,15 +803,76 @@ class _ParentConditionScreenState extends State<ParentConditionScreen> {
           ),
         )
       else ...[
-        _buildCharDistCard(monthData),
+        ConditionReviewCards(month: _reviewMonth, monthData: monthData),
         const SizedBox(height: 16),
-        _buildFatigueChartCard(monthData),
-        const SizedBox(height: 16),
-        ..._buildNotesCard(monthData),
       ],
+      ..._buildStaffCommentCard(mk),
       const SizedBox(height: 8),
       _buildReviewSheetButton(mk),
       const SizedBox(height: 24),
+    ];
+  }
+
+  /// 職員が面談ビューで書いたコメントを保護者にも表示する（読み取り専用）。
+  List<Widget> _buildStaffCommentCard(String mk) {
+    final sheet = _sheets[mk];
+    if (sheet == null) return [];
+    final items = <MapEntry<String, String>>[];
+    void add(String label, dynamic v) {
+      final s = (v ?? '').toString().trim();
+      if (s.isNotEmpty) items.add(MapEntry(label, s));
+    }
+
+    add('今月の見立て', sheet['staffSummary']);
+    add('家庭で試す小さな工夫', sheet['staffHomeTip']);
+    add('教室で継続する支援', sheet['staffClassroomSupport']);
+    if (items.isEmpty) return [];
+
+    return [
+      Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: AppColors.primary.withOpacity(0.06),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppColors.primary.withOpacity(0.15)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: const [
+                Icon(Icons.school, color: AppColors.primary, size: 20),
+                SizedBox(width: 8),
+                Text('先生からのコメント',
+                    style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: AppTextSize.bodyLarge,
+                        color: AppColors.primary)),
+              ],
+            ),
+            const SizedBox(height: 12),
+            ...items.map((e) => Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(e.key,
+                          style: TextStyle(
+                              fontSize: AppTextSize.small,
+                              fontWeight: FontWeight.w600,
+                              color: context.colors.textSecondary)),
+                      const SizedBox(height: 2),
+                      Text(e.value,
+                          style: const TextStyle(
+                              fontSize: AppTextSize.body, height: 1.5)),
+                    ],
+                  ),
+                )),
+          ],
+        ),
+      ),
+      const SizedBox(height: 16),
     ];
   }
 
@@ -933,242 +914,6 @@ class _ParentConditionScreenState extends State<ParentConditionScreen> {
     );
   }
 
-  Widget _buildCharDistCard(Map<String, Map<String, dynamic>> monthData) {
-    final counts = {for (final c in kConditionCharacters) c.id: 0};
-    var recordedDays = 0;
-    for (final d in monthData.values) {
-      final charId = d['character'] as String?;
-      if (charId != null && counts.containsKey(charId)) counts[charId] = counts[charId]! + 1;
-      if (charId != null || (d['fatigue'] as int? ?? 0) > 0) recordedDays++;
-    }
-    final maxCount =
-        counts.values.fold<int>(1, (a, b) => a > b ? a : b);
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: context.colors.cardBg,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: context.colors.borderLight),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Icon(Icons.pets, color: AppColors.primary, size: 20),
-              const SizedBox(width: 8),
-              const Text('キャラクターのぶんぷ',
-                  style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: AppTextSize.bodyLarge,
-                      color: AppColors.primary)),
-              const Spacer(),
-              Text('記録 $recordedDays日',
-                  style: TextStyle(
-                      fontSize: AppTextSize.small,
-                      color: context.colors.textSecondary)),
-            ],
-          ),
-          const SizedBox(height: 12),
-          ...kConditionCharacters.map((c) {
-            final count = counts[c.id]!;
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: Row(
-                children: [
-                  Text(c.emoji,
-                      style: const TextStyle(fontSize: AppTextSize.titleLg)),
-                  const SizedBox(width: 6),
-                  SizedBox(
-                    width: 108,
-                    child: Text(c.name,
-                        style:
-                            const TextStyle(fontSize: AppTextSize.small)),
-                  ),
-                  Expanded(
-                    child: Container(
-                      height: 12,
-                      alignment: Alignment.centerLeft,
-                      decoration: BoxDecoration(
-                        color: context.colors.chipBg,
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: FractionallySizedBox(
-                        widthFactor: count / maxCount,
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: c.color,
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  SizedBox(
-                    width: 32,
-                    child: Text('$count日',
-                        textAlign: TextAlign.right,
-                        style: const TextStyle(
-                            fontSize: AppTextSize.small,
-                            fontWeight: FontWeight.w600)),
-                  ),
-                ],
-              ),
-            );
-          }),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildFatigueChartCard(Map<String, Map<String, dynamic>> monthData) {
-    final points = <MapEntry<int, int>>[];
-    monthData.forEach((dateKey, d) {
-      final f = d['fatigue'] as int?;
-      if (f != null && f >= 1 && f <= 5) {
-        points.add(MapEntry(int.parse(dateKey.substring(8)), f));
-      }
-    });
-    points.sort((a, b) => a.key.compareTo(b.key));
-    final daysInMonth =
-        DateTime(_reviewMonth.year, _reviewMonth.month + 1, 0).day;
-    final avg = points.isEmpty
-        ? null
-        : points.map((p) => p.value).reduce((a, b) => a + b) / points.length;
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: context.colors.cardBg,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: context.colors.borderLight),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Icon(Icons.show_chart,
-                  color: AppColors.primary, size: 20),
-              const SizedBox(width: 8),
-              const Text('つかれ度のすいい',
-                  style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: AppTextSize.bodyLarge,
-                      color: AppColors.primary)),
-              const Spacer(),
-              if (avg != null)
-                Text('平均 ${avg.toStringAsFixed(1)}',
-                    style: TextStyle(
-                        fontSize: AppTextSize.small,
-                        color: context.colors.textSecondary)),
-            ],
-          ),
-          const SizedBox(height: 4),
-          Text('1=元気 〜 5=限界に近い',
-              style: TextStyle(
-                  fontSize: AppTextSize.caption,
-                  color: context.colors.textSecondary)),
-          const SizedBox(height: 8),
-          if (points.isEmpty)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 20),
-              child: Center(
-                child: Text('つかれ度の記録がありません',
-                    style:
-                        TextStyle(color: context.colors.textSecondary)),
-              ),
-            )
-          else
-            SizedBox(
-              width: double.infinity,
-              height: 160,
-              child: CustomPaint(
-                painter: _FatigueChartPainter(
-                  points: points,
-                  daysInMonth: daysInMonth,
-                  gridColor: context.colors.borderLight,
-                  labelColor: context.colors.textSecondary,
-                  lineColor: context.colors.borderMedium,
-                  levelColors: [
-                    for (var lv = 1; lv <= 5; lv++) _fatigueColor(lv)
-                  ],
-                ),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-
-  List<Widget> _buildNotesCard(Map<String, Map<String, dynamic>> monthData) {
-    final notes = monthData.entries
-        .where((e) => (e.value['note'] ?? '').toString().trim().isNotEmpty)
-        .toList()
-      ..sort((a, b) => a.key.compareTo(b.key));
-    if (notes.isEmpty) return [];
-
-    return [
-      Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: context.colors.cardBg,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: context.colors.borderLight),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: const [
-                Icon(Icons.sticky_note_2_outlined,
-                    color: AppColors.primary, size: 20),
-                SizedBox(width: 8),
-                Text('気になった様子・メモ',
-                    style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: AppTextSize.bodyLarge,
-                        color: AppColors.primary)),
-              ],
-            ),
-            const SizedBox(height: 12),
-            ...notes.map((e) {
-              final date = DateTime.parse(e.key);
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 10),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    SizedBox(
-                      width: 64,
-                      child: Text(
-                        DateFormat('M/d(E)', 'ja').format(date),
-                        style: const TextStyle(
-                            fontSize: AppTextSize.small,
-                            fontWeight: FontWeight.w600),
-                      ),
-                    ),
-                    Expanded(
-                      child: Text(e.value['note'].toString(),
-                          style: const TextStyle(
-                              fontSize: AppTextSize.body, height: 1.5)),
-                    ),
-                  ],
-                ),
-              );
-            }),
-          ],
-        ),
-      ),
-      const SizedBox(height: 16),
-    ];
-  }
-
   Widget _buildReviewSheetButton(String mk) {
     final hasSheet = _sheets.containsKey(mk);
     final label = DateFormat('M月', 'ja').format(_reviewMonth);
@@ -1189,98 +934,6 @@ class _ParentConditionScreenState extends State<ParentConditionScreen> {
       ),
     );
   }
-}
-
-extension _FirstOrNull<T> on Iterable<T> {
-  T? get firstOrNull => isEmpty ? null : first;
-}
-
-/// 疲れ度の月間推移チャート（依存ライブラリなしの CustomPainter 実装）。
-/// 横軸 = 日（1〜月末）、縦軸 = 疲れ度 1〜5（上ほど疲れている）。
-/// 点は疲れ度レベルの色、点同士は控えめな線でつなぐ。
-class _FatigueChartPainter extends CustomPainter {
-  final List<MapEntry<int, int>> points; // (日, 疲れ度) 昇順
-  final int daysInMonth;
-  final Color gridColor;
-  final Color labelColor;
-  final Color lineColor;
-  final List<Color> levelColors; // index 0 = レベル1
-
-  _FatigueChartPainter({
-    required this.points,
-    required this.daysInMonth,
-    required this.gridColor,
-    required this.labelColor,
-    required this.lineColor,
-    required this.levelColors,
-  });
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    const leftPad = 22.0, rightPad = 8.0, topPad = 8.0, bottomPad = 20.0;
-    final plotW = size.width - leftPad - rightPad;
-    final plotH = size.height - topPad - bottomPad;
-    double yFor(num level) => topPad + plotH * (5 - level) / 4;
-    double xFor(int day) => daysInMonth <= 1
-        ? leftPad
-        : leftPad + plotW * (day - 1) / (daysInMonth - 1);
-
-    // 横グリッド（レベル1〜5）と左ラベル
-    final gridPaint = Paint()
-      ..color = gridColor
-      ..strokeWidth = 1;
-    for (var lv = 1; lv <= 5; lv++) {
-      final y = yFor(lv);
-      canvas.drawLine(
-          Offset(leftPad, y), Offset(size.width - rightPad, y), gridPaint);
-      _label(canvas, '$lv', Offset(4, y - 6));
-    }
-    // 下部の日ラベル
-    for (final d in const [1, 5, 10, 15, 20, 25, 30]) {
-      if (d > daysInMonth) continue;
-      _label(canvas, '$d', Offset(xFor(d) - 4, size.height - 14));
-    }
-
-    // 折れ線
-    if (points.length >= 2) {
-      final linePaint = Paint()
-        ..color = lineColor
-        ..strokeWidth = 2
-        ..style = PaintingStyle.stroke
-        ..strokeCap = StrokeCap.round;
-      final path = Path()
-        ..moveTo(xFor(points.first.key), yFor(points.first.value));
-      for (final p in points.skip(1)) {
-        path.lineTo(xFor(p.key), yFor(p.value));
-      }
-      canvas.drawPath(path, linePaint);
-    }
-    // ドット（レベル色）
-    for (final p in points) {
-      canvas.drawCircle(
-        Offset(xFor(p.key), yFor(p.value)),
-        4.5,
-        Paint()..color = levelColors[(p.value - 1).clamp(0, 4)],
-      );
-    }
-  }
-
-  void _label(Canvas canvas, String s, Offset offset) {
-    final tp = TextPainter(
-      text: TextSpan(
-          text: s,
-          style: TextStyle(fontSize: AppTextSize.xs, color: labelColor)),
-      textDirection: ui.TextDirection.ltr,
-    )..layout();
-    tp.paint(canvas, offset);
-  }
-
-  @override
-  bool shouldRepaint(covariant _FatigueChartPainter old) =>
-      old.points != points ||
-      old.daysInMonth != daysInMonth ||
-      old.gridColor != gridColor ||
-      old.lineColor != lineColor;
 }
 
 // ============================================================

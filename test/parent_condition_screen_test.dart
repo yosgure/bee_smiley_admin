@@ -316,6 +316,31 @@ void main() {
     expect(find.text('公園で元気に遊んだ'), findsOneWidget);
   });
 
+  testWidgets('ふりかえり: 職員コメントが「先生からのコメント」として表示される', (tester) async {
+    final fs = FakeFirebaseFirestore();
+    await fs
+        .collection('condition_sheets')
+        .doc('${childId}_${monthKey()}')
+        .set({
+      'studentId': childId,
+      'familyUid': familyUid,
+      'monthKey': monthKey(),
+      'staffSummary': '予定が続いた週に疲れが出やすい',
+      'staffHomeTip': '帰宅後に10分の休憩時間を作る',
+    });
+
+    await tester.pumpWidget(wrap(fs));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('ふりかえり'));
+    await tester.pumpAndSettle();
+
+    await tester.scrollUntilVisible(find.text('先生からのコメント'), 200,
+        scrollable: find.byType(Scrollable).first);
+    expect(find.text('予定が続いた週に疲れが出やすい'), findsOneWidget);
+    expect(find.text('帰宅後に10分の休憩時間を作る'), findsOneWidget);
+  });
+
   testWidgets('ふりかえり: 記録のない月は空状態、前月ナビが機能する', (tester) async {
     final fs = FakeFirebaseFirestore();
     await tester.pumpWidget(wrap(fs));
